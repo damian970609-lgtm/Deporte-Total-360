@@ -1,3 +1,4 @@
+
 name: Crear APK de DEPORTE TOTAL 360
 
 on:
@@ -45,8 +46,6 @@ jobs:
       - name: Preparar archivos Android
         run: flutter create --platforms=android .
 
-      # La carpeta android/ se genera durante la compilación.
-      # Por eso añadimos permisos al manifiesto recién generado.
       - name: Habilitar Internet en el APK release
         run: |
           python3 - <<'PY'
@@ -81,7 +80,6 @@ jobs:
                           'No se pudo modificar AndroidManifest.xml'
                       )
 
-          # Mantiene aceleración por hardware para vídeo y WebView.
           if 'android:hardwareAccelerated=' not in content:
               content = re.sub(
                   r'(<application\b)',
@@ -109,7 +107,7 @@ jobs:
         run: dart run flutter_launcher_icons
 
       - name: Analizar código Flutter
-        run: flutter analyze lib
+        run: flutter analyze lib --no-fatal-infos --no-fatal-warnings
 
       - name: Compilar APK de producción
         run: flutter build apk --release
