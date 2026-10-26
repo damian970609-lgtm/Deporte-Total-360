@@ -788,11 +788,11 @@ class _LiveScreenState extends State<LiveScreen> {
                       )
                     : !ready
                         ? OfflinePanel(message: _errorMessage)
-                        : VideoPlayer(c!),
+                        : VideoPlayer(c),
               ),
             ),
           ),
-          if (ready && c != null) ...[
+          if (ready) ...[
             const SizedBox(height: 10),
             VideoProgressIndicator(
               c,
