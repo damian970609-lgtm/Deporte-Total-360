@@ -3,6 +3,9 @@ name: Crear APK de DEPORTE TOTAL 360
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -32,10 +35,13 @@ jobs:
       - name: Instalar dependencias
         run: flutter pub get
 
-      - name: Analizar código
+      - name: Generar icono de Android
+        run: dart run flutter_launcher_icons
+
+      - name: Comprobar código
         run: flutter analyze lib
 
-      - name: Compilar APK
+      - name: Compilar APK de producción
         run: flutter build apk --release
 
       - name: Guardar APK para descargar
@@ -44,3 +50,4 @@ jobs:
           name: deporte-total-360-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
+          retention-days: 30
