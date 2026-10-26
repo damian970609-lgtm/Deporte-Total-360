@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -31,8 +32,7 @@ class WebAgendaScreen extends StatefulWidget {
       _WebAgendaScreenState();
 }
 
-class _WebAgendaScreenState
-    extends State<WebAgendaScreen> {
+class _WebAgendaScreenState extends State<WebAgendaScreen> {
   InAppWebViewController? _controller;
 
   late String _activeUrl;
@@ -41,9 +41,10 @@ class _WebAgendaScreenState
   bool _isPopping = false;
 
   double _progress = 0;
-  String? _error;
 
+  String? _error;
   String _logoDataUrl = '';
+
   int _viewKey = 0;
 
   static const List<String> _blockedHosts = <String>[
@@ -62,8 +63,8 @@ class _WebAgendaScreenState
     'onclickads.net',
     'onclickalgo.com',
     'propellerads.com',
-    'trafficjunky.com',
     'trafficjunky.net',
+    'trafficjunky.com',
     'juicyads.com',
     'richpush.co',
     'taboola.com',
@@ -77,18 +78,9 @@ class _WebAgendaScreenState
     'monetag.com',
     'admaven.com',
     'ero-advertising.com',
-    'tsyndicate.com',
-    'pornhub.com',
-    'xvideos.com',
-    'xnxx.com',
-    'xhamster.com',
-    'redtube.com',
-    'youporn.com',
-    'tube8.com',
-    'spankbang.com',
-    'chaturbate.com',
-    'stripchat.com',
-    'onlyfans.com',
+    'popunder.net',
+    'pushground.com',
+    'push-house.net',
   ];
 
   @override
@@ -103,6 +95,7 @@ class _WebAgendaScreenState
       final data = await rootBundle.load(
         'assets/images/app_icon.png',
       );
+
       final bytes = data.buffer.asUint8List();
 
       if (!mounted) return;
@@ -118,7 +111,7 @@ class _WebAgendaScreenState
         await _applyBranding(controller);
       }
     } catch (_) {
-      // La página puede cargarse aunque falte el icono.
+      // La pantalla sigue funcionando si falta el recurso gráfico.
     }
   }
 
@@ -154,21 +147,42 @@ class _WebAgendaScreenState
         !_isBlockedUri(uri);
   }
 
+  String _normalHost(String host) {
+    return host
+        .toLowerCase()
+        .replaceFirst(RegExp(r'^www\.'), '');
+  }
+
   Future<NavigationActionPolicy> _handleNavigation(
     InAppWebViewController controller,
     NavigationAction action,
   ) async {
-    final rawUrl =
-        action.request.url?.toString() ?? '';
-
-    final uri = Uri.tryParse(rawUrl);
+    final uri = Uri.tryParse(
+      action.request.url?.toString() ?? '',
+    );
 
     if (uri == null || !_isAllowedUri(uri)) {
       return NavigationActionPolicy.CANCEL;
     }
 
-    // No se bloquean todos los dominios externos:
-    // algunos reproductores legítimos los necesitan.
+    // Los reproductores incrustados pueden usar otros dominios.
+    // Se permiten en subframes si el dominio no está bloqueado.
+    if (action.isForMainFrame != true) {
+      return NavigationActionPolicy.ALLOW;
+    }
+
+    // No permitir que la ventana principal abandone la agenda.
+    final current = Uri.tryParse(_activeUrl);
+
+    if (current == null) {
+      return NavigationActionPolicy.CANCEL;
+    }
+
+    if (_normalHost(uri.host) !=
+        _normalHost(current.host)) {
+      return NavigationActionPolicy.CANCEL;
+    }
+
     return NavigationActionPolicy.ALLOW;
   }
 
@@ -177,8 +191,8 @@ class _WebAgendaScreenState
 
     if (uri == null || !_isAllowedUri(uri)) {
       _setError(
-        'El enlace fue bloqueado porque parece '
-        'publicitario o no permitido.',
+        'Este enlace se bloqueó porque no es válido '
+        'o parece publicitario.',
       );
       return;
     }
@@ -245,7 +259,7 @@ class _WebAgendaScreenState
           return;
         }
       } catch (_) {
-        // Si no hay historial web, salimos de esta pantalla.
+        // Sin historial, se cerrará la pantalla integrada.
       }
     }
 
@@ -297,33 +311,31 @@ class _WebAgendaScreenState
                 url("${logoData}") !important;
               background-repeat:
                 no-repeat, no-repeat !important;
-              background-position:
-                center, center !important;
+              background-position: center, center !important;
               background-size:
                 cover, min(76vw, 430px) auto !important;
-              background-attachment:
-                fixed, fixed !important;
+              background-attachment: fixed, fixed !important;
             }
 
             body {
               min-height: 100vh !important;
             }
 
-            header, .site-header, .navbar-header {
+            header,
+            .site-header,
+            .navbar-header,
+            nav,
+            [role="navigation"] {
               background: #071b35 !important;
               border-color: rgba(0,229,255,.35) !important;
-            }
-
-            nav, [role="navigation"] {
-              background-color: #071b35 !important;
-              border-color: rgba(0,229,255,.28) !important;
             }
 
             a, a:visited {
               color: #00e5ff !important;
             }
 
-            button, [role="button"],
+            button,
+            [role="button"],
             input[type="button"],
             input[type="submit"] {
               border-radius: 10px !important;
@@ -334,9 +346,7 @@ class _WebAgendaScreenState
             iframe[src*="adsterra" i],
             iframe[src*="popads" i],
             iframe[src*="popcash" i],
-            iframe[src*="porn" i],
-            iframe[src*="xxx" i],
-            iframe[src*="hentai" i] {
+            iframe[src*="popunder" i] {
               display: none !important;
               visibility: hidden !important;
               pointer-events: none !important;
@@ -384,9 +394,6 @@ class _WebAgendaScreenState
               font: 900 10px Arial, sans-serif !important;
               letter-spacing: .3px !important;
               pointer-events: none !important;
-              box-shadow:
-                0 3px 0 rgba(0,0,0,.45),
-                0 0 10px rgba(0,229,255,.15) !important;
             }
 
             .dt360-live {
@@ -429,22 +436,31 @@ class _WebAgendaScreenState
             'googlesyndication.com',
             'googleadservices.com',
             'adservice.google.com',
+            'adnxs.com',
+            'adsrvr.org',
             'adsterra.com',
             'adsterratools.com',
             'popads.net',
             'popcash.net',
             'exoclick.com',
             'onclickads.net',
+            'onclickalgo.com',
             'propellerads.com',
+            'trafficjunky.net',
             'juicyads.com',
-            'pornhub.com',
-            'xvideos.com',
-            'xnxx.com',
-            'xhamster.com',
-            'redtube.com',
-            'youporn.com',
-            'chaturbate.com',
-            'stripchat.com'
+            'taboola.com',
+            'outbrain.com',
+            'revcontent.com',
+            'mgid.com',
+            'criteo.com',
+            'smartadserver.com',
+            'media.net',
+            'bidvertiser.com',
+            'monetag.com',
+            'admaven.com',
+            'popunder.net',
+            'pushground.com',
+            'push-house.net'
           ];
 
           function blockedUrl(value) {
@@ -463,9 +479,8 @@ class _WebAgendaScreenState
                 return true;
               }
 
-              return /(popunder|popup-ad|clickunder|redirect-ad|adult-content|porn-video|xxx-video|hentai-video)/i.test(
-                h + u.pathname + u.search
-              );
+              return /(popunder|popup-ad|clickunder|redirect-ad|adult-content|porn-video|xxx-video|hentai-video)/i
+                .test(h + u.pathname + u.search);
             } catch (_) {
               return true;
             }
@@ -483,7 +498,8 @@ class _WebAgendaScreenState
                 'DEPORTE TOTAL 360°  •  AGENDA Y TRANSMISIONES';
 
               document.body.insertBefore(
-                banner, document.body.firstChild
+                banner,
+                document.body.firstChild
               );
             }
 
@@ -492,6 +508,7 @@ class _WebAgendaScreenState
             )) {
               const legend = document.createElement('div');
               legend.id = 'dt360-status-legend';
+
               legend.innerHTML =
                 '<span style="color:#ff3159">● EN VIVO</span>' +
                 '<span style="color:#b4c4d9">● TERMINADO</span>' +
@@ -503,15 +520,18 @@ class _WebAgendaScreenState
 
               if (banner && banner.nextSibling) {
                 document.body.insertBefore(
-                  legend, banner.nextSibling
+                  legend,
+                  banner.nextSibling
                 );
               } else {
                 document.body.insertBefore(
-                  legend, document.body.firstChild
+                  legend,
+                  document.body.firstChild
                 );
               }
             }
 
+            // Evitar aperturas de enlaces en nuevas ventanas.
             document.querySelectorAll(
               'a[target="_blank"]'
             ).forEach(a => {
@@ -519,24 +539,65 @@ class _WebAgendaScreenState
               a.rel = 'noopener noreferrer';
             });
 
-            document.querySelectorAll('a[href]')
-              .forEach(a => {
-                if (blockedUrl(a.href)) {
-                  a.removeAttribute('href');
-                  a.style.setProperty(
-                    'pointer-events',
-                    'none',
-                    'important'
-                  );
-                }
+            // Retirar enlaces de publicidad identificada.
+            document.querySelectorAll('a[href]').forEach(a => {
+              if (blockedUrl(a.href)) {
+                a.removeAttribute('href');
 
-                const label =
-                  (a.innerText || a.textContent || '').trim();
+                a.style.setProperty(
+                  'pointer-events',
+                  'none',
+                  'important'
+                );
+              }
 
-                if (/^(ver|ver partido|ver canal|reproducir|play|watch|ver en vivo|en vivo|canal\s*\d*)$/i.test(label)) {
-                  a.classList.add('dt360-play-link');
-                }
-              });
+              const label = (
+                a.innerText || a.textContent || ''
+              ).trim();
+
+              if (/^(ver|ver partido|ver canal|reproducir|play|watch|ver en vivo|en vivo|canal\s*\d*|transmitir|transmisión)$/i.test(label)) {
+                a.classList.add('dt360-play-link');
+                a.setAttribute(
+                  'aria-label',
+                  'EN VIVO AQUÍ'
+                );
+                a.textContent = 'EN VIVO AQUÍ';
+              }
+            });
+
+            // Uniformar también los controles que no son enlaces.
+            document.querySelectorAll(
+              'button, [role="button"], ' +
+              'input[type="button"], input[type="submit"]'
+            ).forEach(node => {
+              const label = (
+                node.innerText ||
+                node.value ||
+                node.getAttribute('aria-label') ||
+                node.textContent ||
+                ''
+              ).trim();
+
+              // Evitar reescribir el mismo texto continuamente.
+              if (/^EN VIVO AQUÍ$/i.test(label)) return;
+
+              if (!/(ver partido|ver canal|reproduc|play|watch|en vivo|live|stream|transmit)/i.test(label)) {
+                return;
+              }
+
+              node.setAttribute(
+                'aria-label',
+                'EN VIVO AQUÍ'
+              );
+
+              if (node.tagName === 'INPUT') {
+                node.value = 'EN VIVO AQUÍ';
+              } else {
+                node.textContent = 'EN VIVO AQUÍ';
+              }
+
+              node.classList.add('dt360-play-link');
+            });
           }
 
           function addMatchStatuses() {
@@ -580,8 +641,10 @@ class _WebAgendaScreenState
                 const parentText =
                   (parent.innerText || '').trim();
 
-                if (parentText.length > text.length &&
-                    parentText.length < 700) {
+                if (
+                  parentText.length > text.length &&
+                  parentText.length < 700
+                ) {
                   return;
                 }
               }
@@ -609,25 +672,14 @@ class _WebAgendaScreenState
           if (!window.__dt360PopupPatch) {
             window.__dt360PopupPatch = true;
 
-            window.open = function(value) {
-              try {
-                const u = new URL(
-                  value || '', location.href
-                );
-
-                if (blockedUrl(u.href)) return null;
-
-                if (/^https?:$/.test(u.protocol)) {
-                  location.href = u.href;
-                }
-              } catch (_) {}
-
+            // No permitir que window.open redirija la página.
+            window.open = function () {
               return null;
             };
 
             document.addEventListener(
               'click',
-              function(event) {
+              function (event) {
                 const target = event.target;
 
                 const link = target && target.closest
@@ -636,6 +688,7 @@ class _WebAgendaScreenState
 
                 if (link && blockedUrl(link.href)) {
                   event.preventDefault();
+                  event.stopPropagation();
                   event.stopImmediatePropagation();
                 }
               },
@@ -644,12 +697,16 @@ class _WebAgendaScreenState
 
             document.addEventListener(
               'submit',
-              function(event) {
+              function (event) {
                 const form = event.target;
 
-                if (form && form.action &&
-                    blockedUrl(form.action)) {
+                if (
+                  form &&
+                  form.action &&
+                  blockedUrl(form.action)
+                ) {
                   event.preventDefault();
+                  event.stopPropagation();
                   event.stopImmediatePropagation();
                 }
               },
@@ -686,8 +743,7 @@ class _WebAgendaScreenState
         source: script,
       );
     } catch (_) {
-      // La página puede rechazar scripts;
-      // el filtro nativo sigue funcionando.
+      // Algunos sitios limitan los scripts; el filtro nativo continúa activo.
     }
   }
 
@@ -732,8 +788,7 @@ class _WebAgendaScreenState
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     const Text(
                       'DEPORTE TOTAL 360°',
@@ -770,9 +825,7 @@ class _WebAgendaScreenState
             ),
             IconButton(
               tooltip: 'Agenda alternativa',
-              onPressed: () => _openUrl(
-                _fallbackAgendaUrl,
-              ),
+              onPressed: () => _openUrl(_fallbackAgendaUrl),
               icon: const Icon(
                 Icons.sports_soccer_rounded,
                 color: _yellow,
@@ -794,7 +847,7 @@ class _WebAgendaScreenState
           children: <Widget>[
             Positioned.fill(
               child: Opacity(
-                opacity: 0.15,
+                opacity: 0.13,
                 child: Image.asset(
                   'assets/images/app_icon.png',
                   fit: BoxFit.cover,
@@ -847,18 +900,17 @@ class _WebAgendaScreenState
                         initialUrlRequest: URLRequest(
                           url: WebUri(_activeUrl),
                         ),
-                        initialSettings:
-                            InAppWebViewSettings(
+                        initialSettings: InAppWebViewSettings(
                           javaScriptEnabled: true,
                           javaScriptCanOpenWindowsAutomatically:
-                              true,
+                              false,
                           domStorageEnabled: true,
                           databaseEnabled: true,
                           thirdPartyCookiesEnabled: true,
                           supportMultipleWindows: true,
                           useShouldOverrideUrlLoading: true,
-                          mediaPlaybackRequiresUserGesture:
-                              false,
+                          useShouldInterceptRequest: true,
+                          mediaPlaybackRequiresUserGesture: false,
                           allowsInlineMediaPlayback: true,
                           useWideViewPort: true,
                           loadWithOverviewMode: true,
@@ -879,35 +931,42 @@ class _WebAgendaScreenState
                           controller,
                           createWindowAction,
                         ) async {
-                          final rawUrl = createWindowAction
-                                  .request.url
-                                  ?.toString() ??
-                              '';
-
-                          final uri = Uri.tryParse(rawUrl);
-
-                          if (uri != null &&
-                              _isAllowedUri(uri)) {
-                            await controller.loadUrl(
-                              urlRequest: URLRequest(
-                                url: WebUri(uri.toString()),
-                              ),
-                            );
-                          }
-
-                          // No se crea una segunda ventana:
-                          // el destino permitido se abre aquí.
+                          // Rechazar popups sin cargar sus URL.
                           return false;
                         },
                         shouldOverrideUrlLoading:
                             _handleNavigation,
+                        shouldInterceptRequest: (
+                          controller,
+                          request,
+                        ) async {
+                          final uri = Uri.tryParse(
+                            request.url.toString(),
+                          );
+
+                          if (
+                            uri != null &&
+                            _isBlockedUri(uri)
+                          ) {
+                            return WebResourceResponse(
+                              contentType: 'text/plain',
+                              data: Uint8List(0),
+                              statusCode: 204,
+                              reasonPhrase: 'Blocked',
+                            );
+                          }
+
+                          return null;
+                        },
                         onLoadStart: (controller, url) {
                           final uri = Uri.tryParse(
                             url?.toString() ?? '',
                           );
 
-                          if (uri != null &&
-                              _isBlockedUri(uri)) {
+                          if (
+                            uri != null &&
+                            _isBlockedUri(uri)
+                          ) {
                             controller.stopLoading();
                             return;
                           }
@@ -939,8 +998,10 @@ class _WebAgendaScreenState
                             url?.toString() ?? '',
                           );
 
-                          if (uri != null &&
-                              _isBlockedUri(uri)) {
+                          if (
+                            uri != null &&
+                            _isBlockedUri(uri)
+                          ) {
                             await controller.stopLoading();
                             return;
                           }
@@ -954,8 +1015,10 @@ class _WebAgendaScreenState
                             _progress = 1;
                             _error = null;
 
-                            if (uri != null &&
-                                _isAllowedUri(uri)) {
+                            if (
+                              uri != null &&
+                              _isAllowedUri(uri)
+                            ) {
                               _activeUrl = uri.toString();
                             }
                           });
@@ -972,8 +1035,8 @@ class _WebAgendaScreenState
                           _setError(
                             'La página no respondió. '
                             'Comprueba tu conexión o vuelve '
-                            'a intentarlo.'
-                            '\n\n${error.description}',
+                            'a intentarlo.\n\n'
+                            '${error.description}',
                           );
                         },
                         onReceivedHttpError: (
@@ -987,7 +1050,10 @@ class _WebAgendaScreenState
 
                           final status = response.statusCode;
 
-                          if (status != null && status >= 400) {
+                          if (
+                            status != null &&
+                            status >= 400
+                          ) {
                             _setError(
                               'El servidor respondió HTTP $status. '
                               'Puede estar temporalmente fuera '
@@ -1003,8 +1069,7 @@ class _WebAgendaScreenState
                           right: 0,
                           child: LinearProgressIndicator(
                             minHeight: 2,
-                            backgroundColor:
-                                Colors.transparent,
+                            backgroundColor: Colors.transparent,
                             valueColor:
                                 AlwaysStoppedAnimation<Color>(
                               _pink,
@@ -1019,8 +1084,7 @@ class _WebAgendaScreenState
                             child: Center(
                               child: SingleChildScrollView(
                                 child: Column(
-                                  mainAxisSize:
-                                      MainAxisSize.min,
+                                  mainAxisSize: MainAxisSize.min,
                                   children: <Widget>[
                                     const Icon(
                                       Icons.wifi_off_rounded,
@@ -1041,8 +1105,7 @@ class _WebAgendaScreenState
                                     const SizedBox(height: 10),
                                     Text(
                                       _error!,
-                                      textAlign:
-                                          TextAlign.center,
+                                      textAlign: TextAlign.center,
                                       style: const TextStyle(
                                         color: _muted,
                                         height: 1.45,
@@ -1079,8 +1142,7 @@ class _WebAgendaScreenState
                                         ),
                                         style:
                                             OutlinedButton.styleFrom(
-                                          foregroundColor:
-                                              _green,
+                                          foregroundColor: _green,
                                           side: const BorderSide(
                                             color: _green,
                                           ),
