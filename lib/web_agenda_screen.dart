@@ -7,12 +7,12 @@ const Color _cyan = Color(0xFF00E5FF);
 const Color _pink = Color(0xFFFF28CF);
 const Color _green = Color(0xFF39FF9C);
 
-const String _defaultAgendaUrl = 'https://futbol-libre.cam/';
+const String _agendaUrl = 'https://futbol-libre.cam/';
 
 class WebAgendaScreen extends StatefulWidget {
   const WebAgendaScreen({
     super.key,
-    this.initialUrl = _defaultAgendaUrl,
+    this.initialUrl = _agendaUrl,
     this.pageTitle = 'AGENDA DEPORTIVA',
   });
 
@@ -25,45 +25,61 @@ class WebAgendaScreen extends StatefulWidget {
 
 class _WebAgendaScreenState extends State<WebAgendaScreen> {
   InAppWebViewController? _controller;
+
+  bool _loading = true;
   double _progress = 0;
   String? _error;
-  bool _loading = true;
-
-  Future<void> _back() async {
-    final controller = _controller;
-
-    if (controller != null && await controller.canGoBack()) {
-      await controller.goBack();
-      return;
-    }
-
-    if (mounted) {
-      Navigator.of(context).maybePop();
-    }
-  }
+  int _reloadKey = 0;
 
   Future<void> _reload() async {
     if (!mounted) return;
 
     setState(() {
-      _error = null;
       _loading = true;
       _progress = 0;
+      _error = null;
     });
 
+    final controller = _controller;
+
+    if (controller == null) {
+      setState(() {
+        _reloadKey++;
+      });
+      return;
+    }
+
     try {
-      await _controller?.loadUrl(
+      await controller.loadUrl(
         urlRequest: URLRequest(
           url: WebUri(widget.initialUrl),
         ),
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
-
       setState(() {
         _loading = false;
-        _error = 'No se pudo iniciar la carga. Comprueba Internet e inténtalo otra vez.';
+        _error = 'No se pudo iniciar la carga: $e';
       });
+    }
+  }
+
+  Future<void> _back() async {
+    final controller = _controller;
+
+    if (controller != null) {
+      try {
+        if (await controller.canGoBack()) {
+          await controller.goBack();
+          return;
+        }
+      } catch (_) {
+        // Si el historial falla, se vuelve a la pantalla anterior.
+      }
+    }
+
+    if (mounted) {
+      Navigator.of(context).maybePop();
     }
   }
 
@@ -79,13 +95,22 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
 
     final scheme = target.scheme.toLowerCase();
 
-    // Los enlaces web se abren dentro de esta misma vista.
+    // Mantener los enlaces web dentro de la aplicación.
     if (scheme == 'https' || scheme == 'http') {
       return NavigationActionPolicy.ALLOW;
     }
 
-    // Evita lanzar esquemas externos no compatibles.
+    // No permitir que enlaces desconocidos ejecuten esquemas externos.
     return NavigationActionPolicy.CANCEL;
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+
+    setState(() {
+      _loading = false;
+      _error = message;
+    });
   }
 
   @override
@@ -93,7 +118,9 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
-        if (!didPop) await _back();
+        if (!didPop) {
+          await _back();
+        }
       },
       child: Scaffold(
         backgroundColor: _navy,
@@ -102,7 +129,10 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           leading: IconButton(
             tooltip: 'Volver',
             onPressed: _back,
-            icon: const Icon(Icons.arrow_back, color: _cyan),
+            icon: const Icon(
+              Icons.arrow_back_rounded,
+              color: _cyan,
+            ),
           ),
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -111,8 +141,8 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                 'DEPORTE TOTAL 360°',
                 style: TextStyle(
                   color: _cyan,
-                  fontWeight: FontWeight.w900,
                   fontSize: 14,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
               Text(
@@ -121,24 +151,29 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Colors.white70,
-                  fontSize: 10,
+                  fontSize: 11,
                 ),
               ),
             ],
           ),
           actions: [
             IconButton(
-              tooltip: 'Recargar página',
+              tooltip: 'Recargar',
               onPressed: _reload,
-              icon: const Icon(Icons.refresh, color: _green),
+              icon: const Icon(
+                Icons.refresh_rounded,
+                color: _green,
+              ),
             ),
           ],
           bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(2),
+            preferredSize: const Size.fromHeight(3),
             child: LinearProgressIndicator(
               value: _loading ? null : _progress,
+              minHeight: 3,
               backgroundColor: _panel,
-              valueColor: const AlwaysStoppedAnimation<Color>(_pink),
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(_pink),
             ),
           ),
         ),
@@ -156,12 +191,12 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                   Icon(
                     Icons.sports_soccer_rounded,
                     color: _cyan,
-                    size: 20,
+                    size: 21,
                   ),
                   SizedBox(width: 9),
                   Expanded(
                     child: Text(
-                      'DEPORTE TOTAL 360° · AGENDA DEPORTIVA',
+                      'AGENDA DEPORTIVA · PARTIDOS',
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w900,
@@ -172,7 +207,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                   Icon(
                     Icons.sports_basketball_rounded,
                     color: _pink,
-                    size: 19,
+                    size: 20,
                   ),
                 ],
               ),
@@ -181,35 +216,26 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
               child: Stack(
                 children: [
                   InAppWebView(
+                    key: ValueKey(_reloadKey),
                     initialUrlRequest: URLRequest(
                       url: WebUri(widget.initialUrl),
                     ),
                     initialSettings: InAppWebViewSettings(
                       javaScriptEnabled: true,
+                      javaScriptCanOpenWindowsAutomatically: true,
                       domStorageEnabled: true,
                       databaseEnabled: true,
-
-                      // Evita que los enlaces target="_blank" dependan
-                      // de una ventana emergente que la app no crea.
+                      thirdPartyCookiesEnabled: true,
                       supportMultipleWindows: false,
-                      javaScriptCanOpenWindowsAutomatically: true,
-
                       useShouldOverrideUrlLoading: true,
                       mediaPlaybackRequiresUserGesture: false,
                       allowsInlineMediaPlayback: true,
-                      thirdPartyCookiesEnabled: true,
                       useWideViewPort: true,
                       loadWithOverviewMode: true,
                       supportZoom: true,
                       builtInZoomControls: true,
                       displayZoomControls: false,
                       cacheEnabled: true,
-
-                      // Identificación habitual de Chrome móvil.
-                      userAgent:
-                          'Mozilla/5.0 (Linux; Android 15) '
-                          'AppleWebKit/537.36 (KHTML, like Gecko) '
-                          'Chrome/131.0.0.0 Mobile Safari/537.36',
                     ),
                     onWebViewCreated: (controller) {
                       _controller = controller;
@@ -217,16 +243,14 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                     shouldOverrideUrlLoading: _handleNavigation,
                     onLoadStart: (controller, url) {
                       if (!mounted) return;
-
                       setState(() {
                         _loading = true;
-                        _error = null;
                         _progress = 0;
+                        _error = null;
                       });
                     },
                     onProgressChanged: (controller, progress) {
                       if (!mounted) return;
-
                       setState(() {
                         _progress = progress / 100;
                         _loading = progress < 100;
@@ -234,7 +258,6 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                     },
                     onLoadStop: (controller, url) {
                       if (!mounted) return;
-
                       setState(() {
                         _loading = false;
                         _progress = 1;
@@ -242,16 +265,31 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                       });
                     },
                     onReceivedError: (controller, request, error) {
-                      if (request.isForMainFrame != true || !mounted) {
-                        return;
-                      }
+                      if (request.isForMainFrame != true) return;
 
-                      setState(() {
-                        _loading = false;
-                        _error =
-                            'La web no respondió. Comprueba la conexión '
-                            'o prueba a abrir la página en Chrome.';
-                      });
+                      _showError(
+                        'No se pudo cargar la página.\n\n'
+                        'Código: ${error.type}\n'
+                        '${error.description}\n\n'
+                        'Comprueba Internet y prueba la dirección '
+                        'en Chrome. Si tampoco abre en Chrome, '
+                        'el problema puede estar en el sitio web.',
+                      );
+                    },
+                    onReceivedHttpError:
+                        (controller, request, response) {
+                      if (request.isForMainFrame != true) return;
+
+                      final status = response.statusCode;
+                      if (status != null && status >= 400) {
+                        _showError(
+                          'El servidor de la web respondió '
+                          'con el código HTTP $status.\n\n'
+                          'Esto puede ser un error del sitio, '
+                          'una restricción o una página temporalmente '
+                          'no disponible.',
+                        );
+                      }
                     },
                   ),
                   if (_loading && _error == null)
@@ -270,41 +308,63 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                     Positioned.fill(
                       child: Container(
                         color: _navy,
-                        padding: const EdgeInsets.all(24),
+                        padding: const EdgeInsets.all(22),
                         child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.wifi_off_rounded,
-                                size: 54,
-                                color: _pink,
-                              ),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'PÁGINA NO DISPONIBLE',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: _cyan,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 18,
+                          child: SingleChildScrollView(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.wifi_off_rounded,
+                                  color: _pink,
+                                  size: 54,
                                 ),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                _error!,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: Colors.white70,
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'NO SE PUDO CARGAR LA AGENDA',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: _cyan,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 17,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 20),
-                              FilledButton.icon(
-                                onPressed: _reload,
-                                icon: const Icon(Icons.refresh),
-                                label: const Text('VOLVER A INTENTAR'),
-                              ),
-                            ],
+                                const SizedBox(height: 14),
+                                Text(
+                                  _error!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    height: 1.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: FilledButton.icon(
+                                    onPressed: _reload,
+                                    icon: const Icon(
+                                      Icons.refresh_rounded,
+                                    ),
+                                    label: const Text(
+                                      'VOLVER A INTENTAR',
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                const Text(
+                                  'Si el sitio bloquea navegadores '
+                                  'integrados o no responde, el código '
+                                  'de la aplicación no puede obligarlo '
+                                  'a funcionar.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
