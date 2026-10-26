@@ -53,8 +53,9 @@ class DeporteTotal360App extends StatelessWidget {
             ),
           ),
         ),
-        home: const HomeScreen(),
+        home: const AgendaStartupScreen(),
       );
+
 }
 
 void showWeb(
@@ -68,6 +69,38 @@ void showWeb(
           WebAgendaScreen(initialUrl: url, pageTitle: title),
     ),
   );
+}
+
+// Pantalla inicial: abre la agenda dentro de la aplicación.
+class AgendaStartupScreen extends StatefulWidget {
+  const AgendaStartupScreen({super.key});
+
+  @override
+  State<AgendaStartupScreen> createState() =>
+      _AgendaStartupScreenState();
+}
+
+class _AgendaStartupScreenState extends State<AgendaStartupScreen> {
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      showWeb(
+        context,
+        title: 'AGENDA DE PARTIDOS',
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // La pantalla principal permanece detrás de la agenda.
+    // Al pulsar Atrás, vuelve a mostrarse con el diseño habitual.
+    return const HomeScreen();
+  }
 }
 
 class HomeScreen extends StatelessWidget {
