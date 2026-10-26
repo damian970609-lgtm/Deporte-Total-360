@@ -7,12 +7,12 @@ const Color _cyan = Color(0xFF00E5FF);
 const Color _pink = Color(0xFFFF28CF);
 const Color _green = Color(0xFF39FF9C);
 
-const String _agendaUrl = 'https://futbol-libre.cam/';
+const String _defaultAgendaUrl = 'https://futbol-libre.cam/';
 
 class WebAgendaScreen extends StatefulWidget {
   const WebAgendaScreen({
     super.key,
-    this.initialUrl = _agendaUrl,
+    this.initialUrl = _defaultAgendaUrl,
     this.pageTitle = 'AGENDA DEPORTIVA',
   });
 
@@ -56,11 +56,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
         ),
       );
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = 'No se pudo iniciar la carga: $e';
-      });
+      _showError('No se pudo iniciar la carga.\n$e');
     }
   }
 
@@ -74,7 +70,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           return;
         }
       } catch (_) {
-        // Si falla el historial, vuelve a la pantalla anterior.
+        // Si falla el historial, se vuelve a la pantalla anterior.
       }
     }
 
@@ -95,12 +91,12 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
 
     final scheme = target.scheme.toLowerCase();
 
-    // Mantener los enlaces HTTP y HTTPS dentro de la aplicación.
+    // Mantiene las páginas web dentro de la aplicación.
     if (scheme == 'https' || scheme == 'http') {
       return NavigationActionPolicy.ALLOW;
     }
 
-    // Bloquear esquemas externos desconocidos.
+    // No abre esquemas externos desconocidos.
     return NavigationActionPolicy.CANCEL;
   }
 
@@ -261,7 +257,6 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                       setState(() {
                         _loading = false;
                         _progress = 1;
-                        _error = null;
                       });
                     },
                     onReceivedError: (controller, request, error) {
@@ -271,9 +266,9 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                         'No se pudo cargar la página.\n\n'
                         'Código: ${error.type}\n'
                         '${error.description}\n\n'
-                        'Comprueba Internet y prueba la dirección '
-                        'en Chrome. Si tampoco abre en Chrome, '
-                        'el problema puede estar en el sitio web.',
+                        'Comprueba la conexión y prueba la dirección '
+                        'en Chrome. Si tampoco abre allí, puede que '
+                        'el sitio no esté disponible.',
                       );
                     },
                     onReceivedHttpError:
@@ -284,11 +279,9 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
 
                       if (status != null && status >= 400) {
                         _showError(
-                          'El servidor respondió con el código '
-                          'HTTP $status.\n\n'
-                          'Puede ser un error del sitio, una '
-                          'restricción o una página temporalmente '
-                          'no disponible.',
+                          'El servidor respondió con HTTP $status.\n\n'
+                          'El sitio puede estar temporalmente caído, '
+                          'bloquear la solicitud o devolver un error.',
                         );
                       }
                     },
@@ -354,10 +347,9 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                                 ),
                                 const SizedBox(height: 10),
                                 const Text(
-                                  'Si el sitio bloquea navegadores '
-                                  'integrados o no responde, el '
-                                  'código de la aplicación no puede '
-                                  'obligarlo a funcionar.',
+                                  'Si el servidor no responde o bloquea '
+                                  'navegadores integrados, la aplicación '
+                                  'no puede obligarlo a cargar.',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     color: Colors.white54,
