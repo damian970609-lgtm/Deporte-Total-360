@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build:
     name: Compilar APK Android
@@ -40,6 +44,55 @@ jobs:
 
       - name: Preparar archivos Android
         run: flutter create --platforms=android .
+
+      # La carpeta android/ se genera durante la compilación.
+      # Por eso añadimos permisos al manifiesto recién generado.
+      - name: Habilitar Internet en el APK release
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          manifest = Path('android/app/src/main/AndroidManifest.xml')
+          content = manifest.read_text(encoding='utf-8')
+
+          permissions = (
+              'android.permission.INTERNET',
+              'android.permission.ACCESS_NETWORK_STATE',
+          )
+
+          for permission in permissions:
+              declaration = (
+                  f'<uses-permission android:name="{permission}" />'
+              )
+
+              if f'android:name="{permission}"' not in content:
+                  content, count = re.subn(
+                      r'(<manifest\b[^>]*>)',
+                      lambda match: (
+                          match.group(1) + '\n    ' + declaration
+                      ),
+                      content,
+                      count=1,
+                  )
+
+                  if count != 1:
+                      raise SystemExit(
+                          'No se pudo modificar AndroidManifest.xml'
+                      )
+
+          # Mantiene aceleración por hardware para vídeo y WebView.
+          if 'android:hardwareAccelerated=' not in content:
+              content = re.sub(
+                  r'(<application\b)',
+                  r'\1 android:hardwareAccelerated="true"',
+                  content,
+                  count=1,
+              )
+
+          manifest.write_text(content, encoding='utf-8')
+          print(manifest.read_text(encoding='utf-8'))
+          PY
 
       - name: Configurar compatibilidad de ProGuard
         run: |
