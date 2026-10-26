@@ -59,9 +59,10 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
       );
     } catch (_) {
       if (!mounted) return;
+
       setState(() {
         _loading = false;
-        _error = 'No se pudo iniciar la carga. Inténtalo otra vez.';
+        _error = 'No se pudo iniciar la carga. Comprueba Internet e inténtalo otra vez.';
       });
     }
   }
@@ -78,38 +79,13 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
 
     final scheme = target.scheme.toLowerCase();
 
-    // Mantiene los enlaces web dentro de la aplicación.
+    // Los enlaces web se abren dentro de esta misma vista.
     if (scheme == 'https' || scheme == 'http') {
       return NavigationActionPolicy.ALLOW;
     }
 
-    // Bloquea esquemas no web para evitar abrir otra aplicación
-    // automáticamente o lanzar destinos no compatibles.
+    // Evita lanzar esquemas externos no compatibles.
     return NavigationActionPolicy.CANCEL;
-  }
-
-  Future<bool> _handlePopup(
-    InAppWebViewController controller,
-    CreateWindowAction action,
-  ) async {
-    final target = action.request.url;
-
-    if (target == null) return false;
-
-    final scheme = target.scheme.toLowerCase();
-    if (scheme != 'https' && scheme != 'http') {
-      return false;
-    }
-
-    // Intenta cargar la ventana emergente en la vista actual.
-    try {
-      await controller.loadUrl(
-        urlRequest: URLRequest(url: target),
-      );
-      return true;
-    } catch (_) {
-      return false;
-    }
   }
 
   @override
@@ -185,7 +161,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                   SizedBox(width: 9),
                   Expanded(
                     child: Text(
-                      'DEPORTE TOTAL 360° · NAVEGACIÓN INTERNA',
+                      'DEPORTE TOTAL 360° · AGENDA DEPORTIVA',
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w900,
@@ -212,8 +188,12 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                       javaScriptEnabled: true,
                       domStorageEnabled: true,
                       databaseEnabled: true,
-                      supportMultipleWindows: true,
+
+                      // Evita que los enlaces target="_blank" dependan
+                      // de una ventana emergente que la app no crea.
+                      supportMultipleWindows: false,
                       javaScriptCanOpenWindowsAutomatically: true,
+
                       useShouldOverrideUrlLoading: true,
                       mediaPlaybackRequiresUserGesture: false,
                       allowsInlineMediaPlayback: true,
@@ -223,14 +203,21 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                       supportZoom: true,
                       builtInZoomControls: true,
                       displayZoomControls: false,
+                      cacheEnabled: true,
+
+                      // Identificación habitual de Chrome móvil.
+                      userAgent:
+                          'Mozilla/5.0 (Linux; Android 15) '
+                          'AppleWebKit/537.36 (KHTML, like Gecko) '
+                          'Chrome/131.0.0.0 Mobile Safari/537.36',
                     ),
                     onWebViewCreated: (controller) {
                       _controller = controller;
                     },
                     shouldOverrideUrlLoading: _handleNavigation,
-                    onCreateWindow: _handlePopup,
                     onLoadStart: (controller, url) {
                       if (!mounted) return;
+
                       setState(() {
                         _loading = true;
                         _error = null;
@@ -239,6 +226,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                     },
                     onProgressChanged: (controller, progress) {
                       if (!mounted) return;
+
                       setState(() {
                         _progress = progress / 100;
                         _loading = progress < 100;
@@ -246,6 +234,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                     },
                     onLoadStop: (controller, url) {
                       if (!mounted) return;
+
                       setState(() {
                         _loading = false;
                         _progress = 1;
@@ -260,8 +249,8 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                       setState(() {
                         _loading = false;
                         _error =
-                            'La página no respondió. Comprueba la conexión '
-                            'o vuelve a intentarlo.';
+                            'La web no respondió. Comprueba la conexión '
+                            'o prueba a abrir la página en Chrome.';
                       });
                     },
                   ),
