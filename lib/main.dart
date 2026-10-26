@@ -19,9 +19,11 @@ const Color muted = Color(0xFFA9BDD6);
 
 const String streamUrl =
     'https://lbgo.bozztv.com/ssh101/ssh101/deportetotal360/playlist.m3u8';
+
 const String whatsappUrl =
     'https://wa.me/5927214741?text=Hola%2C%20contacto%20con%20DEPORTE%20TOTAL%20360';
-/// Cambia este enlace cuando hayas creado tu canal.
+
+// Cambia esto cuando tengas tu canal real
 const String telegramUrl = 'https://t.me/';
 
 Future<void> openUrl(String value) async {
@@ -60,6 +62,7 @@ class DeporteTotal360App extends StatelessWidget {
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -73,6 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _selectTab(int index) {
     setState(() => _tab = index);
+
     if (index == 1 || index == 3) {
       _open(const WebAgendaScreen());
     } else if (index == 2) {
@@ -80,7 +84,10 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (index == 4) {
       _open(const SettingsScreen());
     }
-    if (index != 0) setState(() => _tab = 0);
+
+    if (index != 0) {
+      setState(() => _tab = 0);
+    }
   }
 
   @override
@@ -292,6 +299,7 @@ class SportsRow extends StatelessWidget {
       (Icons.sports_volleyball_rounded, 'VOLEY', blue),
       (Icons.emoji_events_rounded, 'OTROS', Color(0xFFB45CFF)),
     ];
+
     return Row(
       children: [
         for (final sport in sports)
@@ -400,13 +408,13 @@ class FeatureTile extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, size: 34, color: color,
-                shadows: [Shadow(color: color, blurRadius: 12)]),
+                  shadows: [Shadow(color: color, blurRadius: 12)]),
               const SizedBox(height: 9),
               Text(title, textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
               const SizedBox(height: 4),
               Text(subtitle, textAlign: TextAlign.center,
-                style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 9)),
+                  style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 9)),
             ],
           ),
         ),
@@ -498,6 +506,7 @@ class SportsBackdrop extends StatelessWidget {
 
 class LiveScreen extends StatefulWidget {
   const LiveScreen({super.key});
+
   @override
   State<LiveScreen> createState() => _LiveScreenState();
 }
@@ -517,7 +526,9 @@ class _LiveScreenState extends State<LiveScreen> {
     final old = _player;
     _player = null;
     await old?.dispose();
+
     if (!mounted) return;
+
     setState(() {
       _loading = true;
       _error = null;
@@ -525,16 +536,22 @@ class _LiveScreenState extends State<LiveScreen> {
 
     final player = VideoPlayerController.networkUrl(Uri.parse(streamUrl));
     _player = player;
+
     try {
       await player.initialize();
       if (!mounted || _player != player) {
         await player.dispose();
         return;
       }
+
       await player.play();
-      if (mounted) setState(() => _loading = false);
+
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     } catch (_) {
       if (!mounted || _player != player) return;
+
       setState(() {
         _loading = false;
         _error = 'La señal no está disponible en este momento.';
@@ -556,8 +573,10 @@ class _LiveScreenState extends State<LiveScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('TRANSMISIONES EN VIVO',
-          style: TextStyle(color: cyan, fontWeight: FontWeight.w900, fontSize: 15)),
+        title: const Text(
+          'TRANSMISIONES EN VIVO',
+          style: TextStyle(color: cyan, fontWeight: FontWeight.w900, fontSize: 15),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -603,8 +622,11 @@ class _LiveScreenState extends State<LiveScreen> {
           ),
           const SizedBox(height: 14),
           if (offline) ...[
-            Text(_error ?? 'La señal está fuera de línea.',
-              textAlign: TextAlign.center, style: const TextStyle(color: muted)),
+            Text(
+              _error ?? 'La señal está fuera de línea.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: muted),
+            ),
             const SizedBox(height: 12),
             FilledButton.icon(
               onPressed: _startPlayer,
@@ -612,8 +634,11 @@ class _LiveScreenState extends State<LiveScreen> {
               label: const Text('RECARGAR SEÑAL'),
             ),
           ] else
-            const Text('Selecciona reproducir para iniciar la transmisión.',
-              textAlign: TextAlign.center, style: TextStyle(color: muted)),
+            const Text(
+              'Selecciona reproducir para iniciar la transmisión.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: muted),
+            ),
           const SizedBox(height: 18),
           FeatureTile(
             icon: Icons.calendar_month_rounded,
@@ -632,6 +657,7 @@ class _LiveScreenState extends State<LiveScreen> {
 
 class OfflinePanel extends StatelessWidget {
   const OfflinePanel({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -647,15 +673,23 @@ class OfflinePanel extends StatelessWidget {
         children: [
           Icon(Icons.sports_soccer_rounded, color: cyan, size: 36),
           SizedBox(height: 8),
-          Text('DEPORTE TOTAL 360°',
+          Text(
+            'DEPORTE TOTAL 360°',
             textAlign: TextAlign.center,
-            style: TextStyle(color: cyan, fontWeight: FontWeight.w900, fontSize: 18)),
+            style: TextStyle(
+              color: cyan,
+              fontWeight: FontWeight.w900,
+              fontSize: 18,
+            ),
+          ),
           SizedBox(height: 8),
           Icon(Icons.portable_wifi_off_rounded, color: pink, size: 36),
           SizedBox(height: 8),
           Text('CANAL EN VIVO', style: TextStyle(fontWeight: FontWeight.w900)),
-          Text('FUERA DE LÍNEA',
-            style: TextStyle(color: pink, fontWeight: FontWeight.w900, fontSize: 18)),
+          Text(
+            'FUERA DE LÍNEA',
+            style: TextStyle(color: pink, fontWeight: FontWeight.w900, fontSize: 18),
+          ),
         ],
       ),
     );
@@ -664,6 +698,7 @@ class OfflinePanel extends StatelessWidget {
 
 class DonationsScreen extends StatelessWidget {
   const DonationsScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -675,12 +710,13 @@ class DonationsScreen extends StatelessWidget {
           children: [
             const Icon(Icons.favorite_rounded, color: pink, size: 76),
             const SizedBox(height: 18),
-            const Text('APOYA EL PROYECTO',
-              style: TextStyle(color: yellow, fontSize: 22, fontWeight: FontWeight.w900)),
+            const Text(
+              'APOYA EL PROYECTO',
+              style: TextStyle(color: yellow, fontSize: 22, fontWeight: FontWeight.w900),
+            ),
             const SizedBox(height: 12),
             const Text(
-              'Gracias por apoyar DEPORTE TOTAL 360°. '
-              'Contacta con el creador para conocer las opciones de donación.',
+              'Gracias por apoyar DEPORTE TOTAL 360°. Contacta con el creador para conocer las opciones de donación.',
               textAlign: TextAlign.center,
               style: TextStyle(color: muted, height: 1.5),
             ),
@@ -699,6 +735,7 @@ class DonationsScreen extends StatelessWidget {
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
