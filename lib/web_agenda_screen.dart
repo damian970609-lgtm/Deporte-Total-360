@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 const Color _navy = Color(0xFF030814);
-const Color _panel = Color(0xFF071326);
+const Color _panel = Color(0xFF09172B);
 const Color _cyan = Color(0xFF00E5FF);
 const Color _pink = Color(0xFFFF28CF);
 const Color _green = Color(0xFF39FF9C);
+const Color _muted = Color(0xFFB4C4D9);
 
-const String _defaultAgendaUrl = 'https://futbol-libre.cam/';
+const String _originalAgendaUrl = 'https://futbol-libre.cam/';
+const String _fallbackAgendaUrl =
+    'https://www.espn.com/soccer/scoreboard';
 
 class WebAgendaScreen extends StatefulWidget {
   const WebAgendaScreen({
     super.key,
-    this.initialUrl = _defaultAgendaUrl,
+    this.initialUrl = _originalAgendaUrl,
     this.pageTitle = 'AGENDA DEPORTIVA',
   });
 
@@ -25,22 +29,42 @@ class WebAgendaScreen extends StatefulWidget {
 
 class _WebAgendaScreenState extends State<WebAgendaScreen> {
   InAppWebViewController? _controller;
-
+  late String _activeUrl;
   bool _loading = true;
   double _progress = 0;
   String? _error;
-  int _reloadKey = 0;
+  int _viewKey = 0;
 
-  Uri get _initialUri => Uri.parse(widget.initialUrl);
+  @override
+  void initState() {
+    super.initState();
+    _activeUrl = widget.initialUrl;
+  }
 
-  bool _isSameSite(Uri target) {
-    final baseHost = _initialUri.host.toLowerCase();
-    final targetHost = target.host.toLowerCase();
+  Future<void> _loadUrl(String url) async {
+    if (!mounted) return;
 
-    if (baseHost.isEmpty || targetHost.isEmpty) return false;
+    setState(() {
+      _activeUrl = url;
+      _loading = true;
+      _progress = 0;
+      _error = null;
+    });
 
-    return targetHost == baseHost ||
-        targetHost.endsWith('.$baseHost');
+    final controller = _controller;
+
+    if (controller == null) {
+      setState(() => _viewKey++);
+      return;
+    }
+
+    try {
+      await controller.loadUrl(
+        urlRequest: URLRequest(url: WebUri(url)),
+      );
+    } catch (error) {
+      _setError('No se pudo abrir la página: $error');
+    }
   }
 
   Future<void> _reload() async {
@@ -55,21 +79,40 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
     final controller = _controller;
 
     if (controller == null) {
-      setState(() => _reloadKey++);
+      setState(() => _viewKey++);
       return;
     }
 
     try {
       await controller.loadUrl(
-        urlRequest: URLRequest(
-          url: WebUri(widget.initialUrl),
-        ),
+        urlRequest: URLRequest(url: WebUri(_activeUrl)),
       );
-    } catch (_) {
-      _showError(
-        'No se pudo recargar la página. '
-        'Comprueba tu conexión e inténtalo otra vez.',
+    } catch (error) {
+      _setError('No se pudo recargar la página: $error');
+    }
+  }
+
+  Future<void> _openInBrowser() async {
+    final uri = Uri.tryParse(_activeUrl);
+
+    if (uri == null) {
+      _setError('La dirección web no es válida.');
+      return;
+    }
+
+    try {
+      final opened = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
       );
+
+      if (!opened && mounted) {
+        _setError(
+          'Android no encontró una aplicación para abrir esta dirección.',
+        );
+      }
+    } catch (error) {
+      _setError('No se pudo abrir el navegador: $error');
     }
   }
 
@@ -83,7 +126,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           return;
         }
       } catch (_) {
-        // Si falla el historial, vuelve a la pantalla anterior.
+        // Si el historial no está disponible, vuelve a la pantalla principal.
       }
     }
 
@@ -92,37 +135,29 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
     }
   }
 
-  Future<NavigationActionPolicy> _handleNavigation(
+  Future<NavigationActionPolicy> _allowSafeWebNavigation(
     InAppWebViewController controller,
     NavigationAction action,
   ) async {
-    final target = action.request.url;
+    final uri = action.request.url;
 
-    if (target == null) {
+    if (uri == null) {
       return NavigationActionPolicy.CANCEL;
     }
 
-    final scheme = target.scheme.toLowerCase();
+    // Se permiten redirecciones HTTP/HTTPS a otros dominios.
+    // Muchas páginas de agenda y reproductores usan varios dominios.
+    final scheme = uri.scheme.toLowerCase();
 
-    // Bloquea esquemas externos, como intent: y market:.
-    if (scheme != 'https' && scheme != 'http') {
-      return NavigationActionPolicy.CANCEL;
-    }
-
-    // Permite recursos incrustados, como imágenes, scripts e iframes.
-    if (!action.isForMainFrame) {
+    if (scheme == 'https' || scheme == 'http') {
       return NavigationActionPolicy.ALLOW;
     }
 
-    // La navegación principal permanece en el mismo sitio.
-    if (_isSameSite(target)) {
-      return NavigationActionPolicy.ALLOW;
-    }
-
+    // Se bloquean esquemas externos como intent:, market:, file: y javascript:.
     return NavigationActionPolicy.CANCEL;
   }
 
-  void _showError(String message) {
+  void _setError(String message) {
     if (!mounted) return;
 
     setState(() {
@@ -157,7 +192,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                 'DEPORTE TOTAL 360°',
                 style: TextStyle(
                   color: _cyan,
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -166,13 +201,21 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 11,
+                  color: _muted,
+                  fontSize: 10,
                 ),
               ),
             ],
           ),
           actions: [
+            IconButton(
+              tooltip: 'Abrir en Chrome/navegador',
+              onPressed: _openInBrowser,
+              icon: const Icon(
+                Icons.open_in_browser_rounded,
+                color: _cyan,
+              ),
+            ),
             IconButton(
               tooltip: 'Recargar',
               onPressed: _reload,
@@ -198,32 +241,32 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
+                horizontal: 14,
+                vertical: 9,
               ),
-              color: const Color(0xFF091A31),
+              color: const Color(0xFF0B1D35),
               child: const Row(
                 children: [
                   Icon(
                     Icons.sports_soccer_rounded,
                     color: _cyan,
-                    size: 21,
+                    size: 20,
                   ),
-                  SizedBox(width: 9),
+                  SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'AGENDA DEPORTIVA · PARTIDOS',
+                      'AGENDA · PARTIDOS · RESULTADOS',
                       style: TextStyle(
                         color: Colors.white,
+                        fontSize: 10,
                         fontWeight: FontWeight.w900,
-                        fontSize: 11,
                       ),
                     ),
                   ),
                   Icon(
                     Icons.sports_basketball_rounded,
                     color: _pink,
-                    size: 20,
+                    size: 19,
                   ),
                 ],
               ),
@@ -232,13 +275,13 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
               child: Stack(
                 children: [
                   InAppWebView(
-                    key: ValueKey(_reloadKey),
+                    key: ValueKey<int>(_viewKey),
                     initialUrlRequest: URLRequest(
-                      url: WebUri(widget.initialUrl),
+                      url: WebUri(_activeUrl),
                     ),
                     initialSettings: InAppWebViewSettings(
                       javaScriptEnabled: true,
-                      javaScriptCanOpenWindowsAutomatically: false,
+                      javaScriptCanOpenWindowsAutomatically: true,
                       domStorageEnabled: true,
                       databaseEnabled: true,
                       thirdPartyCookiesEnabled: true,
@@ -252,14 +295,12 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                       builtInZoomControls: true,
                       displayZoomControls: false,
                       cacheEnabled: true,
+                      transparentBackground: false,
                     ),
                     onWebViewCreated: (controller) {
                       _controller = controller;
                     },
-                    onCreateWindow: (controller, action) async {
-                      return false;
-                    },
-                    shouldOverrideUrlLoading: _handleNavigation,
+                    shouldOverrideUrlLoading: _allowSafeWebNavigation,
                     onLoadStart: (controller, url) {
                       if (!mounted) return;
 
@@ -285,34 +326,25 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                         _progress = 1;
                       });
                     },
-                    onReceivedError: (
-                      controller,
-                      request,
-                      error,
-                    ) {
+                    onReceivedError: (controller, request, error) {
                       if (request.isForMainFrame != true) return;
 
-                      _showError(
-                        'No se pudo cargar la agenda.\n\n'
-                        '${error.description}\n\n'
-                        'Comprueba la conexión y abre la dirección '
-                        'en Chrome para verificar si está disponible.',
+                      _setError(
+                        'La página no respondió. Comprueba la conexión '
+                        'o usa la agenda alternativa.\n\n'
+                        '${error.description}',
                       );
                     },
-                    onReceivedHttpError: (
-                      controller,
-                      request,
-                      response,
-                    ) {
+                    onReceivedHttpError:
+                        (controller, request, response) {
                       if (request.isForMainFrame != true) return;
 
                       final status = response.statusCode;
-
                       if (status != null && status >= 400) {
-                        _showError(
-                          'El servidor respondió con HTTP $status. '
-                          'Puede estar temporalmente caído o rechazar '
-                          'la solicitud desde la aplicación.',
+                        _setError(
+                          'El servidor respondió HTTP $status. '
+                          'La web puede estar fuera de servicio o '
+                          'rechazar la conexión desde la aplicación.',
                         );
                       }
                     },
@@ -331,11 +363,11 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                     ),
                   if (_error != null)
                     Positioned.fill(
-                      child: Container(
+                      child: ColoredBox(
                         color: _navy,
-                        padding: const EdgeInsets.all(22),
                         child: Center(
                           child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(22),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -344,9 +376,9 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                                   color: _pink,
                                   size: 54,
                                 ),
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 15),
                                 const Text(
-                                  'NO SE PUDO CARGAR LA AGENDA',
+                                  'NO SE PUDO CARGAR LA WEB',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     color: _cyan,
@@ -354,13 +386,14 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                                     fontSize: 17,
                                   ),
                                 ),
-                                const SizedBox(height: 14),
+                                const SizedBox(height: 12),
                                 Text(
                                   _error!,
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(
-                                    color: Colors.white70,
-                                    height: 1.5,
+                                    color: _muted,
+                                    height: 1.45,
+                                    fontSize: 12,
                                   ),
                                 ),
                                 const SizedBox(height: 20),
@@ -375,9 +408,32 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                TextButton(
-                                  onPressed: _back,
-                                  child: const Text('VOLVER'),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    onPressed: () =>
+                                        _loadUrl(_fallbackAgendaUrl),
+                                    icon: const Icon(
+                                      Icons.sports_soccer_rounded,
+                                    ),
+                                    label: const Text(
+                                      'USAR AGENDA ALTERNATIVA',
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: _green,
+                                      side: const BorderSide(
+                                        color: _green,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                TextButton.icon(
+                                  onPressed: _openInBrowser,
+                                  icon: const Icon(
+                                    Icons.open_in_browser_rounded,
+                                  ),
+                                  label: const Text('PROBAR EN CHROME'),
                                 ),
                               ],
                             ),
