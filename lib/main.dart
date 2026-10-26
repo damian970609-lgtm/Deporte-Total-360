@@ -16,8 +16,18 @@ const Color yellow = Color(0xFFFFD600);
 const Color blue = Color(0xFF087BFF);
 const Color muted = Color(0xFFA9BDD6);
 
-// Dirección provisional tomada del código actual del proyecto.
-// Debe confirmarse con el proveedor de la señal en directo.
+/// PRISM LIVE STUDIO / SSH101
+/// Servidor de entrada RTMP para enviar la transmisión.
+const String rtmpServerUrl =
+    'rtmp://ssh101.bozztv.com:1935/ssh101';
+
+/// Nombre o clave de transmisión configurado en SSH101.
+/// Debe coincidir con la configuración de tu cuenta.
+const String ssh101StreamKey = 'deportetotal360';
+
+/// Dirección HLS que usa el reproductor de la APK.
+/// Se conserva la URL que ya tenía el proyecto.
+/// Si SSH101 te proporciona otra URL HLS, reemplaza esta dirección.
 const String streamUrl =
     'https://lbgo.bozztv.com/ssh101/ssh101/deportetotal360/playlist.m3u8';
 
@@ -522,6 +532,7 @@ class _LiveScreenState extends State<LiveScreen> {
 
     try {
       await player.initialize();
+
       if (!mounted || _player != player) {
         await player.dispose();
         return;
@@ -530,12 +541,14 @@ class _LiveScreenState extends State<LiveScreen> {
       await player.play();
 
       if (!mounted || _player != player) return;
+
       setState(() {
         _loading = false;
         _failed = false;
       });
     } catch (_) {
       if (!mounted || _player != player) return;
+
       setState(() {
         _loading = false;
         _failed = true;
