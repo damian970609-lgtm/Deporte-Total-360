@@ -690,26 +690,23 @@ class _LiveScreenState extends State<LiveScreen> {
                                 child: FittedBox(
                                   fit: BoxFit.contain,
                                   child: SizedBox(
-                                    // CORREGIDO: comprobación explícita de null.
-                                    width: p!.value.size.width,
-                                    height: p!.value.size.height,
-                                    child: VideoPlayer(p!),
+                                    width: p.value.size.width,
+                                    height: p.value.size.height,
+                                    child: VideoPlayer(p),
                                   ),
                                 ),
                               ),
                               IconButton.filled(
                                 onPressed: () {
                                   setState(() {
-                                    // CORREGIDO: p puede ser null fuera
-                                    // de la comprobación del reproductor.
-                                    p!.value.isPlaying
-                                        ? p!.pause()
-                                        : p!.play();
+                                    p.value.isPlaying
+                                        ? p.pause()
+                                        : p.play();
                                   });
                                 },
                                 iconSize: 38,
                                 icon: Icon(
-                                  p!.value.isPlaying
+                                  p.value.isPlaying
                                       ? Icons.pause
                                       : Icons.play_arrow,
                                 ),
