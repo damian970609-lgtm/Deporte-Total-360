@@ -26,13 +26,16 @@ jobs:
       - name: Generar archivos de Android
         run: flutter create --platforms=android .
 
+      - name: Corregir compatibilidad de ProGuard
+        run: echo 'android.r8.proguardAndroidTxt.disallowed=false' >> android/gradle.properties
+
       - name: Instalar dependencias
         run: flutter pub get
 
-      - name: Analizar código de la aplicación
+      - name: Analizar código
         run: flutter analyze lib
 
-      - name: Compilar APK de lanzamiento
+      - name: Compilar APK
         run: flutter build apk --release
 
       - name: Guardar APK para descargar
