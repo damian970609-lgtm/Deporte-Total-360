@@ -16,23 +16,19 @@ const Color yellow = Color(0xFFFFD600);
 const Color blue = Color(0xFF087BFF);
 const Color muted = Color(0xFFA9BDD6);
 
-/// PRISM LIVE STUDIO / SSH101
-/// Servidor de entrada RTMP para enviar la transmisión.
-const String rtmpServerUrl =
-    'rtmp://ssh101.bozztv.com:1935/ssh101';
-
-/// Nombre o clave de transmisión configurado en SSH101.
-/// Debe coincidir con la configuración de tu cuenta.
+// Datos de emisión para configurar PRISM LIVE STUDIO.
+// El envío RTMP se hace desde PRISM, no desde el reproductor Flutter.
+const String rtmpServerUrl = 'rtmp://ssh101.bozztv.com:1935/ssh101';
 const String ssh101StreamKey = 'deportetotal360';
+const String channelDisplayName = 'Deporte Total 360°-1';
 
-/// Dirección HLS que usa el reproductor de la APK.
-/// Se conserva la URL que ya tenía el proyecto.
-/// Si SSH101 te proporciona otra URL HLS, reemplaza esta dirección.
+// URL HLS de salida para reproducir la señal en la APK.
+// Comprueba en el panel de SSH101 que esta sea la URL asignada a tu canal.
 const String streamUrl =
-    'https://lbgo.bozztv.com/ssh101/ssh101/deportetotal360/playlist.m3u8';
+    'https://live21.bozztv.com/akamaissh101/ssh101/deportetotal360/playlist.m3u8';
 
+const String agendaUrl = 'https://futbol-libre.cam/';
 const String telegramUrl = 'https://t.me/';
-const String whatsappUrl = 'https://web.whatsapp.com/';
 
 class DeporteTotal360App extends StatelessWidget {
   const DeporteTotal360App({super.key});
@@ -78,22 +74,20 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        titleSpacing: 12,
         title: const Text(
           'DEPORTE TOTAL 360°',
           style: TextStyle(
             color: cyan,
             fontWeight: FontWeight.w900,
-            letterSpacing: .4,
+            fontSize: 17,
           ),
         ),
         actions: [
           IconButton(
             tooltip: 'Telegram',
-            onPressed: () => openInside(
-              context,
-              telegramUrl,
-              'TELEGRAM',
-            ),
+            onPressed: () =>
+                openInside(context, telegramUrl, 'TELEGRAM'),
             icon: const Icon(Icons.send_rounded, color: cyan),
           ),
         ],
@@ -101,208 +95,231 @@ class HomeScreen extends StatelessWidget {
       body: Stack(
         children: [
           const Positioned.fill(child: SportsBackdrop()),
-          ListView(
-            padding: const EdgeInsets.all(14),
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(22),
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color(0xFF071B46),
-                      Color(0xFF160B3C),
-                      Color(0xFF031326),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  border: Border.all(color: cyan),
-                  boxShadow: [
-                    BoxShadow(
-                      color: cyan.withValues(alpha: .12),
-                      blurRadius: 20,
-                    ),
-                  ],
+          SafeArea(
+            top: false,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+              children: [
+                _buildHero(),
+                const SizedBox(height: 22),
+                const SectionTitle(
+                  title: 'TU MUNDO DEPORTIVO',
+                  color: cyan,
                 ),
-                child: Column(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(15),
-                      child: Image.asset(
-                        'assets/images/logo.png',
-                        height: 210,
-                        width: double.infinity,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, error, stack) {
-                          return const SizedBox(
-                            height: 180,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.emoji_events_rounded,
-                                  color: yellow,
-                                  size: 70,
-                                ),
-                                SizedBox(height: 8),
-                                Text(
-                                  'DEPORTE TOTAL 360°',
-                                  style: TextStyle(
-                                    color: cyan,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 20,
-                                  ),
-                                ),
-                              ],
+                const SizedBox(height: 14),
+                const SportsRow(),
+                const SizedBox(height: 24),
+                const SectionTitle(
+                  title: 'EXPLORA DEPORTE TOTAL 360°',
+                  color: pink,
+                ),
+                const SizedBox(height: 12),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final columns =
+                        constraints.maxWidth >= 520 ? 3 : 2;
+
+                    return GridView.count(
+                      crossAxisCount: columns,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisSpacing: 11,
+                      mainAxisSpacing: 11,
+                      childAspectRatio: columns == 3 ? 1.0 : 1.12,
+                      children: [
+                        FeatureTile(
+                          icon: Icons.live_tv_rounded,
+                          title: 'EN VIVO',
+                          subtitle: 'VER CANAL',
+                          color: pink,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const LiveScreen(),
                             ),
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'TODOS LOS DEPORTES EN UN SOLO LUGAR',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
+                          ),
+                        ),
+                        FeatureTile(
+                          icon: Icons.calendar_month_rounded,
+                          title: 'AGENDA',
+                          subtitle: 'PARTIDOS',
+                          color: green,
+                          onTap: () => openInside(
+                            context,
+                            agendaUrl,
+                            'AGENDA DEPORTIVA',
+                          ),
+                        ),
+                        FeatureTile(
+                          icon: Icons.send_rounded,
+                          title: 'TELEGRAM',
+                          subtitle: 'CANAL OFICIAL',
+                          color: const Color(0xFF28A8E9),
+                          onTap: () => openInside(
+                            context,
+                            telegramUrl,
+                            'TELEGRAM',
+                          ),
+                        ),
+                        FeatureTile(
+                          icon: Icons.sports_soccer_rounded,
+                          title: 'FÚTBOL',
+                          subtitle: 'AGENDA',
+                          color: cyan,
+                          onTap: () => openInside(
+                            context,
+                            agendaUrl,
+                            'AGENDA DE FÚTBOL',
+                          ),
+                        ),
+                        FeatureTile(
+                          icon: Icons.favorite_rounded,
+                          title: 'DONACIONES',
+                          subtitle: 'APOYA EL PROYECTO',
+                          color: yellow,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const DonationsScreen(),
+                            ),
+                          ),
+                        ),
+                        FeatureTile(
+                          icon: Icons.emoji_events_rounded,
+                          title: 'DEPORTES',
+                          subtitle: 'TODOS EN UNO',
+                          color: blue,
+                          onTap: () => openInside(
+                            context,
+                            agendaUrl,
+                            'AGENDA DEPORTIVA',
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
-              ),
-              const SizedBox(height: 22),
-              const SectionTitle(
-                title: 'TU MUNDO DEPORTIVO',
-                color: cyan,
-              ),
-              const SizedBox(height: 12),
-              const SportsRow(),
-              const SizedBox(height: 18),
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisSpacing: 11,
-                mainAxisSpacing: 11,
-                childAspectRatio: 1.12,
-                children: [
-                  FeatureTile(
-                    icon: Icons.live_tv_rounded,
-                    title: 'TRANSMISIONES',
-                    subtitle: 'EN VIVO',
-                    color: pink,
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const LiveScreen(),
+                const SizedBox(height: 22),
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(18),
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0xFF061A3A),
+                        Color(0xFF250B40),
+                        Color(0xFF062E3C),
+                      ],
+                    ),
+                    border: Border.all(
+                      color: pink.withValues(alpha: .8),
+                    ),
+                  ),
+                  child: const Column(
+                    children: [
+                      Icon(
+                        Icons.emoji_events_rounded,
+                        color: yellow,
+                        size: 42,
                       ),
-                    ),
-                  ),
-                  FeatureTile(
-                    icon: Icons.calendar_month_rounded,
-                    title: 'AGENDA',
-                    subtitle: 'DE PARTIDOS',
-                    color: green,
-                    onTap: () => openInside(
-                      context,
-                      'https://futbol-libre.cam/',
-                      'AGENDA DEPORTIVA',
-                    ),
-                  ),
-                  FeatureTile(
-                    icon: Icons.send_rounded,
-                    title: 'TELEGRAM',
-                    subtitle: 'CANAL OFICIAL',
-                    color: const Color(0xFF28A8E9),
-                    onTap: () => openInside(
-                      context,
-                      telegramUrl,
-                      'TELEGRAM',
-                    ),
-                  ),
-                  FeatureTile(
-                    icon: Icons.chat_rounded,
-                    title: 'CONTACTAR',
-                    subtitle: 'WHATSAPP WEB',
-                    color: green,
-                    onTap: () => openInside(
-                      context,
-                      whatsappUrl,
-                      'CONTACTAR',
-                    ),
-                  ),
-                  FeatureTile(
-                    icon: Icons.favorite_rounded,
-                    title: 'DONACIONES',
-                    subtitle: 'APOYA EL PROYECTO',
-                    color: yellow,
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const DonationsScreen(),
+                      SizedBox(height: 8),
+                      Text(
+                        '¡EL DEPORTE NOS UNE!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: cyan,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
-                    ),
-                  ),
-                  FeatureTile(
-                    icon: Icons.sports_soccer_rounded,
-                    title: 'MÁS DEPORTES',
-                    subtitle: 'CONSULTAR AGENDA',
-                    color: blue,
-                    onTap: () => openInside(
-                      context,
-                      'https://futbol-libre.cam/',
-                      'AGENDA DEPORTIVA',
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(18),
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color(0xFF061A3A),
-                      Color(0xFF250B40),
-                      Color(0xFF062E3C),
+                      SizedBox(height: 8),
+                      Text(
+                        'Fútbol · Baloncesto · Béisbol · Tenis · Voleibol',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
                     ],
                   ),
-                  border: Border.all(color: pink),
                 ),
-                child: const Column(
-                  children: [
-                    Icon(
-                      Icons.emoji_events_rounded,
-                      color: yellow,
-                      size: 38,
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      '¡EL DEPORTE NOS UNE!',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: cyan,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Fútbol · Baloncesto · Béisbol · Tenis · Voleibol',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white70),
-                    ),
-                  ],
+                const SizedBox(height: 18),
+                const Text(
+                  'DEPORTE TOTAL 360° · TU PASIÓN, EN TODAS PARTES',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: muted,
+                    fontSize: 10,
+                    letterSpacing: .4,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'DEPORTE TOTAL 360° · TU PASIÓN, EN TODAS PARTES',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: muted, fontSize: 10),
-              ),
-            ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHero() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF071B46),
+            Color(0xFF160B3C),
+            Color(0xFF031326),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(color: cyan, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: cyan.withValues(alpha: .12),
+            blurRadius: 20,
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Image.asset(
+            'assets/images/logo.png',
+            height: 190,
+            width: double.infinity,
+            fit: BoxFit.contain,
+            errorBuilder: (_, error, stack) {
+              return const SizedBox(
+                height: 150,
+                child: Icon(
+                  Icons.emoji_events_rounded,
+                  color: yellow,
+                  size: 80,
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'TODO EL DEPORTE EN UN SOLO LUGAR',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+              letterSpacing: .4,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Agenda deportiva · Directos · Noticias',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: muted,
+              fontSize: 11,
+            ),
           ),
         ],
       ),
@@ -331,18 +348,19 @@ class SportsRow extends StatelessWidget {
             child: Column(
               children: [
                 Container(
-                  width: 40,
-                  height: 40,
+                  width: 39,
+                  height: 39,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: sport.$3.withValues(alpha: .08),
                     border: Border.all(color: sport.$3),
                   ),
-                  child: Icon(sport.$1, color: sport.$3, size: 22),
+                  child: Icon(sport.$1, color: sport.$3, size: 21),
                 ),
                 const SizedBox(height: 5),
                 Text(
                   sport.$2,
+                  textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 8,
                     fontWeight: FontWeight.w800,
@@ -423,7 +441,9 @@ class FeatureTile extends StatelessWidget {
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(17),
-            border: Border.all(color: color.withValues(alpha: .9)),
+            border: Border.all(
+              color: color.withValues(alpha: .9),
+            ),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -487,7 +507,11 @@ class SportsBackdrop extends StatelessWidget {
         shape: BoxShape.circle,
         color: color,
         boxShadow: [
-          BoxShadow(color: color, blurRadius: 70, spreadRadius: 25),
+          BoxShadow(
+            color: color,
+            blurRadius: 70,
+            spreadRadius: 25,
+          ),
         ],
       ),
     );
@@ -570,9 +594,8 @@ class _LiveScreenState extends State<LiveScreen> {
   @override
   Widget build(BuildContext context) {
     final player = _player;
-    final ready = player != null &&
-        player.value.isInitialized &&
-        !_failed;
+    final ready =
+        player != null && player.value.isInitialized && !_failed;
 
     return Scaffold(
       appBar: AppBar(
@@ -641,8 +664,8 @@ class _LiveScreenState extends State<LiveScreen> {
           const SizedBox(height: 12),
           if (!_loading && !ready) ...[
             const Text(
-              'No se pudo reproducir la señal. Puede estar desconectada '
-              'o la dirección puede haber cambiado.',
+              'No se pudo reproducir la señal. Comprueba que PRISM '
+              'esté transmitiendo y que la URL HLS corresponda a tu canal.',
               textAlign: TextAlign.center,
               style: TextStyle(color: muted),
             ),
@@ -661,7 +684,7 @@ class _LiveScreenState extends State<LiveScreen> {
             color: green,
             onTap: () => openInside(
               context,
-              'https://futbol-libre.cam/',
+              agendaUrl,
               'AGENDA DEPORTIVA',
             ),
           ),
@@ -751,11 +774,11 @@ class DonationsScreen extends StatelessWidget {
               FilledButton.icon(
                 onPressed: () => openInside(
                   context,
-                  whatsappUrl,
-                  'CONTACTAR',
+                  telegramUrl,
+                  'TELEGRAM',
                 ),
-                icon: const Icon(Icons.chat_rounded),
-                label: const Text('CONTACTAR'),
+                icon: const Icon(Icons.send_rounded),
+                label: const Text('IR A TELEGRAM'),
               ),
             ],
           ),
