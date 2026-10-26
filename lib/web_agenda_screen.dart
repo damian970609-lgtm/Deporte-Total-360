@@ -31,6 +31,18 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
   String? _error;
   int _reloadKey = 0;
 
+  Uri get _initialUri => Uri.parse(widget.initialUrl);
+
+  bool _isSameSite(Uri target) {
+    final baseHost = _initialUri.host.toLowerCase();
+    final targetHost = target.host.toLowerCase();
+
+    if (baseHost.isEmpty || targetHost.isEmpty) return false;
+
+    return targetHost == baseHost ||
+        targetHost.endsWith('.$baseHost');
+  }
+
   Future<void> _reload() async {
     if (!mounted) return;
 
@@ -43,9 +55,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
     final controller = _controller;
 
     if (controller == null) {
-      setState(() {
-        _reloadKey++;
-      });
+      setState(() => _reloadKey++);
       return;
     }
 
@@ -56,7 +66,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
         ),
       );
     } catch (e) {
-      _showError('No se pudo iniciar la carga.\n$e');
+      _showError('No se pudo recargar la página.\n$e');
     }
   }
 
@@ -70,7 +80,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           return;
         }
       } catch (_) {
-        // Si falla el historial, se vuelve a la pantalla anterior.
+        // Si falla el historial, vuelve a la pantalla anterior.
       }
     }
 
@@ -91,12 +101,22 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
 
     final scheme = target.scheme.toLowerCase();
 
-    // Mantiene las páginas web dentro de la aplicación.
-    if (scheme == 'https' || scheme == 'http') {
+    // Bloquea esquemas externos como intent:, market: y otros.
+    if (scheme != 'https' && scheme != 'http') {
+      return NavigationActionPolicy.CANCEL;
+    }
+
+    // Permite recursos, vídeos e iframes incrustados.
+    if (!action.isForMainFrame) {
       return NavigationActionPolicy.ALLOW;
     }
 
-    // No abre esquemas externos desconocidos.
+    // Evita que la página principal sea sustituida por otro dominio.
+    // Si el reproductor requiere una redirección externa, puede bloquearse.
+    if (_isSameSite(target)) {
+      return NavigationActionPolicy.ALLOW;
+    }
+
     return NavigationActionPolicy.CANCEL;
   }
 
@@ -154,7 +174,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           ),
           actions: [
             IconButton(
-              tooltip: 'Recargar',
+              tooltip: 'Recargar agenda',
               onPressed: _reload,
               icon: const Icon(
                 Icons.refresh_rounded,
@@ -175,6 +195,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
         ),
         body: Column(
           children: [
+            // Cabecera propia de la APK.
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(
@@ -218,7 +239,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                     ),
                     initialSettings: InAppWebViewSettings(
                       javaScriptEnabled: true,
-                      javaScriptCanOpenWindowsAutomatically: true,
+                      javaScriptCanOpenWindowsAutomatically: false,
                       domStorageEnabled: true,
                       databaseEnabled: true,
                       thirdPartyCookiesEnabled: true,
@@ -236,43 +257,64 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                     onWebViewCreated: (controller) {
                       _controller = controller;
                     },
+
+                    // Rechaza ventanas emergentes creadas por la web.
+                    onCreateWindow: (controller, action) async {
+                      return false;
+                    },
+
                     shouldOverrideUrlLoading: _handleNavigation,
+
                     onLoadStart: (controller, url) {
                       if (!mounted) return;
+
                       setState(() {
                         _loading = true;
                         _progress = 0;
                         _error = null;
                       });
                     },
+
                     onProgressChanged: (controller, progress) {
                       if (!mounted) return;
+
                       setState(() {
                         _progress = progress / 100;
                         _loading = progress < 100;
                       });
                     },
+
                     onLoadStop: (controller, url) {
                       if (!mounted) return;
+
                       setState(() {
                         _loading = false;
                         _progress = 1;
                       });
                     },
-                    onReceivedError: (controller, request, error) {
+
+                    onReceivedError: (
+                      controller,
+                      request,
+                      error,
+                    ) {
                       if (request.isForMainFrame != true) return;
 
                       _showError(
-                        'No se pudo cargar la página.\n\n'
+                        'No se pudo cargar la agenda.\n\n'
                         'Código: ${error.type}\n'
                         '${error.description}\n\n'
                         'Comprueba la conexión y prueba la dirección '
-                        'en Chrome. Si tampoco abre allí, puede que '
-                        'el sitio no esté disponible.',
+                        'en Chrome. Si el sitio bloquea navegadores '
+                        'integrados, la APK no puede obligarlo a cargar.',
                       );
                     },
-                    onReceivedHttpError:
-                        (controller, request, response) {
+
+                    onReceivedHttpError: (
+                      controller,
+                      request,
+                      response,
+                    ) {
                       if (request.isForMainFrame != true) return;
 
                       final status = response.statusCode;
@@ -280,12 +322,13 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                       if (status != null && status >= 400) {
                         _showError(
                           'El servidor respondió con HTTP $status.\n\n'
-                          'El sitio puede estar temporalmente caído, '
-                          'bloquear la solicitud o devolver un error.',
+                          'Puede estar temporalmente caído o rechazar '
+                          'la solicitud desde la aplicación.',
                         );
                       }
                     },
                   ),
+
                   if (_loading && _error == null)
                     const Positioned(
                       top: 0,
@@ -298,6 +341,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                             AlwaysStoppedAnimation<Color>(_pink),
                       ),
                     ),
+
                   if (_error != null)
                     Positioned.fill(
                       child: Container(
@@ -343,17 +387,6 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                                     label: const Text(
                                       'VOLVER A INTENTAR',
                                     ),
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                const Text(
-                                  'Si el servidor no responde o bloquea '
-                                  'navegadores integrados, la aplicación '
-                                  'no puede obligarlo a cargar.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: Colors.white54,
-                                    fontSize: 12,
                                   ),
                                 ),
                               ],
