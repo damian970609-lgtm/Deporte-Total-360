@@ -23,12 +23,13 @@ const String streamUrl =
 const String whatsappUrl =
     'https://wa.me/5927214741?text=Hola%2C%20contacto%20con%20DEPORTE%20TOTAL%20360';
 
-// Cambia esto cuando tengas tu canal real
+// Cambia esto cuando tengas tu canal real.
 const String telegramUrl = 'https://t.me/';
 
 Future<void> openUrl(String value) async {
   final uri = Uri.tryParse(value);
   if (uri == null || !uri.hasScheme) return;
+
   try {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   } catch (_) {}
@@ -71,7 +72,9 @@ class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
 
   void _open(Widget page) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => page),
+    );
   }
 
   void _selectTab(int index) {
@@ -186,14 +189,21 @@ class _HomeScreenState extends State<HomeScreen> {
               const Text(
                 'FÚTBOL  •  BÁSQUET  •  TENIS  •  BÉISBOL  •  VOLEIBOL',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: muted, fontSize: 10, letterSpacing: .4),
+                style: TextStyle(
+                  color: muted,
+                  fontSize: 10,
+                  letterSpacing: .4,
+                ),
               ),
               const SizedBox(height: 12),
               const Center(
                 child: Text(
                   'DEPORTE TOTAL 360° · TU PASIÓN, EN TODAS PARTES',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white38, fontSize: 10),
+                  style: TextStyle(
+                    color: Colors.white38,
+                    fontSize: 10,
+                  ),
                 ),
               ),
             ],
@@ -243,14 +253,24 @@ class BrandHero extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: const LinearGradient(
-          colors: [Color(0xFF071B46), Color(0xFF160B3C), Color(0xFF031326)],
+          colors: [
+            Color(0xFF071B46),
+            Color(0xFF160B3C),
+            Color(0xFF031326),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         border: Border.all(color: cyan.withValues(alpha: .9)),
         boxShadow: [
-          BoxShadow(color: cyan.withValues(alpha: .12), blurRadius: 22),
-          BoxShadow(color: pink.withValues(alpha: .08), blurRadius: 28),
+          BoxShadow(
+            color: cyan.withValues(alpha: .12),
+            blurRadius: 22,
+          ),
+          BoxShadow(
+            color: pink.withValues(alpha: .08),
+            blurRadius: 28,
+          ),
         ],
       ),
       child: Column(
@@ -312,12 +332,21 @@ class SportsRow extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: sport.$3.withValues(alpha: .08),
-                    border: Border.all(color: sport.$3.withValues(alpha: .8)),
+                    border: Border.all(
+                      color: sport.$3.withValues(alpha: .8),
+                    ),
                     boxShadow: [
-                      BoxShadow(color: sport.$3.withValues(alpha: .12), blurRadius: 10),
+                      BoxShadow(
+                        color: sport.$3.withValues(alpha: .12),
+                        blurRadius: 10,
+                      ),
                     ],
                   ),
-                  child: Icon(sport.$1, color: sport.$3, size: 23),
+                  child: Icon(
+                    sport.$1,
+                    color: sport.$3,
+                    size: 23,
+                  ),
                 ),
                 const SizedBox(height: 5),
                 Text(
@@ -337,7 +366,12 @@ class SportsRow extends StatelessWidget {
 }
 
 class SectionTitle extends StatelessWidget {
-  const SectionTitle({super.key, required this.title, required this.color});
+  const SectionTitle({
+    super.key,
+    required this.title,
+    required this.color,
+  });
+
   final String title;
   final Color color;
 
@@ -351,7 +385,9 @@ class SectionTitle extends StatelessWidget {
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(4),
-            boxShadow: [BoxShadow(color: color, blurRadius: 8)],
+            boxShadow: [
+              BoxShadow(color: color, blurRadius: 8),
+            ],
           ),
         ),
         const SizedBox(width: 9),
@@ -401,20 +437,42 @@ class FeatureTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(17),
             border: Border.all(color: color.withValues(alpha: .9)),
             boxShadow: [
-              BoxShadow(color: color.withValues(alpha: .08), blurRadius: 12),
+              BoxShadow(
+                color: color.withValues(alpha: .08),
+                blurRadius: 12,
+              ),
             ],
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 34, color: color,
-                  shadows: [Shadow(color: color, blurRadius: 12)]),
+              Icon(
+                icon,
+                size: 34,
+                color: color,
+                shadows: [
+                  Shadow(color: color, blurRadius: 12),
+                ],
+              ),
               const SizedBox(height: 9),
-              Text(title, textAlign: TextAlign.center,
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 11,
+                ),
+              ),
               const SizedBox(height: 4),
-              Text(subtitle, textAlign: TextAlign.center,
-                  style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 9)),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 9,
+                ),
+              ),
             ],
           ),
         ),
@@ -433,13 +491,21 @@ class SportsBanner extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
         gradient: const LinearGradient(
-          colors: [Color(0xFF061A3A), Color(0xFF250B40), Color(0xFF062E3C)],
+          colors: [
+            Color(0xFF061A3A),
+            Color(0xFF250B40),
+            Color(0xFF062E3C),
+          ],
         ),
         border: Border.all(color: pink.withValues(alpha: .8)),
       ),
       child: const Column(
         children: [
-          Icon(Icons.emoji_events_rounded, color: yellow, size: 35),
+          Icon(
+            Icons.emoji_events_rounded,
+            color: yellow,
+            size: 35,
+          ),
           SizedBox(height: 7),
           Text(
             '¡EL DEPORTE NOS UNE!',
@@ -448,14 +514,19 @@ class SportsBanner extends StatelessWidget {
               fontSize: 20,
               fontWeight: FontWeight.w900,
               color: cyan,
-              shadows: [Shadow(color: pink, blurRadius: 12)],
+              shadows: [
+                Shadow(color: pink, blurRadius: 12),
+              ],
             ),
           ),
           SizedBox(height: 6),
           Text(
             'Fútbol · Baloncesto · Béisbol · Tenis · Voleibol · Y más',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white70, fontSize: 12),
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
@@ -498,7 +569,13 @@ class SportsBackdrop extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: color,
-        boxShadow: [BoxShadow(color: color, blurRadius: 70, spreadRadius: 25)],
+        boxShadow: [
+          BoxShadow(
+            color: color,
+            blurRadius: 70,
+            spreadRadius: 25,
+          ),
+        ],
       ),
     );
   }
@@ -534,11 +611,14 @@ class _LiveScreenState extends State<LiveScreen> {
       _error = null;
     });
 
-    final player = VideoPlayerController.networkUrl(Uri.parse(streamUrl));
+    final player = VideoPlayerController.networkUrl(
+      Uri.parse(streamUrl),
+    );
     _player = player;
 
     try {
       await player.initialize();
+
       if (!mounted || _player != player) {
         await player.dispose();
         return;
@@ -568,6 +648,7 @@ class _LiveScreenState extends State<LiveScreen> {
   @override
   Widget build(BuildContext context) {
     final p = _player;
+
     final offline = !_loading &&
         (_error != null || p == null || !p.value.isInitialized);
 
@@ -575,13 +656,20 @@ class _LiveScreenState extends State<LiveScreen> {
       appBar: AppBar(
         title: const Text(
           'TRANSMISIONES EN VIVO',
-          style: TextStyle(color: cyan, fontWeight: FontWeight.w900, fontSize: 15),
+          style: TextStyle(
+            color: cyan,
+            fontWeight: FontWeight.w900,
+            fontSize: 15,
+          ),
         ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const SectionTitle(title: 'CANAL EN VIVO DE DEPORTE TOTAL 360°', color: pink),
+          const SectionTitle(
+            title: 'CANAL EN VIVO DE DEPORTE TOTAL 360°',
+            color: pink,
+          ),
           const SizedBox(height: 14),
           ClipRRect(
             borderRadius: BorderRadius.circular(18),
@@ -590,7 +678,9 @@ class _LiveScreenState extends State<LiveScreen> {
               child: Container(
                 color: Colors.black,
                 child: _loading
-                    ? const Center(child: CircularProgressIndicator(color: cyan))
+                    ? const Center(
+                        child: CircularProgressIndicator(color: cyan),
+                      )
                     : offline
                         ? const OfflinePanel()
                         : Stack(
@@ -600,20 +690,29 @@ class _LiveScreenState extends State<LiveScreen> {
                                 child: FittedBox(
                                   fit: BoxFit.contain,
                                   child: SizedBox(
-                                    width: p.value.size.width,
-                                    height: p.value.size.height,
-                                    child: VideoPlayer(p),
+                                    // CORREGIDO: comprobación explícita de null.
+                                    width: p!.value.size.width,
+                                    height: p!.value.size.height,
+                                    child: VideoPlayer(p!),
                                   ),
                                 ),
                               ),
                               IconButton.filled(
                                 onPressed: () {
                                   setState(() {
-                                    p.value.isPlaying ? p.pause() : p.play();
+                                    // CORREGIDO: p puede ser null fuera
+                                    // de la comprobación del reproductor.
+                                    p!.value.isPlaying
+                                        ? p!.pause()
+                                        : p!.play();
                                   });
                                 },
                                 iconSize: 38,
-                                icon: Icon(p.value.isPlaying ? Icons.pause : Icons.play_arrow),
+                                icon: Icon(
+                                  p!.value.isPlaying
+                                      ? Icons.pause
+                                      : Icons.play_arrow,
+                                ),
                               ),
                             ],
                           ),
@@ -646,7 +745,9 @@ class _LiveScreenState extends State<LiveScreen> {
             subtitle: 'CONSULTAR PROGRAMACIÓN',
             color: green,
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const WebAgendaScreen()),
+              MaterialPageRoute(
+                builder: (_) => const WebAgendaScreen(),
+              ),
             ),
           ),
         ],
@@ -665,13 +766,21 @@ class OfflinePanel extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF07152E), Color(0xFF240A3C), Color(0xFF031B29)],
+          colors: [
+            Color(0xFF07152E),
+            Color(0xFF240A3C),
+            Color(0xFF031B29),
+          ],
         ),
       ),
       child: const Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.sports_soccer_rounded, color: cyan, size: 36),
+          Icon(
+            Icons.sports_soccer_rounded,
+            color: cyan,
+            size: 36,
+          ),
           SizedBox(height: 8),
           Text(
             'DEPORTE TOTAL 360°',
@@ -683,12 +792,23 @@ class OfflinePanel extends StatelessWidget {
             ),
           ),
           SizedBox(height: 8),
-          Icon(Icons.portable_wifi_off_rounded, color: pink, size: 36),
+          Icon(
+            Icons.portable_wifi_off_rounded,
+            color: pink,
+            size: 36,
+          ),
           SizedBox(height: 8),
-          Text('CANAL EN VIVO', style: TextStyle(fontWeight: FontWeight.w900)),
+          Text(
+            'CANAL EN VIVO',
+            style: TextStyle(fontWeight: FontWeight.w900),
+          ),
           Text(
             'FUERA DE LÍNEA',
-            style: TextStyle(color: pink, fontWeight: FontWeight.w900, fontSize: 18),
+            style: TextStyle(
+              color: pink,
+              fontWeight: FontWeight.w900,
+              fontSize: 18,
+            ),
           ),
         ],
       ),
@@ -708,17 +828,30 @@ class DonationsScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.favorite_rounded, color: pink, size: 76),
+            const Icon(
+              Icons.favorite_rounded,
+              color: pink,
+              size: 76,
+            ),
             const SizedBox(height: 18),
             const Text(
               'APOYA EL PROYECTO',
-              style: TextStyle(color: yellow, fontSize: 22, fontWeight: FontWeight.w900),
+              style: TextStyle(
+                color: yellow,
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+              ),
             ),
             const SizedBox(height: 12),
             const Text(
-              'Gracias por apoyar DEPORTE TOTAL 360°. Contacta con el creador para conocer las opciones de donación.',
+              'Gracias por apoyar DEPORTE TOTAL 360°. '
+              'Contacta con el creador para conocer las opciones '
+              'de donación.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: muted, height: 1.5),
+              style: TextStyle(
+                color: muted,
+                height: 1.5,
+              ),
             ),
             const SizedBox(height: 22),
             FilledButton.icon(
@@ -743,36 +876,60 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         children: [
           const ListTile(
-            leading: Icon(Icons.dark_mode_rounded, color: cyan),
+            leading: Icon(
+              Icons.dark_mode_rounded,
+              color: cyan,
+            ),
             title: Text('Modo oscuro'),
             subtitle: Text('Interfaz deportiva oscura'),
-            trailing: Icon(Icons.check_circle, color: green),
+            trailing: Icon(
+              Icons.check_circle,
+              color: green,
+            ),
           ),
           const Divider(color: Colors.white12),
           const ListTile(
-            leading: Icon(Icons.notifications_active_rounded, color: green),
+            leading: Icon(
+              Icons.notifications_active_rounded,
+              color: green,
+            ),
             title: Text('Notificaciones'),
-            subtitle: Text('Las notificaciones requieren configuración adicional.'),
+            subtitle: Text(
+              'Las notificaciones requieren configuración adicional.',
+            ),
           ),
           const Divider(color: Colors.white12),
           ListTile(
-            leading: const Icon(Icons.send_rounded, color: Color(0xFF28A8E9)),
+            leading: const Icon(
+              Icons.send_rounded,
+              color: Color(0xFF28A8E9),
+            ),
             title: const Text('Canal de Telegram'),
-            subtitle: const Text('Enlace provisional hasta crear el canal'),
+            subtitle: const Text(
+              'Enlace provisional hasta crear el canal',
+            ),
             trailing: const Icon(Icons.open_in_new),
             onTap: () => openUrl(telegramUrl),
           ),
           const Divider(color: Colors.white12),
           ListTile(
-            leading: const Icon(Icons.support_agent_rounded, color: green),
+            leading: const Icon(
+              Icons.support_agent_rounded,
+              color: green,
+            ),
             title: const Text('Contactar con el creador'),
             onTap: () => openUrl(whatsappUrl),
           ),
           const Divider(color: Colors.white12),
           const ListTile(
-            leading: Icon(Icons.info_outline_rounded, color: cyan),
+            leading: Icon(
+              Icons.info_outline_rounded,
+              color: cyan,
+            ),
             title: Text('Acerca de'),
-            subtitle: Text('DEPORTE TOTAL 360° · Tu pasión, en todas partes.'),
+            subtitle: Text(
+              'DEPORTE TOTAL 360° · Tu pasión, en todas partes.',
+            ),
           ),
         ],
       ),
