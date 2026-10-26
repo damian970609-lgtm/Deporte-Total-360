@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 const Color _navy = Color(0xFF030814);
 const Color _panel = Color(0xFF071326);
@@ -8,10 +7,17 @@ const Color _cyan = Color(0xFF00E5FF);
 const Color _pink = Color(0xFFFF28CF);
 const Color _green = Color(0xFF39FF9C);
 
-const String _agendaUrl = 'https://futbol-libre.cam/';
+const String _defaultAgendaUrl = 'https://futbol-libre.cam/';
 
 class WebAgendaScreen extends StatefulWidget {
-  const WebAgendaScreen({super.key});
+  const WebAgendaScreen({
+    super.key,
+    this.initialUrl = _defaultAgendaUrl,
+    this.pageTitle = 'AGENDA DEPORTIVA',
+  });
+
+  final String initialUrl;
+  final String pageTitle;
 
   @override
   State<WebAgendaScreen> createState() => _WebAgendaScreenState();
@@ -23,56 +29,87 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
   String? _error;
   bool _loading = true;
 
-  static const Set<String> _allowedHosts = {
-    'futbol-libre.cam',
-    'www.futbol-libre.cam',
-  };
-
-  bool _allowed(Uri uri) =>
-      uri.scheme == 'https' && _allowedHosts.contains(uri.host.toLowerCase());
-
   Future<void> _back() async {
-    final c = _controller;
-    if (c != null && await c.canGoBack()) {
-      await c.goBack();
-    } else if (mounted) {
+    final controller = _controller;
+
+    if (controller != null && await controller.canGoBack()) {
+      await controller.goBack();
+      return;
+    }
+
+    if (mounted) {
       Navigator.of(context).maybePop();
     }
   }
 
   Future<void> _reload() async {
+    if (!mounted) return;
+
     setState(() {
       _error = null;
       _loading = true;
       _progress = 0;
     });
 
-    await _controller?.loadUrl(
-      urlRequest: URLRequest(url: WebUri(_agendaUrl)),
-    );
+    try {
+      await _controller?.loadUrl(
+        urlRequest: URLRequest(
+          url: WebUri(widget.initialUrl),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'No se pudo iniciar la carga. Inténtalo otra vez.';
+      });
+    }
   }
 
-  Future<NavigationActionPolicy> _navigation(
+  Future<NavigationActionPolicy> _handleNavigation(
     InAppWebViewController controller,
     NavigationAction action,
   ) async {
-    final webUrl = action.request.url;
-    if (webUrl == null) return NavigationActionPolicy.CANCEL;
+    final target = action.request.url;
 
-    final uri = Uri.tryParse(webUrl.toString());
-    if (uri == null) return NavigationActionPolicy.CANCEL;
+    if (target == null) {
+      return NavigationActionPolicy.CANCEL;
+    }
 
-    if (_allowed(uri)) {
+    final scheme = target.scheme.toLowerCase();
+
+    // Mantiene los enlaces web dentro de la aplicación.
+    if (scheme == 'https' || scheme == 'http') {
       return NavigationActionPolicy.ALLOW;
     }
 
-    if (uri.scheme == 'https' || uri.scheme == 'http') {
-      try {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } catch (_) {}
+    // Bloquea esquemas no web para evitar abrir otra aplicación
+    // automáticamente o lanzar destinos no compatibles.
+    return NavigationActionPolicy.CANCEL;
+  }
+
+  Future<bool> _handlePopup(
+    InAppWebViewController controller,
+    CreateWindowAction action,
+  ) async {
+    final target = action.request.url;
+
+    if (target == null) return false;
+
+    final scheme = target.scheme.toLowerCase();
+    if (scheme != 'https' && scheme != 'http') {
+      return false;
     }
 
-    return NavigationActionPolicy.CANCEL;
+    // Intenta cargar la ventana emergente en la vista actual.
+    try {
+      await controller.loadUrl(
+        urlRequest: URLRequest(url: target),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   @override
@@ -87,25 +124,35 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
         appBar: AppBar(
           backgroundColor: _panel,
           leading: IconButton(
+            tooltip: 'Volver',
             onPressed: _back,
             icon: const Icon(Icons.arrow_back, color: _cyan),
           ),
-          title: const Column(
+          title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 'DEPORTE TOTAL 360°',
-                style: TextStyle(color: _cyan, fontWeight: FontWeight.w900, fontSize: 14),
+                style: TextStyle(
+                  color: _cyan,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 14,
+                ),
               ),
               Text(
-                'AGENDA DEPORTIVA',
-                style: TextStyle(color: Colors.white70, fontSize: 10),
+                widget.pageTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                ),
               ),
             ],
           ),
           actions: [
             IconButton(
-              tooltip: 'Recargar agenda',
+              tooltip: 'Recargar página',
               onPressed: _reload,
               icon: const Icon(Icons.refresh, color: _green),
             ),
@@ -113,7 +160,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(2),
             child: LinearProgressIndicator(
-              value: _progress >= 1 ? null : _progress,
+              value: _loading ? null : _progress,
               backgroundColor: _panel,
               valueColor: const AlwaysStoppedAnimation<Color>(_pink),
             ),
@@ -123,23 +170,34 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           children: [
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
               color: const Color(0xFF091A31),
               child: const Row(
                 children: [
-                  Icon(Icons.sports_soccer, color: _cyan, size: 20),
+                  Icon(
+                    Icons.sports_soccer_rounded,
+                    color: _cyan,
+                    size: 20,
+                  ),
                   SizedBox(width: 9),
                   Expanded(
                     child: Text(
-                      'AGENDA DE PARTIDOS',
+                      'DEPORTE TOTAL 360° · NAVEGACIÓN INTERNA',
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w900,
-                        fontSize: 12,
+                        fontSize: 11,
                       ),
                     ),
                   ),
-                  Icon(Icons.sports_basketball, color: _pink, size: 19),
+                  Icon(
+                    Icons.sports_basketball_rounded,
+                    color: _pink,
+                    size: 19,
+                  ),
                 ],
               ),
             ),
@@ -147,18 +205,30 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
               child: Stack(
                 children: [
                   InAppWebView(
-                    initialUrlRequest: URLRequest(url: WebUri(_agendaUrl)),
+                    initialUrlRequest: URLRequest(
+                      url: WebUri(widget.initialUrl),
+                    ),
                     initialSettings: InAppWebViewSettings(
                       javaScriptEnabled: true,
                       domStorageEnabled: true,
-                      supportMultipleWindows: false,
-                      javaScriptCanOpenWindowsAutomatically: false,
+                      databaseEnabled: true,
+                      supportMultipleWindows: true,
+                      javaScriptCanOpenWindowsAutomatically: true,
                       useShouldOverrideUrlLoading: true,
-                      mediaPlaybackRequiresUserGesture: true,
+                      mediaPlaybackRequiresUserGesture: false,
                       allowsInlineMediaPlayback: true,
                       thirdPartyCookiesEnabled: true,
+                      useWideViewPort: true,
+                      loadWithOverviewMode: true,
+                      supportZoom: true,
+                      builtInZoomControls: true,
+                      displayZoomControls: false,
                     ),
-                    onWebViewCreated: (controller) => _controller = controller,
+                    onWebViewCreated: (controller) {
+                      _controller = controller;
+                    },
+                    shouldOverrideUrlLoading: _handleNavigation,
+                    onCreateWindow: _handlePopup,
                     onLoadStart: (controller, url) {
                       if (!mounted) return;
                       setState(() {
@@ -179,17 +249,21 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                       setState(() {
                         _loading = false;
                         _progress = 1;
+                        _error = null;
                       });
                     },
                     onReceivedError: (controller, request, error) {
-                      if (request.isForMainFrame != true || !mounted) return;
+                      if (request.isForMainFrame != true || !mounted) {
+                        return;
+                      }
+
                       setState(() {
                         _loading = false;
-                        _error = 'No se pudo cargar la página. Comprueba tu conexión e inténtalo de nuevo.';
+                        _error =
+                            'La página no respondió. Comprueba la conexión '
+                            'o vuelve a intentarlo.';
                       });
                     },
-                    shouldOverrideUrlLoading: _navigation,
-                    onCreateWindow: (controller, action) async => false,
                   ),
                   if (_loading && _error == null)
                     const Positioned(
@@ -199,7 +273,8 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                       child: LinearProgressIndicator(
                         minHeight: 2,
                         backgroundColor: Colors.transparent,
-                        valueColor: AlwaysStoppedAnimation<Color>(_pink),
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(_pink),
                       ),
                     ),
                   if (_error != null)
@@ -211,10 +286,15 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.wifi_off, size: 54, color: _pink),
+                              const Icon(
+                                Icons.wifi_off_rounded,
+                                size: 54,
+                                color: _pink,
+                              ),
                               const SizedBox(height: 16),
                               const Text(
-                                'AGENDA NO DISPONIBLE',
+                                'PÁGINA NO DISPONIBLE',
+                                textAlign: TextAlign.center,
                                 style: TextStyle(
                                   color: _cyan,
                                   fontWeight: FontWeight.w900,
@@ -225,7 +305,9 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                               Text(
                                 _error!,
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(color: Colors.white70),
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                ),
                               ),
                               const SizedBox(height: 20),
                               FilledButton.icon(
