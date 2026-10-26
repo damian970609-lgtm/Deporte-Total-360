@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-const String _originalAgendaUrl = 'https://futbol-libre.cam/';
+const String _agendaUrl = 'https://futbol-libre.cam/';
 const String _fallbackAgendaUrl =
     'https://www.espn.com/soccer/scoreboard';
 
@@ -10,12 +13,13 @@ const Color _panel = Color(0xFF071B35);
 const Color _cyan = Color(0xFF00E5FF);
 const Color _pink = Color(0xFFFF28CF);
 const Color _green = Color(0xFF39FF9C);
+const Color _yellow = Color(0xFFFFD600);
 const Color _muted = Color(0xFFB4C4D9);
 
 class WebAgendaScreen extends StatefulWidget {
   const WebAgendaScreen({
     super.key,
-    this.initialUrl = _originalAgendaUrl,
+    this.initialUrl = _agendaUrl,
     this.pageTitle = 'AGENDA DE PARTIDOS',
   });
 
@@ -23,24 +27,24 @@ class WebAgendaScreen extends StatefulWidget {
   final String pageTitle;
 
   @override
-  State<WebAgendaScreen> createState() =>
-      _WebAgendaScreenState();
+  State<WebAgendaScreen> createState() => _WebAgendaScreenState();
 }
 
 class _WebAgendaScreenState extends State<WebAgendaScreen> {
   InAppWebViewController? _controller;
 
   late String _activeUrl;
-  late String _lastSafeUrl;
 
   bool _loading = true;
-  bool _handlingUnsafeNavigation = false;
+  bool _allowPop = false;
 
   double _progress = 0;
   String? _error;
   int _viewKey = 0;
 
-  static const List<String> _adHosts = <String>[
+  String _logoBase64 = '';
+
+  static const List<String> _blockedHosts = <String>[
     'doubleclick.net',
     'googlesyndication.com',
     'googleadservices.com',
@@ -69,23 +73,10 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
     'smartadserver.com',
     'media.net',
     'bidvertiser.com',
-    'adf.ly',
-    'linkvertise.com',
-    'link.tl',
-    'ouo.io',
-    'shrinkme.io',
-    'shorte.st',
-    'bc.vc',
-    'clk.sh',
-    'adfoc.us',
-    'pop.do',
-    'admaven.com',
     'monetag.com',
+    'admaven.com',
     'ero-advertising.com',
     'tsyndicate.com',
-  ];
-
-  static const List<String> _adultHosts = <String>[
     'pornhub.com',
     'xvideos.com',
     'xnxx.com',
@@ -96,107 +87,48 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
     'spankbang.com',
     'chaturbate.com',
     'stripchat.com',
-    'cam4.com',
-    'livejasmin.com',
     'onlyfans.com',
-    'eporner.com',
-    'motherless.com',
-    'hentaihaven.xxx',
-    'rule34.xxx',
-    'xhamsterlive.com',
-    'brazzers.com',
-    'bangbros.com',
   ];
 
   @override
   void initState() {
     super.initState();
     _activeUrl = widget.initialUrl;
-    _lastSafeUrl = widget.initialUrl;
+    _loadLogo();
+  }
+
+  Future<void> _loadLogo() async {
+    try {
+      final data =
+          await rootBundle.load('assets/images/app_icon.png');
+
+      if (!mounted) return;
+
+      setState(() {
+        _logoBase64 =
+            base64Encode(data.buffer.asUint8List());
+      });
+
+      final controller = _controller;
+      if (controller != null) {
+        await _applyBranding(controller);
+      }
+    } catch (_) {
+      // La web sigue funcionando si no puede cargarse el icono.
+    }
   }
 
   bool _hostMatches(String host, String domain) {
-    return host == domain || host.endsWith('.$domain');
-  }
-
-  bool _isFirstPartyHost(String host) {
     final normalized = host.toLowerCase();
-
-    return normalized == 'futbol-libre.cam' ||
-        normalized.endsWith('.futbol-libre.cam') ||
-        normalized.contains('futbollibre') ||
-        normalized.contains('futbol-libre');
-  }
-
-  bool _isTrustedPlayerUri(Uri uri) {
-    final host = uri.host.toLowerCase();
-
-    const knownVideoDomains = <String>[
-      'youtube.com',
-      'youtu.be',
-      'dailymotion.com',
-      'dai.ly',
-      'vimeo.com',
-      'twitch.tv',
-      'ok.ru',
-      'streamwish.com',
-      'streamtape.com',
-      'vixcloud.co',
-    ];
-
-    if (knownVideoDomains.any(
-      (domain) => _hostMatches(host, domain),
-    )) {
-      return true;
-    }
-
-    return RegExp(
-          r'(^|[.-])(stream|player|video|embed|cdn|hls|live)([.-]|$)',
-          caseSensitive: false,
-        ).hasMatch(host) ||
-        uri.path.toLowerCase().endsWith('.m3u8') ||
-        uri.path.toLowerCase().endsWith('.mp4');
+    return normalized == domain ||
+        normalized.endsWith('.$domain');
   }
 
   bool _isBlockedAdUri(Uri uri) {
     final host = uri.host.toLowerCase();
 
-    if (_adHosts.any(
+    if (_blockedHosts.any(
       (domain) => _hostMatches(host, domain),
-    )) {
-      return true;
-    }
-
-    if (_adultHosts.any(
-      (domain) => _hostMatches(host, domain),
-    )) {
-      return true;
-    }
-
-    const unsafeHostFragments = <String>[
-      'porn',
-      'xnxx',
-      'xvideos',
-      'xhamster',
-      'redtube',
-      'youporn',
-      'hentai',
-      'chaturbate',
-      'stripchat',
-      'camgirl',
-      'adult-video',
-      'sexcam',
-      'popunder',
-      'popads',
-      'adsterra',
-      'onclickads',
-      'clickadu',
-      'trafficjunky',
-      'juicyads',
-    ];
-
-    if (unsafeHostFragments.any(
-      (fragment) => host.contains(fragment),
     )) {
       return true;
     }
@@ -205,76 +137,47 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
         '${uri.host}${uri.path}${uri.query}'.toLowerCase();
 
     return RegExp(
-      r'(popunder|pop-up-ad|popup-ad|clickunder|adclick|interstitial-ad|redirect-ad|adult-content|porn-video|xxx-video|hentai-video|camgirl)',
+      r'(popunder|pop-up-ad|popup-ad|clickunder|'
+      r'interstitial-ad|redirect-ad|adult-content|'
+      r'porn-video|xxx-video|hentai-video|camgirl)',
     ).hasMatch(address);
   }
 
-  bool _isAllowedWebUri(Uri uri) {
-    return (uri.scheme == 'http' ||
-            uri.scheme == 'https') &&
+  bool _isAllowedUri(Uri uri) {
+    return (uri.scheme == 'https' ||
+            uri.scheme == 'http') &&
         !_isBlockedAdUri(uri);
   }
 
-  Future<NavigationActionPolicy> _allowSafeWebNavigation(
+  Future<NavigationActionPolicy> _allowSafeNavigation(
     InAppWebViewController controller,
     NavigationAction action,
   ) async {
-    final uri = Uri.tryParse(
-      action.request.url?.toString() ?? '',
-    );
+    final rawUrl = action.request.url?.toString() ?? '';
+    final uri = Uri.tryParse(rawUrl);
 
-    if (uri == null || !_isAllowedWebUri(uri)) {
+    if (uri == null || !_isAllowedUri(uri)) {
       return NavigationActionPolicy.CANCEL;
     }
 
-    // Bloquea redirecciones automáticas hacia destinos desconocidos.
-    // Se conservan la agenda y los destinos que parecen reproductores.
-    if (action.isRedirect == true &&
-        !_isFirstPartyHost(uri.host) &&
-        !_isTrustedPlayerUri(uri)) {
-      return NavigationActionPolicy.CANCEL;
-    }
-
-    if (_isFirstPartyHost(uri.host) ||
-        _isTrustedPlayerUri(uri)) {
-      _lastSafeUrl = uri.toString();
-    }
-
+    // Importante: no se cancela automáticamente un reproductor
+    // solo porque su dominio sea externo o desconocido.
+    // Se bloquean los dominios publicitarios identificados arriba.
     return NavigationActionPolicy.ALLOW;
   }
 
-  Future<void> _restoreLastSafePage(
-    InAppWebViewController controller,
-  ) async {
-    if (_handlingUnsafeNavigation) return;
-
-    _handlingUnsafeNavigation = true;
-
-    try {
-      await controller.stopLoading();
-
-      await controller.loadUrl(
-        urlRequest: URLRequest(
-          url: WebUri(_lastSafeUrl),
-        ),
-      );
-    } catch (_) {
-      // El botón Atrás permite regresar a la aplicación.
-    }
-  }
-
-  Future<void> _loadUrl(String url) async {
-    if (!mounted) return;
-
+  Future<void> _openUrl(String url) async {
     final uri = Uri.tryParse(url);
 
-    if (uri == null || !_isAllowedWebUri(uri)) {
+    if (uri == null || !_isAllowedUri(uri)) {
       _setError(
-        'El enlace fue bloqueado por seguridad porque '
-        'parece un anuncio o una redirección no permitida.',
+        'El enlace no se abrió porque parece una '
+        'dirección publicitaria o no permitida.',
       );
       return;
     }
+
+    if (!mounted) return;
 
     setState(() {
       _activeUrl = uri.toString();
@@ -318,14 +221,37 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
     }
 
     try {
-      await controller.loadUrl(
-        urlRequest: URLRequest(
-          url: WebUri(_activeUrl),
-        ),
-      );
+      await controller.reload();
     } catch (error) {
       _setError('No se pudo recargar la página: $error');
     }
+  }
+
+  Future<void> _goBack() async {
+    final controller = _controller;
+
+    if (controller != null) {
+      try {
+        if (await controller.canGoBack()) {
+          await controller.goBack();
+          return;
+        }
+      } catch (_) {
+        // Si no hay historial web, se vuelve a la pantalla anterior.
+      }
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _allowPop = true;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    });
   }
 
   void _setError(String message) {
@@ -337,100 +263,77 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
     });
   }
 
-  Future<void> _applyAppThemeAndBlockAds(
+  Future<void> _applyBranding(
     InAppWebViewController controller,
   ) async {
     try {
-      await controller.evaluateJavascript(
-        source: r'''
+      final script = r'''
         (function () {
           if (!document.documentElement) return;
 
-          const id = 'dt360-branding-and-ad-filter';
+          const logoData = "__LOGO_DATA__";
+          const styleId = "dt360-app-style";
 
-          let style = document.getElementById(id);
+          let style = document.getElementById(styleId);
 
           if (!style) {
-            style = document.createElement('style');
-            style.id = id;
+            style = document.createElement("style");
+            style.id = styleId;
             (document.head || document.documentElement)
               .appendChild(style);
           }
 
           style.textContent = `
             html, body {
-              background: #020817 !important;
               color: #f4f8ff !important;
               color-scheme: dark !important;
+              background-color: #020817 !important;
+              background-image:
+                linear-gradient(
+                  rgba(2, 8, 23, .87),
+                  rgba(2, 8, 23, .90)
+                ),
+                url("${logoData}") !important;
+              background-repeat: no-repeat, no-repeat !important;
+              background-position: center, center !important;
+              background-size: cover, min(76vw, 430px) auto !important;
+              background-attachment: fixed, fixed !important;
             }
 
             body {
-              margin-top: 0 !important;
+              min-height: 100vh !important;
             }
 
-            header, .site-header, .navbar, .navbar-header,
-            .site-navigation,
-            [class*="advertisement" i],
-            [id*="advertisement" i],
-            [class*="ad-banner" i],
-            [id*="ad-banner" i],
-            [class*="ad-container" i],
-            [id*="ad-container" i],
-            [class*="popunder" i],
-            [id*="popunder" i],
-            [class*="popup-ad" i],
-            [id*="popup-ad" i],
-            [class="ads"], [id="ads"],
-            .adsbygoogle, [data-ad-slot], [data-ad-unit],
+            header, .site-header, .navbar-header {
+              background: #071b35 !important;
+              border-color: rgba(0,229,255,.35) !important;
+            }
+
+            nav, [role="navigation"] {
+              background-color: #071b35 !important;
+              border-color: rgba(0,229,255,.28) !important;
+            }
+
+            a, a:visited {
+              color: #00e5ff !important;
+            }
+
+            button, [role="button"],
+            input[type="button"], input[type="submit"] {
+              border-radius: 10px !important;
+            }
+
             iframe[src*="doubleclick" i],
             iframe[src*="googlesyndication" i],
+            iframe[src*="adsterra" i],
             iframe[src*="popads" i],
             iframe[src*="popcash" i],
             iframe[src*="porn" i],
             iframe[src*="xxx" i],
-            iframe[src*="hentai" i],
-            iframe[src*="chaturbate" i] {
+            iframe[src*="hentai" i] {
               display: none !important;
               visibility: hidden !important;
               pointer-events: none !important;
-            }
-
-            nav, [role="navigation"] {
-              background: #071B35 !important;
-              border-color: rgba(0,229,255,.3) !important;
-            }
-
-            article, li, .card,
-            [class*="match" i],
-            [class*="partido" i],
-            [class*="fixture" i],
-            [data-match] {
-              border-color: rgba(0,229,255,.28) !important;
-              border-radius: 12px !important;
-            }
-
-            a, a:visited {
-              color: #00E5FF !important;
-            }
-
-            button, [role="button"],
-            input[type="button"],
-            input[type="submit"] {
-              border-radius: 10px !important;
-            }
-
-            .dt360-play-link {
-              display: inline-block !important;
-              padding: 9px 12px !important;
-              margin: 4px !important;
-              background: linear-gradient(
-                110deg, #00E5FF, #39FF9C
-              ) !important;
-              color: #020817 !important;
-              border: 1px solid #00E5FF !important;
-              border-radius: 10px !important;
-              font-weight: 900 !important;
-              text-decoration: none !important;
             }
 
             #dt360-page-banner {
@@ -439,86 +342,102 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
               top: 0;
               z-index: 2147483000;
               width: 100%;
-              padding: 10px 12px;
+              padding: 11px 10px;
               margin: 0 0 8px;
               text-align: center;
-              color: #00E5FF;
+              color: #00e5ff;
               background: linear-gradient(
-                100deg, #061B3C, #0A0D26, #1C0734
+                110deg, #061b3c, #0a0d26, #1c0734
               );
-              border-bottom: 1px solid rgba(0,229,255,.7);
+              border-bottom: 2px solid #00e5ff;
+              box-shadow: 0 4px 14px rgba(0,0,0,.55);
               font: 900 12px Arial, sans-serif;
               letter-spacing: .7px;
-              text-shadow: 0 0 8px rgba(0,229,255,.28);
+            }
+
+            #dt360-status-legend {
+              display: flex;
+              flex-wrap: wrap;
+              justify-content: center;
+              gap: 7px;
+              padding: 9px 5px;
+              margin: 4px;
+              border: 1px solid rgba(0,229,255,.35);
+              border-radius: 12px;
+              background: rgba(4,14,35,.94);
+              font: 900 10px Arial, sans-serif;
+            }
+
+            .dt360-status-pill {
+              display: inline-flex !important;
+              align-items: center !important;
+              width: fit-content !important;
+              padding: 5px 9px !important;
+              margin: 4px 4px 6px 0 !important;
+              border-radius: 999px !important;
+              font: 900 10px Arial, sans-serif !important;
+              letter-spacing: .3px !important;
+              color: #020817 !important;
+              box-shadow: 0 3px 0 rgba(0,0,0,.45),
+                          0 0 10px rgba(0,229,255,.15) !important;
+              pointer-events: none !important;
+            }
+
+            .dt360-live {
+              background: #ff3159 !important;
+              color: white !important;
+            }
+
+            .dt360-finished {
+              background: #91a1b5 !important;
+              color: #07101e !important;
+            }
+
+            .dt360-waiting {
+              background: linear-gradient(
+                100deg, #ffd600, #ff9d00
+              ) !important;
+              color: #1a1000 !important;
+            }
+
+            .dt360-play-link {
+              display: inline-block !important;
+              padding: 10px 13px !important;
+              margin: 5px !important;
+              background: linear-gradient(
+                110deg, #00e5ff, #39ff9c
+              ) !important;
+              color: #020817 !important;
+              border: 1px solid #00e5ff !important;
+              border-radius: 11px !important;
+              box-shadow: 0 4px 0 #07516a,
+                          0 7px 12px rgba(0,0,0,.4) !important;
+              font-weight: 900 !important;
+              text-decoration: none !important;
             }
           `;
 
-          const adHosts = [
-            'doubleclick.net',
-            'googlesyndication.com',
-            'googleadservices.com',
-            'adservice.google.com',
-            'adnxs.com',
-            'adsrvr.org',
-            'ad-delivery.net',
-            'adsterra.com',
-            'adsterratools.com',
-            'popads.net',
-            'popcash.net',
-            'exoclick.com',
-            'onclickads.net',
-            'onclickalgo.com',
-            'propellerads.com',
-            'trafficjunky.com',
-            'trafficjunky.net',
-            'juicyads.com',
-            'hilltopads.net',
-            'richpush.co',
-            'taboola.com',
-            'outbrain.com',
-            'revcontent.com',
-            'mgid.com',
-            'criteo.com',
-            'smartadserver.com',
-            'media.net',
-            'bidvertiser.com',
-            'adf.ly',
-            'linkvertise.com',
-            'link.tl',
-            'ouo.io',
-            'shrinkme.io',
-            'shorte.st',
-            'bc.vc',
-            'clk.sh',
-            'adfoc.us',
-            'pop.do',
-            'admaven.com',
-            'monetag.com',
-            'ero-advertising.com',
-            'tsyndicate.com'
-          ];
-
-          const adultHosts = [
-            'pornhub.com',
-            'xvideos.com',
-            'xnxx.com',
-            'xhamster.com',
-            'redtube.com',
-            'youporn.com',
-            'tube8.com',
-            'spankbang.com',
-            'chaturbate.com',
-            'stripchat.com',
-            'cam4.com',
-            'livejasmin.com',
-            'onlyfans.com',
-            'eporner.com',
-            'motherless.com',
-            'hentaihaven.xxx',
-            'rule34.xxx',
-            'xhamsterlive.com',
-            'brazzers.com',
-            'bangbros.com'
+          const blockedHosts = [
+            "doubleclick.net",
+            "googlesyndication.com",
+            "googleadservices.com",
+            "adservice.google.com",
+            "adsterra.com",
+            "adsterratools.com",
+            "popads.net",
+            "popcash.net",
+            "exoclick.com",
+            "onclickads.net",
+            "propellerads.com",
+            "juicyads.com",
+            "pornhub.com",
+            "xvideos.com",
+            "xnxx.com",
+            "xhamster.com",
+            "redtube.com",
+            "youporn.com",
+            "chaturbate.com",
+            "stripchat.com"
           ];
 
           function blockedUrl(value) {
@@ -527,150 +446,164 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
 
               if (!/^https?:$/.test(u.protocol)) return true;
 
-              const h = u.hostname.toLowerCase();
+              const host = u.hostname.toLowerCase();
 
-              if (adHosts.some(
-                d => h === d || h.endsWith('.' + d)
+              if (blockedHosts.some(
+                d => host === d || host.endsWith("." + d)
               )) return true;
 
-              if (adultHosts.some(
-                d => h === d || h.endsWith('.' + d)
-              )) return true;
-
-              if (/(porn|xnxx|xvideos|xhamster|redtube|youporn|hentai|chaturbate|stripchat|camgirl|popunder|popads|adsterra|onclickads|clickadu|juicyads)/i.test(h)) {
-                return true;
-              }
-
-              return /(popunder|pop-up-ad|popup-ad|clickunder|adclick|interstitial-ad|redirect-ad|adult-content|porn-video|xxx-video|hentai-video|camgirl)/i.test(
-                h + u.pathname + u.search
-              );
+              return /(popunder|popup-ad|clickunder|redirect-ad|adult-content|porn-video|xxx-video|hentai-video)/i
+                .test(host + u.pathname + u.search);
             } catch (_) {
               return true;
             }
           }
 
-          function hasPlayerContent(el) {
-            if (!el || !el.querySelector) return false;
-
-            return !!el.querySelector(
-              'video, audio, [class*="player" i], ' +
-              '[id*="player" i], iframe[src*="stream" i], ' +
-              'iframe[src*="video" i], iframe[src*="embed" i]'
-            );
-          }
-
-          function hideAdElements() {
-            const selector =
-              'iframe, [data-ad-slot], [data-ad-unit], ' +
-              '[id], [class], [aria-label]';
-
-            document.querySelectorAll(selector).forEach(el => {
-              if (el.id === 'dt360-page-banner' ||
-                  el.id === id) {
-                return;
-              }
-
-              // Evita ocultar un reproductor reconocido.
-              if (hasPlayerContent(el) ||
-                  el.matches(
-                    'video, audio, source, .dt360-play-link'
-                  )) {
-                return;
-              }
-
-              const hint = [
-                el.id || '',
-                typeof el.className === 'string'
-                  ? el.className : '',
-                el.getAttribute('src') || '',
-                el.getAttribute('href') || '',
-                el.getAttribute('aria-label') || '',
-                el.getAttribute('data-ad-slot') || ''
-              ].join(' ').toLowerCase();
-
-              const source = el.getAttribute('src') || '';
-
-              const unsafeSource =
-                /^https?:/i.test(source) &&
-                blockedUrl(source);
-
-              if (unsafeSource ||
-                  /(^|[\s_-])(ads?|advert|advertisement|popunder|popup|sponsor|adult|porn|xxx|hentai|camgirl)([\s_-]|$)/i.test(hint)) {
-                el.style.setProperty(
-                  'display', 'none', 'important'
-                );
-                el.style.setProperty(
-                  'visibility', 'hidden', 'important'
-                );
-                el.style.setProperty(
-                  'pointer-events', 'none', 'important'
-                );
-              }
-            });
-          }
-
           function installBranding() {
             if (!document.body) return;
 
-            if (!document.getElementById('dt360-page-banner')) {
-              const brand = document.createElement('div');
-              brand.id = 'dt360-page-banner';
-              brand.textContent =
-                'DEPORTE TOTAL 360°  •  AGENDA DE PARTIDOS';
+            if (!document.getElementById("dt360-page-banner")) {
+              const banner = document.createElement("div");
+              banner.id = "dt360-page-banner";
+              banner.textContent =
+                "DEPORTE TOTAL 360°  •  AGENDA Y TRANSMISIONES";
 
               document.body.insertBefore(
-                brand, document.body.firstChild
+                banner, document.body.firstChild
               );
             }
 
-            document.querySelectorAll(
-              'a[target="_blank"]'
-            ).forEach(a => {
-              a.target = '_self';
-              a.rel = 'noopener noreferrer';
-            });
+            if (!document.getElementById("dt360-status-legend")) {
+              const legend = document.createElement("div");
+              legend.id = "dt360-status-legend";
+              legend.innerHTML =
+                '<span style="color:#ff3159">● EN VIVO</span>' +
+                '<span style="color:#b4c4d9">● TERMINADO</span>' +
+                '<span style="color:#ffd600">● ESPERANDO TRANSMISIÓN</span>';
 
-            document.querySelectorAll('a[href]').forEach(a => {
+              const banner =
+                document.getElementById("dt360-page-banner");
+
+              if (banner && banner.nextSibling) {
+                document.body.insertBefore(
+                  legend, banner.nextSibling
+                );
+              } else {
+                document.body.insertBefore(
+                  legend, document.body.firstChild
+                );
+              }
+            }
+
+            document.querySelectorAll('a[target="_blank"]')
+              .forEach(a => {
+                a.target = "_self";
+                a.rel = "noopener noreferrer";
+              });
+
+            document.querySelectorAll("a[href]").forEach(a => {
               if (blockedUrl(a.href)) {
-                a.removeAttribute('href');
+                a.removeAttribute("href");
                 a.style.setProperty(
-                  'pointer-events', 'none', 'important'
+                  "pointer-events", "none", "important"
                 );
               }
 
               const label =
-                (a.innerText || a.textContent || '').trim();
+                (a.innerText || a.textContent || "").trim();
 
               if (/^(ver|ver partido|ver canal|reproducir|play|watch|ver en vivo|en vivo|canal\s*\d*)$/i.test(label)) {
-                a.classList.add('dt360-play-link');
-                a.target = '_self';
-                a.rel = 'noopener noreferrer';
-              }
-            });
-
-            document.querySelectorAll('button').forEach(b => {
-              const label =
-                (b.innerText || b.textContent || '').trim();
-
-              if (/^(ver|ver partido|ver canal|reproducir|play|watch|ver en vivo|en vivo)$/i.test(label)) {
-                b.classList.add('dt360-play-link');
+                a.classList.add("dt360-play-link");
               }
             });
           }
 
-          if (!window.__dt360PopupsBlocked) {
-            window.__dt360PopupsBlocked = true;
+          function addMatchStatuses() {
+            const selector =
+              'article, li, [class*="match" i], ' +
+              '[class*="partido" i], [class*="fixture" i], ' +
+              '[data-match]';
 
-            // Evita crear nuevas pestañas con window.open.
-            window.open = function () {
+            document.querySelectorAll(selector).forEach(node => {
+              if (node.querySelector(':scope > .dt360-status-pill')) {
+                return;
+              }
+
+              const text = (node.innerText || node.textContent || '')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+              if (text.length < 18 || text.length > 800) return;
+
+              const explicitMatch = node.matches(
+                '[class*="match" i], [class*="partido" i], ' +
+                '[class*="fixture" i], [data-match]'
+              );
+
+              const matchIndicators =
+                /\bvs\.?\b|\bversus\b|\d{1,2}:\d{2}|-\s*\d+\s*[:–-]\s*\d+|\b\d+\s*-\s*\d+\b/i
+                  .test(text);
+
+              if (!explicitMatch && !matchIndicators) return;
+
+              const parent = node.parentElement
+                ? node.parentElement.closest(selector)
+                : null;
+
+              if (parent && parent !== node) {
+                const parentText =
+                  (parent.innerText || '').trim();
+
+                if (parentText.length > text.length &&
+                    parentText.length < 700) {
+                  return;
+                }
+              }
+
+              let label = 'ESPERANDO TRANSMISIÓN';
+              let statusClass = 'dt360-waiting';
+
+              if (/\b(en vivo|live now|live|en juego|playing|primer tiempo|segundo tiempo|medio tiempo|halftime|descanso)\b/i.test(text)) {
+                label = '● EN VIVO';
+                statusClass = 'dt360-live';
+              } else if (/\b(terminado|finalizado|finished|full time|final|ft)\b/i.test(text)) {
+                label = '● TERMINADO';
+                statusClass = 'dt360-finished';
+              }
+
+              const pill = document.createElement('span');
+              pill.className =
+                'dt360-status-pill ' + statusClass;
+              pill.textContent = label;
+
+              node.insertBefore(pill, node.firstChild);
+            });
+          }
+
+          if (!window.__dt360PopupPatch) {
+            window.__dt360PopupPatch = true;
+
+            // Los enlaces de reproductores que usan window.open
+            // se intentan abrir dentro de esta misma ventana.
+            // Los dominios publicitarios conocidos se rechazan.
+            window.open = function (value) {
+              try {
+                const u = new URL(value || "", location.href);
+
+                if (blockedUrl(u.href)) return null;
+
+                if (/^https?:$/.test(u.protocol)) {
+                  location.href = u.href;
+                }
+              } catch (_) {}
+
               return null;
             };
 
-            document.addEventListener('click', function (event) {
+            document.addEventListener("click", function (event) {
               const target = event.target;
-
               const link = target && target.closest
-                ? target.closest('a[href]')
+                ? target.closest("a[href]")
                 : null;
 
               if (link && blockedUrl(link.href)) {
@@ -678,26 +611,19 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                 event.stopImmediatePropagation();
               }
             }, true);
-
-            document.addEventListener('submit', function (event) {
-              const form = event.target;
-
-              if (form && form.action &&
-                  blockedUrl(form.action)) {
-                event.preventDefault();
-                event.stopImmediatePropagation();
-              }
-            }, true);
           }
 
-          installBranding();
-          hideAdElements();
+          function updateAppView() {
+            installBranding();
+            addMatchStatuses();
+          }
+
+          updateAppView();
 
           if (!window.__dt360Observer) {
             window.__dt360Observer = new MutationObserver(
               function () {
-                installBranding();
-                hideAdElements();
+                updateAppView();
               }
             );
 
@@ -707,32 +633,39 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                 childList: true,
                 subtree: true,
                 attributes: true,
-                attributeFilter: [
-                  'src', 'href', 'class', 'id'
-                ]
+                attributeFilter: ['href', 'class', 'id']
               }
             );
           }
         })();
-      ''');
+      '''.replaceAll(
+        '__LOGO_DATA__',
+        'data:image/png;base64,$_logoBase64',
+      );
+
+      await controller.evaluateJavascript(source: script);
     } catch (_) {
-      // Si la web impide la inyección, sigue activo el filtro
-      // nativo de navegación de la aplicación.
+      // Algunos sitios pueden limitar la personalización visual.
+      // El filtro nativo de navegación sigue funcionando.
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope<void>(
-      canPop: true,
+      canPop: _allowPop,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          _goBack();
+        }
+      },
       child: Scaffold(
         backgroundColor: _navy,
         appBar: AppBar(
           backgroundColor: _panel,
           leading: IconButton(
-            tooltip: 'Volver a la aplicación',
-            onPressed: () =>
-                Navigator.of(context).maybePop(),
+            tooltip: 'Atrás',
+            onPressed: _goBack,
             icon: const Icon(
               Icons.arrow_back_rounded,
               color: _cyan,
@@ -741,20 +674,21 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           title: Row(
             children: <Widget>[
               ClipRRect(
-                borderRadius: BorderRadius.circular(7),
+                borderRadius: BorderRadius.circular(8),
                 child: Image.asset(
-                  'assets/images/logo.png',
-                  width: 34,
-                  height: 34,
+                  'assets/images/app_icon.png',
+                  width: 36,
+                  height: 36,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Icon(
+                  errorBuilder: (_, __, ___) =>
+                      const Icon(
                     Icons.sports_soccer_rounded,
                     color: _cyan,
-                    size: 28,
+                    size: 29,
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 9),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -785,11 +719,19 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           ),
           actions: <Widget>[
             IconButton(
-              tooltip: 'Recargar página',
+              tooltip: 'Recargar',
               onPressed: _reload,
               icon: const Icon(
                 Icons.refresh_rounded,
                 color: _green,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Agenda alternativa',
+              onPressed: () => _openUrl(_fallbackAgendaUrl),
+              icon: const Icon(
+                Icons.sports_soccer_rounded,
+                color: _yellow,
               ),
             ),
           ],
@@ -804,271 +746,291 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
             ),
           ),
         ),
-        body: Column(
+        body: Stack(
           children: <Widget>[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 13,
-                vertical: 8,
-              ),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: <Color>[
-                    Color(0xFF0B1D35),
-                    Color(0xFF10132D),
-                  ],
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.14,
+                child: Image.asset(
+                  'assets/images/app_icon.png',
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      const SizedBox.shrink(),
                 ),
               ),
-              child: const Row(
-                children: <Widget>[
-                  Icon(
-                    Icons.sports_soccer_rounded,
-                    color: _cyan,
-                    size: 19,
-                  ),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'AGENDA · PARTIDOS · RESULTADOS',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  Icon(
-                    Icons.sports_basketball_rounded,
-                    color: _pink,
-                    size: 18,
-                  ),
-                ],
+            ),
+            Positioned.fill(
+              child: ColoredBox(
+                color: _navy.withValues(alpha: 0.84),
               ),
             ),
-            Expanded(
-              child: Stack(
-                children: <Widget>[
-                  InAppWebView(
-                    key: ValueKey<int>(_viewKey),
-                    initialUrlRequest: URLRequest(
-                      url: WebUri(_activeUrl),
-                    ),
-                    initialSettings: InAppWebViewSettings(
-                      javaScriptEnabled: true,
-                      javaScriptCanOpenWindowsAutomatically: false,
-                      domStorageEnabled: true,
-                      databaseEnabled: true,
-                      thirdPartyCookiesEnabled: true,
-
-                      // Se interceptan las solicitudes de ventana nueva
-                      // y el callback siguiente las rechaza.
-                      supportMultipleWindows: true,
-
-                      useShouldOverrideUrlLoading: true,
-                      mediaPlaybackRequiresUserGesture: false,
-                      allowsInlineMediaPlayback: true,
-                      useWideViewPort: true,
-                      loadWithOverviewMode: true,
-                      supportZoom: true,
-                      builtInZoomControls: true,
-                      displayZoomControls: false,
-                      cacheEnabled: true,
-                      transparentBackground: false,
-                    ),
-                    onWebViewCreated: (controller) {
-                      _controller = controller;
-                    },
-                    onCreateWindow: (
-                      controller,
-                      createWindowAction,
-                    ) async {
-                      // No se permiten pestañas publicitarias.
-                      return false;
-                    },
-                    shouldOverrideUrlLoading:
-                        _allowSafeWebNavigation,
-                    onLoadStart: (controller, url) async {
-                      final value = url?.toString();
-
-                      final uri = value == null
-                          ? null
-                          : Uri.tryParse(value);
-
-                      if (uri != null &&
-                          _isBlockedAdUri(uri)) {
-                        await _restoreLastSafePage(controller);
-                        return;
-                      }
-
-                      if (!mounted) return;
-
-                      setState(() {
-                        _loading = true;
-                        _progress = 0;
-                        _error = null;
-                      });
-                    },
-                    onProgressChanged: (
-                      controller,
-                      progress,
-                    ) {
-                      if (!mounted) return;
-
-                      setState(() {
-                        _progress = progress / 100;
-                        _loading = progress < 100;
-                      });
-                    },
-                    onLoadStop: (controller, url) async {
-                      _handlingUnsafeNavigation = false;
-
-                      final value = url?.toString();
-
-                      final uri = value == null
-                          ? null
-                          : Uri.tryParse(value);
-
-                      if (uri != null &&
-                          _isBlockedAdUri(uri)) {
-                        await _restoreLastSafePage(controller);
-                        return;
-                      }
-
-                      await _applyAppThemeAndBlockAds(controller);
-
-                      if (!mounted) return;
-
-                      setState(() {
-                        _loading = false;
-                        _progress = 1;
-
-                        if (uri != null &&
-                            (_isFirstPartyHost(uri.host) ||
-                                _isTrustedPlayerUri(uri))) {
-                          _lastSafeUrl = uri.toString();
-                        }
-                      });
-                    },
-                    onReceivedError: (
-                      controller,
-                      request,
-                      error,
-                    ) {
-                      if (request.isForMainFrame != true) return;
-
-                      _setError(
-                        'La página no respondió. Comprueba tu '
-                        'conexión o abre la agenda alternativa.'
-                        '\n\n${error.description}',
-                      );
-                    },
-                    onReceivedHttpError: (
-                      controller,
-                      request,
-                      response,
-                    ) {
-                      if (request.isForMainFrame != true) return;
-
-                      final status = response.statusCode;
-
-                      if (status != null && status >= 400) {
-                        _setError(
-                          'El servidor respondió HTTP $status. '
-                          'La web puede estar fuera de servicio '
-                          'o rechazar la conexión desde la app.',
-                        );
-                      }
-                    },
+            Column(
+              children: <Widget>[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
                   ),
-
-                  if (_loading && _error == null)
-                    const Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: LinearProgressIndicator(
-                        minHeight: 2,
-                        backgroundColor: Colors.transparent,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(_pink),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: <Color>[
+                        Color(0xFF0B1D35),
+                        Color(0xFF10132D),
+                      ],
+                    ),
+                    border: Border(
+                      bottom: BorderSide(
+                        color: _cyan.withValues(alpha: 0.45),
                       ),
                     ),
+                  ),
+                  child: const Text(
+                    'EN VIVO  •  TERMINADO  •  ESPERANDO TRANSMISIÓN',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Stack(
+                    children: <Widget>[
+                      InAppWebView(
+                        key: ValueKey<int>(_viewKey),
+                        initialUrlRequest: URLRequest(
+                          url: WebUri(_activeUrl),
+                        ),
+                        initialSettings: InAppWebViewSettings(
+                          javaScriptEnabled: true,
+                          javaScriptCanOpenWindowsAutomatically: true,
+                          domStorageEnabled: true,
+                          databaseEnabled: true,
+                          thirdPartyCookiesEnabled: true,
+                          supportMultipleWindows: true,
+                          useShouldOverrideUrlLoading: true,
+                          mediaPlaybackRequiresUserGesture: false,
+                          allowsInlineMediaPlayback: true,
+                          useWideViewPort: true,
+                          loadWithOverviewMode: true,
+                          supportZoom: true,
+                          builtInZoomControls: true,
+                          displayZoomControls: false,
+                          cacheEnabled: true,
+                          transparentBackground: false,
+                        ),
+                        onWebViewCreated: (controller) {
+                          _controller = controller;
+                        },
+                        onCreateWindow: (
+                          controller,
+                          createWindowAction,
+                        ) async {
+                          // Si el reproductor abre otra ventana, se
+                          // intenta cargar el destino en esta WebView.
+                          final rawUrl = createWindowAction
+                                  .request.url
+                                  ?.toString() ??
+                              '';
 
-                  if (_error != null)
-                    Positioned.fill(
-                      child: ColoredBox(
-                        color: _navy,
-                        child: Center(
-                          child: SingleChildScrollView(
+                          final uri = Uri.tryParse(rawUrl);
+
+                          if (uri != null && _isAllowedUri(uri)) {
+                            await controller.loadUrl(
+                              urlRequest: URLRequest(
+                                url: WebUri(uri.toString()),
+                              ),
+                            );
+                          }
+
+                          return false;
+                        },
+                        shouldOverrideUrlLoading:
+                            _allowSafeNavigation,
+                        onLoadStart: (controller, url) {
+                          final value = url?.toString();
+                          final uri = value == null
+                              ? null
+                              : Uri.tryParse(value);
+
+                          if (uri != null &&
+                              _isBlockedAdUri(uri)) {
+                            controller.stopLoading();
+                            return;
+                          }
+
+                          if (!mounted) return;
+
+                          setState(() {
+                            _loading = true;
+                            _progress = 0;
+                            _error = null;
+                          });
+                        },
+                        onProgressChanged: (
+                          controller,
+                          progress,
+                        ) {
+                          if (!mounted) return;
+
+                          setState(() {
+                            _progress = progress / 100;
+                            _loading = progress < 100;
+                          });
+                        },
+                        onLoadStop: (controller, url) async {
+                          final value = url?.toString();
+                          final uri = value == null
+                              ? null
+                              : Uri.tryParse(value);
+
+                          if (uri != null &&
+                              _isBlockedAdUri(uri)) {
+                            await controller.stopLoading();
+                            return;
+                          }
+
+                          await _applyBranding(controller);
+
+                          if (!mounted) return;
+
+                          setState(() {
+                            _loading = false;
+                            _progress = 1;
+                            _error = null;
+
+                            if (uri != null &&
+                                _isAllowedUri(uri)) {
+                              _activeUrl = uri.toString();
+                            }
+                          });
+                        },
+                        onReceivedError: (
+                          controller,
+                          request,
+                          error,
+                        ) {
+                          if (request.isForMainFrame != true) {
+                            return;
+                          }
+
+                          _setError(
+                            'La página no respondió. Revisa '
+                            'tu conexión o vuelve a intentarlo.'
+                            '\n\n${error.description}',
+                          );
+                        },
+                        onReceivedHttpError: (
+                          controller,
+                          request,
+                          response,
+                        ) {
+                          if (request.isForMainFrame != true) {
+                            return;
+                          }
+
+                          final status = response.statusCode;
+
+                          if (status != null && status >= 400) {
+                            _setError(
+                              'El servidor respondió HTTP $status. '
+                              'Puede estar temporalmente fuera '
+                              'de servicio o rechazar la conexión.',
+                            );
+                          }
+                        },
+                      ),
+                      if (_loading && _error == null)
+                        const Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          child: LinearProgressIndicator(
+                            minHeight: 2,
+                            backgroundColor: Colors.transparent,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(_pink),
+                          ),
+                        ),
+                      if (_error != null)
+                        Positioned.fill(
+                          child: Container(
+                            color: _navy,
                             padding: const EdgeInsets.all(22),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: <Widget>[
-                                const Icon(
-                                  Icons.wifi_off_rounded,
-                                  color: _pink,
-                                  size: 52,
-                                ),
-                                const SizedBox(height: 14),
-                                const Text(
-                                  'NO SE PUDO CARGAR LA PÁGINA',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: _cyan,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  _error!,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: _muted,
-                                    height: 1.45,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                const SizedBox(height: 18),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: FilledButton.icon(
-                                    onPressed: _reload,
-                                    icon: const Icon(
-                                      Icons.refresh_rounded,
+                            child: Center(
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: <Widget>[
+                                    const Icon(
+                                      Icons.wifi_off_rounded,
+                                      color: _pink,
+                                      size: 52,
                                     ),
-                                    label: const Text('REINTENTAR'),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: OutlinedButton.icon(
-                                    onPressed: () =>
-                                        _loadUrl(_fallbackAgendaUrl),
-                                    icon: const Icon(
-                                      Icons.sports_soccer_rounded,
-                                    ),
-                                    label: const Text(
-                                      'USAR AGENDA ALTERNATIVA',
-                                    ),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: _green,
-                                      side: const BorderSide(
-                                        color: _green,
+                                    const SizedBox(height: 14),
+                                    const Text(
+                                      'NO SE PUDO CARGAR LA PÁGINA',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: _cyan,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 16,
                                       ),
                                     ),
-                                  ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      _error!,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: _muted,
+                                        height: 1.45,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 18),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: FilledButton.icon(
+                                        onPressed: _reload,
+                                        icon: const Icon(
+                                          Icons.refresh_rounded,
+                                        ),
+                                        label: const Text('REINTENTAR'),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton.icon(
+                                        onPressed: () => _openUrl(
+                                          _fallbackAgendaUrl,
+                                        ),
+                                        icon: const Icon(
+                                          Icons.sports_soccer_rounded,
+                                        ),
+                                        label: const Text(
+                                          'ABRIR AGENDA ALTERNATIVA',
+                                        ),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: _green,
+                                          side: const BorderSide(
+                                            color: _green,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                ],
-              ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
         ),
