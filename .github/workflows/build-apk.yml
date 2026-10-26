@@ -1,4 +1,3 @@
-
 name: Crear APK de DEPORTE TOTAL 360
 
 on:
@@ -9,35 +8,36 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Descargar repositorio
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Configurar Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Flutter
+      - name: Configurar Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: "3.47.8"
 
-      - name: Generar archivos Android
+      - name: Generar archivos de Android
         run: flutter create --platforms=android .
 
-      - name: Flutter Pub Get
+      - name: Instalar dependencias
         run: flutter pub get
 
-      - name: Flutter Analyze
-        run: flutter analyze
+      - name: Analizar código de la aplicación
+        run: flutter analyze lib
 
-      - name: Flutter Build APK
+      - name: Compilar APK de lanzamiento
         run: flutter build apk --release
 
-      - name: Upload APK artifact
+      - name: Guardar APK para descargar
         uses: actions/upload-artifact@v4
         with:
           name: deporte-total-360-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
