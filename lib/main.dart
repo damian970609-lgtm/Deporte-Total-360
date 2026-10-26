@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'web_agenda_screen.dart';
 
 void main() {
@@ -15,6 +16,12 @@ const Color yellow = Color(0xFFFFD600);
 const Color muted = Color(0xFFB4C4D9);
 
 const String agendaUrl = 'https://futbol-libre.cam/';
+
+// Añade aquí las URL válidas de tus reproductores.
+// Déjalas vacías hasta disponer de sus direcciones reales.
+const String prismStreamUrl = '';
+const String ssh101StreamUrl = '';
+
 const String fallbackAgendaUrl =
     'https://www.espn.com/soccer/scoreboard';
 const String telegramUrl = 'https://t.me/';
@@ -75,7 +82,6 @@ class DeporteTotal360App extends StatelessWidget {
   }
 }
 
-/// Fondo de marca reutilizable en todas las pantallas.
 class AppBackdrop extends StatelessWidget {
   const AppBackdrop({
     super.key,
@@ -90,7 +96,7 @@ class AppBackdrop extends StatelessWidget {
       fit: StackFit.expand,
       children: <Widget>[
         Opacity(
-          opacity: 0.15,
+          opacity: 0.13,
           child: Image.asset(
             'assets/images/app_icon.png',
             fit: BoxFit.cover,
@@ -117,47 +123,18 @@ class AppBackdrop extends StatelessWidget {
   }
 }
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  int _selectedIndex = 0;
-
-  Future<void> _openPage(Widget page) async {
+  Future<void> _openPage(
+    BuildContext context,
+    Widget page,
+  ) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => page,
       ),
     );
-
-    if (mounted) {
-      setState(() => _selectedIndex = 0);
-    }
-  }
-
-  void _navigationTap(int index) {
-    setState(() => _selectedIndex = index);
-
-    switch (index) {
-      case 0:
-        break;
-      case 1:
-        showWeb(context, title: 'FÚTBOL');
-        break;
-      case 2:
-        _openPage(const LiveScreen());
-        break;
-      case 3:
-        showWeb(context);
-        break;
-      case 4:
-        _openPage(const SettingsScreen());
-        break;
-    }
   }
 
   @override
@@ -168,7 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(
-              12, 10, 12, 16,
+              12, 10, 12, 20,
             ),
             child: Column(
               crossAxisAlignment:
@@ -221,7 +198,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 const _SportsStrip(),
                 const SizedBox(height: 14),
                 Row(
@@ -232,8 +209,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         title: 'TRANSMISIONES',
                         subtitle: 'EN VIVO',
                         color: const Color(0xFFFF3159),
-                        onTap: () =>
-                            _openPage(const LiveScreen()),
+                        onTap: () => _openPage(
+                          context,
+                          const LiveScreen(),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 9),
@@ -246,20 +225,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         onTap: () => showWeb(context),
                       ),
                     ),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: _ActionTile(
-                        icon: Icons.send_rounded,
-                        title: 'TELEGRAM',
-                        subtitle: 'COMUNIDAD',
-                        color: const Color(0xFF31A9F5),
-                        onTap: () => showWeb(
-                          context,
-                          url: telegramUrl,
-                          title: 'TELEGRAM',
-                        ),
-                      ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -267,95 +232,54 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: <Widget>[
                     Expanded(
                       child: _ActionTile(
-                        horizontal: true,
-                        icon: Icons.chat_bubble_rounded,
-                        title: 'CONTACTAR',
-                        subtitle: 'CON EL CREADOR',
-                        color: green,
-                        onTap: () => showWeb(
+                        icon: Icons.send_rounded,
+                        title: 'TELEGRAM',
+                        subtitle: 'CANAL OFICIAL',
+                        color: cyan,
+                        onTap: () => _openExternalInfo(
                           context,
-                          url: contactUrl,
-                          title: 'CONTACTAR',
+                          telegramUrl,
+                          'Telegram',
                         ),
                       ),
                     ),
                     const SizedBox(width: 9),
                     Expanded(
                       child: _ActionTile(
-                        horizontal: true,
-                        icon: Icons.favorite_rounded,
-                        title: 'DONACIONES',
-                        subtitle: 'APOYA EL PROYECTO',
-                        color: yellow,
-                        onTap: () =>
-                            _openPage(const DonationsScreen()),
+                        icon: Icons.volunteer_activism_rounded,
+                        title: 'APOYO',
+                        subtitle: 'AL PROYECTO',
+                        color: pink,
+                        onTap: () => _openPage(
+                          context,
+                          const DonationsScreen(),
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    gradient: const LinearGradient(
-                      colors: <Color>[
-                        Color(0xFF061B47),
-                        Color(0xFF351054),
-                        Color(0xFF071D45),
-                      ],
-                    ),
-                    border: Border.all(
-                      color: pink.withValues(alpha: .8),
-                    ),
-                    boxShadow: <BoxShadow>[
-                      BoxShadow(
-                        color: pink.withValues(alpha: .18),
-                        blurRadius: 14,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
+                FilledButton.icon(
+                  onPressed: () => showWeb(context),
+                  icon: const Icon(
+                    Icons.play_circle_fill_rounded,
                   ),
-                  child: const Row(
-                    children: <Widget>[
-                      Icon(
-                        Icons.sports_soccer_rounded,
-                        color: cyan,
-                        size: 34,
-                      ),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Text(
-                              '¡EL DEPORTE NOS UNE!',
-                              style: TextStyle(
-                                color: yellow,
-                                fontSize: 15,
-                                fontStyle: FontStyle.italic,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              'Agenda, resultados y pasión deportiva.',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(
-                        Icons.emoji_events_rounded,
-                        color: yellow,
-                        size: 31,
-                      ),
-                    ],
+                  label: const Text(
+                    'VER AGENDA DE PARTIDOS',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _openExternalInfo(
+                    context,
+                    contactUrl,
+                    'Contacto',
+                  ),
+                  icon: const Icon(Icons.chat_rounded),
+                  label: const Text('CONTACTO'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: green,
+                    side: const BorderSide(color: green),
                   ),
                 ),
               ],
@@ -363,39 +287,39 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: _selectedIndex,
-        onTap: _navigationTap,
-        backgroundColor: const Color(0xFF030A18),
-        selectedItemColor: cyan,
-        unselectedItemColor: muted,
-        selectedFontSize: 10,
-        unselectedFontSize: 9,
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_rounded),
-            label: 'Inicio',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.sports_soccer_rounded),
-            label: 'Fútbol',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.live_tv_rounded),
-            label: 'En vivo',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_month_rounded),
-            label: 'Agenda',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings_rounded),
-            label: 'Ajustes',
-          ),
-        ],
-      ),
     );
+  }
+}
+
+Future<void> _openExternalInfo(
+  BuildContext context,
+  String url,
+  String label,
+) async {
+  final uri = Uri.tryParse(url);
+  if (uri == null) return;
+
+  try {
+    final opened = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo abrir $label.'),
+        ),
+      );
+    }
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo abrir $label.'),
+        ),
+      );
+    }
   }
 }
 
@@ -404,85 +328,47 @@ class _SportsStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const sports =
-        <({String label, IconData icon, Color color})>[
-      (
-        label: 'FÚTBOL',
-        icon: Icons.sports_soccer_rounded,
-        color: cyan,
-      ),
-      (
-        label: 'BÁSQUET',
-        icon: Icons.sports_basketball_rounded,
-        color: yellow,
-      ),
-      (
-        label: 'TENIS',
-        icon: Icons.sports_tennis_rounded,
-        color: green,
-      ),
-      (
-        label: 'BÉISBOL',
-        icon: Icons.sports_baseball_rounded,
-        color: pink,
-      ),
-      (
-        label: 'VÓLEY',
-        icon: Icons.sports_volleyball_rounded,
-        color: Color(0xFF438DFF),
-      ),
-      (
-        label: 'OTROS',
-        icon: Icons.emoji_events_rounded,
-        color: Color(0xFFB48CFF),
-      ),
+    const entries = <(IconData, String)>[
+      (Icons.sports_soccer_rounded, 'FÚTBOL'),
+      (Icons.sports_basketball_rounded, 'BALONCESTO'),
+      (Icons.sports_tennis_rounded, 'TENIS'),
+      (Icons.sports_mma_rounded, 'COMBATE'),
+      (Icons.sports_volleyball_rounded, 'VÓLEIBOL'),
     ];
 
     return SizedBox(
-      height: 70,
+      height: 74,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: sports.length,
+        itemCount: entries.length,
         separatorBuilder: (_, __) =>
-            const SizedBox(width: 8),
+            const SizedBox(width: 9),
         itemBuilder: (context, index) {
-          final sport = sports[index];
+          final item = entries[index];
 
           return Container(
-            width: 70,
-            padding: const EdgeInsets.symmetric(
-              vertical: 6,
-              horizontal: 3,
-            ),
+            width: 92,
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: panel,
+              color: panel.withValues(alpha: .84),
               borderRadius: BorderRadius.circular(13),
               border: Border.all(
-                color: sport.color.withValues(alpha: .85),
+                color: cyan.withValues(alpha: .35),
               ),
-              boxShadow: <BoxShadow>[
-                BoxShadow(
-                  color: sport.color.withValues(alpha: .15),
-                  blurRadius: 9,
-                  offset: const Offset(0, 4),
-                ),
-              ],
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
                 Icon(
-                  sport.icon,
-                  color: sport.color,
-                  size: 27,
+                  item.$1,
+                  color: cyan,
+                  size: 25,
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  sport.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  item.$2,
+                  textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: Colors.white,
                     fontSize: 8,
                     fontWeight: FontWeight.w900,
                   ),
@@ -503,7 +389,6 @@ class _ActionTile extends StatelessWidget {
     required this.subtitle,
     required this.color,
     required this.onTap,
-    this.horizontal = false,
   });
 
   final IconData icon;
@@ -511,117 +396,59 @@ class _ActionTile extends StatelessWidget {
   final String subtitle;
   final Color color;
   final VoidCallback onTap;
-  final bool horizontal;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
+      color: panel,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          height: horizontal ? 76 : 102,
-          padding: const EdgeInsets.symmetric(
-            horizontal: 7,
-            vertical: 8,
+          constraints: const BoxConstraints(
+            minHeight: 106,
           ),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: <Color>[
-                color.withValues(alpha: .23),
-                panel,
-              ],
-            ),
             border: Border.all(
-              color: color.withValues(alpha: .95),
-              width: 1.2,
+              color: color.withValues(alpha: .85),
             ),
             boxShadow: <BoxShadow>[
               BoxShadow(
-                color: color.withValues(alpha: .32),
-                blurRadius: 0,
-                offset: const Offset(0, 4),
-              ),
-              BoxShadow(
-                color: color.withValues(alpha: .16),
-                blurRadius: 11,
-                offset: const Offset(0, 7),
+                color: color.withValues(alpha: .12),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
-          child: horizontal
-              ? Row(
-                  children: <Widget>[
-                    Icon(icon, color: color, size: 29),
-                    const SizedBox(width: 7),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment:
-                            MainAxisAlignment.center,
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            subtitle,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: color,
-                              fontSize: 7,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                )
-              : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                    Icon(icon, color: color, size: 31),
-                    const SizedBox(height: 5),
-                    Text(
-                      title,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 8,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 7,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(icon, color: color, size: 30),
+              const SizedBox(height: 7),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
                 ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 8,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -677,10 +504,11 @@ class LiveScreen extends StatelessWidget {
                     ),
                     SizedBox(height: 8),
                     Text(
-                      'Los enlaces de reproducción directa anteriores '
-                      'no eran fuentes verificadas. Abre la agenda '
-                      'para seleccionar el reproductor disponible. '
-                      'La app no puede inventar un enlace de emisión válido.',
+                      'Abre la agenda y selecciona el reproductor '
+                      'disponible. La app evita abrir ventanas '
+                      'emergentes, pero necesita que el sitio '
+                      'tenga un reproductor incrustado válido '
+                      'para poder reproducirlo.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: muted,
@@ -693,11 +521,14 @@ class LiveScreen extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               _ChannelTile(
-                name: 'PRIM',
+                name: 'PRISM',
                 color: pink,
                 onTap: () => showWeb(
                   context,
-                  title: 'PRIM · REPRODUCTOR',
+                  url: prismStreamUrl.trim().isEmpty
+                      ? agendaUrl
+                      : prismStreamUrl.trim(),
+                  title: 'PRISM · EN VIVO AQUÍ',
                 ),
               ),
               const SizedBox(height: 12),
@@ -706,7 +537,10 @@ class LiveScreen extends StatelessWidget {
                 color: cyan,
                 onTap: () => showWeb(
                   context,
-                  title: 'SSH101 · REPRODUCTOR',
+                  url: ssh101StreamUrl.trim().isEmpty
+                      ? agendaUrl
+                      : ssh101StreamUrl.trim(),
+                  title: 'SSH101 · EN VIVO AQUÍ',
                 ),
               ),
               const SizedBox(height: 18),
@@ -778,7 +612,7 @@ class _ChannelTile extends StatelessWidget {
                 ),
               ),
               const Text(
-                'ABRIR AGENDA',
+                'EN VIVO AQUÍ',
                 style: TextStyle(
                   color: cyan,
                   fontSize: 10,
@@ -806,7 +640,7 @@ class DonationsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('DONACIONES'),
+        title: const Text('APOYO AL PROYECTO'),
       ),
       body: AppBackdrop(
         child: Center(
@@ -818,13 +652,6 @@ class DonationsScreen extends StatelessWidget {
                 color: panel.withValues(alpha: .95),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: pink),
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: pink.withValues(alpha: .17),
-                    blurRadius: 16,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
               ),
               child: const Column(
                 mainAxisSize: MainAxisSize.min,
@@ -832,119 +659,31 @@ class DonationsScreen extends StatelessWidget {
                   Icon(
                     Icons.favorite_rounded,
                     color: pink,
-                    size: 60,
+                    size: 54,
                   ),
-                  SizedBox(height: 14),
+                  SizedBox(height: 12),
                   Text(
-                    'APOYA DEPORTE TOTAL 360°',
-                    textAlign: TextAlign.center,
+                    'GRACIAS POR APOYAR',
                     style: TextStyle(
                       color: cyan,
-                      fontSize: 18,
                       fontWeight: FontWeight.w900,
+                      fontSize: 18,
                     ),
                   ),
-                  SizedBox(height: 10),
+                  SizedBox(height: 8),
                   Text(
-                    'Gracias por ayudar a mantener vivo este '
-                    'proyecto. Añade aquí tu enlace de donación '
-                    'cuando lo tengas.',
+                    'Esta sección queda preparada para añadir '
+                    'el enlace oficial de apoyo cuando esté disponible.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: muted,
-                      height: 1.5,
+                      height: 1.4,
                     ),
                   ),
                 ],
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
-
-  @override
-  State<SettingsScreen> createState() =>
-      _SettingsScreenState();
-}
-
-class _SettingsScreenState extends State<SettingsScreen> {
-  bool _notifications = true;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('AJUSTES'),
-      ),
-      body: AppBackdrop(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: <Widget>[
-            SwitchListTile(
-              tileColor: panel.withValues(alpha: .9),
-              secondary: const Icon(
-                Icons.notifications_active_rounded,
-                color: green,
-              ),
-              title: const Text('Notificaciones'),
-              value: _notifications,
-              onChanged: (value) =>
-                  setState(() => _notifications = value),
-            ),
-            const Divider(
-              color: Color(0xFF203B60),
-            ),
-            const ListTile(
-              tileColor: Color(0xD5071B35),
-              leading: Icon(
-                Icons.language_rounded,
-                color: yellow,
-              ),
-              title: Text('Idioma'),
-              subtitle: Text('Español'),
-            ),
-            const Divider(
-              color: Color(0xFF203B60),
-            ),
-            const ListTile(
-              tileColor: Color(0xD5071B35),
-              leading: Icon(
-                Icons.info_outline_rounded,
-                color: pink,
-              ),
-              title: Text('Acerca de'),
-              subtitle: Text('DEPORTE TOTAL 360°'),
-            ),
-            const SizedBox(height: 20),
-            Center(
-              child: Image.asset(
-                'assets/images/app_icon.png',
-                height: 145,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Icon(
-                  Icons.sports_soccer_rounded,
-                  color: cyan,
-                  size: 80,
-                ),
-              ),
-            ),
-            const Center(
-              child: Text(
-                'TU PASIÓN, EN TODAS PARTES',
-                style: TextStyle(
-                  color: cyan,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1,
-                ),
-              ),
-            ),
-          ],
         ),
       ),
     );
