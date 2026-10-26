@@ -7,10 +7,12 @@ const Color _panel = Color(0xFF071326);
 const Color _cyan = Color(0xFF00E5FF);
 const Color _pink = Color(0xFFFF28CF);
 const Color _green = Color(0xFF39FF9C);
+
 const String _agendaUrl = 'https://futbol-libre.cam/';
 
 class WebAgendaScreen extends StatefulWidget {
   const WebAgendaScreen({super.key});
+
   @override
   State<WebAgendaScreen> createState() => _WebAgendaScreenState();
 }
@@ -44,7 +46,10 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
       _loading = true;
       _progress = 0;
     });
-    await _controller?.loadUrl(urlRequest: URLRequest(url: WebUri(_agendaUrl)));
+
+    await _controller?.loadUrl(
+      urlRequest: URLRequest(url: WebUri(_agendaUrl)),
+    );
   }
 
   Future<NavigationActionPolicy> _navigation(
@@ -53,14 +58,20 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
   ) async {
     final webUrl = action.request.url;
     if (webUrl == null) return NavigationActionPolicy.CANCEL;
+
     final uri = Uri.tryParse(webUrl.toString());
     if (uri == null) return NavigationActionPolicy.CANCEL;
-    if (_allowed(uri)) return NavigationActionPolicy.ALLOW;
+
+    if (_allowed(uri)) {
+      return NavigationActionPolicy.ALLOW;
+    }
+
     if (uri.scheme == 'https' || uri.scheme == 'http') {
       try {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } catch (_) {}
     }
+
     return NavigationActionPolicy.CANCEL;
   }
 
@@ -82,10 +93,14 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           title: const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('DEPORTE TOTAL 360°',
-                style: TextStyle(color: _cyan, fontWeight: FontWeight.w900, fontSize: 14)),
-              Text('AGENDA DEPORTIVA',
-                style: TextStyle(color: Colors.white70, fontSize: 10)),
+              Text(
+                'DEPORTE TOTAL 360°',
+                style: TextStyle(color: _cyan, fontWeight: FontWeight.w900, fontSize: 14),
+              ),
+              Text(
+                'AGENDA DEPORTIVA',
+                style: TextStyle(color: Colors.white70, fontSize: 10),
+              ),
             ],
           ),
           actions: [
@@ -115,8 +130,14 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                   Icon(Icons.sports_soccer, color: _cyan, size: 20),
                   SizedBox(width: 9),
                   Expanded(
-                    child: Text('AGENDA DE PARTIDOS',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12)),
+                    child: Text(
+                      'AGENDA DE PARTIDOS',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
                   Icon(Icons.sports_basketball, color: _pink, size: 19),
                 ],
@@ -192,11 +213,20 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                             children: [
                               const Icon(Icons.wifi_off, size: 54, color: _pink),
                               const SizedBox(height: 16),
-                              const Text('AGENDA NO DISPONIBLE',
-                                style: TextStyle(color: _cyan, fontWeight: FontWeight.w900, fontSize: 18)),
+                              const Text(
+                                'AGENDA NO DISPONIBLE',
+                                style: TextStyle(
+                                  color: _cyan,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                ),
+                              ),
                               const SizedBox(height: 10),
-                              Text(_error!, textAlign: TextAlign.center,
-                                style: const TextStyle(color: Colors.white70)),
+                              Text(
+                                _error!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.white70),
+                              ),
                               const SizedBox(height: 20),
                               FilledButton.icon(
                                 onPressed: _reload,
