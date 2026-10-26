@@ -7,6 +7,7 @@ void main() {
   runApp(const DeporteTotal360App());
 }
 
+// Colores de DEPORTE TOTAL 360°
 const Color bg = Color(0xFF030814);
 const Color panel = Color(0xFF071326);
 const Color cyan = Color(0xFF00E5FF);
@@ -16,18 +17,15 @@ const Color yellow = Color(0xFFFFD600);
 const Color blue = Color(0xFF087BFF);
 const Color muted = Color(0xFFA9BDD6);
 
-// Datos de emisión para configurar PRISM LIVE STUDIO.
-// El envío RTMP se hace desde PRISM, no desde el reproductor Flutter.
-const String rtmpServerUrl = 'rtmp://ssh101.bozztv.com:1935/ssh101';
-const String ssh101StreamKey = 'deportetotal360';
-const String channelDisplayName = 'Deporte Total 360°-1';
-
-// URL HLS de salida para reproducir la señal en la APK.
-// Comprueba en el panel de SSH101 que esta sea la URL asignada a tu canal.
+// Comprueba que esta dirección HLS sea la asignada a tu canal
+// en el panel de SSH101. PRISM LIVE STUDIO debe estar transmitiendo.
 const String streamUrl =
     'https://live21.bozztv.com/akamaissh101/ssh101/deportetotal360/playlist.m3u8';
 
 const String agendaUrl = 'https://futbol-libre.cam/';
+
+// Cuando crees tu canal de Telegram, cambia esta dirección
+// por el enlace real de tu canal.
 const String telegramUrl = 'https://t.me/';
 
 class DeporteTotal360App extends StatelessWidget {
@@ -79,8 +77,8 @@ class HomeScreen extends StatelessWidget {
           'DEPORTE TOTAL 360°',
           style: TextStyle(
             color: cyan,
+            fontSize: 16,
             fontWeight: FontWeight.w900,
-            fontSize: 17,
           ),
         ),
         actions: [
@@ -88,20 +86,25 @@ class HomeScreen extends StatelessWidget {
             tooltip: 'Telegram',
             onPressed: () =>
                 openInside(context, telegramUrl, 'TELEGRAM'),
-            icon: const Icon(Icons.send_rounded, color: cyan),
+            icon: const Icon(
+              Icons.send_rounded,
+              color: cyan,
+            ),
           ),
         ],
       ),
       body: Stack(
         children: [
-          const Positioned.fill(child: SportsBackdrop()),
+          const Positioned.fill(
+            child: SportsBackdrop(),
+          ),
           SafeArea(
             top: false,
             child: ListView(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
               children: [
-                _buildHero(),
-                const SizedBox(height: 22),
+                _buildReferenceImage(),
+                const SizedBox(height: 20),
                 const SectionTitle(
                   title: 'TU MUNDO DEPORTIVO',
                   color: cyan,
@@ -122,21 +125,25 @@ class HomeScreen extends StatelessWidget {
                     return GridView.count(
                       crossAxisCount: columns,
                       shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
+                      physics:
+                          const NeverScrollableScrollPhysics(),
                       crossAxisSpacing: 11,
                       mainAxisSpacing: 11,
-                      childAspectRatio: columns == 3 ? 1.0 : 1.12,
+                      childAspectRatio:
+                          columns == 3 ? 1.0 : 1.12,
                       children: [
                         FeatureTile(
                           icon: Icons.live_tv_rounded,
                           title: 'EN VIVO',
                           subtitle: 'VER CANAL',
                           color: pink,
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const LiveScreen(),
-                            ),
-                          ),
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const LiveScreen(),
+                              ),
+                            );
+                          },
                         ),
                         FeatureTile(
                           icon: Icons.calendar_month_rounded,
@@ -176,11 +183,14 @@ class HomeScreen extends StatelessWidget {
                           title: 'DONACIONES',
                           subtitle: 'APOYA EL PROYECTO',
                           color: yellow,
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const DonationsScreen(),
-                            ),
-                          ),
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const DonationsScreen(),
+                              ),
+                            );
+                          },
                         ),
                         FeatureTile(
                           icon: Icons.emoji_events_rounded,
@@ -210,7 +220,7 @@ class HomeScreen extends StatelessWidget {
                       ],
                     ),
                     border: Border.all(
-                      color: pink.withValues(alpha: .8),
+                      color: pink.withValues(alpha: 0.8),
                     ),
                   ),
                   child: const Column(
@@ -232,7 +242,8 @@ class HomeScreen extends StatelessWidget {
                       ),
                       SizedBox(height: 8),
                       Text(
-                        'Fútbol · Baloncesto · Béisbol · Tenis · Voleibol',
+                        'Fútbol · Baloncesto · Béisbol · '
+                        'Tenis · Voleibol',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white70,
@@ -249,7 +260,7 @@ class HomeScreen extends StatelessWidget {
                   style: TextStyle(
                     color: muted,
                     fontSize: 10,
-                    letterSpacing: .4,
+                    letterSpacing: 0.4,
                   ),
                 ),
               ],
@@ -260,68 +271,80 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHero() {
+  Widget _buildReferenceImage() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
-          colors: [
-            Color(0xFF071B46),
-            Color(0xFF160B3C),
-            Color(0xFF031326),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: panel,
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: cyan, width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: cyan.withValues(alpha: .12),
-            blurRadius: 20,
+            color: cyan.withValues(alpha: 0.12),
+            blurRadius: 18,
           ),
         ],
       ),
-      child: Column(
-        children: [
-          Image.asset(
-            'assets/images/logo.png',
-            height: 190,
-            width: double.infinity,
-            fit: BoxFit.contain,
-            errorBuilder: (_, error, stack) {
-              return const SizedBox(
-                height: 150,
-                child: Icon(
-                  Icons.emoji_events_rounded,
-                  color: yellow,
-                  size: 80,
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'TODO EL DEPORTE EN UN SOLO LUGAR',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w900,
-              letterSpacing: .4,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(15),
+        child: Column(
+          children: [
+            Image.asset(
+              'assets/images/home_reference.png',
+              width: double.infinity,
+              fit: BoxFit.fitWidth,
+              errorBuilder: (context, error, stackTrace) {
+                return Image.asset(
+                  'assets/images/logo.png',
+                  width: double.infinity,
+                  height: 190,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const SizedBox(
+                      height: 150,
+                      child: Center(
+                        child: Icon(
+                          Icons.emoji_events_rounded,
+                          color: yellow,
+                          size: 70,
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
             ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Agenda deportiva · Directos · Noticias',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: muted,
-              fontSize: 11,
+            const Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 12,
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    'TODO EL DEPORTE EN UN SOLO LUGAR',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  SizedBox(height: 5),
+                  Text(
+                    'Agenda deportiva · Directos · Noticias',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: muted,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -352,10 +375,14 @@ class SportsRow extends StatelessWidget {
                   height: 39,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: sport.$3.withValues(alpha: .08),
+                    color: sport.$3.withValues(alpha: 0.08),
                     border: Border.all(color: sport.$3),
                   ),
-                  child: Icon(sport.$1, color: sport.$3, size: 21),
+                  child: Icon(
+                    sport.$1,
+                    color: sport.$3,
+                    size: 21,
+                  ),
                 ),
                 const SizedBox(height: 5),
                 Text(
@@ -404,7 +431,7 @@ class SectionTitle extends StatelessWidget {
               color: color,
               fontWeight: FontWeight.w900,
               fontSize: 12,
-              letterSpacing: .4,
+              letterSpacing: 0.4,
             ),
           ),
         ),
@@ -442,7 +469,7 @@ class FeatureTile extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(17),
             border: Border.all(
-              color: color.withValues(alpha: .9),
+              color: color.withValues(alpha: 0.9),
             ),
           ),
           child: Column(
@@ -487,12 +514,18 @@ class SportsBackdrop extends StatelessWidget {
           Positioned(
             top: 100,
             left: -80,
-            child: _glow(190, cyan.withValues(alpha: .035)),
+            child: _glow(
+              190,
+              cyan.withValues(alpha: 0.035),
+            ),
           ),
           Positioned(
             top: 470,
             right: -80,
-            child: _glow(220, pink.withValues(alpha: .035)),
+            child: _glow(
+              220,
+              pink.withValues(alpha: 0.035),
+            ),
           ),
         ],
       ),
@@ -537,9 +570,9 @@ class _LiveScreenState extends State<LiveScreen> {
   }
 
   Future<void> _startPlayer() async {
-    final old = _player;
+    final oldPlayer = _player;
     _player = null;
-    await old?.dispose();
+    await oldPlayer?.dispose();
 
     if (!mounted) return;
 
@@ -551,6 +584,7 @@ class _LiveScreenState extends State<LiveScreen> {
     final player = VideoPlayerController.networkUrl(
       Uri.parse(streamUrl),
     );
+
     _player = player;
     player.addListener(_onPlayerChanged);
 
@@ -624,7 +658,9 @@ class _LiveScreenState extends State<LiveScreen> {
                 color: Colors.black,
                 child: _loading
                     ? const Center(
-                        child: CircularProgressIndicator(color: cyan),
+                        child: CircularProgressIndicator(
+                          color: cyan,
+                        ),
                       )
                     : !ready
                         ? const OfflinePanel()
@@ -664,8 +700,9 @@ class _LiveScreenState extends State<LiveScreen> {
           const SizedBox(height: 12),
           if (!_loading && !ready) ...[
             const Text(
-              'No se pudo reproducir la señal. Comprueba que PRISM '
-              'esté transmitiendo y que la URL HLS corresponda a tu canal.',
+              'No se pudo reproducir la señal. Comprueba que '
+              'PRISM esté transmitiendo y que la URL HLS sea '
+              'la correcta para tu canal SSH101.',
               textAlign: TextAlign.center,
               style: TextStyle(color: muted),
             ),
@@ -743,42 +780,39 @@ class DonationsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('DONACIONES')),
-      body: Center(
+      appBar: AppBar(
+        title: const Text('DONACIONES'),
+      ),
+      body: const Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              Icon(
                 Icons.favorite_rounded,
                 color: pink,
                 size: 76,
               ),
-              const SizedBox(height: 18),
-              const Text(
+              SizedBox(height: 18),
+              Text(
                 'APOYA EL PROYECTO',
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: yellow,
+                  color: cyan,
                   fontSize: 22,
                   fontWeight: FontWeight.w900,
                 ),
               ),
-              const SizedBox(height: 12),
-              const Text(
-                'Gracias por apoyar DEPORTE TOTAL 360°.',
+              SizedBox(height: 10),
+              Text(
+                'Gracias por apoyar a DEPORTE TOTAL 360°. '
+                'Próximamente añadiremos opciones de donación.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: muted),
-              ),
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: () => openInside(
-                  context,
-                  telegramUrl,
-                  'TELEGRAM',
+                style: TextStyle(
+                  color: muted,
+                  height: 1.5,
                 ),
-                icon: const Icon(Icons.send_rounded),
-                label: const Text('IR A TELEGRAM'),
               ),
             ],
           ),
