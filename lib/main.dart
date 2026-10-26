@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
@@ -20,10 +21,11 @@ const Color muted = Color(0xFFA9BDD6);
 const String streamUrl =
     'https://lbgo.bozztv.com/ssh101/ssh101/deportetotal360/playlist.m3u8';
 
+// Comprueba que este número de WhatsApp sea el correcto.
 const String whatsappUrl =
     'https://wa.me/5927214741?text=Hola%2C%20contacto%20con%20DEPORTE%20TOTAL%20360';
 
-// Cambia esto cuando tengas tu canal real.
+// Sustituye el enlace cuando crees tu canal de Telegram.
 const String telegramUrl = 'https://t.me/';
 
 Future<void> openUrl(String value) async {
@@ -31,7 +33,10 @@ Future<void> openUrl(String value) async {
   if (uri == null || !uri.hasScheme) return;
 
   try {
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
   } catch (_) {}
 }
 
@@ -78,18 +83,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _selectTab(int index) {
-    setState(() => _tab = index);
-
-    if (index == 1 || index == 3) {
-      _open(const WebAgendaScreen());
-    } else if (index == 2) {
-      _open(const LiveScreen());
-    } else if (index == 4) {
-      _open(const SettingsScreen());
+    if (index == 0) {
+      setState(() => _tab = 0);
+      return;
     }
 
-    if (index != 0) {
-      setState(() => _tab = 0);
+    setState(() => _tab = 0);
+
+    switch (index) {
+      case 1:
+      case 3:
+        _open(const WebAgendaScreen());
+        break;
+      case 2:
+        _open(const LiveScreen());
+        break;
+      case 4:
+        _open(const SettingsScreen());
+        break;
     }
   }
 
@@ -602,6 +613,7 @@ class _LiveScreenState extends State<LiveScreen> {
   Future<void> _startPlayer() async {
     final old = _player;
     _player = null;
+
     await old?.dispose();
 
     if (!mounted) return;
@@ -624,11 +636,18 @@ class _LiveScreenState extends State<LiveScreen> {
         return;
       }
 
+      if (!player.value.isInitialized) {
+        throw StateError('El reproductor no se inicializó.');
+      }
+
       await player.play();
 
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (!mounted || _player != player) return;
+
+      setState(() {
+        _loading = false;
+        _error = null;
+      });
     } catch (_) {
       if (!mounted || _player != player) return;
 
@@ -637,6 +656,42 @@ class _LiveScreenState extends State<LiveScreen> {
         _error = 'La señal no está disponible en este momento.';
       });
     }
+  }
+
+  // CORRECCIÓN: este método recibe un controlador NO nulo.
+  // Solo se llama después de comprobar que el controlador existe
+  // y que el vídeo está inicializado.
+  Widget _buildPlayer(VideoPlayerController player) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        SizedBox.expand(
+          child: FittedBox(
+            fit: BoxFit.contain,
+            child: SizedBox(
+              width: player.value.size.width,
+              height: player.value.size.height,
+              child: VideoPlayer(player),
+            ),
+          ),
+        ),
+        IconButton.filled(
+          onPressed: () {
+            if (player.value.isPlaying) {
+              player.pause();
+            } else {
+              player.play();
+            }
+          },
+          iconSize: 38,
+          icon: Icon(
+            player.value.isPlaying
+                ? Icons.pause
+                : Icons.play_arrow,
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -650,7 +705,9 @@ class _LiveScreenState extends State<LiveScreen> {
     final p = _player;
 
     final offline = !_loading &&
-        (_error != null || p == null || !p.value.isInitialized);
+        (_error != null ||
+            p == null ||
+            !p.value.isInitialized);
 
     return Scaffold(
       appBar: AppBar(
@@ -679,40 +736,15 @@ class _LiveScreenState extends State<LiveScreen> {
                 color: Colors.black,
                 child: _loading
                     ? const Center(
-                        child: CircularProgressIndicator(color: cyan),
+                        child: CircularProgressIndicator(
+                          color: cyan,
+                        ),
                       )
-                    : offline
+                    : (p == null ||
+                            _error != null ||
+                            !p.value.isInitialized)
                         ? const OfflinePanel()
-                        : Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              SizedBox.expand(
-                                child: FittedBox(
-                                  fit: BoxFit.contain,
-                                  child: SizedBox(
-                                    width: p.value.size.width,
-                                    height: p.value.size.height,
-                                    child: VideoPlayer(p),
-                                  ),
-                                ),
-                              ),
-                              IconButton.filled(
-                                onPressed: () {
-                                  setState(() {
-                                    p.value.isPlaying
-                                        ? p.pause()
-                                        : p.play();
-                                  });
-                                },
-                                iconSize: 38,
-                                icon: Icon(
-                                  p.value.isPlaying
-                                      ? Icons.pause
-                                      : Icons.play_arrow,
-                                ),
-                              ),
-                            ],
-                          ),
+                        : _buildPlayer(p),
               ),
             ),
           ),
