@@ -63,8 +63,8 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
     'onclickads.net',
     'onclickalgo.com',
     'propellerads.com',
-    'trafficjunky.net',
     'trafficjunky.com',
+    'trafficjunky.net',
     'juicyads.com',
     'richpush.co',
     'taboola.com',
@@ -96,13 +96,11 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
         'assets/images/app_icon.png',
       );
 
-      final bytes = data.buffer.asUint8List();
-
       if (!mounted) return;
 
       setState(() {
         _logoDataUrl =
-            'data:image/png;base64,${base64Encode(bytes)}';
+            'data:image/png;base64,${base64Encode(data.buffer.asUint8List())}';
       });
 
       final controller = _controller;
@@ -111,22 +109,20 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
         await _applyBranding(controller);
       }
     } catch (_) {
-      // La pantalla sigue funcionando si falta el recurso gráfico.
+      // El icono es opcional para la navegación.
     }
   }
 
   bool _hostMatches(String host, String domain) {
-    final normalized = host.toLowerCase();
+    final value = host.toLowerCase();
 
-    return normalized == domain ||
-        normalized.endsWith('.$domain');
+    return value == domain ||
+        value.endsWith('.$domain');
   }
 
   bool _isBlockedUri(Uri uri) {
-    final host = uri.host.toLowerCase();
-
     if (_blockedHosts.any(
-      (domain) => _hostMatches(host, domain),
+      (domain) => _hostMatches(uri.host.toLowerCase(), domain),
     )) {
       return true;
     }
@@ -147,7 +143,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
         !_isBlockedUri(uri);
   }
 
-  String _normalHost(String host) {
+  String _normalizedHost(String host) {
     return host
         .toLowerCase()
         .replaceFirst(RegExp(r'^www\.'), '');
@@ -165,33 +161,30 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
       return NavigationActionPolicy.CANCEL;
     }
 
-    // Los reproductores incrustados pueden usar otros dominios.
-    // Se permiten en subframes si el dominio no está bloqueado.
+    // Los iframes de vídeo pueden estar alojados en otros dominios.
+    // Se permiten si su dominio no figura en el filtro publicitario.
     if (action.isForMainFrame != true) {
       return NavigationActionPolicy.ALLOW;
     }
 
-    // No permitir que la ventana principal abandone la agenda.
+    // Bloquear la navegación principal hacia un dominio diferente.
     final current = Uri.tryParse(_activeUrl);
 
-    if (current == null) {
-      return NavigationActionPolicy.CANCEL;
-    }
-
-    if (_normalHost(uri.host) !=
-        _normalHost(current.host)) {
+    if (current == null ||
+        _normalizedHost(uri.host) !=
+            _normalizedHost(current.host)) {
       return NavigationActionPolicy.CANCEL;
     }
 
     return NavigationActionPolicy.ALLOW;
   }
 
-  Future<void> _openUrl(String url) async {
-    final uri = Uri.tryParse(url);
+  Future<void> _openUrl(String value) async {
+    final uri = Uri.tryParse(value);
 
     if (uri == null || !_isAllowedUri(uri)) {
       _setError(
-        'Este enlace se bloqueó porque no es válido '
+        'El enlace se bloqueó porque no es válido '
         'o parece publicitario.',
       );
       return;
@@ -243,7 +236,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
     try {
       await controller.reload();
     } catch (error) {
-      _setError('No se pudo recargar la página: $error');
+      _setError('No se pudo recargar: $error');
     }
   }
 
@@ -259,7 +252,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           return;
         }
       } catch (_) {
-        // Sin historial, se cerrará la pantalla integrada.
+        // Sin historial web, cerrar la pantalla integrada.
       }
     }
 
@@ -309,8 +302,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                   rgba(2,8,23,.90)
                 ),
                 url("${logoData}") !important;
-              background-repeat:
-                no-repeat, no-repeat !important;
+              background-repeat: no-repeat, no-repeat !important;
               background-position: center, center !important;
               background-size:
                 cover, min(76vw, 430px) auto !important;
@@ -392,7 +384,6 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
               margin: 4px 4px 6px 0 !important;
               border-radius: 999px !important;
               font: 900 10px Arial, sans-serif !important;
-              letter-spacing: .3px !important;
               pointer-events: none !important;
             }
 
@@ -423,9 +414,6 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
               color: #020817 !important;
               border: 1px solid #00e5ff !important;
               border-radius: 11px !important;
-              box-shadow:
-                0 4px 0 #07516a,
-                0 7px 12px rgba(0,0,0,.4) !important;
               font-weight: 900 !important;
               text-decoration: none !important;
             }
@@ -467,9 +455,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
             try {
               const u = new URL(value, location.href);
 
-              if (!/^https?:$/.test(u.protocol)) {
-                return true;
-              }
+              if (!/^https?:$/.test(u.protocol)) return true;
 
               const h = u.hostname.toLowerCase();
 
@@ -489,26 +475,20 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           function installBranding() {
             if (!document.body) return;
 
-            if (!document.getElementById(
-              'dt360-page-banner'
-            )) {
+            if (!document.getElementById('dt360-page-banner')) {
               const banner = document.createElement('div');
               banner.id = 'dt360-page-banner';
               banner.textContent =
-                'DEPORTE TOTAL 360°  •  AGENDA Y TRANSMISIONES';
-
+                'DEPORTE TOTAL 360° • AGENDA Y TRANSMISIONES';
               document.body.insertBefore(
                 banner,
                 document.body.firstChild
               );
             }
 
-            if (!document.getElementById(
-              'dt360-status-legend'
-            )) {
+            if (!document.getElementById('dt360-status-legend')) {
               const legend = document.createElement('div');
               legend.id = 'dt360-status-legend';
-
               legend.innerHTML =
                 '<span style="color:#ff3159">● EN VIVO</span>' +
                 '<span style="color:#b4c4d9">● TERMINADO</span>' +
@@ -531,7 +511,6 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
               }
             }
 
-            // Evitar aperturas de enlaces en nuevas ventanas.
             document.querySelectorAll(
               'a[target="_blank"]'
             ).forEach(a => {
@@ -539,11 +518,9 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
               a.rel = 'noopener noreferrer';
             });
 
-            // Retirar enlaces de publicidad identificada.
             document.querySelectorAll('a[href]').forEach(a => {
               if (blockedUrl(a.href)) {
                 a.removeAttribute('href');
-
                 a.style.setProperty(
                   'pointer-events',
                   'none',
@@ -555,17 +532,15 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                 a.innerText || a.textContent || ''
               ).trim();
 
+              if (/^EN VIVO AQUÍ$/i.test(label)) return;
+
               if (/^(ver|ver partido|ver canal|reproducir|play|watch|ver en vivo|en vivo|canal\s*\d*|transmitir|transmisión)$/i.test(label)) {
                 a.classList.add('dt360-play-link');
-                a.setAttribute(
-                  'aria-label',
-                  'EN VIVO AQUÍ'
-                );
+                a.setAttribute('aria-label', 'EN VIVO AQUÍ');
                 a.textContent = 'EN VIVO AQUÍ';
               }
             });
 
-            // Uniformar también los controles que no son enlaces.
             document.querySelectorAll(
               'button, [role="button"], ' +
               'input[type="button"], input[type="submit"]'
@@ -578,7 +553,6 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                 ''
               ).trim();
 
-              // Evitar reescribir el mismo texto continuamente.
               if (/^EN VIVO AQUÍ$/i.test(label)) return;
 
               if (!/(ver partido|ver canal|reproduc|play|watch|en vivo|live|stream|transmit)/i.test(label)) {
@@ -602,29 +576,24 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
 
           function addMatchStatuses() {
             const selector =
-              'article, li, [class*="match" i], ' +
-              '[class*="partido" i], [class*="fixture" i], ' +
+              'article,li,[class*="match" i],' +
+              '[class*="partido" i],[class*="fixture" i],' +
               '[data-match]';
 
             document.querySelectorAll(selector).forEach(node => {
               if (node.querySelector(
                 ':scope > .dt360-status-pill'
-              )) {
-                return;
-              }
+              )) return;
 
               const text = (
                 node.innerText || node.textContent || ''
               ).replace(/\s+/g, ' ').trim();
 
-              if (text.length < 18 || text.length > 800) {
-                return;
-              }
+              if (text.length < 18 || text.length > 800) return;
 
               const explicit = node.matches(
-                '[class*="match" i], ' +
-                '[class*="partido" i], ' +
-                '[class*="fixture" i], [data-match]'
+                '[class*="match" i],[class*="partido" i],' +
+                '[class*="fixture" i],[data-match]'
               );
 
               const indicators =
@@ -644,9 +613,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                 if (
                   parentText.length > text.length &&
                   parentText.length < 700
-                ) {
-                  return;
-                }
+                ) return;
               }
 
               let label = 'ESPERANDO TRANSMISIÓN';
@@ -661,8 +628,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
               }
 
               const pill = document.createElement('span');
-              pill.className =
-                'dt360-status-pill ' + cls;
+              pill.className = 'dt360-status-pill ' + cls;
               pill.textContent = label;
 
               node.insertBefore(pill, node.firstChild);
@@ -672,46 +638,78 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           if (!window.__dt360PopupPatch) {
             window.__dt360PopupPatch = true;
 
-            // No permitir que window.open redirija la página.
+            // window.open no puede abrir otra página.
             window.open = function () {
               return null;
             };
 
-            document.addEventListener(
-              'click',
-              function (event) {
-                const target = event.target;
+            document.addEventListener('click', function (event) {
+              const target = event.target;
+              const link = target && target.closest
+                ? target.closest('a[href]')
+                : null;
 
-                const link = target && target.closest
-                  ? target.closest('a[href]')
-                  : null;
+              if (!link) return;
 
-                if (link && blockedUrl(link.href)) {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  event.stopImmediatePropagation();
-                }
-              },
-              true
-            );
+              let destination;
 
-            document.addEventListener(
-              'submit',
-              function (event) {
-                const form = event.target;
+              try {
+                destination = new URL(link.href, location.href);
+              } catch (_) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                return;
+              }
 
-                if (
-                  form &&
-                  form.action &&
-                  blockedUrl(form.action)
-                ) {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  event.stopImmediatePropagation();
-                }
-              },
-              true
-            );
+              const host = destination.hostname
+                .toLowerCase()
+                .replace(/^www\./, '');
+
+              const currentHost = location.hostname
+                .toLowerCase()
+                .replace(/^www\./, '');
+
+              if (
+                blockedUrl(destination.href) ||
+                host !== currentHost
+              ) {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+              }
+            }, true);
+
+            document.addEventListener('submit', function (event) {
+              const form = event.target;
+              if (!form || !form.action) return;
+
+              let destination;
+
+              try {
+                destination = new URL(form.action, location.href);
+              } catch (_) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                return;
+              }
+
+              const host = destination.hostname
+                .toLowerCase()
+                .replace(/^www\./, '');
+
+              const currentHost = location.hostname
+                .toLowerCase()
+                .replace(/^www\./, '');
+
+              if (
+                blockedUrl(destination.href) ||
+                host !== currentHost
+              ) {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+              }
+            }, true);
           }
 
           function updatePage() {
@@ -739,11 +737,9 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
         })();
       '''.replaceAll('__DT360_LOGO__', _logoDataUrl);
 
-      await controller.evaluateJavascript(
-        source: script,
-      );
+      await controller.evaluateJavascript(source: script);
     } catch (_) {
-      // Algunos sitios limitan los scripts; el filtro nativo continúa activo.
+      // La página sigue funcionando si rechaza el script de estilo.
     }
   }
 
@@ -752,17 +748,15 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
     return PopScope<void>(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) {
-          _goBack();
-        }
+        if (!didPop) _goBack();
       },
       child: Scaffold(
         backgroundColor: _navy,
         appBar: AppBar(
           backgroundColor: _panel,
           leading: IconButton(
-            tooltip: 'Atrás',
             onPressed: _goBack,
+            tooltip: 'Atrás',
             icon: const Icon(
               Icons.arrow_back_rounded,
               color: _cyan,
@@ -777,8 +771,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                   width: 36,
                   height: 36,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) =>
-                      const Icon(
+                  errorBuilder: (_, __, ___) => const Icon(
                     Icons.sports_soccer_rounded,
                     color: _cyan,
                     size: 28,
@@ -786,11 +779,11 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              Expanded(
+              const Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    const Text(
+                    Text(
                       'DEPORTE TOTAL 360°',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -798,15 +791,6 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                         color: _cyan,
                         fontSize: 12,
                         fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    Text(
-                      widget.pageTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: _muted,
-                        fontSize: 10,
                       ),
                     ),
                   ],
@@ -847,7 +831,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           children: <Widget>[
             Positioned.fill(
               child: Opacity(
-                opacity: 0.13,
+                opacity: .13,
                 child: Image.asset(
                   'assets/images/app_icon.png',
                   fit: BoxFit.cover,
@@ -858,7 +842,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
             ),
             Positioned.fill(
               child: ColoredBox(
-                color: _navy.withValues(alpha: 0.84),
+                color: _navy.withValues(alpha: .84),
               ),
             ),
             Column(
@@ -883,7 +867,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                     ),
                   ),
                   child: const Text(
-                    'EN VIVO  •  TERMINADO  •  ESPERANDO TRANSMISIÓN',
+                    'EN VIVO • TERMINADO • ESPERANDO TRANSMISIÓN',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.white,
@@ -931,7 +915,6 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                           controller,
                           createWindowAction,
                         ) async {
-                          // Rechazar popups sin cargar sus URL.
                           return false;
                         },
                         shouldOverrideUrlLoading:
@@ -944,10 +927,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                             request.url.toString(),
                           );
 
-                          if (
-                            uri != null &&
-                            _isBlockedUri(uri)
-                          ) {
+                          if (uri != null && _isBlockedUri(uri)) {
                             return WebResourceResponse(
                               contentType: 'text/plain',
                               data: Uint8List(0),
@@ -963,11 +943,21 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                             url?.toString() ?? '',
                           );
 
-                          if (
-                            uri != null &&
-                            _isBlockedUri(uri)
-                          ) {
+                          if (uri != null && _isBlockedUri(uri)) {
                             controller.stopLoading();
+                            return;
+                          }
+
+                          final expected = Uri.tryParse(_activeUrl);
+
+                          if (uri != null &&
+                              expected != null &&
+                              _normalizedHost(uri.host) !=
+                                  _normalizedHost(expected.host)) {
+                            controller.stopLoading();
+                            _setError(
+                              'Se bloqueó una redirección a otro dominio.',
+                            );
                             return;
                           }
 
@@ -998,10 +988,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                             url?.toString() ?? '',
                           );
 
-                          if (
-                            uri != null &&
-                            _isBlockedUri(uri)
-                          ) {
+                          if (uri != null && _isBlockedUri(uri)) {
                             await controller.stopLoading();
                             return;
                           }
@@ -1015,10 +1002,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                             _progress = 1;
                             _error = null;
 
-                            if (
-                              uri != null &&
-                              _isAllowedUri(uri)
-                            ) {
+                            if (uri != null && _isAllowedUri(uri)) {
                               _activeUrl = uri.toString();
                             }
                           });
@@ -1028,14 +1012,11 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                           request,
                           error,
                         ) {
-                          if (request.isForMainFrame != true) {
-                            return;
-                          }
+                          if (request.isForMainFrame != true) return;
 
                           _setError(
                             'La página no respondió. '
-                            'Comprueba tu conexión o vuelve '
-                            'a intentarlo.\n\n'
+                            'Comprueba tu conexión.\n\n'
                             '${error.description}',
                           );
                         },
@@ -1044,20 +1025,14 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                           request,
                           response,
                         ) {
-                          if (request.isForMainFrame != true) {
-                            return;
-                          }
+                          if (request.isForMainFrame != true) return;
 
                           final status = response.statusCode;
 
-                          if (
-                            status != null &&
-                            status >= 400
-                          ) {
+                          if (status != null && status >= 400) {
                             _setError(
                               'El servidor respondió HTTP $status. '
-                              'Puede estar temporalmente fuera '
-                              'de servicio o rechazar la conexión.',
+                              'Puede estar temporalmente fuera de servicio.',
                             );
                           }
                         },
@@ -1071,9 +1046,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                             minHeight: 2,
                             backgroundColor: Colors.transparent,
                             valueColor:
-                                AlwaysStoppedAnimation<Color>(
-                              _pink,
-                            ),
+                                AlwaysStoppedAnimation<Color>(_pink),
                           ),
                         ),
                       if (_error != null)
@@ -1097,8 +1070,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
                                         color: _cyan,
-                                        fontWeight:
-                                            FontWeight.w900,
+                                        fontWeight: FontWeight.w900,
                                         fontSize: 16,
                                       ),
                                     ),
@@ -1120,28 +1092,22 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                                         icon: const Icon(
                                           Icons.refresh_rounded,
                                         ),
-                                        label: const Text(
-                                          'REINTENTAR',
-                                        ),
+                                        label: const Text('REINTENTAR'),
                                       ),
                                     ),
                                     const SizedBox(height: 8),
                                     SizedBox(
                                       width: double.infinity,
-                                      child:
-                                          OutlinedButton.icon(
+                                      child: OutlinedButton.icon(
                                         onPressed: () =>
-                                            _openUrl(
-                                          _fallbackAgendaUrl,
-                                        ),
+                                            _openUrl(_fallbackAgendaUrl),
                                         icon: const Icon(
                                           Icons.sports_soccer_rounded,
                                         ),
                                         label: const Text(
                                           'ABRIR AGENDA ALTERNATIVA',
                                         ),
-                                        style:
-                                            OutlinedButton.styleFrom(
+                                        style: OutlinedButton.styleFrom(
                                           foregroundColor: _green,
                                           side: const BorderSide(
                                             color: _green,
