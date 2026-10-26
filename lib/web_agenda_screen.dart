@@ -65,8 +65,11 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           url: WebUri(widget.initialUrl),
         ),
       );
-    } catch (e) {
-      _showError('No se pudo recargar la página.\n$e');
+    } catch (_) {
+      _showError(
+        'No se pudo recargar la página. '
+        'Comprueba tu conexión e inténtalo otra vez.',
+      );
     }
   }
 
@@ -101,18 +104,17 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
 
     final scheme = target.scheme.toLowerCase();
 
-    // Bloquea esquemas externos como intent:, market: y otros.
+    // Bloquea esquemas externos, como intent: y market:.
     if (scheme != 'https' && scheme != 'http') {
       return NavigationActionPolicy.CANCEL;
     }
 
-    // Permite recursos, vídeos e iframes incrustados.
+    // Permite recursos incrustados, como imágenes, scripts e iframes.
     if (!action.isForMainFrame) {
       return NavigationActionPolicy.ALLOW;
     }
 
-    // Evita que la página principal sea sustituida por otro dominio.
-    // Si el reproductor requiere una redirección externa, puede bloquearse.
+    // La navegación principal permanece en el mismo sitio.
     if (_isSameSite(target)) {
       return NavigationActionPolicy.ALLOW;
     }
@@ -134,9 +136,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
-        if (!didPop) {
-          await _back();
-        }
+        if (!didPop) await _back();
       },
       child: Scaffold(
         backgroundColor: _navy,
@@ -174,7 +174,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           ),
           actions: [
             IconButton(
-              tooltip: 'Recargar agenda',
+              tooltip: 'Recargar',
               onPressed: _reload,
               icon: const Icon(
                 Icons.refresh_rounded,
@@ -195,7 +195,6 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
         ),
         body: Column(
           children: [
-            // Cabecera propia de la APK.
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(
@@ -257,14 +256,10 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                     onWebViewCreated: (controller) {
                       _controller = controller;
                     },
-
-                    // Rechaza ventanas emergentes creadas por la web.
                     onCreateWindow: (controller, action) async {
                       return false;
                     },
-
                     shouldOverrideUrlLoading: _handleNavigation,
-
                     onLoadStart: (controller, url) {
                       if (!mounted) return;
 
@@ -274,7 +269,6 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                         _error = null;
                       });
                     },
-
                     onProgressChanged: (controller, progress) {
                       if (!mounted) return;
 
@@ -283,7 +277,6 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                         _loading = progress < 100;
                       });
                     },
-
                     onLoadStop: (controller, url) {
                       if (!mounted) return;
 
@@ -292,7 +285,6 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                         _progress = 1;
                       });
                     },
-
                     onReceivedError: (
                       controller,
                       request,
@@ -302,14 +294,11 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
 
                       _showError(
                         'No se pudo cargar la agenda.\n\n'
-                        'Código: ${error.type}\n'
                         '${error.description}\n\n'
-                        'Comprueba la conexión y prueba la dirección '
-                        'en Chrome. Si el sitio bloquea navegadores '
-                        'integrados, la APK no puede obligarlo a cargar.',
+                        'Comprueba la conexión y abre la dirección '
+                        'en Chrome para verificar si está disponible.',
                       );
                     },
-
                     onReceivedHttpError: (
                       controller,
                       request,
@@ -321,14 +310,13 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
 
                       if (status != null && status >= 400) {
                         _showError(
-                          'El servidor respondió con HTTP $status.\n\n'
+                          'El servidor respondió con HTTP $status. '
                           'Puede estar temporalmente caído o rechazar '
                           'la solicitud desde la aplicación.',
                         );
                       }
                     },
                   ),
-
                   if (_loading && _error == null)
                     const Positioned(
                       top: 0,
@@ -341,7 +329,6 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                             AlwaysStoppedAnimation<Color>(_pink),
                       ),
                     ),
-
                   if (_error != null)
                     Positioned.fill(
                       child: Container(
@@ -384,10 +371,13 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                                     icon: const Icon(
                                       Icons.refresh_rounded,
                                     ),
-                                    label: const Text(
-                                      'VOLVER A INTENTAR',
-                                    ),
+                                    label: const Text('REINTENTAR'),
                                   ),
+                                ),
+                                const SizedBox(height: 8),
+                                TextButton(
+                                  onPressed: _back,
+                                  child: const Text('VOLVER'),
                                 ),
                               ],
                             ),
