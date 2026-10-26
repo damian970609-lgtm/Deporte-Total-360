@@ -74,7 +74,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           return;
         }
       } catch (_) {
-        // Si el historial falla, se vuelve a la pantalla anterior.
+        // Si falla el historial, vuelve a la pantalla anterior.
       }
     }
 
@@ -95,12 +95,12 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
 
     final scheme = target.scheme.toLowerCase();
 
-    // Mantener los enlaces web dentro de la aplicación.
+    // Mantener los enlaces HTTP y HTTPS dentro de la aplicación.
     if (scheme == 'https' || scheme == 'http') {
       return NavigationActionPolicy.ALLOW;
     }
 
-    // No permitir que enlaces desconocidos ejecuten esquemas externos.
+    // Bloquear esquemas externos desconocidos.
     return NavigationActionPolicy.CANCEL;
   }
 
@@ -281,12 +281,13 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                       if (request.isForMainFrame != true) return;
 
                       final status = response.statusCode;
+
                       if (status != null && status >= 400) {
                         _showError(
-                          'El servidor de la web respondió '
-                          'con el código HTTP $status.\n\n'
-                          'Esto puede ser un error del sitio, '
-                          'una restricción o una página temporalmente '
+                          'El servidor respondió con el código '
+                          'HTTP $status.\n\n'
+                          'Puede ser un error del sitio, una '
+                          'restricción o una página temporalmente '
                           'no disponible.',
                         );
                       }
@@ -354,9 +355,9 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                                 const SizedBox(height: 10),
                                 const Text(
                                   'Si el sitio bloquea navegadores '
-                                  'integrados o no responde, el código '
-                                  'de la aplicación no puede obligarlo '
-                                  'a funcionar.',
+                                  'integrados o no responde, el '
+                                  'código de la aplicación no puede '
+                                  'obligarlo a funcionar.',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     color: Colors.white54,
