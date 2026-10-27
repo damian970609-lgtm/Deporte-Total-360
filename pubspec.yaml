@@ -26,6 +26,7 @@ flutter:
     - assets/images/logo.png
     - assets/images/home_reference.png
     - assets/images/app_icon.png
+    - assets/images/file_000000006048820e9e0720f1adf548f1.png
 
 flutter_launcher_icons:
   android: true
