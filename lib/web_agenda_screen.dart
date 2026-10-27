@@ -6,8 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 const String _agendaUrl = 'https://futbol-libre.cam/';
-const String _fallbackAgendaUrl =
-    'https://www.espn.com/soccer/scoreboard';
+const String _fallbackAgendaUrl = 'https://www.espn.com/soccer/scoreboard';
 
 const Color _navy = Color(0xFF020817);
 const Color _panel = Color(0xFF071B35);
@@ -15,6 +14,7 @@ const Color _cyan = Color(0xFF00E5FF);
 const Color _pink = Color(0xFFFF28CF);
 const Color _green = Color(0xFF39FF9C);
 const Color _yellow = Color(0xFFFFD600);
+const Color _red = Color(0xFFFF1744);
 const Color _muted = Color(0xFFB4C4D9);
 
 class WebAgendaScreen extends StatefulWidget {
@@ -28,8 +28,7 @@ class WebAgendaScreen extends StatefulWidget {
   final String pageTitle;
 
   @override
-  State<WebAgendaScreen> createState() =>
-      _WebAgendaScreenState();
+  State<WebAgendaScreen> createState() => _WebAgendaScreenState();
 }
 
 class _WebAgendaScreenState extends State<WebAgendaScreen> {
@@ -39,7 +38,6 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
 
   bool _loading = true;
   bool _isPopping = false;
-
   double _progress = 0;
 
   String? _error;
@@ -92,9 +90,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
 
   Future<void> _loadLogo() async {
     try {
-      final data = await rootBundle.load(
-        'assets/images/app_icon.png',
-      );
+      final data = await rootBundle.load('assets/images/app_icon.png');
 
       if (!mounted) return;
 
@@ -104,89 +100,79 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
       });
 
       final controller = _controller;
-
       if (controller != null) {
         await _applyBranding(controller);
       }
     } catch (_) {
-      // El icono es opcional para la navegación.
+      // La web seguirá funcionando aunque no cargue el fondo.
     }
   }
 
   bool _hostMatches(String host, String domain) {
     final value = host.toLowerCase();
-
-    return value == domain ||
-        value.endsWith('.$domain');
+    return value == domain || value.endsWith('.$domain');
   }
 
   bool _isBlockedUri(Uri uri) {
-    if (_blockedHosts.any(
-      (domain) => _hostMatches(uri.host.toLowerCase(), domain),
-    )) {
+    final host = uri.host.toLowerCase();
+
+    if (_blockedHosts.any((domain) => _hostMatches(host, domain))) {
       return true;
     }
 
-    final address =
-        '${uri.host}${uri.path}${uri.query}'.toLowerCase();
+    final address = '${uri.host}${uri.path}${uri.query}'.toLowerCase();
 
     return RegExp(
-      r'(popunder|pop-up-ad|popup-ad|clickunder|'
+      r'(popunder|clickunder|popup-ad|pop-up-ad|'
       r'interstitial-ad|redirect-ad|adult-content|'
       r'porn-video|xxx-video|hentai-video|camgirl)',
     ).hasMatch(address);
   }
 
   bool _isAllowedUri(Uri uri) {
-    return (uri.scheme == 'https' ||
-            uri.scheme == 'http') &&
+    return (uri.scheme == 'https' || uri.scheme == 'http') &&
         !_isBlockedUri(uri);
-  }
-
-  String _normalizedHost(String host) {
-    return host
-        .toLowerCase()
-        .replaceFirst(RegExp(r'^www\.'), '');
   }
 
   Future<NavigationActionPolicy> _handleNavigation(
     InAppWebViewController controller,
     NavigationAction action,
   ) async {
-    final uri = Uri.tryParse(
-      action.request.url?.toString() ?? '',
-    );
+    final rawUrl = action.request.url?.toString() ?? '';
+    final uri = Uri.tryParse(rawUrl);
 
     if (uri == null || !_isAllowedUri(uri)) {
       return NavigationActionPolicy.CANCEL;
     }
 
-    // Los iframes de vídeo pueden estar alojados en otros dominios.
-    // Se permiten si su dominio no figura en el filtro publicitario.
-    if (action.isForMainFrame != true) {
-      return NavigationActionPolicy.ALLOW;
-    }
-
-    // Bloquear la navegación principal hacia un dominio diferente.
-    final current = Uri.tryParse(_activeUrl);
-
-    if (current == null ||
-        _normalizedHost(uri.host) !=
-            _normalizedHost(current.host)) {
-      return NavigationActionPolicy.CANCEL;
-    }
-
+    // No se bloquea un reproductor solo porque esté alojado
+    // en un dominio diferente al de la agenda.
     return NavigationActionPolicy.ALLOW;
+  }
+
+  Future<WebResourceResponse?> _interceptRequest(
+    InAppWebViewController controller,
+    WebResourceRequest request,
+  ) async {
+    final uri = Uri.tryParse(request.url.toString());
+
+    if (uri != null && _isBlockedUri(uri)) {
+      return WebResourceResponse(
+        contentType: 'text/plain',
+        data: Uint8List(0),
+        statusCode: 204,
+        reasonPhrase: 'Blocked',
+      );
+    }
+
+    return null;
   }
 
   Future<void> _openUrl(String value) async {
     final uri = Uri.tryParse(value);
 
     if (uri == null || !_isAllowedUri(uri)) {
-      _setError(
-        'El enlace se bloqueó porque no es válido '
-        'o parece publicitario.',
-      );
+      _showMessage('No se puede abrir ese enlace.');
       return;
     }
 
@@ -208,12 +194,10 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
 
     try {
       await controller.loadUrl(
-        urlRequest: URLRequest(
-          url: WebUri(uri.toString()),
-        ),
+        urlRequest: URLRequest(url: WebUri(uri.toString())),
       );
-    } catch (error) {
-      _setError('No se pudo abrir la página: $error');
+    } catch (_) {
+      _setError('No se pudo abrir la página. Comprueba tu conexión.');
     }
   }
 
@@ -235,8 +219,8 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
 
     try {
       await controller.reload();
-    } catch (error) {
-      _setError('No se pudo recargar: $error');
+    } catch (_) {
+      _setError('No se pudo recargar la página.');
     }
   }
 
@@ -252,7 +236,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           return;
         }
       } catch (_) {
-        // Sin historial web, cerrar la pantalla integrada.
+        // Si no queda historial, se cierra la pantalla.
       }
     }
 
@@ -271,153 +255,26 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
     });
   }
 
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: _panel,
+      ),
+    );
+  }
+
   Future<void> _applyBranding(
     InAppWebViewController controller,
   ) async {
     try {
-      final script = r'''
+      const rawScript = r'''
         (function () {
           if (!document.documentElement) return;
 
           const logoData = '__DT360_LOGO__';
-          const styleId = 'dt360-app-style';
-
-          let style = document.getElementById(styleId);
-
-          if (!style) {
-            style = document.createElement('style');
-            style.id = styleId;
-            (document.head || document.documentElement)
-              .appendChild(style);
-          }
-
-          style.textContent = `
-            html, body {
-              color: #f4f8ff !important;
-              color-scheme: dark !important;
-              background-color: #020817 !important;
-              background-image:
-                linear-gradient(
-                  rgba(2,8,23,.87),
-                  rgba(2,8,23,.90)
-                ),
-                url("${logoData}") !important;
-              background-repeat: no-repeat, no-repeat !important;
-              background-position: center, center !important;
-              background-size:
-                cover, min(76vw, 430px) auto !important;
-              background-attachment: fixed, fixed !important;
-            }
-
-            body {
-              min-height: 100vh !important;
-            }
-
-            header,
-            .site-header,
-            .navbar-header,
-            nav,
-            [role="navigation"] {
-              background: #071b35 !important;
-              border-color: rgba(0,229,255,.35) !important;
-            }
-
-            a, a:visited {
-              color: #00e5ff !important;
-            }
-
-            button,
-            [role="button"],
-            input[type="button"],
-            input[type="submit"] {
-              border-radius: 10px !important;
-            }
-
-            iframe[src*="doubleclick" i],
-            iframe[src*="googlesyndication" i],
-            iframe[src*="adsterra" i],
-            iframe[src*="popads" i],
-            iframe[src*="popcash" i],
-            iframe[src*="popunder" i] {
-              display: none !important;
-              visibility: hidden !important;
-              pointer-events: none !important;
-            }
-
-            #dt360-page-banner {
-              box-sizing: border-box;
-              position: sticky;
-              top: 0;
-              z-index: 2147483000;
-              width: 100%;
-              padding: 11px 10px;
-              margin: 0 0 8px;
-              text-align: center;
-              color: #00e5ff;
-              background: linear-gradient(
-                110deg, #061b3c, #0a0d26, #1c0734
-              );
-              border-bottom: 2px solid #00e5ff;
-              box-shadow: 0 4px 14px rgba(0,0,0,.55);
-              font: 900 12px Arial, sans-serif;
-              letter-spacing: .7px;
-            }
-
-            #dt360-status-legend {
-              display: flex;
-              flex-wrap: wrap;
-              justify-content: center;
-              gap: 8px;
-              padding: 9px 5px;
-              margin: 4px;
-              border: 1px solid rgba(0,229,255,.35);
-              border-radius: 12px;
-              background: rgba(4,14,35,.94);
-              font: 900 10px Arial, sans-serif;
-            }
-
-            .dt360-status-pill {
-              display: inline-flex !important;
-              align-items: center !important;
-              width: fit-content !important;
-              padding: 5px 9px !important;
-              margin: 4px 4px 6px 0 !important;
-              border-radius: 999px !important;
-              font: 900 10px Arial, sans-serif !important;
-              pointer-events: none !important;
-            }
-
-            .dt360-live {
-              background: #ff3159 !important;
-              color: white !important;
-            }
-
-            .dt360-finished {
-              background: #91a1b5 !important;
-              color: #07101e !important;
-            }
-
-            .dt360-waiting {
-              background: linear-gradient(
-                100deg, #ffd600, #ff9d00
-              ) !important;
-              color: #1a1000 !important;
-            }
-
-            .dt360-play-link {
-              display: inline-block !important;
-              padding: 10px 13px !important;
-              margin: 5px !important;
-              background: linear-gradient(
-                110deg, #00e5ff, #39ff9c
-              ) !important;
-              color: #020817 !important;
-              border: 1px solid #00e5ff !important;
-              border-radius: 11px !important;
-              font-weight: 900 !important;
-              text-decoration: none !important;
-            }
-          `;
 
           const blockedHosts = [
             'doubleclick.net',
@@ -434,6 +291,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
             'onclickads.net',
             'onclickalgo.com',
             'propellerads.com',
+            'trafficjunky.com',
             'trafficjunky.net',
             'juicyads.com',
             'taboola.com',
@@ -454,193 +312,515 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           function blockedUrl(value) {
             try {
               const u = new URL(value, location.href);
+              if (!/^https?:$/.test(u.protocol)) return false;
 
-              if (!/^https?:$/.test(u.protocol)) return true;
-
-              const h = u.hostname.toLowerCase();
+              const host = u.hostname.toLowerCase();
 
               if (blockedHosts.some(
-                d => h === d || h.endsWith('.' + d)
+                d => host === d || host.endsWith('.' + d)
               )) {
                 return true;
               }
 
-              return /(popunder|popup-ad|clickunder|redirect-ad|adult-content|porn-video|xxx-video|hentai-video)/i
-                .test(h + u.pathname + u.search);
+              return /(popunder|clickunder|popup-ad|pop-up-ad|interstitial-ad)/i
+                .test(host + u.pathname + u.search);
             } catch (_) {
-              return true;
+              return false;
             }
           }
 
-          function installBranding() {
-            if (!document.body) return;
+          function hideElement(element) {
+            if (!element || element === document.body) return;
+            element.style.setProperty('display', 'none', 'important');
+            element.style.setProperty('visibility', 'hidden', 'important');
+          }
 
-            if (!document.getElementById('dt360-page-banner')) {
-              const banner = document.createElement('div');
-              banner.id = 'dt360-page-banner';
-              banner.textContent =
-                'DEPORTE TOTAL 360° • AGENDA Y TRANSMISIONES';
-              document.body.insertBefore(
-                banner,
-                document.body.firstChild
-              );
+          function installStyles() {
+            let style = document.getElementById('dt360-app-style');
+
+            if (!style) {
+              style = document.createElement('style');
+              style.id = 'dt360-app-style';
+              (document.head || document.documentElement)
+                .appendChild(style);
             }
 
-            if (!document.getElementById('dt360-status-legend')) {
-              const legend = document.createElement('div');
-              legend.id = 'dt360-status-legend';
-              legend.innerHTML =
-                '<span style="color:#ff3159">● EN VIVO</span>' +
-                '<span style="color:#b4c4d9">● TERMINADO</span>' +
-                '<span style="color:#ffd600">● ESPERANDO TRANSMISIÓN</span>';
+            // Solo se inyecta el CSS una vez por documento.
+            if (style.dataset.dt360Version !== '2') {
+              style.textContent = `
+                html, body {
+                  color: #f4f8ff !important;
+                  color-scheme: dark !important;
+                  background-color: #020817 !important;
+                  background-image:
+                    linear-gradient(
+                      rgba(2, 8, 23, .88),
+                      rgba(2, 8, 23, .94)
+                    ),
+                    url("${logoData}") !important;
+                  background-repeat: no-repeat, no-repeat !important;
+                  background-position: center, center !important;
+                  background-size: cover, min(78vw, 440px) auto !important;
+                  background-attachment: fixed, fixed !important;
+                }
 
-              const banner = document.getElementById(
-                'dt360-page-banner'
-              );
+                body {
+                  min-height: 100vh !important;
+                  margin: 0 !important;
+                  overflow-x: hidden !important;
+                  font-family: Arial, Helvetica, sans-serif !important;
+                }
 
-              if (banner && banner.nextSibling) {
-                document.body.insertBefore(
-                  legend,
-                  banner.nextSibling
-                );
-              } else {
-                document.body.insertBefore(
-                  legend,
-                  document.body.firstChild
-                );
-              }
+                a, a:visited {
+                  color: #00e5ff !important;
+                }
+
+                .dt360-play-link,
+                a.dt360-play-link,
+                button.dt360-play-link,
+                .dt360-reload-button {
+                  display: inline-flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  box-sizing: border-box !important;
+                  min-height: 42px !important;
+                  padding: 10px 16px !important;
+                  margin: 6px 4px !important;
+                  border: 1px solid #ff7f96 !important;
+                  border-radius: 12px !important;
+                  background: linear-gradient(
+                    180deg, #ff4268 0%, #f00038 100%
+                  ) !important;
+                  color: #ffffff !important;
+                  font: 900 14px Arial, sans-serif !important;
+                  letter-spacing: .5px !important;
+                  text-decoration: none !important;
+                  text-align: center !important;
+                  text-shadow: 0 1px 2px #73001b !important;
+                  box-shadow:
+                    0 5px 0 #8f0024,
+                    0 0 14px rgba(255, 23, 68, .55) !important;
+                  transform: translateY(-1px) !important;
+                }
+
+                .dt360-play-link:active,
+                .dt360-reload-button:active {
+                  transform: translateY(3px) !important;
+                  box-shadow: 0 2px 0 #8f0024 !important;
+                }
+
+                button, input[type="button"], input[type="submit"],
+                [role="button"], .btn {
+                  border-radius: 12px !important;
+                  font-weight: 900 !important;
+                }
+
+                iframe[src*="doubleclick" i],
+                iframe[src*="googlesyndication" i],
+                iframe[src*="adsterra" i],
+                iframe[src*="popads" i],
+                iframe[src*="popcash" i],
+                iframe[src*="popunder" i],
+                iframe[src*="onclickads" i],
+                iframe[src*="exoclick" i],
+                [class*="adsbygoogle" i],
+                [id*="google_ads" i],
+                [class*="advertisement" i],
+                [id*="advertisement" i],
+                [class*="popunder" i],
+                [id*="popunder" i],
+                [class*="ad-container" i],
+                [id*="ad-container" i],
+                [class*="discord" i],
+                [id*="discord" i],
+                a[href*="discord.com" i],
+                iframe[src*="discord.com" i],
+                footer, .site-footer, #footer {
+                  display: none !important;
+                  visibility: hidden !important;
+                  pointer-events: none !important;
+                }
+
+                video {
+                  display: block !important;
+                  width: 100% !important;
+                  max-width: 100% !important;
+                  height: auto !important;
+                  background: #000 !important;
+                  object-fit: contain !important;
+                }
+
+                iframe {
+                  max-width: 100% !important;
+                  background: #000 !important;
+                }
+
+                .video-js, .jwplayer, #player, #video-player,
+                .player-container, .video-container {
+                  max-width: 100% !important;
+                  background: #000 !important;
+                  border-radius: 10px !important;
+                  overflow: hidden !important;
+                }
+              `;
+
+              style.dataset.dt360Version = '2';
             }
 
+            // Quita banners duplicados de versiones anteriores.
+            document.getElementById('dt360-page-banner')?.remove();
+            document.getElementById('dt360-status-legend')?.remove();
+          }
+
+          function setText(element, value) {
+            if (element.tagName === 'INPUT') {
+              if (element.value !== value) element.value = value;
+              return;
+            }
+
+            if ((element.textContent || '').trim() !== value) {
+              element.textContent = value;
+            }
+          }
+
+          function hideSiteHeader() {
             document.querySelectorAll(
-              'a[target="_blank"]'
-            ).forEach(a => {
-              a.target = '_self';
-              a.rel = 'noopener noreferrer';
-            });
-
-            document.querySelectorAll('a[href]').forEach(a => {
-              if (blockedUrl(a.href)) {
-                a.removeAttribute('href');
-                a.style.setProperty(
-                  'pointer-events',
-                  'none',
-                  'important'
-                );
-              }
-
-              const label = (
-                a.innerText || a.textContent || ''
-              ).trim();
-
-              if (/^EN VIVO AQUÍ$/i.test(label)) return;
-
-              if (/^(ver|ver partido|ver canal|reproducir|play|watch|ver en vivo|en vivo|canal\s*\d*|transmitir|transmisión)$/i.test(label)) {
-                a.classList.add('dt360-play-link');
-                a.setAttribute('aria-label', 'EN VIVO AQUÍ');
-                a.textContent = 'EN VIVO AQUÍ';
+              'header, .site-header, .main-header, .mobile-header, ' +
+              '.desktop-header, .navbar-header, .site-navbar, ' +
+              '#header, #navbar, .navbar'
+            ).forEach(element => {
+              if (!element.querySelector('video, iframe, embed, object')) {
+                hideElement(element);
               }
             });
 
+            // Busca títulos que solo dicen "Fútbol Libre".
+            const leaves = Array.from(document.querySelectorAll('body *'))
+              .filter(element => {
+                if (element.children.length > 2) return false;
+
+                const text = (
+                  element.innerText || element.textContent || ''
+                ).replace(/\s+/g, ' ').trim();
+
+                return /^f[úu]tbol libre(?: tv)?$/i.test(text);
+              });
+
+            leaves.forEach(leaf => {
+              let candidate = leaf;
+
+              for (let i = 0; i < 6 && candidate; i++) {
+                const rect = candidate.getBoundingClientRect();
+                const text = (
+                  candidate.innerText || candidate.textContent || ''
+                ).replace(/\s+/g, ' ').trim();
+
+                const hasMedia = candidate.querySelector &&
+                  candidate.querySelector('video, iframe, embed, object');
+
+                if (
+                  i >= 1 &&
+                  rect.width >= window.innerWidth * .65 &&
+                  rect.height >= 30 &&
+                  rect.height <= 180 &&
+                  text.length < 220 &&
+                  !hasMedia
+                ) {
+                  hideElement(candidate);
+                  break;
+                }
+
+                candidate = candidate.parentElement;
+              }
+            });
+          }
+
+          function hidePromotionalBlocks() {
             document.querySelectorAll(
-              'button, [role="button"], ' +
+              'a[href*="discord" i], iframe[src*="discord" i], ' +
+              '[class*="discord" i], [id*="discord" i], ' +
+              '.social-links, .social-share, .site-footer, footer'
+            ).forEach(hideElement);
+
+            const patterns = [
+              /información de la señal/i,
+              /selecciona el reproductor para iniciar/i,
+              /si tarda en cargar.*botón de recarga/i,
+              /únete a nuestro discord/i,
+              /join our discord/i
+            ];
+
+            patterns.forEach(pattern => {
+              const leaves = Array.from(document.querySelectorAll('body *'))
+                .filter(element => {
+                  if (element.children.length > 2) return false;
+
+                  const text = (
+                    element.innerText || element.textContent || ''
+                  ).replace(/\s+/g, ' ').trim();
+
+                  return text.length > 0 &&
+                    text.length < 200 &&
+                    pattern.test(text);
+                });
+
+              leaves.forEach(leaf => {
+                let candidate = leaf;
+
+                for (let i = 0; i < 5 && candidate; i++) {
+                  const text = (
+                    candidate.innerText || candidate.textContent || ''
+                  ).replace(/\s+/g, ' ').trim();
+
+                  const hasMedia = candidate.querySelector &&
+                    candidate.querySelector('video, iframe, embed, object');
+
+                  const hasReload =
+                    /recargar señal|recargar canal|reload/i.test(text);
+
+                  if (
+                    i >= 1 &&
+                    text.length < 1200 &&
+                    !hasMedia &&
+                    !hasReload
+                  ) {
+                    hideElement(candidate);
+                    break;
+                  }
+
+                  candidate = candidate.parentElement;
+                }
+              });
+            });
+          }
+
+          function validLink(link) {
+            if (!link || !link.href) return false;
+
+            try {
+              const url = new URL(link.href, location.href);
+              return /^https?:$/.test(url.protocol) && !blockedUrl(url.href);
+            } catch (_) {
+              return false;
+            }
+          }
+
+          function isPlayerLink(element) {
+            const label = (
+              element.innerText ||
+              element.value ||
+              element.getAttribute('aria-label') ||
+              element.textContent ||
+              ''
+            ).replace(/\s+/g, ' ').trim();
+
+            const href = (
+              element.href ||
+              element.getAttribute('href') ||
+              ''
+            ).toLowerCase();
+
+            const textLooksLikePlay =
+              /^(ver|ver partido|ver canal|ver en vivo|reproducir|play|watch|live|en vivo|en vivo aquí|vivo|canal\s*\d*|transmitir|transmisión|esperando transmisión)$/i
+                .test(label);
+
+            const urlLooksLikePlayer =
+              /\/(player|watch|live|stream|video|canal|partido|match)(\/|$|[?#])/i
+                .test(href);
+
+            return textLooksLikePlay || urlLooksLikePlayer;
+          }
+
+          function enhancePlayButtons() {
+            document.querySelectorAll('.dt360-status-pill').forEach(
+              element => element.remove()
+            );
+
+            const candidates = document.querySelectorAll(
+              'a[href], button, [role="button"], ' +
               'input[type="button"], input[type="submit"]'
-            ).forEach(node => {
+            );
+
+            candidates.forEach(element => {
               const label = (
-                node.innerText ||
-                node.value ||
-                node.getAttribute('aria-label') ||
-                node.textContent ||
+                element.innerText ||
+                element.value ||
+                element.getAttribute('aria-label') ||
+                element.textContent ||
                 ''
-              ).trim();
+              ).replace(/\s+/g, ' ').trim();
 
-              if (/^EN VIVO AQUÍ$/i.test(label)) return;
+              const reload =
+                /recargar señal|recargar canal|reload signal|reload channel/i
+                  .test(label);
 
-              if (!/(ver partido|ver canal|reproduc|play|watch|en vivo|live|stream|transmit)/i.test(label)) {
+              if (reload) {
+                setText(element, 'RECARGAR CANAL');
+                element.classList.add('dt360-reload-button');
+                element.style.setProperty('width', 'calc(100% - 16px)');
                 return;
               }
 
-              node.setAttribute(
-                'aria-label',
-                'EN VIVO AQUÍ'
-              );
+              const clickable = element.tagName === 'A' ||
+                element.tagName === 'BUTTON' ||
+                element.getAttribute('role') === 'button';
 
-              if (node.tagName === 'INPUT') {
-                node.value = 'EN VIVO AQUÍ';
-              } else {
-                node.textContent = 'EN VIVO AQUÍ';
+              if (!clickable || !isPlayerLink(element)) return;
+
+              if (element.tagName === 'A' && !validLink(element)) {
+                element.removeAttribute('href');
+                return;
               }
 
-              node.classList.add('dt360-play-link');
+              setText(element, 'VIVO');
+              element.setAttribute('aria-label', 'VIVO');
+              element.classList.add('dt360-play-link');
+
+              if (element.tagName === 'A') {
+                element.target = '_self';
+                element.rel = 'noopener noreferrer';
+              }
+            });
+
+            // Cambia el mensaje de espera solo si encontramos un enlace
+            // de reproductor real en esa tarjeta. No inventa una URL.
+            const waitingNodes = Array.from(
+              document.querySelectorAll('span, small, div, p')
+            ).filter(element => {
+              if (element.children.length > 0) return false;
+
+              return /^esperando transmisión$/i.test(
+                (element.textContent || '').trim()
+              );
+            });
+
+            waitingNodes.forEach(element => {
+              const card = element.closest(
+                'article, li, [class*="match" i], ' +
+                '[class*="partido" i], [data-match]'
+              );
+
+              const possibleLinks = card
+                ? Array.from(card.querySelectorAll('a[href]'))
+                : [];
+
+              const playerLink = possibleLinks.find(link =>
+                validLink(link) && isPlayerLink(link)
+              );
+
+              if (playerLink) {
+                const button = document.createElement('a');
+                button.href = playerLink.href;
+                button.target = '_self';
+                button.rel = 'noopener noreferrer';
+                button.className = 'dt360-play-link';
+                button.textContent = 'VIVO';
+                element.replaceWith(button);
+              }
             });
           }
 
-          function addMatchStatuses() {
-            const selector =
-              'article,li,[class*="match" i],' +
-              '[class*="partido" i],[class*="fixture" i],' +
-              '[data-match]';
+          function tryVideos() {
+            document.querySelectorAll('video').forEach(video => {
+              video.playsInline = true;
+              video.setAttribute('playsinline', '');
+              video.setAttribute('webkit-playsinline', '');
 
-            document.querySelectorAll(selector).forEach(node => {
-              if (node.querySelector(
-                ':scope > .dt360-status-pill'
-              )) return;
+              if (video.dataset.dt360Listeners !== '1') {
+                video.dataset.dt360Listeners = '1';
 
-              const text = (
-                node.innerText || node.textContent || ''
-              ).replace(/\s+/g, ' ').trim();
+                const retryPlay = function () {
+                  if (video.paused && video.readyState >= 2) {
+                    try {
+                      const result = video.play();
+                      if (result && result.catch) {
+                        result.catch(function () {
+                          // El navegador puede exigir una pulsación manual.
+                        });
+                      }
+                    } catch (_) {}
+                  }
+                };
 
-              if (text.length < 18 || text.length > 800) return;
+                video.addEventListener('loadeddata', retryPlay, {once: true});
+                video.addEventListener('canplay', retryPlay, {once: true});
+              }
 
-              const explicit = node.matches(
-                '[class*="match" i],[class*="partido" i],' +
-                '[class*="fixture" i],[data-match]'
-              );
+              if (video.paused && video.readyState >= 2) {
+                try {
+                  const result = video.play();
 
-              const indicators =
-                /\bvs\.?\b|\bversus\b|\d{1,2}:\d{2}|\b\d+\s*[-–:]\s*\d+\b/i
-                  .test(text);
+                  if (result && result.catch) {
+                    result.catch(function () {
+                      // Android puede exigir que el usuario toque Play.
+                    });
+                  }
+                } catch (_) {}
+              }
+            });
+          }
 
-              if (!explicit && !indicators) return;
+          function compactPlayerPage() {
+            const text = (
+              document.body.innerText || document.body.textContent || ''
+            ).toLowerCase();
 
-              const parent = node.parentElement
-                ? node.parentElement.closest(selector)
-                : null;
+            const playerPage =
+              /fútbol libre tv|recargar señal|información de la señal|selecciona el reproductor/
+                .test(text);
 
-              if (parent) {
-                const parentText =
-                  (parent.innerText || '').trim();
+            if (!playerPage) return;
+
+            hidePromotionalBlocks();
+
+            document.querySelectorAll(
+              'header, .site-header, .main-header, .navbar, ' +
+              '.site-footer, footer'
+            ).forEach(element => {
+              if (!element.querySelector('video, iframe, embed, object')) {
+                hideElement(element);
+              }
+            });
+
+            document.querySelectorAll('h1, h2, h3, h4, p, section, article')
+              .forEach(element => {
+                const label = (
+                  element.innerText || element.textContent || ''
+                ).replace(/\s+/g, ' ').trim();
 
                 if (
-                  parentText.length > text.length &&
-                  parentText.length < 700
-                ) return;
-              }
-
-              let label = 'ESPERANDO TRANSMISIÓN';
-              let cls = 'dt360-waiting';
-
-              if (/\b(en vivo|live now|live|en juego|playing|primer tiempo|segundo tiempo|medio tiempo|halftime|descanso)\b/i.test(text)) {
-                label = '● EN VIVO';
-                cls = 'dt360-live';
-              } else if (/\b(terminado|finalizado|finished|full time|final|ft)\b/i.test(text)) {
-                label = '● TERMINADO';
-                cls = 'dt360-finished';
-              }
-
-              const pill = document.createElement('span');
-              pill.className = 'dt360-status-pill ' + cls;
-              pill.textContent = label;
-
-              node.insertBefore(pill, node.firstChild);
-            });
+                  /información de la señal|selecciona el reproductor|únete a nuestro discord/i
+                    .test(label) &&
+                  !element.querySelector('video, iframe, embed, object')
+                ) {
+                  hideElement(element);
+                }
+              });
           }
 
-          if (!window.__dt360PopupPatch) {
+          function redirectAllowedPopupsIntoThisView() {
+            if (window.__dt360PopupPatch) return;
             window.__dt360PopupPatch = true;
 
-            // window.open no puede abrir otra página.
-            window.open = function () {
-              return null;
+            // Permite enlaces de vídeo legítimos en la misma ventana.
+            window.open = function (value) {
+              if (!value) return null;
+
+              try {
+                const url = new URL(value, location.href);
+
+                if (
+                  !/^https?:$/.test(url.protocol) ||
+                  blockedUrl(url.href)
+                ) {
+                  return null;
+                }
+
+                location.href = url.href;
+                return window;
+              } catch (_) {
+                return null;
+              }
             };
 
             document.addEventListener('click', function (event) {
@@ -649,33 +829,24 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                 ? target.closest('a[href]')
                 : null;
 
-              if (!link) return;
-
-              let destination;
-
-              try {
-                destination = new URL(link.href, location.href);
-              } catch (_) {
+              if (link && blockedUrl(link.href)) {
                 event.preventDefault();
+                event.stopPropagation();
                 event.stopImmediatePropagation();
                 return;
               }
 
-              const host = destination.hostname
-                .toLowerCase()
-                .replace(/^www\./, '');
+              const playControl = target && target.closest
+                ? target.closest(
+                    'video, .vjs-big-play-button, ' +
+                    '.jw-icon-playback, .plyr__control--overlaid, ' +
+                    '[aria-label*="play" i], [title*="play" i]'
+                  )
+                : null;
 
-              const currentHost = location.hostname
-                .toLowerCase()
-                .replace(/^www\./, '');
-
-              if (
-                blockedUrl(destination.href) ||
-                host !== currentHost
-              ) {
-                event.preventDefault();
-                event.stopPropagation();
-                event.stopImmediatePropagation();
+              if (playControl) {
+                setTimeout(tryVideos, 250);
+                setTimeout(tryVideos, 800);
               }
             }, true);
 
@@ -683,28 +854,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
               const form = event.target;
               if (!form || !form.action) return;
 
-              let destination;
-
-              try {
-                destination = new URL(form.action, location.href);
-              } catch (_) {
-                event.preventDefault();
-                event.stopImmediatePropagation();
-                return;
-              }
-
-              const host = destination.hostname
-                .toLowerCase()
-                .replace(/^www\./, '');
-
-              const currentHost = location.hostname
-                .toLowerCase()
-                .replace(/^www\./, '');
-
-              if (
-                blockedUrl(destination.href) ||
-                host !== currentHost
-              ) {
+              if (blockedUrl(form.action)) {
                 event.preventDefault();
                 event.stopPropagation();
                 event.stopImmediatePropagation();
@@ -713,33 +863,47 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           }
 
           function updatePage() {
-            installBranding();
-            addMatchStatuses();
+            if (!document.body) return;
+
+            installStyles();
+            hideSiteHeader();
+            enhancePlayButtons();
+            compactPlayerPage();
+            redirectAllowedPopupsIntoThisView();
+            tryVideos();
           }
 
           updatePage();
 
           if (!window.__dt360Observer) {
-            window.__dt360Observer = new MutationObserver(
-              updatePage
-            );
+            window.__dt360Observer = new MutationObserver(function () {
+              clearTimeout(window.__dt360UpdateTimer);
+              window.__dt360UpdateTimer = setTimeout(updatePage, 250);
+            });
 
-            window.__dt360Observer.observe(
-              document.documentElement,
-              {
-                childList: true,
-                subtree: true,
-                attributes: true,
-                attributeFilter: ['href', 'class', 'id']
-              }
-            );
+            window.__dt360Observer.observe(document.documentElement, {
+              childList: true,
+              subtree: true,
+              attributes: true,
+              attributeFilter: ['href', 'class', 'id']
+            });
           }
+
+          // Intenta iniciar vídeos que aparezcan después de cargar la agenda.
+          setTimeout(tryVideos, 350);
+          setTimeout(tryVideos, 1200);
+          setTimeout(tryVideos, 2500);
         })();
-      '''.replaceAll('__DT360_LOGO__', _logoDataUrl);
+      ''';
+
+      final script = rawScript.replaceAll(
+        '__DT360_LOGO__',
+        _logoDataUrl,
+      );
 
       await controller.evaluateJavascript(source: script);
     } catch (_) {
-      // La página sigue funcionando si rechaza el script de estilo.
+      // La página seguirá funcionando si rechaza la personalización.
     }
   }
 
@@ -765,11 +929,11 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           title: Row(
             children: <Widget>[
               ClipRRect(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
                 child: Image.asset(
                   'assets/images/app_icon.png',
-                  width: 36,
-                  height: 36,
+                  width: 38,
+                  height: 38,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => const Icon(
                     Icons.sports_soccer_rounded,
@@ -778,29 +942,24 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 9),
               const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      'DEPORTE TOTAL 360°',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: _cyan,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  'DEPORTE TOTAL 360°',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: _cyan,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
             ],
           ),
           actions: <Widget>[
             IconButton(
-              tooltip: 'Recargar',
+              tooltip: 'Recargar página',
               onPressed: _reload,
               icon: const Icon(
                 Icons.refresh_rounded,
@@ -822,8 +981,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
               value: _loading ? null : _progress,
               minHeight: 3,
               backgroundColor: _panel,
-              valueColor:
-                  const AlwaysStoppedAnimation<Color>(_pink),
+              valueColor: const AlwaysStoppedAnimation<Color>(_pink),
             ),
           ),
         ),
@@ -831,30 +989,27 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
           children: <Widget>[
             Positioned.fill(
               child: Opacity(
-                opacity: .13,
+                opacity: .12,
                 child: Image.asset(
                   'assets/images/app_icon.png',
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) =>
-                      const SizedBox.shrink(),
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                 ),
               ),
             ),
-            Positioned.fill(
-              child: ColoredBox(
-                color: _navy.withValues(alpha: .84),
-              ),
+            const Positioned.fill(
+              child: ColoredBox(color: Color(0xE8020817)),
             ),
             Column(
               children: <Widget>[
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 9,
+                    horizontal: 8,
+                    vertical: 10,
                   ),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
                       colors: <Color>[
                         Color(0xFF0B1D35),
                         Color(0xFF10132D),
@@ -862,17 +1017,19 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                     ),
                     border: Border(
                       bottom: BorderSide(
-                        color: _cyan.withValues(alpha: .45),
+                        color: _cyan,
+                        width: 1.5,
                       ),
                     ),
                   ),
                   child: const Text(
-                    'EN VIVO • TERMINADO • ESPERANDO TRANSMISIÓN',
+                    '🔴 EN VIVO  •  ⚪ TERMINADO  •  🟡 AGENDA',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 10,
                       fontWeight: FontWeight.w900,
+                      letterSpacing: .3,
                     ),
                   ),
                 ),
@@ -886,20 +1043,19 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                         ),
                         initialSettings: InAppWebViewSettings(
                           javaScriptEnabled: true,
-                          javaScriptCanOpenWindowsAutomatically:
-                              false,
+                          javaScriptCanOpenWindowsAutomatically: false,
                           domStorageEnabled: true,
                           databaseEnabled: true,
                           thirdPartyCookiesEnabled: true,
-                          supportMultipleWindows: true,
+                          supportMultipleWindows: false,
                           useShouldOverrideUrlLoading: true,
                           useShouldInterceptRequest: true,
                           mediaPlaybackRequiresUserGesture: false,
                           allowsInlineMediaPlayback: true,
                           useWideViewPort: true,
                           loadWithOverviewMode: true,
-                          supportZoom: true,
-                          builtInZoomControls: true,
+                          supportZoom: false,
+                          builtInZoomControls: false,
                           displayZoomControls: false,
                           cacheEnabled: true,
                           transparentBackground: false,
@@ -915,49 +1071,17 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                           controller,
                           createWindowAction,
                         ) async {
+                          // Los anuncios no deben crear ventanas nuevas.
+                          // window.open de vídeo se redirige mediante JS.
                           return false;
                         },
-                        shouldOverrideUrlLoading:
-                            _handleNavigation,
-                        shouldInterceptRequest: (
-                          controller,
-                          request,
-                        ) async {
-                          final uri = Uri.tryParse(
-                            request.url.toString(),
-                          );
-
-                          if (uri != null && _isBlockedUri(uri)) {
-                            return WebResourceResponse(
-                              contentType: 'text/plain',
-                              data: Uint8List(0),
-                              statusCode: 204,
-                              reasonPhrase: 'Blocked',
-                            );
-                          }
-
-                          return null;
-                        },
+                        shouldOverrideUrlLoading: _handleNavigation,
+                        shouldInterceptRequest: _interceptRequest,
                         onLoadStart: (controller, url) {
-                          final uri = Uri.tryParse(
-                            url?.toString() ?? '',
-                          );
+                          final uri = Uri.tryParse(url?.toString() ?? '');
 
                           if (uri != null && _isBlockedUri(uri)) {
                             controller.stopLoading();
-                            return;
-                          }
-
-                          final expected = Uri.tryParse(_activeUrl);
-
-                          if (uri != null &&
-                              expected != null &&
-                              _normalizedHost(uri.host) !=
-                                  _normalizedHost(expected.host)) {
-                            controller.stopLoading();
-                            _setError(
-                              'Se bloqueó una redirección a otro dominio.',
-                            );
                             return;
                           }
 
@@ -969,10 +1093,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                             _error = null;
                           });
                         },
-                        onProgressChanged: (
-                          controller,
-                          progress,
-                        ) {
+                        onProgressChanged: (controller, progress) {
                           if (!mounted) return;
 
                           setState(() {
@@ -980,13 +1101,8 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                             _loading = progress < 100;
                           });
                         },
-                        onLoadStop: (
-                          controller,
-                          url,
-                        ) async {
-                          final uri = Uri.tryParse(
-                            url?.toString() ?? '',
-                          );
+                        onLoadStop: (controller, url) async {
+                          final uri = Uri.tryParse(url?.toString() ?? '');
 
                           if (uri != null && _isBlockedUri(uri)) {
                             await controller.stopLoading();
@@ -1052,21 +1168,34 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                       if (_error != null)
                         Positioned.fill(
                           child: Container(
-                            color: _navy,
+                            color: _navy.withOpacity(.94),
                             padding: const EdgeInsets.all(22),
                             child: Center(
-                              child: SingleChildScrollView(
+                              child: Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: _panel,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: _red),
+                                  boxShadow: const <BoxShadow>[
+                                    BoxShadow(
+                                      color: Color(0x55FF1744),
+                                      blurRadius: 18,
+                                      offset: Offset(0, 5),
+                                    ),
+                                  ],
+                                ),
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: <Widget>[
                                     const Icon(
                                       Icons.wifi_off_rounded,
-                                      color: _pink,
-                                      size: 52,
+                                      color: _red,
+                                      size: 42,
                                     ),
-                                    const SizedBox(height: 14),
+                                    const SizedBox(height: 12),
                                     const Text(
-                                      'NO SE PUDO CARGAR LA PÁGINA',
+                                      'NO SE PUDO CARGAR',
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
                                         color: _cyan,
@@ -1080,37 +1209,29 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                                       textAlign: TextAlign.center,
                                       style: const TextStyle(
                                         color: _muted,
-                                        height: 1.45,
-                                        fontSize: 12,
+                                        height: 1.4,
                                       ),
                                     ),
-                                    const SizedBox(height: 18),
+                                    const SizedBox(height: 16),
                                     SizedBox(
                                       width: double.infinity,
-                                      child: FilledButton.icon(
+                                      child: ElevatedButton.icon(
                                         onPressed: _reload,
                                         icon: const Icon(
                                           Icons.refresh_rounded,
                                         ),
-                                        label: const Text('REINTENTAR'),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: OutlinedButton.icon(
-                                        onPressed: () =>
-                                            _openUrl(_fallbackAgendaUrl),
-                                        icon: const Icon(
-                                          Icons.sports_soccer_rounded,
-                                        ),
-                                        label: const Text(
-                                          'ABRIR AGENDA ALTERNATIVA',
-                                        ),
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: _green,
-                                          side: const BorderSide(
-                                            color: _green,
+                                        label: const Text('RECARGAR CANAL'),
+                                        style: ElevatedButton.styleFrom(
+                                          foregroundColor: Colors.white,
+                                          backgroundColor: _red,
+                                          elevation: 7,
+                                          shadowColor: _red,
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 14,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
                                           ),
                                         ),
                                       ),
