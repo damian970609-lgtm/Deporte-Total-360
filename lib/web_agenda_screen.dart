@@ -1,1255 +1,1223 @@
-import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:video_player/video_player.dart';
 
-const String _agendaUrl = 'https://futbol-libre.cam/';
-const String _fallbackAgendaUrl = 'https://www.espn.com/soccer/scoreboard';
+const Color agendaBg = Color(0xFF030814);
+const Color agendaPanel = Color(0xFF071326);
+const Color agendaLine = Color(0xFF123D65);
+const Color agendaCyan = Color(0xFF00E5FF);
+const Color agendaBlue = Color(0xFF087BFF);
+const Color agendaPink = Color(0xFFFF28CF);
+const Color agendaGreen = Color(0xFF39FF9C);
+const Color agendaRed = Color(0xFFFF3155);
+const Color agendaMuted = Color(0xFFA9BDD6);
 
-const Color _navy = Color(0xFF020817);
-const Color _panel = Color(0xFF071B35);
-const Color _cyan = Color(0xFF00E5FF);
-const Color _pink = Color(0xFFFF28CF);
-const Color _green = Color(0xFF39FF9C);
-const Color _yellow = Color(0xFFFFD600);
-const Color _red = Color(0xFFFF1744);
-const Color _muted = Color(0xFFB4C4D9);
+enum MatchStatus { live, scheduled, finished }
 
-class WebAgendaScreen extends StatefulWidget {
-  const WebAgendaScreen({
-    super.key,
-    this.initialUrl = _agendaUrl,
-    this.pageTitle = 'AGENDA DE PARTIDOS',
-  });
+class MatchStreamSource {
+  const MatchStreamSource({required this.name, required this.url});
 
-  final String initialUrl;
-  final String pageTitle;
+  final String name;
+  final String url;
 
-  @override
-  State<WebAgendaScreen> createState() => _WebAgendaScreenState();
+  Uri? get validatedUri {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null || !uri.hasAuthority || uri.host.isEmpty) return null;
+    if (uri.scheme != 'https' && uri.scheme != 'http') return null;
+    return uri;
+  }
 }
 
-class _WebAgendaScreenState extends State<WebAgendaScreen> {
-  InAppWebViewController? _controller;
+class MatchEvent {
+  const MatchEvent({
+    required this.id,
+    required this.sport,
+    required this.competition,
+    required this.homeTeam,
+    required this.awayTeam,
+    required this.startsAt,
+    this.status = MatchStatus.scheduled,
+    this.homeScore,
+    this.awayScore,
+    this.streamSources = const <MatchStreamSource>[],
+    this.sourceName = '',
+  });
 
-  late String _activeUrl;
+  final String id;
+  final String sport;
+  final String competition;
+  final String homeTeam;
+  final String awayTeam;
+  final DateTime startsAt;
+  final MatchStatus status;
+  final int? homeScore;
+  final int? awayScore;
+  final List<MatchStreamSource> streamSources;
+  final String sourceName;
 
-  bool _loading = true;
-  bool _isPopping = false;
-  double _progress = 0;
+  bool get hasValidStream =>
+      streamSources.any((source) => source.validatedUri != null);
+}
 
-  String? _error;
-  String _logoDataUrl = '';
+/// Agenda nativa para la sección Fútbol y los mosaicos deportivos.
+/// El calendario queda vacío hasta conectar una fuente real/autorizada.
+class AgendaScreen extends StatefulWidget {
+  const AgendaScreen({
+    super.key,
+    this.initialSport = 'Todos',
+    this.matches = const <MatchEvent>[],
+  });
 
-  int _viewKey = 0;
+  final String initialSport;
+  final List<MatchEvent> matches;
 
-  static const List<String> _blockedHosts = <String>[
-    'doubleclick.net',
-    'googlesyndication.com',
-    'googleadservices.com',
-    'adservice.google.com',
-    'adnxs.com',
-    'adsrvr.org',
-    'ad-delivery.net',
-    'adsterra.com',
-    'adsterratools.com',
-    'popads.net',
-    'popcash.net',
-    'exoclick.com',
-    'onclickads.net',
-    'onclickalgo.com',
-    'propellerads.com',
-    'trafficjunky.com',
-    'trafficjunky.net',
-    'juicyads.com',
-    'richpush.co',
-    'taboola.com',
-    'outbrain.com',
-    'revcontent.com',
-    'mgid.com',
-    'criteo.com',
-    'smartadserver.com',
-    'media.net',
-    'bidvertiser.com',
-    'monetag.com',
-    'admaven.com',
-    'ero-advertising.com',
-    'popunder.net',
-    'pushground.com',
-    'push-house.net',
+  @override
+  State<AgendaScreen> createState() => _AgendaScreenState();
+}
+
+class _AgendaScreenState extends State<AgendaScreen> {
+  static const List<String> _sports = <String>[
+    'Todos',
+    'Fútbol',
+    'Básquet',
+    'Béisbol',
+    'Tenis',
+    'Vóley',
+    'Otros',
   ];
+
+  static const List<String> _statuses = <String>[
+    'Todos',
+    'En vivo',
+    'Programados',
+    'Finalizados',
+  ];
+
+  late String _sport;
+  String _dateFilter = 'Hoy';
+  String _statusFilter = 'Todos';
+  String _query = '';
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _activeUrl = widget.initialUrl;
-    _loadLogo();
+    _sport = _sports.contains(widget.initialSport)
+        ? widget.initialSport
+        : 'Todos';
   }
 
-  Future<void> _loadLogo() async {
-    try {
-      final data = await rootBundle.load('assets/images/app_icon.png');
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
-      if (!mounted) return;
+  List<MatchEvent> get _filteredMatches {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final query = _query.trim().toLowerCase();
 
-      setState(() {
-        _logoDataUrl =
-            'data:image/png;base64,${base64Encode(data.buffer.asUint8List())}';
-      });
-
-      final controller = _controller;
-      if (controller != null) {
-        await _applyBranding(controller);
+    return widget.matches.where((event) {
+      if (_sport != 'Todos' && event.sport != _sport) return false;
+      if (_statusFilter == 'En vivo' &&
+          event.status != MatchStatus.live) {
+        return false;
       }
-    } catch (_) {
-      // La web seguirá funcionando aunque no cargue el fondo.
-    }
-  }
+      if (_statusFilter == 'Programados' &&
+          event.status != MatchStatus.scheduled) {
+        return false;
+      }
+      if (_statusFilter == 'Finalizados' &&
+          event.status != MatchStatus.finished) {
+        return false;
+      }
 
-  bool _hostMatches(String host, String domain) {
-    final value = host.toLowerCase();
-    return value == domain || value.endsWith('.$domain');
-  }
+      final eventDay = DateTime(
+        event.startsAt.year,
+        event.startsAt.month,
+        event.startsAt.day,
+      );
+      if (_dateFilter == 'Hoy' && eventDay != today) return false;
+      if (_dateFilter == 'Mañana' && eventDay != tomorrow) return false;
 
-  bool _isBlockedUri(Uri uri) {
-    final host = uri.host.toLowerCase();
-
-    if (_blockedHosts.any((domain) => _hostMatches(host, domain))) {
+      if (query.isNotEmpty) {
+        final searchable =
+            '${event.homeTeam} ${event.awayTeam} ${event.competition} '
+                    '${event.sport}'
+                .toLowerCase();
+        if (!searchable.contains(query)) return false;
+      }
       return true;
-    }
-
-    final address = '${uri.host}${uri.path}${uri.query}'.toLowerCase();
-
-    return RegExp(
-      r'(popunder|clickunder|popup-ad|pop-up-ad|'
-      r'interstitial-ad|redirect-ad|adult-content|'
-      r'porn-video|xxx-video|hentai-video|camgirl)',
-    ).hasMatch(address);
+    }).toList()..sort((a, b) => a.startsAt.compareTo(b.startsAt));
   }
 
-  bool _isAllowedUri(Uri uri) {
-    return (uri.scheme == 'https' || uri.scheme == 'http') &&
-        !_isBlockedUri(uri);
-  }
-
-  Future<NavigationActionPolicy> _handleNavigation(
-    InAppWebViewController controller,
-    NavigationAction action,
-  ) async {
-    final rawUrl = action.request.url?.toString() ?? '';
-    final uri = Uri.tryParse(rawUrl);
-
-    if (uri == null || !_isAllowedUri(uri)) {
-      return NavigationActionPolicy.CANCEL;
-    }
-
-    // No se bloquea un reproductor solo porque esté alojado
-    // en un dominio diferente al de la agenda.
-    return NavigationActionPolicy.ALLOW;
-  }
-
-  Future<WebResourceResponse?> _interceptRequest(
-    InAppWebViewController controller,
-    WebResourceRequest request,
-  ) async {
-    final uri = Uri.tryParse(request.url.toString());
-
-    if (uri != null && _isBlockedUri(uri)) {
-      return WebResourceResponse(
-        contentType: 'text/plain',
-        data: Uint8List(0),
-        statusCode: 204,
-        reasonPhrase: 'Blocked',
-      );
-    }
-
-    return null;
-  }
-
-  Future<void> _openUrl(String value) async {
-    final uri = Uri.tryParse(value);
-
-    if (uri == null || !_isAllowedUri(uri)) {
-      _showMessage('No se puede abrir ese enlace.');
-      return;
-    }
-
-    if (!mounted) return;
-
+  void _clearFilters() {
+    _searchController.clear();
     setState(() {
-      _activeUrl = uri.toString();
-      _loading = true;
-      _progress = 0;
-      _error = null;
+      _query = '';
+      _sport = 'Todos';
+      _statusFilter = 'Todos';
+      _dateFilter = 'Todos';
     });
-
-    final controller = _controller;
-
-    if (controller == null) {
-      setState(() => _viewKey++);
-      return;
-    }
-
-    try {
-      await controller.loadUrl(
-        urlRequest: URLRequest(url: WebUri(uri.toString())),
-      );
-    } catch (_) {
-      _setError('No se pudo abrir la página. Comprueba tu conexión.');
-    }
-  }
-
-  Future<void> _reload() async {
-    if (!mounted) return;
-
-    setState(() {
-      _loading = true;
-      _progress = 0;
-      _error = null;
-    });
-
-    final controller = _controller;
-
-    if (controller == null) {
-      setState(() => _viewKey++);
-      return;
-    }
-
-    try {
-      await controller.reload();
-    } catch (_) {
-      _setError('No se pudo recargar la página.');
-    }
-  }
-
-  Future<void> _goBack() async {
-    if (_isPopping) return;
-
-    final controller = _controller;
-
-    if (controller != null) {
-      try {
-        if (await controller.canGoBack()) {
-          await controller.goBack();
-          return;
-        }
-      } catch (_) {
-        // Si no queda historial, se cierra la pantalla.
-      }
-    }
-
-    if (!mounted) return;
-
-    _isPopping = true;
-    Navigator.of(context).pop();
-  }
-
-  void _setError(String message) {
-    if (!mounted) return;
-
-    setState(() {
-      _loading = false;
-      _error = message;
-    });
-  }
-
-  void _showMessage(String message) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: _panel,
-      ),
-    );
-  }
-
-  Future<void> _applyBranding(
-    InAppWebViewController controller,
-  ) async {
-    try {
-      const rawScript = r'''
-        (function () {
-          if (!document.documentElement) return;
-
-          const logoData = '__DT360_LOGO__';
-
-          const blockedHosts = [
-            'doubleclick.net',
-            'googlesyndication.com',
-            'googleadservices.com',
-            'adservice.google.com',
-            'adnxs.com',
-            'adsrvr.org',
-            'adsterra.com',
-            'adsterratools.com',
-            'popads.net',
-            'popcash.net',
-            'exoclick.com',
-            'onclickads.net',
-            'onclickalgo.com',
-            'propellerads.com',
-            'trafficjunky.com',
-            'trafficjunky.net',
-            'juicyads.com',
-            'taboola.com',
-            'outbrain.com',
-            'revcontent.com',
-            'mgid.com',
-            'criteo.com',
-            'smartadserver.com',
-            'media.net',
-            'bidvertiser.com',
-            'monetag.com',
-            'admaven.com',
-            'popunder.net',
-            'pushground.com',
-            'push-house.net'
-          ];
-
-          function blockedUrl(value) {
-            try {
-              const u = new URL(value, location.href);
-              if (!/^https?:$/.test(u.protocol)) return false;
-
-              const host = u.hostname.toLowerCase();
-
-              if (blockedHosts.some(
-                d => host === d || host.endsWith('.' + d)
-              )) {
-                return true;
-              }
-
-              return /(popunder|clickunder|popup-ad|pop-up-ad|interstitial-ad)/i
-                .test(host + u.pathname + u.search);
-            } catch (_) {
-              return false;
-            }
-          }
-
-          function hideElement(element) {
-            if (!element || element === document.body) return;
-            element.style.setProperty('display', 'none', 'important');
-            element.style.setProperty('visibility', 'hidden', 'important');
-          }
-
-          function installStyles() {
-            let style = document.getElementById('dt360-app-style');
-
-            if (!style) {
-              style = document.createElement('style');
-              style.id = 'dt360-app-style';
-              (document.head || document.documentElement)
-                .appendChild(style);
-            }
-
-            // Solo se inyecta el CSS una vez por documento.
-            if (style.dataset.dt360Version !== '2') {
-              style.textContent = `
-                html, body {
-                  color: #f4f8ff !important;
-                  color-scheme: dark !important;
-                  background-color: #020817 !important;
-                  background-image:
-                    linear-gradient(
-                      rgba(2, 8, 23, .88),
-                      rgba(2, 8, 23, .94)
-                    ),
-                    url("${logoData}") !important;
-                  background-repeat: no-repeat, no-repeat !important;
-                  background-position: center, center !important;
-                  background-size: cover, min(78vw, 440px) auto !important;
-                  background-attachment: fixed, fixed !important;
-                }
-
-                body {
-                  min-height: 100vh !important;
-                  margin: 0 !important;
-                  overflow-x: hidden !important;
-                  font-family: Arial, Helvetica, sans-serif !important;
-                }
-
-                a, a:visited {
-                  color: #00e5ff !important;
-                }
-
-                .dt360-play-link,
-                a.dt360-play-link,
-                button.dt360-play-link,
-                .dt360-reload-button {
-                  display: inline-flex !important;
-                  align-items: center !important;
-                  justify-content: center !important;
-                  box-sizing: border-box !important;
-                  min-height: 42px !important;
-                  padding: 10px 16px !important;
-                  margin: 6px 4px !important;
-                  border: 1px solid #ff7f96 !important;
-                  border-radius: 12px !important;
-                  background: linear-gradient(
-                    180deg, #ff4268 0%, #f00038 100%
-                  ) !important;
-                  color: #ffffff !important;
-                  font: 900 14px Arial, sans-serif !important;
-                  letter-spacing: .5px !important;
-                  text-decoration: none !important;
-                  text-align: center !important;
-                  text-shadow: 0 1px 2px #73001b !important;
-                  box-shadow:
-                    0 5px 0 #8f0024,
-                    0 0 14px rgba(255, 23, 68, .55) !important;
-                  transform: translateY(-1px) !important;
-                }
-
-                .dt360-play-link:active,
-                .dt360-reload-button:active {
-                  transform: translateY(3px) !important;
-                  box-shadow: 0 2px 0 #8f0024 !important;
-                }
-
-                button, input[type="button"], input[type="submit"],
-                [role="button"], .btn {
-                  border-radius: 12px !important;
-                  font-weight: 900 !important;
-                }
-
-                iframe[src*="doubleclick" i],
-                iframe[src*="googlesyndication" i],
-                iframe[src*="adsterra" i],
-                iframe[src*="popads" i],
-                iframe[src*="popcash" i],
-                iframe[src*="popunder" i],
-                iframe[src*="onclickads" i],
-                iframe[src*="exoclick" i],
-                [class*="adsbygoogle" i],
-                [id*="google_ads" i],
-                [class*="advertisement" i],
-                [id*="advertisement" i],
-                [class*="popunder" i],
-                [id*="popunder" i],
-                [class*="ad-container" i],
-                [id*="ad-container" i],
-                [class*="discord" i],
-                [id*="discord" i],
-                a[href*="discord.com" i],
-                iframe[src*="discord.com" i],
-                footer, .site-footer, #footer {
-                  display: none !important;
-                  visibility: hidden !important;
-                  pointer-events: none !important;
-                }
-
-                video {
-                  display: block !important;
-                  width: 100% !important;
-                  max-width: 100% !important;
-                  height: auto !important;
-                  background: #000 !important;
-                  object-fit: contain !important;
-                }
-
-                iframe {
-                  max-width: 100% !important;
-                  background: #000 !important;
-                }
-
-                .video-js, .jwplayer, #player, #video-player,
-                .player-container, .video-container {
-                  max-width: 100% !important;
-                  background: #000 !important;
-                  border-radius: 10px !important;
-                  overflow: hidden !important;
-                }
-              `;
-
-              style.dataset.dt360Version = '2';
-            }
-
-            // Quita banners duplicados de versiones anteriores.
-            document.getElementById('dt360-page-banner')?.remove();
-            document.getElementById('dt360-status-legend')?.remove();
-          }
-
-          function setText(element, value) {
-            if (element.tagName === 'INPUT') {
-              if (element.value !== value) element.value = value;
-              return;
-            }
-
-            if ((element.textContent || '').trim() !== value) {
-              element.textContent = value;
-            }
-          }
-
-          function hideSiteHeader() {
-            document.querySelectorAll(
-              'header, .site-header, .main-header, .mobile-header, ' +
-              '.desktop-header, .navbar-header, .site-navbar, ' +
-              '#header, #navbar, .navbar'
-            ).forEach(element => {
-              if (!element.querySelector('video, iframe, embed, object')) {
-                hideElement(element);
-              }
-            });
-
-            // Busca títulos que solo dicen "Fútbol Libre".
-            const leaves = Array.from(document.querySelectorAll('body *'))
-              .filter(element => {
-                if (element.children.length > 2) return false;
-
-                const text = (
-                  element.innerText || element.textContent || ''
-                ).replace(/\s+/g, ' ').trim();
-
-                return /^f[úu]tbol libre(?: tv)?$/i.test(text);
-              });
-
-            leaves.forEach(leaf => {
-              let candidate = leaf;
-
-              for (let i = 0; i < 6 && candidate; i++) {
-                const rect = candidate.getBoundingClientRect();
-                const text = (
-                  candidate.innerText || candidate.textContent || ''
-                ).replace(/\s+/g, ' ').trim();
-
-                const hasMedia = candidate.querySelector &&
-                  candidate.querySelector('video, iframe, embed, object');
-
-                if (
-                  i >= 1 &&
-                  rect.width >= window.innerWidth * .65 &&
-                  rect.height >= 30 &&
-                  rect.height <= 180 &&
-                  text.length < 220 &&
-                  !hasMedia
-                ) {
-                  hideElement(candidate);
-                  break;
-                }
-
-                candidate = candidate.parentElement;
-              }
-            });
-          }
-
-          function hidePromotionalBlocks() {
-            document.querySelectorAll(
-              'a[href*="discord" i], iframe[src*="discord" i], ' +
-              '[class*="discord" i], [id*="discord" i], ' +
-              '.social-links, .social-share, .site-footer, footer'
-            ).forEach(hideElement);
-
-            const patterns = [
-              /información de la señal/i,
-              /selecciona el reproductor para iniciar/i,
-              /si tarda en cargar.*botón de recarga/i,
-              /únete a nuestro discord/i,
-              /join our discord/i
-            ];
-
-            patterns.forEach(pattern => {
-              const leaves = Array.from(document.querySelectorAll('body *'))
-                .filter(element => {
-                  if (element.children.length > 2) return false;
-
-                  const text = (
-                    element.innerText || element.textContent || ''
-                  ).replace(/\s+/g, ' ').trim();
-
-                  return text.length > 0 &&
-                    text.length < 200 &&
-                    pattern.test(text);
-                });
-
-              leaves.forEach(leaf => {
-                let candidate = leaf;
-
-                for (let i = 0; i < 5 && candidate; i++) {
-                  const text = (
-                    candidate.innerText || candidate.textContent || ''
-                  ).replace(/\s+/g, ' ').trim();
-
-                  const hasMedia = candidate.querySelector &&
-                    candidate.querySelector('video, iframe, embed, object');
-
-                  const hasReload =
-                    /recargar señal|recargar canal|reload/i.test(text);
-
-                  if (
-                    i >= 1 &&
-                    text.length < 1200 &&
-                    !hasMedia &&
-                    !hasReload
-                  ) {
-                    hideElement(candidate);
-                    break;
-                  }
-
-                  candidate = candidate.parentElement;
-                }
-              });
-            });
-          }
-
-          function validLink(link) {
-            if (!link || !link.href) return false;
-
-            try {
-              const url = new URL(link.href, location.href);
-              return /^https?:$/.test(url.protocol) && !blockedUrl(url.href);
-            } catch (_) {
-              return false;
-            }
-          }
-
-          function isPlayerLink(element) {
-            const label = (
-              element.innerText ||
-              element.value ||
-              element.getAttribute('aria-label') ||
-              element.textContent ||
-              ''
-            ).replace(/\s+/g, ' ').trim();
-
-            const href = (
-              element.href ||
-              element.getAttribute('href') ||
-              ''
-            ).toLowerCase();
-
-            const textLooksLikePlay =
-              /^(ver|ver partido|ver canal|ver en vivo|reproducir|play|watch|live|en vivo|en vivo aquí|vivo|canal\s*\d*|transmitir|transmisión|esperando transmisión)$/i
-                .test(label);
-
-            const urlLooksLikePlayer =
-              /\/(player|watch|live|stream|video|canal|partido|match)(\/|$|[?#])/i
-                .test(href);
-
-            return textLooksLikePlay || urlLooksLikePlayer;
-          }
-
-          function enhancePlayButtons() {
-            document.querySelectorAll('.dt360-status-pill').forEach(
-              element => element.remove()
-            );
-
-            const candidates = document.querySelectorAll(
-              'a[href], button, [role="button"], ' +
-              'input[type="button"], input[type="submit"]'
-            );
-
-            candidates.forEach(element => {
-              const label = (
-                element.innerText ||
-                element.value ||
-                element.getAttribute('aria-label') ||
-                element.textContent ||
-                ''
-              ).replace(/\s+/g, ' ').trim();
-
-              const reload =
-                /recargar señal|recargar canal|reload signal|reload channel/i
-                  .test(label);
-
-              if (reload) {
-                setText(element, 'RECARGAR CANAL');
-                element.classList.add('dt360-reload-button');
-                element.style.setProperty('width', 'calc(100% - 16px)');
-                return;
-              }
-
-              const clickable = element.tagName === 'A' ||
-                element.tagName === 'BUTTON' ||
-                element.getAttribute('role') === 'button';
-
-              if (!clickable || !isPlayerLink(element)) return;
-
-              if (element.tagName === 'A' && !validLink(element)) {
-                element.removeAttribute('href');
-                return;
-              }
-
-              setText(element, 'VIVO');
-              element.setAttribute('aria-label', 'VIVO');
-              element.classList.add('dt360-play-link');
-
-              if (element.tagName === 'A') {
-                element.target = '_self';
-                element.rel = 'noopener noreferrer';
-              }
-            });
-
-            // Cambia el mensaje de espera solo si encontramos un enlace
-            // de reproductor real en esa tarjeta. No inventa una URL.
-            const waitingNodes = Array.from(
-              document.querySelectorAll('span, small, div, p')
-            ).filter(element => {
-              if (element.children.length > 0) return false;
-
-              return /^esperando transmisión$/i.test(
-                (element.textContent || '').trim()
-              );
-            });
-
-            waitingNodes.forEach(element => {
-              const card = element.closest(
-                'article, li, [class*="match" i], ' +
-                '[class*="partido" i], [data-match]'
-              );
-
-              const possibleLinks = card
-                ? Array.from(card.querySelectorAll('a[href]'))
-                : [];
-
-              const playerLink = possibleLinks.find(link =>
-                validLink(link) && isPlayerLink(link)
-              );
-
-              if (playerLink) {
-                const button = document.createElement('a');
-                button.href = playerLink.href;
-                button.target = '_self';
-                button.rel = 'noopener noreferrer';
-                button.className = 'dt360-play-link';
-                button.textContent = 'VIVO';
-                element.replaceWith(button);
-              }
-            });
-          }
-
-          function tryVideos() {
-            document.querySelectorAll('video').forEach(video => {
-              video.playsInline = true;
-              video.setAttribute('playsinline', '');
-              video.setAttribute('webkit-playsinline', '');
-
-              if (video.dataset.dt360Listeners !== '1') {
-                video.dataset.dt360Listeners = '1';
-
-                const retryPlay = function () {
-                  if (video.paused && video.readyState >= 2) {
-                    try {
-                      const result = video.play();
-                      if (result && result.catch) {
-                        result.catch(function () {
-                          // El navegador puede exigir una pulsación manual.
-                        });
-                      }
-                    } catch (_) {}
-                  }
-                };
-
-                video.addEventListener('loadeddata', retryPlay, {once: true});
-                video.addEventListener('canplay', retryPlay, {once: true});
-              }
-
-              if (video.paused && video.readyState >= 2) {
-                try {
-                  const result = video.play();
-
-                  if (result && result.catch) {
-                    result.catch(function () {
-                      // Android puede exigir que el usuario toque Play.
-                    });
-                  }
-                } catch (_) {}
-              }
-            });
-          }
-
-          function compactPlayerPage() {
-            const text = (
-              document.body.innerText || document.body.textContent || ''
-            ).toLowerCase();
-
-            const playerPage =
-              /fútbol libre tv|recargar señal|información de la señal|selecciona el reproductor/
-                .test(text);
-
-            if (!playerPage) return;
-
-            hidePromotionalBlocks();
-
-            document.querySelectorAll(
-              'header, .site-header, .main-header, .navbar, ' +
-              '.site-footer, footer'
-            ).forEach(element => {
-              if (!element.querySelector('video, iframe, embed, object')) {
-                hideElement(element);
-              }
-            });
-
-            document.querySelectorAll('h1, h2, h3, h4, p, section, article')
-              .forEach(element => {
-                const label = (
-                  element.innerText || element.textContent || ''
-                ).replace(/\s+/g, ' ').trim();
-
-                if (
-                  /información de la señal|selecciona el reproductor|únete a nuestro discord/i
-                    .test(label) &&
-                  !element.querySelector('video, iframe, embed, object')
-                ) {
-                  hideElement(element);
-                }
-              });
-          }
-
-          function redirectAllowedPopupsIntoThisView() {
-            if (window.__dt360PopupPatch) return;
-            window.__dt360PopupPatch = true;
-
-            // Permite enlaces de vídeo legítimos en la misma ventana.
-            window.open = function (value) {
-              if (!value) return null;
-
-              try {
-                const url = new URL(value, location.href);
-
-                if (
-                  !/^https?:$/.test(url.protocol) ||
-                  blockedUrl(url.href)
-                ) {
-                  return null;
-                }
-
-                location.href = url.href;
-                return window;
-              } catch (_) {
-                return null;
-              }
-            };
-
-            document.addEventListener('click', function (event) {
-              const target = event.target;
-              const link = target && target.closest
-                ? target.closest('a[href]')
-                : null;
-
-              if (link && blockedUrl(link.href)) {
-                event.preventDefault();
-                event.stopPropagation();
-                event.stopImmediatePropagation();
-                return;
-              }
-
-              const playControl = target && target.closest
-                ? target.closest(
-                    'video, .vjs-big-play-button, ' +
-                    '.jw-icon-playback, .plyr__control--overlaid, ' +
-                    '[aria-label*="play" i], [title*="play" i]'
-                  )
-                : null;
-
-              if (playControl) {
-                setTimeout(tryVideos, 250);
-                setTimeout(tryVideos, 800);
-              }
-            }, true);
-
-            document.addEventListener('submit', function (event) {
-              const form = event.target;
-              if (!form || !form.action) return;
-
-              if (blockedUrl(form.action)) {
-                event.preventDefault();
-                event.stopPropagation();
-                event.stopImmediatePropagation();
-              }
-            }, true);
-          }
-
-          function updatePage() {
-            if (!document.body) return;
-
-            installStyles();
-            hideSiteHeader();
-            enhancePlayButtons();
-            compactPlayerPage();
-            redirectAllowedPopupsIntoThisView();
-            tryVideos();
-          }
-
-          updatePage();
-
-          if (!window.__dt360Observer) {
-            window.__dt360Observer = new MutationObserver(function () {
-              clearTimeout(window.__dt360UpdateTimer);
-              window.__dt360UpdateTimer = setTimeout(updatePage, 250);
-            });
-
-            window.__dt360Observer.observe(document.documentElement, {
-              childList: true,
-              subtree: true,
-              attributes: true,
-              attributeFilter: ['href', 'class', 'id']
-            });
-          }
-
-          // Intenta iniciar vídeos que aparezcan después de cargar la agenda.
-          setTimeout(tryVideos, 350);
-          setTimeout(tryVideos, 1200);
-          setTimeout(tryVideos, 2500);
-        })();
-      ''';
-
-      final script = rawScript.replaceAll(
-        '__DT360_LOGO__',
-        _logoDataUrl,
-      );
-
-      await controller.evaluateJavascript(source: script);
-    } catch (_) {
-      // La página seguirá funcionando si rechaza la personalización.
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return PopScope<void>(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) _goBack();
-      },
-      child: Scaffold(
-        backgroundColor: _navy,
-        appBar: AppBar(
-          backgroundColor: _panel,
-          leading: IconButton(
-            onPressed: _goBack,
-            tooltip: 'Atrás',
-            icon: const Icon(
-              Icons.arrow_back_rounded,
-              color: _cyan,
+    final events = _filteredMatches;
+
+    return Scaffold(
+      backgroundColor: agendaBg,
+      appBar: AppBar(
+        backgroundColor: agendaBg,
+        title: const Row(
+          children: <Widget>[
+            Icon(
+              Icons.calendar_month_rounded,
+              color: agendaCyan,
+              size: 24,
             ),
-          ),
-          title: Row(
-            children: <Widget>[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.asset(
-                  'assets/images/app_icon.png',
-                  width: 38,
-                  height: 38,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Icon(
-                    Icons.sports_soccer_rounded,
-                    color: _cyan,
-                    size: 28,
-                  ),
+            SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                'AGENDA DE PARTIDOS',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
                 ),
-              ),
-              const SizedBox(width: 9),
-              const Expanded(
-                child: Text(
-                  'DEPORTE TOTAL 360°',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: _cyan,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: <Widget>[
-            IconButton(
-              tooltip: 'Recargar página',
-              onPressed: _reload,
-              icon: const Icon(
-                Icons.refresh_rounded,
-                color: _green,
-              ),
-            ),
-            IconButton(
-              tooltip: 'Agenda alternativa',
-              onPressed: () => _openUrl(_fallbackAgendaUrl),
-              icon: const Icon(
-                Icons.sports_soccer_rounded,
-                color: _yellow,
               ),
             ),
           ],
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(3),
-            child: LinearProgressIndicator(
-              value: _loading ? null : _progress,
-              minHeight: 3,
-              backgroundColor: _panel,
-              valueColor: const AlwaysStoppedAnimation<Color>(_pink),
-            ),
+        ),
+        actions: <Widget>[
+          IconButton(
+            tooltip: 'Limpiar búsqueda',
+            onPressed: _clearFilters,
+            icon: const Icon(Icons.refresh_rounded, color: agendaCyan),
+          ),
+        ],
+      ),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment.topCenter,
+            radius: 1.2,
+            colors: <Color>[
+              Color(0xFF101B42),
+              agendaBg,
+              Color(0xFF08071B),
+            ],
           ),
         ),
-        body: Stack(
-          children: <Widget>[
-            Positioned.fill(
-              child: Opacity(
-                opacity: .12,
-                child: Image.asset(
-                  'assets/images/app_icon.png',
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 7, 12, 9),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (value) => setState(() => _query = value),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Buscar equipo, liga o deporte…',
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      color: agendaCyan,
+                    ),
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _query = '');
+                            },
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                    filled: true,
+                    fillColor: agendaPanel,
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: agendaLine),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: agendaCyan,
+                        width: 1.4,
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
-            const Positioned.fill(
-              child: ColoredBox(color: Color(0xE8020817)),
-            ),
-            Column(
-              children: <Widget>[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 10,
-                  ),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: <Color>[
-                        Color(0xFF0B1D35),
-                        Color(0xFF10132D),
-                      ],
-                    ),
-                    border: Border(
-                      bottom: BorderSide(
-                        color: _cyan,
-                        width: 1.5,
-                      ),
-                    ),
-                  ),
-                  child: const Text(
-                    '🔴 EN VIVO  •  ⚪ TERMINADO  •  🟡 AGENDA',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: .3,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Stack(
-                    children: <Widget>[
-                      InAppWebView(
-                        key: ValueKey<int>(_viewKey),
-                        initialUrlRequest: URLRequest(
-                          url: WebUri(_activeUrl),
-                        ),
-                        initialSettings: InAppWebViewSettings(
-                          javaScriptEnabled: true,
-                          javaScriptCanOpenWindowsAutomatically: false,
-                          domStorageEnabled: true,
-                          databaseEnabled: true,
-                          thirdPartyCookiesEnabled: true,
-                          supportMultipleWindows: false,
-                          useShouldOverrideUrlLoading: true,
-                          useShouldInterceptRequest: true,
-                          mediaPlaybackRequiresUserGesture: false,
-                          allowsInlineMediaPlayback: true,
-                          useWideViewPort: true,
-                          loadWithOverviewMode: true,
-                          supportZoom: false,
-                          builtInZoomControls: false,
-                          displayZoomControls: false,
-                          cacheEnabled: true,
-                          transparentBackground: false,
-                        ),
-                        onWebViewCreated: (controller) {
-                          _controller = controller;
-
-                          if (_logoDataUrl.isNotEmpty) {
-                            _applyBranding(controller);
-                          }
-                        },
-                        onCreateWindow: (
-                          controller,
-                          createWindowAction,
-                        ) async {
-                          // Los anuncios no deben crear ventanas nuevas.
-                          // window.open de vídeo se redirige mediante JS.
-                          return false;
-                        },
-                        shouldOverrideUrlLoading: _handleNavigation,
-                        shouldInterceptRequest: _interceptRequest,
-                        onLoadStart: (controller, url) {
-                          final uri = Uri.tryParse(url?.toString() ?? '');
-
-                          if (uri != null && _isBlockedUri(uri)) {
-                            controller.stopLoading();
-                            return;
-                          }
-
-                          if (!mounted) return;
-
-                          setState(() {
-                            _loading = true;
-                            _progress = 0;
-                            _error = null;
-                          });
-                        },
-                        onProgressChanged: (controller, progress) {
-                          if (!mounted) return;
-
-                          setState(() {
-                            _progress = progress / 100;
-                            _loading = progress < 100;
-                          });
-                        },
-                        onLoadStop: (controller, url) async {
-                          final uri = Uri.tryParse(url?.toString() ?? '');
-
-                          if (uri != null && _isBlockedUri(uri)) {
-                            await controller.stopLoading();
-                            return;
-                          }
-
-                          await _applyBranding(controller);
-
-                          if (!mounted) return;
-
-                          setState(() {
-                            _loading = false;
-                            _progress = 1;
-                            _error = null;
-
-                            if (uri != null && _isAllowedUri(uri)) {
-                              _activeUrl = uri.toString();
-                            }
-                          });
-                        },
-                        onReceivedError: (
-                          controller,
-                          request,
-                          error,
-                        ) {
-                          if (request.isForMainFrame != true) return;
-
-                          _setError(
-                            'La página no respondió. '
-                            'Comprueba tu conexión.\n\n'
-                            '${error.description}',
-                          );
-                        },
-                        onReceivedHttpError: (
-                          controller,
-                          request,
-                          response,
-                        ) {
-                          if (request.isForMainFrame != true) return;
-
-                          final status = response.statusCode;
-
-                          if (status != null && status >= 400) {
-                            _setError(
-                              'El servidor respondió HTTP $status. '
-                              'Puede estar temporalmente fuera de servicio.',
-                            );
-                          }
-                        },
-                      ),
-                      if (_loading && _error == null)
-                        const Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          child: LinearProgressIndicator(
-                            minHeight: 2,
-                            backgroundColor: Colors.transparent,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(_pink),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: <Widget>[
+                    for (final date in <String>[
+                      'Hoy',
+                      'Mañana',
+                      'Todos',
+                    ])
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: _FilterButton(
+                            label: date,
+                            selected: _dateFilter == date,
+                            onTap: () => setState(() => _dateFilter = date),
                           ),
                         ),
-                      if (_error != null)
-                        Positioned.fill(
-                          child: Container(
-                            color: _navy.withOpacity(.94),
-                            padding: const EdgeInsets.all(22),
-                            child: Center(
-                              child: Container(
-                                padding: const EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                  color: _panel,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: _red),
-                                  boxShadow: const <BoxShadow>[
-                                    BoxShadow(
-                                      color: Color(0x55FF1744),
-                                      blurRadius: 18,
-                                      offset: Offset(0, 5),
-                                    ),
-                                  ],
-                                ),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: <Widget>[
-                                    const Icon(
-                                      Icons.wifi_off_rounded,
-                                      color: _red,
-                                      size: 42,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    const Text(
-                                      'NO SE PUDO CARGAR',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: _cyan,
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Text(
-                                      _error!,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        color: _muted,
-                                        height: 1.4,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: ElevatedButton.icon(
-                                        onPressed: _reload,
-                                        icon: const Icon(
-                                          Icons.refresh_rounded,
-                                        ),
-                                        label: const Text('RECARGAR CANAL'),
-                                        style: ElevatedButton.styleFrom(
-                                          foregroundColor: Colors.white,
-                                          backgroundColor: _red,
-                                          elevation: 7,
-                                          shadowColor: _red,
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 14,
-                                          ),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 42,
+                child: ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _sports.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 7),
+                  itemBuilder: (context, index) {
+                    final value = _sports[index];
+                    return ChoiceChip(
+                      label: Text(value),
+                      selected: _sport == value,
+                      onSelected: (_) => setState(() => _sport = value),
+                      selectedColor: agendaBlue,
+                      backgroundColor: agendaPanel,
+                      labelStyle: TextStyle(
+                        color:
+                            _sport == value ? Colors.white : agendaMuted,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                      ),
+                      side: BorderSide(
+                        color: _sport == value ? agendaCyan : agendaLine,
+                      ),
+                      showCheckmark: false,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 35,
+                child: ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _statuses.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 7),
+                  itemBuilder: (context, index) {
+                    final value = _statuses[index];
+                    final selected = _statusFilter == value;
+                    final color =
+                        value == 'En vivo' ? agendaRed : agendaGreen;
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(9),
+                      onTap: () => setState(() => _statusFilter = value),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              selected ? color.withAlpha(35) : agendaPanel,
+                          border: Border.all(
+                            color: selected ? color : agendaLine,
+                          ),
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Text(
+                          value,
+                          style: TextStyle(
+                            color: selected ? color : agendaMuted,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 13, 14, 8),
+                child: Row(
+                  children: <Widget>[
+                    const Expanded(
+                      child: Text(
+                        'PARTIDOS Y EVENTOS',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 13,
+                          letterSpacing: .4,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${events.length} eventos',
+                      style: const TextStyle(
+                        color: agendaMuted,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: events.isEmpty
+                    ? _EmptyAgenda(
+                        hasSearch: _query.trim().isNotEmpty,
+                        onClear: _clearFilters,
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
+                        itemCount: events.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: 8),
+                        itemBuilder: (context, index) => _MatchCard(
+                          event: events[index],
+                          onTap: () => Navigator.of(context).push<void>(
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  MatchDetailScreen(event: events[index]),
                             ),
                           ),
                         ),
-                    ],
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterButton extends StatelessWidget {
+  const _FilterButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 9),
+          decoration: BoxDecoration(
+            color: selected ? agendaBlue : agendaPanel,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected ? agendaCyan : agendaLine,
+            ),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: selected ? Colors.white : agendaMuted,
+              fontWeight: FontWeight.w900,
+              fontSize: 12,
+            ),
+          ),
+        ),
+      );
+}
+
+class _EmptyAgenda extends StatelessWidget {
+  const _EmptyAgenda({
+    required this.hasSearch,
+    required this.onClear,
+  });
+
+  final bool hasSearch;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 30),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 26, 20, 24),
+            decoration: BoxDecoration(
+              color: agendaPanel.withAlpha(235),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: agendaLine),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: agendaCyan.withAlpha(18),
+                  blurRadius: 22,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Container(
+                  width: 76,
+                  height: 76,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: agendaBlue.withAlpha(30),
+                    border: Border.all(color: agendaCyan.withAlpha(120)),
+                  ),
+                  child: const Icon(
+                    Icons.calendar_month_rounded,
+                    color: agendaCyan,
+                    size: 39,
+                  ),
+                ),
+                const SizedBox(height: 17),
+                Text(
+                  hasSearch
+                      ? 'No hay resultados'
+                      : 'Agenda lista para conectarse',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 9),
+                Text(
+                  hasSearch
+                      ? 'Prueba con otro equipo, competición o deporte.'
+                      : 'Esta pantalla ya es nativa de Deporte Total 360°. '
+                          'Todavía no hay una fuente de partidos reales '
+                          'conectada, así que no mostramos horarios inventados '
+                          'ni botones de reproducción sin destino.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: agendaMuted,
+                    fontSize: 12,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                OutlinedButton.icon(
+                  onPressed: onClear,
+                  icon: const Icon(Icons.filter_alt_off_rounded),
+                  label: const Text('Limpiar filtros'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: agendaCyan,
+                    side: const BorderSide(color: agendaCyan),
                   ),
                 ),
               ],
+            ),
+          ),
+        ),
+      );
+}
+
+class _MatchCard extends StatelessWidget {
+  const _MatchCard({required this.event, required this.onTap});
+
+  final MatchEvent event;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = event.status == MatchStatus.live
+        ? agendaRed
+        : event.status == MatchStatus.finished
+            ? agendaMuted
+            : agendaGreen;
+    final statusText = event.status == MatchStatus.live
+        ? 'EN VIVO'
+        : event.status == MatchStatus.finished
+            ? 'FINALIZADO'
+            : 'PROGRAMADO';
+    final sourceReady = event.hasValidStream;
+
+    return Material(
+      color: agendaPanel.withAlpha(245),
+      borderRadius: BorderRadius.circular(13),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(13),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: agendaLine),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Icon(
+                    _sportIcon(event.sport),
+                    color: agendaCyan,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      event.competition,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: agendaCyan,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withAlpha(28),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: statusColor),
+                    ),
+                    child: Text(
+                      statusText,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: _TeamName(
+                      name: event.homeTeam,
+                      score: event.homeScore,
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(
+                      'VS',
+                      style: TextStyle(
+                        color: agendaMuted,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: _TeamName(
+                      name: event.awayTeam,
+                      score: event.awayScore,
+                      alignEnd: true,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 11),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      _dateLabel(event.startsAt),
+                      style: const TextStyle(
+                        color: agendaMuted,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                  if (sourceReady)
+                    const Icon(
+                      Icons.play_circle_fill_rounded,
+                      color: agendaGreen,
+                      size: 16,
+                    ),
+                  const SizedBox(width: 5),
+                  Text(
+                    sourceReady ? 'Ver opciones' : 'Detalles',
+                    style: TextStyle(
+                      color: sourceReady ? agendaGreen : agendaCyan,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: agendaMuted,
+                    size: 19,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TeamName extends StatelessWidget {
+  const _TeamName({
+    required this.name,
+    this.score,
+    this.alignEnd = false,
+  });
+
+  final String name;
+  final int? score;
+  final bool alignEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    final alignment = alignEnd ? TextAlign.end : TextAlign.start;
+    return Column(
+      crossAxisAlignment:
+          alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          name,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: alignment,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            height: 1.25,
+          ),
+        ),
+        if (score != null) ...<Widget>[
+          const SizedBox(height: 3),
+          Text(
+            '$score',
+            textAlign: alignment,
+            style: const TextStyle(
+              color: agendaCyan,
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class MatchDetailScreen extends StatelessWidget {
+  const MatchDetailScreen({super.key, required this.event});
+
+  final MatchEvent event;
+
+  @override
+  Widget build(BuildContext context) {
+    final sources = event.streamSources
+        .where((source) => source.validatedUri != null)
+        .toList();
+
+    return Scaffold(
+      backgroundColor: agendaBg,
+      appBar: AppBar(
+        backgroundColor: agendaBg,
+        title: const Text(
+          'DETALLES DEL EVENTO',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+        ),
+      ),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment.topCenter,
+            radius: 1.1,
+            colors: <Color>[
+              Color(0xFF101B42),
+              agendaBg,
+              Color(0xFF08071B),
+            ],
+          ),
+        ),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: <Widget>[
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: agendaPanel,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: agendaCyan.withAlpha(160)),
+              ),
+              child: Column(
+                children: <Widget>[
+                  Text(
+                    event.competition.toUpperCase(),
+                    style: const TextStyle(
+                      color: agendaCyan,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          event.homeTeam,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Text(
+                          event.homeScore == null || event.awayScore == null
+                              ? 'VS'
+                              : '${event.homeScore} : ${event.awayScore}',
+                          style: const TextStyle(
+                            color: agendaPink,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          event.awayTeam,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  Text(
+                    '${event.sport} • ${_dateLabel(event.startsAt)}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: agendaMuted,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'OPCIONES DE REPRODUCCIÓN',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                letterSpacing: .5,
+              ),
+            ),
+            const SizedBox(height: 9),
+            if (sources.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: agendaPanel,
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(color: agendaLine),
+                ),
+                child: const Column(
+                  children: <Widget>[
+                    Icon(
+                      Icons.videocam_off_rounded,
+                      color: agendaMuted,
+                      size: 42,
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      'No hay una fuente de vídeo configurada',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      'El reproductor se habilitará cuando se conecte una '
+                      'fuente válida y autorizada para este evento. No se '
+                      'inventan enlaces ni se eluden protecciones.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: agendaMuted,
+                        fontSize: 12,
+                        height: 1.45,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              ...sources.map(
+                (source) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: agendaBlue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                      onPressed: () => Navigator.of(context).push<void>(
+                        MaterialPageRoute<void>(
+                          builder: (_) => AgendaVideoPlayerScreen(
+                            title: '${event.homeTeam} vs ${event.awayTeam}',
+                            source: source,
+                          ),
+                        ),
+                      ),
+                      icon: const Icon(Icons.play_circle_fill_rounded),
+                      label: Text('Reproducir • ${source.name}'),
+                    ),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 16),
+            const Text(
+              'La app reproduce únicamente URLs HTTP/HTTPS suministradas '
+              'por una fuente válida. La compatibilidad del stream depende '
+              'de su formato, disponibilidad y permisos.',
+              style: TextStyle(color: agendaMuted, fontSize: 11, height: 1.5),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+class AgendaVideoPlayerScreen extends StatefulWidget {
+  const AgendaVideoPlayerScreen({
+    super.key,
+    required this.title,
+    required this.source,
+  });
+
+  final String title;
+  final MatchStreamSource source;
+
+  @override
+  State<AgendaVideoPlayerScreen> createState() =>
+      _AgendaVideoPlayerScreenState();
+}
+
+class _AgendaVideoPlayerScreenState extends State<AgendaVideoPlayerScreen> {
+  VideoPlayerController? _controller;
+  String? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    final uri = widget.source.validatedUri;
+    if (uri == null) {
+      setState(() {
+        _loading = false;
+        _error = 'La dirección de vídeo no es una URL HTTP/HTTPS válida.';
+      });
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    final oldController = _controller;
+    _controller = null;
+    await oldController?.dispose();
+
+    final controller = VideoPlayerController.networkUrl(uri);
+    _controller = controller;
+    try {
+      await controller.initialize();
+      await controller.setLooping(false);
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() => _loading = false);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error =
+            'No se pudo cargar el vídeo. Comprueba la fuente, la conexión y los permisos de acceso.';
+      });
+      await controller.dispose();
+      if (identical(_controller, controller)) _controller = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  String _durationLabel(Duration value) {
+    final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
+    final hours = value.inHours;
+    return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    return Scaffold(
+      backgroundColor: agendaBg,
+      appBar: AppBar(
+        backgroundColor: agendaBg,
+        title: Text(
+          widget.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(14),
+        children: <Widget>[
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: agendaCyan),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: AspectRatio(
+              aspectRatio: controller?.value.isInitialized == true
+                  ? controller!.value.aspectRatio
+                  : 16 / 9,
+              child: _loading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: agendaCyan),
+                    )
+                  : _error != null
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                const Icon(
+                                  Icons.error_outline_rounded,
+                                  color: agendaRed,
+                                  size: 38,
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  _error!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                OutlinedButton.icon(
+                                  onPressed: _initialize,
+                                  icon: const Icon(Icons.refresh_rounded),
+                                  label: const Text('Reintentar'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: agendaCyan,
+                                    side: const BorderSide(color: agendaCyan),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : controller == null || !controller.value.isInitialized
+                          ? const Center(
+                              child: Text(
+                                'El reproductor no está disponible.',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            )
+                          : GestureDetector(
+                              onTap: () async {
+                                if (controller.value.isPlaying) {
+                                  await controller.pause();
+                                } else {
+                                  await controller.play();
+                                }
+                                if (mounted) setState(() {});
+                              },
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: <Widget>[
+                                  VideoPlayer(controller),
+                                  if (!controller.value.isPlaying)
+                                    Container(
+                                      width: 58,
+                                      height: 58,
+                                      decoration: BoxDecoration(
+                                        color: agendaBlue.withAlpha(210),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.play_arrow_rounded,
+                                        color: Colors.white,
+                                        size: 42,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+            ),
+          ),
+          if (!_loading &&
+              _error == null &&
+              controller != null &&
+              controller.value.isInitialized) ...<Widget>[
+            const SizedBox(height: 12),
+            ValueListenableBuilder<VideoPlayerValue>(
+              valueListenable: controller,
+              builder: (context, value, _) => Column(
+                children: <Widget>[
+                  Slider(
+                    value: value.duration.inMilliseconds <= 0
+                        ? 0
+                        : value.position.inMilliseconds
+                            .clamp(0, value.duration.inMilliseconds)
+                            .toDouble(),
+                    max: value.duration.inMilliseconds <= 0
+                        ? 1
+                        : value.duration.inMilliseconds.toDouble(),
+                    activeColor: agendaCyan,
+                    inactiveColor: agendaLine,
+                    onChanged: value.duration.inMilliseconds <= 0
+                        ? null
+                        : (position) => controller.seekTo(
+                              Duration(milliseconds: position.round()),
+                            ),
+                  ),
+                  Row(
+                    children: <Widget>[
+                      Text(
+                        _durationLabel(value.position),
+                        style: const TextStyle(
+                          color: agendaMuted,
+                          fontSize: 11,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        _durationLabel(value.duration),
+                        style: const TextStyle(
+                          color: agendaMuted,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      if (value.isPlaying) {
+                        await controller.pause();
+                      } else {
+                        await controller.play();
+                      }
+                      if (mounted) setState(() {});
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: agendaBlue,
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: Icon(
+                      value.isPlaying
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                    ),
+                    label: Text(value.isPlaying ? 'Pausar' : 'Reproducir'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Text(
+            'Fuente seleccionada: ${widget.source.name}',
+            style: const TextStyle(
+              color: agendaCyan,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Si aparece un error, la fuente puede estar fuera de línea, '
+            'requerir permisos o utilizar un formato no compatible. La app '
+            'no intenta eludir autenticación ni DRM.',
+            style: TextStyle(color: agendaMuted, fontSize: 12, height: 1.45),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+IconData _sportIcon(String sport) {
+  switch (sport) {
+    case 'Fútbol':
+      return Icons.sports_soccer_rounded;
+    case 'Básquet':
+      return Icons.sports_basketball_rounded;
+    case 'Béisbol':
+      return Icons.sports_baseball_rounded;
+    case 'Tenis':
+      return Icons.sports_tennis_rounded;
+    case 'Vóley':
+      return Icons.sports_volleyball_rounded;
+    default:
+      return Icons.emoji_events_rounded;
+  }
+}
+
+String _dateLabel(DateTime date) {
+  final local = date.toLocal();
+  final day = local.day.toString().padLeft(2, '0');
+  final month = local.month.toString().padLeft(2, '0');
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '$day/$month • $hour:$minute';
 }
