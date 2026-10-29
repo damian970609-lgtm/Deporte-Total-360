@@ -1,25 +1,29 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
+
+import 'agenda_screen.dart';
 import 'web_agenda_screen.dart';
 
-const Color bg = Color(0xFF020817);
-const Color panel = Color(0xFF071B35);
-const Color cyan = Color(0xFF00E5FF);
-const Color pink = Color(0xFFFF28CF);
-const Color green = Color(0xFF39FF9C);
-const Color yellow = Color(0xFFFFD600);
-const Color muted = Color(0xFFB4C4D9);
-const Color liveRed = Color(0xFFFF1744);
+// Identidad visual de DEPORTE TOTAL 360°: azul noche, cian, rosa y verde neón.
+const Color appBg = Color(0xFF030814);
+const Color appPanel = Color(0xFF071326);
+const Color appPanel2 = Color(0xFF0B1B31);
+const Color appLine = Color(0xFF123D65);
+const Color appCyan = Color(0xFF00E5FF);
+const Color appBlue = Color(0xFF087BFF);
+const Color appPink = Color(0xFFFF28CF);
+const Color appGreen = Color(0xFF39FF9C);
+const Color appYellow = Color(0xFFFFD600);
+const Color appRed = Color(0xFFFF3155);
+const Color appMuted = Color(0xFFA9BDD6);
 
-const String agendaUrl = 'https://futbol-libre.cam/';
-const String fallbackAgendaUrl = 'https://www.espn.com/soccer/scoreboard';
-const String telegramUrl = 'https://t.me/';
-const String contactUrl = 'https://wa.me/';
 const String rtmpBase = 'rtmp://ssh101.bozztv.com/ssh101/';
 const String hlsBase = 'https://live21.bozztv.com/akamaissh101/ssh101/';
+const String contactUrl = 'https://wa.me/5927214741';
 const String settingsPhotoAsset =
     'assets/images/file_000000006048820e9e0720f1adf548f1.png';
 
@@ -28,6 +32,7 @@ enum AppLanguage { spanish, english, portuguese, french }
 final ValueNotifier<AppLanguage> appLanguage =
     ValueNotifier<AppLanguage>(AppLanguage.spanish);
 final ValueNotifier<String> channelSlug = ValueNotifier<String>('');
+final ValueNotifier<String> telegramLink = ValueNotifier<String>('');
 
 String languageCode(AppLanguage language) {
   switch (language) {
@@ -55,256 +60,96 @@ AppLanguage parseLanguage(String? code) {
   }
 }
 
-const Map<String, Map<AppLanguage, String>> _text = {
-  'app_title': {
+const Map<String, Map<AppLanguage, String>> _labels =
+    <String, Map<AppLanguage, String>>{
+  'title': <AppLanguage, String>{
     AppLanguage.spanish: 'DEPORTE TOTAL 360°',
     AppLanguage.english: 'TOTAL SPORTS 360°',
     AppLanguage.portuguese: 'ESPORTE TOTAL 360°',
     AppLanguage.french: 'SPORT TOTAL 360°',
   },
-  'tagline': {
+  'tagline': <AppLanguage, String>{
     AppLanguage.spanish: 'TODOS LOS DEPORTES EN UN SOLO LUGAR',
     AppLanguage.english: 'ALL SPORTS IN ONE PLACE',
     AppLanguage.portuguese: 'TODOS OS ESPORTES EM UM SÓ LUGAR',
     AppLanguage.french: 'TOUS LES SPORTS AU MÊME ENDROIT',
   },
-  'live': {
-    AppLanguage.spanish: 'TRANSMISIONES',
+  'home': <AppLanguage, String>{
+    AppLanguage.spanish: 'Inicio',
+    AppLanguage.english: 'Home',
+    AppLanguage.portuguese: 'Início',
+    AppLanguage.french: 'Accueil',
+  },
+  'football': <AppLanguage, String>{
+    AppLanguage.spanish: 'Fútbol',
+    AppLanguage.english: 'Football',
+    AppLanguage.portuguese: 'Futebol',
+    AppLanguage.french: 'Football',
+  },
+  'live': <AppLanguage, String>{
+    AppLanguage.spanish: 'En vivo',
+    AppLanguage.english: 'Live',
+    AppLanguage.portuguese: 'Ao vivo',
+    AppLanguage.french: 'En direct',
+  },
+  'agenda': <AppLanguage, String>{
+    AppLanguage.spanish: 'Agenda',
+    AppLanguage.english: 'Schedule',
+    AppLanguage.portuguese: 'Agenda',
+    AppLanguage.french: 'Agenda',
+  },
+  'settings': <AppLanguage, String>{
+    AppLanguage.spanish: 'Ajustes',
+    AppLanguage.english: 'Settings',
+    AppLanguage.portuguese: 'Configurações',
+    AppLanguage.french: 'Réglages',
+  },
+  'streams': <AppLanguage, String>{
+    AppLanguage.spanish: 'TRANSMISIONES EN VIVO',
     AppLanguage.english: 'LIVE STREAMS',
-    AppLanguage.portuguese: 'TRANSMISSÕES',
-    AppLanguage.french: 'DIRECT',
+    AppLanguage.portuguese: 'TRANSMISSÕES AO VIVO',
+    AppLanguage.french: 'DIFFUSIONS EN DIRECT',
   },
-  'agenda': {
-    AppLanguage.spanish: 'AGENDA',
-    AppLanguage.english: 'SCHEDULE',
-    AppLanguage.portuguese: 'AGENDA',
-    AppLanguage.french: 'PROGRAMME',
-  },
-  'matches': {
+  'matches': <AppLanguage, String>{
     AppLanguage.spanish: 'AGENDA DE PARTIDOS',
     AppLanguage.english: 'MATCH SCHEDULE',
     AppLanguage.portuguese: 'AGENDA DE JOGOS',
     AppLanguage.french: 'CALENDRIER DES MATCHS',
   },
-  'telegram': {
+  'telegram': <AppLanguage, String>{
     AppLanguage.spanish: 'TELEGRAM',
     AppLanguage.english: 'TELEGRAM',
     AppLanguage.portuguese: 'TELEGRAM',
     AppLanguage.french: 'TELEGRAM',
   },
-  'official_channel': {
-    AppLanguage.spanish: 'CANAL OFICIAL',
-    AppLanguage.english: 'OFFICIAL CHANNEL',
-    AppLanguage.portuguese: 'CANAL OFICIAL',
-    AppLanguage.french: 'CHAÎNE OFFICIELLE',
+  'contact': <AppLanguage, String>{
+    AppLanguage.spanish: 'CONTACTAR CON EL CREADOR',
+    AppLanguage.english: 'CONTACT THE CREATOR',
+    AppLanguage.portuguese: 'CONTACTAR O CRIADOR',
+    AppLanguage.french: 'CONTACTER LE CRÉATEUR',
   },
-  'settings': {
-    AppLanguage.spanish: 'AJUSTES',
-    AppLanguage.english: 'SETTINGS',
-    AppLanguage.portuguese: 'CONFIGURAÇÕES',
-    AppLanguage.french: 'PARAMÈTRES',
-  },
-  'language': {
-    AppLanguage.spanish: 'Idioma',
-    AppLanguage.english: 'Language',
-    AppLanguage.portuguese: 'Idioma',
-    AppLanguage.french: 'Langue',
-  },
-  'stream_setup': {
-    AppLanguage.spanish: 'CONFIGURACIÓN DE TRANSMISIÓN',
-    AppLanguage.english: 'STREAM SETTINGS',
-    AppLanguage.portuguese: 'CONFIGURAÇÃO DA TRANSMISSÃO',
-    AppLanguage.french: 'CONFIGURATION DU DIRECT',
-  },
-  'channel_slug': {
-    AppLanguage.spanish: 'Identificador del canal SSH101',
-    AppLanguage.english: 'SSH101 channel slug',
-    AppLanguage.portuguese: 'Identificador do canal SSH101',
-    AppLanguage.french: 'Identifiant de chaîne SSH101',
-  },
-  'channel_hint': {
-    AppLanguage.spanish: 'Escribe el nombre de canal creado en BozzTV',
-    AppLanguage.english: 'Enter the channel name created on BozzTV',
-    AppLanguage.portuguese: 'Digite o nome de canal criado na BozzTV',
-    AppLanguage.french: 'Saisissez le nom de chaîne créé sur BozzTV',
-  },
-  'save': {
-    AppLanguage.spanish: 'GUARDAR CONFIGURACIÓN',
-    AppLanguage.english: 'SAVE SETTINGS',
-    AppLanguage.portuguese: 'SALVAR CONFIGURAÇÃO',
-    AppLanguage.french: 'ENREGISTRER',
-  },
-  'rtmp': {
-    AppLanguage.spanish: 'Servidor RTMP para PRISM (emisión)',
-    AppLanguage.english: 'RTMP server for PRISM (broadcast)',
-    AppLanguage.portuguese: 'Servidor RTMP para PRISM (transmissão)',
-    AppLanguage.french: 'Serveur RTMP pour PRISM (émission)',
-  },
-  'hls': {
-    AppLanguage.spanish: 'URL HLS para ver en la APK',
-    AppLanguage.english: 'HLS URL for playback in the app',
-    AppLanguage.portuguese: 'URL HLS para assistir no app',
-    AppLanguage.french: 'URL HLS pour lire dans l’application',
-  },
-  'copy': {
-    AppLanguage.spanish: 'COPIAR',
-    AppLanguage.english: 'COPY',
-    AppLanguage.portuguese: 'COPIAR',
-    AppLanguage.french: 'COPIER',
-  },
-  'saved': {
-    AppLanguage.spanish: 'Configuración guardada.',
-    AppLanguage.english: 'Settings saved.',
-    AppLanguage.portuguese: 'Configuração salva.',
-    AppLanguage.french: 'Configuration enregistrée.',
-  },
-  'invalid_channel': {
-    AppLanguage.spanish: 'Usa solo letras, números, guion y guion bajo.',
-    AppLanguage.english: 'Use only letters, numbers, hyphens and underscores.',
-    AppLanguage.portuguese: 'Use apenas letras, números, hífen e sublinhado.',
-    AppLanguage.french: 'Utilisez uniquement lettres, chiffres, tirets et soulignements.',
-  },
-  'configure_first': {
-    AppLanguage.spanish: 'Primero escribe y guarda el identificador del canal en Ajustes.',
-    AppLanguage.english: 'Enter and save the channel slug in Settings first.',
-    AppLanguage.portuguese: 'Primeiro informe e salve o identificador em Configurações.',
-    AppLanguage.french: 'Saisissez et enregistrez d’abord l’identifiant dans Paramètres.',
-  },
-  'player': {
-    AppLanguage.spanish: 'REPRODUCCIÓN EN VIVO',
-    AppLanguage.english: 'LIVE PLAYER',
-    AppLanguage.portuguese: 'REPRODUÇÃO AO VIVO',
-    AppLanguage.french: 'LECTEUR EN DIRECT',
-  },
-  'play': {
-    AppLanguage.spanish: 'REPRODUCIR',
-    AppLanguage.english: 'PLAY',
-    AppLanguage.portuguese: 'REPRODUZIR',
-    AppLanguage.french: 'LECTURE',
-  },
-  'pause': {
-    AppLanguage.spanish: 'PAUSAR',
-    AppLanguage.english: 'PAUSE',
-    AppLanguage.portuguese: 'PAUSAR',
-    AppLanguage.french: 'PAUSE',
-  },
-  'retry': {
-    AppLanguage.spanish: 'REINTENTAR',
-    AppLanguage.english: 'RETRY',
-    AppLanguage.portuguese: 'TENTAR NOVAMENTE',
-    AppLanguage.french: 'RÉESSAYER',
-  },
-  'channel_missing': {
-    AppLanguage.spanish: 'Aún no has configurado el canal SSH101.',
-    AppLanguage.english: 'The SSH101 channel is not configured yet.',
-    AppLanguage.portuguese: 'O canal SSH101 ainda não foi configurado.',
-    AppLanguage.french: 'La chaîne SSH101 n’est pas encore configurée.',
-  },
-  'stream_error': {
-    AppLanguage.spanish:
-        'No se pudo iniciar el vídeo. Comprueba que el canal esté emitiendo y que la URL HLS sea válida.',
-    AppLanguage.english:
-        'Video could not start. Check that the channel is live and the HLS URL is valid.',
-    AppLanguage.portuguese:
-        'Não foi possível iniciar o vídeo. Verifique se o canal está ao vivo e se a URL HLS é válida.',
-    AppLanguage.french:
-        'Impossible de lancer la vidéo. Vérifiez que la chaîne est en direct et que l’URL HLS est valide.',
-  },
-  'encoder': {
-    AppLanguage.spanish: 'CONFIGURAR PRISM',
-    AppLanguage.english: 'CONFIGURE PRISM',
-    AppLanguage.portuguese: 'CONFIGURAR PRISM',
-    AppLanguage.french: 'CONFIGURER PRISM',
-  },
-  'viewer': {
-    AppLanguage.spanish: 'SSH101 · VER TRANSMISIÓN',
-    AppLanguage.english: 'SSH101 · WATCH STREAM',
-    AppLanguage.portuguese: 'SSH101 · ASSISTIR À TRANSMISSÃO',
-    AppLanguage.french: 'SSH101 · REGARDER LE DIRECT',
-  },
-  'live_here': {
-    AppLanguage.spanish: 'EN VIVO AQUÍ',
-    AppLanguage.english: 'LIVE HERE',
-    AppLanguage.portuguese: 'AO VIVO AQUI',
-    AppLanguage.french: 'EN DIRECT ICI',
-  },
-  'copy_done': {
-    AppLanguage.spanish: 'Copiado al portapapeles.',
-    AppLanguage.english: 'Copied to clipboard.',
-    AppLanguage.portuguese: 'Copiado para a área de transferência.',
-    AppLanguage.french: 'Copié dans le presse-papiers.',
-  },
-  'settings_help': {
-    AppLanguage.spanish:
-        'Introduce solo el identificador del canal, no la URL completa ni los símbolos < >.',
-    AppLanguage.english:
-        'Enter only the channel slug, not the full URL or the < > symbols.',
-    AppLanguage.portuguese:
-        'Digite apenas o identificador do canal, não a URL completa nem os símbolos < >.',
-    AppLanguage.french:
-        'Saisissez uniquement l’identifiant, sans l’URL complète ni les symboles < >.',
-  },
-  'football': {
-    AppLanguage.spanish: 'FÚTBOL',
-    AppLanguage.english: 'SOCCER',
-    AppLanguage.portuguese: 'FUTEBOL',
-    AppLanguage.french: 'FOOTBALL',
-  },
-  'basketball': {
-    AppLanguage.spanish: 'BALONCESTO',
-    AppLanguage.english: 'BASKETBALL',
-    AppLanguage.portuguese: 'BASQUETE',
-    AppLanguage.french: 'BASKET',
-  },
-  'tennis': {
-    AppLanguage.spanish: 'TENIS',
-    AppLanguage.english: 'TENNIS',
-    AppLanguage.portuguese: 'TÊNIS',
-    AppLanguage.french: 'TENNIS',
-  },
-  'combat': {
-    AppLanguage.spanish: 'COMBATE',
-    AppLanguage.english: 'COMBAT',
-    AppLanguage.portuguese: 'LUTAS',
-    AppLanguage.french: 'COMBAT',
-  },
-  'volleyball': {
-    AppLanguage.spanish: 'VÓLEIBOL',
-    AppLanguage.english: 'VOLLEYBALL',
-    AppLanguage.portuguese: 'VÔLEI',
-    AppLanguage.french: 'VOLLEY',
-  },
-  'contact': {
-    AppLanguage.spanish: 'CONTACTO',
-    AppLanguage.english: 'CONTACT',
-    AppLanguage.portuguese: 'CONTATO',
-    AppLanguage.french: 'CONTACT',
-  },
-  'support': {
-    AppLanguage.spanish: 'APOYO AL PROYECTO',
-    AppLanguage.english: 'SUPPORT THE PROJECT',
-    AppLanguage.portuguese: 'APOIE O PROJETO',
-    AppLanguage.french: 'SOUTENIR LE PROJET',
+  'donations': <AppLanguage, String>{
+    AppLanguage.spanish: 'DONACIONES',
+    AppLanguage.english: 'DONATIONS',
+    AppLanguage.portuguese: 'DOAÇÕES',
+    AppLanguage.french: 'DONS',
   },
 };
 
-String tr(String key) => _text[key]?[appLanguage.value] ?? key;
-
+String tr(String key) => _labels[key]?[appLanguage.value] ?? key;
 String buildRtmpUrl(String channel) => '$rtmpBase$channel';
 String buildHlsUrl(String channel) => '$hlsBase$channel/playlist.m3u8';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   try {
     final prefs = await SharedPreferences.getInstance();
     appLanguage.value = parseLanguage(prefs.getString('app_language'));
     channelSlug.value = prefs.getString('ssh101_channel') ?? '';
+    telegramLink.value = prefs.getString('telegram_public_link') ?? '';
   } catch (_) {
-    appLanguage.value = AppLanguage.spanish;
-    channelSlug.value = '';
+    // La app puede abrirse aunque el almacenamiento local no esté disponible.
   }
-
   runApp(const DeporteTotal360App());
 }
 
@@ -315,36 +160,202 @@ class DeporteTotal360App extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<AppLanguage>(
       valueListenable: appLanguage,
-      builder: (context, language, _) {
-        return MaterialApp(
-          title: tr('app_title'),
-          debugShowCheckedModeBanner: false,
-          theme: ThemeData(
-            useMaterial3: true,
+      builder: (context, language, _) => MaterialApp(
+        title: tr('title'),
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          useMaterial3: true,
+          brightness: Brightness.dark,
+          scaffoldBackgroundColor: appBg,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: appCyan,
             brightness: Brightness.dark,
-            scaffoldBackgroundColor: bg,
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: cyan,
-              brightness: Brightness.dark,
+          ),
+          appBarTheme: const AppBarTheme(
+            backgroundColor: appBg,
+            foregroundColor: Colors.white,
+            elevation: 0,
+          ),
+          inputDecorationTheme: InputDecorationTheme(
+            filled: true,
+            fillColor: appPanel,
+            labelStyle: const TextStyle(color: appMuted),
+            hintStyle: const TextStyle(color: appMuted),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: appLine),
             ),
-            appBarTheme: const AppBarTheme(
-              backgroundColor: bg,
-              foregroundColor: Colors.white,
-              elevation: 0,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: appLine),
             ),
-            filledButtonTheme: FilledButtonThemeData(
-              style: FilledButton.styleFrom(
-                backgroundColor: cyan,
-                foregroundColor: bg,
-                textStyle: const TextStyle(fontWeight: FontWeight.w900),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
-              ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: appCyan, width: 1.4),
             ),
           ),
-          home: const HomeScreen(),
-        );
-      },
+        ),
+        home: const MainShell(),
+      ),
+    );
+  }
+}
+
+class MainShell extends StatefulWidget {
+  const MainShell({super.key});
+
+  @override
+  State<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends State<MainShell> {
+  int _selectedIndex = 0;
+  String _agendaSport = 'Fútbol';
+
+  void _selectTab(int index) {
+    setState(() {
+      _selectedIndex = index;
+      if (index == 1) _agendaSport = 'Fútbol';
+      if (index == 3) _agendaSport = 'Todos';
+    });
+  }
+
+  void _selectSport(String sport) {
+    setState(() {
+      _agendaSport = sport;
+      // Los mosaicos deportivos abren la agenda nativa filtrada por deporte.
+      // La pestaña principal Agenda abre la web dentro del marco de la app.
+      _selectedIndex = 1;
+    });
+  }
+
+  Future<void> _openTelegram() async {
+    final link = telegramLink.value.trim();
+    if (link.isEmpty) {
+      if (!mounted) return;
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: appPanel,
+          title: const Text(
+            'Canal de Telegram',
+            style: TextStyle(color: appCyan, fontWeight: FontWeight.w900),
+          ),
+          content: const Text(
+            'Este espacio está reservado para tu canal. Todavía no hay un '
+            'enlace público configurado; no abriremos un canal genérico ni '
+            'uno inventado.',
+            style: TextStyle(color: appMuted, height: 1.45),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cerrar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _selectTab(4);
+              },
+              child: const Text('Configurar enlace'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    await openExternalLink(context, link, label: 'Telegram');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = <Widget>[
+      HomeDashboard(
+        onNavigate: _selectTab,
+        onSportSelected: _selectSport,
+        onTelegram: _openTelegram,
+        onContact: () => openExternalLink(context, contactUrl, label: 'WhatsApp'),
+        onDonations: () => Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => const DonationsScreen(),
+          ),
+        ),
+      ),
+      AgendaScreen(
+        key: ValueKey<String>('football-$_agendaSport'),
+        initialSport: _agendaSport == 'Todos' ? 'Fútbol' : _agendaSport,
+      ),
+      const LiveScreen(),
+      const WebAgendaScreen(),
+      const SettingsScreen(),
+    ];
+
+    return Scaffold(
+      backgroundColor: appBg,
+      body: IndexedStack(index: _selectedIndex, children: pages),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF020B19),
+          border: const Border(top: BorderSide(color: appLine)),
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: appCyan.withAlpha(18),
+              blurRadius: 18,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: NavigationBar(
+            height: 64,
+            selectedIndex: _selectedIndex,
+            onDestinationSelected: _selectTab,
+            backgroundColor: const Color(0xFF020B19),
+            indicatorColor: appBlue.withAlpha(95),
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            destinations: <NavigationDestination>[
+              NavigationDestination(
+                icon: const Icon(Icons.home_outlined),
+                selectedIcon: const Icon(Icons.home_rounded, color: appCyan),
+                label: tr('home'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.sports_soccer_outlined),
+                selectedIcon: const Icon(
+                  Icons.sports_soccer_rounded,
+                  color: appCyan,
+                ),
+                label: tr('football'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.live_tv_outlined),
+                selectedIcon: const Icon(
+                  Icons.live_tv_rounded,
+                  color: appPink,
+                ),
+                label: tr('live'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.calendar_month_outlined),
+                selectedIcon: const Icon(
+                  Icons.calendar_month_rounded,
+                  color: appGreen,
+                ),
+                label: tr('agenda'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.settings_outlined),
+                selectedIcon: const Icon(
+                  Icons.settings_rounded,
+                  color: appCyan,
+                ),
+                label: tr('settings'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -358,24 +369,26 @@ class AppBackdrop extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
-        Opacity(
-          opacity: .13,
-          child: Image.asset(
-            'assets/images/app_icon.png',
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-          ),
-        ),
         const DecoratedBox(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
+            gradient: RadialGradient(
+              center: Alignment.topCenter,
+              radius: 1.25,
               colors: <Color>[
-                Color(0xE6051A3A),
-                Color(0xF0020817),
-                Color(0xE609051B),
+                Color(0xFF101B42),
+                appBg,
+                Color(0xFF08071B),
               ],
+            ),
+          ),
+        ),
+        IgnorePointer(
+          child: Opacity(
+            opacity: .035,
+            child: Image.asset(
+              'assets/images/app_icon.png',
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
             ),
           ),
         ),
@@ -385,11 +398,9 @@ class AppBackdrop extends StatelessWidget {
   }
 }
 
-/// Fondo especial de Ajustes: fotografía del propietario,
-/// un filtro oscuro y el rótulo neón Damian.apk.
+/// Fondo de Ajustes con la imagen del proyecto y una capa oscura.
 class SettingsBackdrop extends StatelessWidget {
   const SettingsBackdrop({super.key, required this.child});
-
   final Widget child;
 
   @override
@@ -404,6 +415,7 @@ class SettingsBackdrop extends StatelessWidget {
           errorBuilder: (_, __, ___) => Image.asset(
             'assets/images/app_icon.png',
             fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const ColoredBox(color: appBg),
           ),
         ),
         const DecoratedBox(
@@ -413,8 +425,8 @@ class SettingsBackdrop extends StatelessWidget {
               end: Alignment.bottomCenter,
               colors: <Color>[
                 Color(0x66020817),
-                Color(0x99020817),
-                Color(0xDC020817),
+                Color(0xB3020817),
+                Color(0xF2020817),
               ],
             ),
           ),
@@ -425,163 +437,275 @@ class SettingsBackdrop extends StatelessWidget {
   }
 }
 
-Future<void> openWeb(
-  BuildContext context, {
-  String url = agendaUrl,
-  String title = 'AGENDA DE PARTIDOS',
-}) async {
-  await Navigator.of(context).push<void>(
-    MaterialPageRoute<void>(
-      builder: (_) => WebAgendaScreen(initialUrl: url, pageTitle: title),
-    ),
-  );
-}
+class HomeDashboard extends StatelessWidget {
+  const HomeDashboard({
+    super.key,
+    required this.onNavigate,
+    required this.onSportSelected,
+    required this.onTelegram,
+    required this.onContact,
+    required this.onDonations,
+  });
 
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
-
-  Future<void> _open(BuildContext context, Widget page) async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => page),
-    );
-  }
+  final ValueChanged<int> onNavigate;
+  final ValueChanged<String> onSportSelected;
+  final VoidCallback onTelegram;
+  final VoidCallback onContact;
+  final VoidCallback onDonations;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: appBg,
       appBar: AppBar(
-        title: Text(
-          tr('app_title'),
-          style: const TextStyle(
-            color: cyan,
-            fontSize: 14,
-            fontWeight: FontWeight.w900,
-          ),
+        titleSpacing: 12,
+        title: Row(
+          children: <Widget>[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/images/app_icon.png',
+                width: 34,
+                height: 34,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Icon(
+                  Icons.emoji_events_rounded,
+                  color: appCyan,
+                ),
+              ),
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                tr('title'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: appCyan,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  letterSpacing: .35,
+                ),
+              ),
+            ),
+          ],
         ),
         actions: <Widget>[
           IconButton(
             tooltip: tr('settings'),
-            onPressed: () => _open(context, const SettingsScreen()),
-            icon: const Icon(Icons.settings_rounded, color: cyan),
+            onPressed: () => onNavigate(4),
+            icon: const Icon(Icons.settings_rounded, color: appCyan),
           ),
         ],
       ),
       body: AppBackdrop(
         child: SafeArea(
+          top: false,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                Container(
-                  height: 165,
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    gradient: const RadialGradient(
-                      center: Alignment.topCenter,
-                      radius: 1.15,
-                      colors: <Color>[
-                        Color(0xFF12336A),
-                        Color(0xFF040B1B),
-                        Color(0xFF060819),
-                      ],
-                    ),
-                    border: Border.all(color: cyan.withValues(alpha: .65)),
-                    boxShadow: <BoxShadow>[
-                      BoxShadow(
-                        color: cyan.withValues(alpha: .2),
-                        blurRadius: 18,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child: Image.asset(
-                    'assets/images/logo.png',
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Icon(
-                      Icons.emoji_events_rounded,
-                      color: yellow,
-                      size: 86,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
+                _BrandHero(),
+                const SizedBox(height: 10),
                 Text(
                   tr('tagline'),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 12,
                     fontWeight: FontWeight.w900,
+                    fontSize: 11,
+                    letterSpacing: .8,
                   ),
                 ),
-                const SizedBox(height: 14),
-                const _SportsStrip(),
-                const SizedBox(height: 14),
+                const SizedBox(height: 17),
                 Row(
                   children: <Widget>[
-                    Expanded(
-                      child: _ActionTile(
-                        icon: Icons.live_tv_rounded,
-                        title: tr('live'),
-                        subtitle: 'PRISM • SSH101',
-                        color: const Color(0xFFFF3159),
-                        onTap: () => _open(context, const LiveScreen()),
+                    const Expanded(
+                      child: _SectionHeading(
+                        title: 'TODOS LOS DEPORTES',
+                        icon: Icons.public_rounded,
                       ),
                     ),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: _ActionTile(
-                        icon: Icons.calendar_month_rounded,
-                        title: tr('agenda'),
-                        subtitle: tr('matches'),
-                        color: green,
-                        onTap: () => openWeb(context),
+                    TextButton(
+                      onPressed: () => onNavigate(3),
+                      child: const Text(
+                        'Explorar →',
+                        style: TextStyle(color: appCyan, fontSize: 11),
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: _ActionTile(
-                        icon: Icons.send_rounded,
-                        title: tr('telegram'),
-                        subtitle: tr('official_channel'),
-                        color: cyan,
-                        onTap: () => _launchExternal(context, telegramUrl),
-                      ),
-                    ),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: _ActionTile(
-                        icon: Icons.settings_rounded,
-                        title: tr('settings'),
-                        subtitle: tr('language'),
-                        color: yellow,
-                        onTap: () => _open(context, const SettingsScreen()),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                FilledButton.icon(
-                  onPressed: () => openWeb(context),
-                  icon: const Icon(Icons.play_circle_fill_rounded),
-                  label: Text(tr('matches')),
                 ),
                 const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () => _launchExternal(context, contactUrl),
-                  icon: const Icon(Icons.chat_rounded),
-                  label: Text(tr('contact')),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: green,
-                    side: const BorderSide(color: green),
+                GridView.count(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 1.18,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: <Widget>[
+                    _SportTile(
+                      title: 'FÚTBOL',
+                      subtitle: 'Ligas • Copas',
+                      icon: Icons.sports_soccer_rounded,
+                      color: appGreen,
+                      onTap: () => onSportSelected('Fútbol'),
+                    ),
+                    _SportTile(
+                      title: 'BÁSQUET',
+                      subtitle: 'NBA • FIBA',
+                      icon: Icons.sports_basketball_rounded,
+                      color: appYellow,
+                      onTap: () => onSportSelected('Básquet'),
+                    ),
+                    _SportTile(
+                      title: 'BÉISBOL',
+                      subtitle: 'MLB • Ligas',
+                      icon: Icons.sports_baseball_rounded,
+                      color: appPink,
+                      onTap: () => onSportSelected('Béisbol'),
+                    ),
+                    _SportTile(
+                      title: 'TENIS',
+                      subtitle: 'ATP • WTA',
+                      icon: Icons.sports_tennis_rounded,
+                      color: appGreen,
+                      onTap: () => onSportSelected('Tenis'),
+                    ),
+                    _SportTile(
+                      title: 'VÓLEY',
+                      subtitle: 'Ligas • Torneos',
+                      icon: Icons.sports_volleyball_rounded,
+                      color: appBlue,
+                      onTap: () => onSportSelected('Vóley'),
+                    ),
+                    _SportTile(
+                      title: 'OTROS',
+                      subtitle: 'Boxeo • Motor',
+                      icon: Icons.emoji_events_rounded,
+                      color: appCyan,
+                      onTap: () => onSportSelected('Otros'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 17),
+                const _SectionHeading(
+                  title: 'ACCESO RÁPIDO',
+                  icon: Icons.bolt_rounded,
+                ),
+                const SizedBox(height: 9),
+                GridView.count(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: .96,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: <Widget>[
+                    _ActionTile(
+                      title: tr('streams'),
+                      subtitle: 'Ver canales',
+                      icon: Icons.live_tv_rounded,
+                      color: appRed,
+                      onTap: () => onNavigate(2),
+                    ),
+                    _ActionTile(
+                      title: tr('matches'),
+                      subtitle: 'Calendario completo',
+                      icon: Icons.calendar_month_rounded,
+                      color: appGreen,
+                      onTap: () => onNavigate(3),
+                    ),
+                    _ActionTile(
+                      title: tr('telegram'),
+                      subtitle: 'Canal oficial',
+                      icon: Icons.send_rounded,
+                      color: appBlue,
+                      onTap: onTelegram,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: _ActionTile(
+                        title: tr('contact'),
+                        subtitle: 'En caso de fallas',
+                        icon: Icons.chat_rounded,
+                        color: appGreen,
+                        onTap: onContact,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _ActionTile(
+                        title: tr('donations'),
+                        subtitle: 'Apoya el proyecto',
+                        icon: Icons.favorite_rounded,
+                        color: appYellow,
+                        onTap: onDonations,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 15),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 18,
                   ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    gradient: const LinearGradient(
+                      colors: <Color>[
+                        Color(0xFF07172D),
+                        Color(0xFF10113A),
+                        Color(0xFF071B2D),
+                      ],
+                    ),
+                    border: Border.all(color: appCyan.withAlpha(110)),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(color: appBlue.withAlpha(24), blurRadius: 18),
+                    ],
+                  ),
+                  child: const Row(
+                    children: <Widget>[
+                      Icon(Icons.sports_rounded, color: appPink, size: 34),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              '¡EL DEPORTE NOS UNE!',
+                              style: TextStyle(
+                                color: appCyan,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 14,
+                                letterSpacing: .5,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Tu pasión, en todas partes.',
+                              style: TextStyle(color: appMuted, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.bolt_rounded, color: appYellow, size: 28),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'La agenda online se abre dentro de la app; los partidos y la '
+                  'reproducción dependen del sitio y de la disponibilidad de '
+                  'cada señal.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: appMuted, fontSize: 10, height: 1.5),
                 ),
               ],
             ),
@@ -592,127 +716,124 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-Future<void> _launchExternal(BuildContext context, String value) async {
-  final uri = Uri.tryParse(value);
-  if (uri == null) return;
-
-  try {
-    final opened = await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    );
-
-    if (!opened && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudo abrir el enlace.')),
-      );
-    }
-  } catch (_) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudo abrir el enlace.')),
-      );
-    }
-  }
-}
-
-class _SportsStrip extends StatelessWidget {
-  const _SportsStrip();
-
+class _BrandHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final entries = <(IconData, String)>[
-      (Icons.sports_soccer_rounded, tr('football')),
-      (Icons.sports_basketball_rounded, tr('basketball')),
-      (Icons.sports_tennis_rounded, tr('tennis')),
-      (Icons.sports_mma_rounded, tr('combat')),
-      (Icons.sports_volleyball_rounded, tr('volleyball')),
-    ];
-
-    return SizedBox(
-      height: 74,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: entries.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 9),
-        itemBuilder: (context, index) {
-          final item = entries[index];
-
-          return Container(
-            width: 92,
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: panel.withValues(alpha: .84),
-              borderRadius: BorderRadius.circular(13),
-              border: Border.all(color: cyan.withValues(alpha: .35)),
+    return Container(
+      height: 178,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(17),
+        gradient: const RadialGradient(
+          center: Alignment.topCenter,
+          radius: 1.25,
+          colors: <Color>[
+            Color(0xFF10366B),
+            Color(0xFF080D25),
+            Color(0xFF040816),
+          ],
+        ),
+        border: Border.all(color: appCyan.withAlpha(170)),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: appCyan.withAlpha(30),
+            blurRadius: 18,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(color: appPink.withAlpha(18), blurRadius: 20),
+        ],
+      ),
+      child: Image.asset(
+        'assets/images/logo.png',
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Icon(Icons.emoji_events_rounded, color: appYellow, size: 50),
+            SizedBox(height: 8),
+            Text(
+              'DEPORTE TOTAL 360°',
+              style: TextStyle(
+                color: appCyan,
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+              ),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Icon(item.$1, color: cyan, size: 25),
-                const SizedBox(height: 4),
-                Text(
-                  item.$2,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 8,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
+          ],
+        ),
       ),
     );
   }
 }
 
-class _ActionTile extends StatelessWidget {
-  const _ActionTile({
-    required this.icon,
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading({required this.title, required this.icon});
+  final String title;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: <Widget>[
+          Icon(icon, color: appCyan, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: 12,
+                letterSpacing: .45,
+              ),
+            ),
+          ),
+        ],
+      );
+}
+
+class _SportTile extends StatelessWidget {
+  const _SportTile({
     required this.title,
     required this.subtitle,
+    required this.icon,
     required this.color,
     required this.onTap,
   });
 
-  final IconData icon;
   final String title;
   final String subtitle;
+  final IconData icon;
   final Color color;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: panel,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
+  Widget build(BuildContext context) => InkWell(
+        borderRadius: BorderRadius.circular(12),
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
         child: Container(
-          constraints: const BoxConstraints(minHeight: 106),
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: color.withValues(alpha: .85)),
+            borderRadius: BorderRadius.circular(12),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: <Color>[color.withAlpha(32), appPanel],
+            ),
+            border: Border.all(color: color.withAlpha(175)),
             boxShadow: <BoxShadow>[
-              BoxShadow(
-                color: color.withValues(alpha: .12),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
+              BoxShadow(color: color.withAlpha(18), blurRadius: 12),
             ],
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              Icon(icon, color: color, size: 30),
-              const SizedBox(height: 7),
+              Icon(icon, color: color, size: 28),
+              const SizedBox(height: 5),
               Text(
                 title,
                 textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 10,
@@ -723,18 +844,78 @@ class _ActionTile extends StatelessWidget {
               Text(
                 subtitle,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 8,
-                  fontWeight: FontWeight.w900,
-                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: appMuted, fontSize: 8),
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
+      );
+}
+
+class _ActionTile extends StatelessWidget {
+  const _ActionTile({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 86),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: <Color>[color.withAlpha(36), const Color(0xFF050C1D)],
+            ),
+            border: Border.all(color: color.withAlpha(215)),
+            boxShadow: <BoxShadow>[
+              BoxShadow(color: color.withAlpha(30), blurRadius: 14),
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(icon, color: color, size: 29),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: appMuted, fontSize: 9),
+              ),
+            ],
+          ),
+        ),
+      );
 }
 
 class LiveScreen extends StatelessWidget {
@@ -742,101 +923,113 @@ class LiveScreen extends StatelessWidget {
 
   Future<void> _openPlayer(BuildContext context) async {
     final slug = channelSlug.value.trim();
-
     if (slug.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('configure_first'))),
-      );
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
-          builder: (_) => const SettingsScreen(),
+        const SnackBar(
+          content: Text('Primero configura tu identificador de canal en Ajustes.'),
         ),
+      );
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
       );
       return;
     }
-
     await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => LivePlayerScreen(channel: slug),
-      ),
+      MaterialPageRoute<void>(builder: (_) => LivePlayerScreen(channel: slug)),
     );
   }
 
   Future<void> _openEncoder(BuildContext context) async {
     await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => const EncoderConfigScreen(),
-      ),
+      MaterialPageRoute<void>(builder: (_) => const EncoderConfigScreen()),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(tr('live'))),
+      backgroundColor: appBg,
+      appBar: AppBar(
+        title: Text(
+          tr('streams'),
+          style: const TextStyle(
+            color: appCyan,
+            fontWeight: FontWeight.w900,
+            fontSize: 14,
+          ),
+        ),
+      ),
       body: AppBackdrop(
         child: SafeArea(
+          top: false,
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
             children: <Widget>[
               Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: panel.withValues(alpha: .94),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: cyan.withValues(alpha: .8)),
+                  color: appPanel,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: appCyan.withAlpha(170)),
                 ),
-                child: Column(
+                child: const Column(
                   children: <Widget>[
-                    const Icon(
-                      Icons.live_tv_rounded,
-                      color: pink,
-                      size: 55,
-                    ),
-                    const SizedBox(height: 12),
+                    Icon(Icons.live_tv_rounded, color: appPink, size: 52),
+                    SizedBox(height: 12),
                     Text(
-                      tr('stream_setup'),
+                      'CANAL EN VIVO DE DEPORTE TOTAL 360°',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: cyan,
+                      style: TextStyle(
+                        color: appCyan,
                         fontWeight: FontWeight.w900,
-                        fontSize: 17,
+                        fontSize: 16,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     Text(
-                      tr('settings_help'),
+                      'El reproductor necesita un canal válido y una señal activa. '
+                      'Si el servidor está fuera de línea, se mostrará el error y '
+                      'podrás reintentar.',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: muted,
-                        height: 1.45,
+                      style: TextStyle(
+                        color: appMuted,
                         fontSize: 12,
+                        height: 1.45,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
-              _ChannelTile(
-                name: 'PRISM',
-                subtitle: tr('encoder'),
-                color: pink,
+              const SizedBox(height: 12),
+              _LiveActionCard(
+                title: 'PRISM LIVE STUDIO',
+                subtitle: 'Configurar datos para emitir desde tu encoder.',
                 icon: Icons.settings_input_antenna_rounded,
+                color: appPink,
                 onTap: () => _openEncoder(context),
               ),
-              const SizedBox(height: 12),
-              _ChannelTile(
-                name: 'SSH101',
-                subtitle: tr('live_here'),
-                color: cyan,
+              const SizedBox(height: 10),
+              _LiveActionCard(
+                title: 'SSH101 • REPRODUCCIÓN',
+                subtitle: 'Abrir la señal del canal configurado en Ajustes.',
                 icon: Icons.play_circle_fill_rounded,
+                color: appGreen,
                 onTap: () => _openPlayer(context),
               ),
-              const SizedBox(height: 18),
-              FilledButton.icon(
-                onPressed: () => openWeb(context),
-                icon: const Icon(Icons.calendar_month_rounded),
-                label: Text(tr('matches')),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const EncoderConfigScreen(),
+                  ),
+                ),
+                icon: const Icon(Icons.copy_rounded),
+                label: const Text('Ver configuración de emisión'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: appCyan,
+                  side: const BorderSide(color: appCyan),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                ),
               ),
             ],
           ),
@@ -846,80 +1039,65 @@ class LiveScreen extends StatelessWidget {
   }
 }
 
-class _ChannelTile extends StatelessWidget {
-  const _ChannelTile({
-    required this.name,
+class _LiveActionCard extends StatelessWidget {
+  const _LiveActionCard({
+    required this.title,
     required this.subtitle,
-    required this.color,
     required this.icon,
+    required this.color,
     required this.onTap,
   });
 
-  final String name;
+  final String title;
   final String subtitle;
-  final Color color;
   final IconData icon;
+  final Color color;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: panel,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
+  Widget build(BuildContext context) => InkWell(
+        borderRadius: BorderRadius.circular(13),
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: color),
-            boxShadow: <BoxShadow>[
-              BoxShadow(
-                color: color.withValues(alpha: .16),
-                blurRadius: 8,
-              ),
-            ],
+            color: appPanel,
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: color.withAlpha(185)),
           ),
           child: Row(
             children: <Widget>[
-              Icon(icon, color: color, size: 38),
+              Icon(icon, color: color, size: 35),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      name,
+                      title,
                       style: const TextStyle(
-                        fontSize: 17,
                         color: Colors.white,
                         fontWeight: FontWeight.w900,
+                        fontSize: 12,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 5),
                     Text(
                       subtitle,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
+                      style: const TextStyle(
+                        color: appMuted,
+                        fontSize: 11,
+                        height: 1.4,
                       ),
                     ),
                   ],
                 ),
               ),
-              const Icon(
-                Icons.arrow_forward_ios_rounded,
-                color: cyan,
-                size: 16,
-              ),
+              const Icon(Icons.chevron_right_rounded, color: appMuted),
             ],
           ),
         ),
-      ),
-    );
-  }
+      );
 }
 
 class EncoderConfigScreen extends StatelessWidget {
@@ -927,10 +1105,9 @@ class EncoderConfigScreen extends StatelessWidget {
 
   Future<void> _copy(BuildContext context, String value) async {
     await Clipboard.setData(ClipboardData(text: value));
-
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('copy_done'))),
+        const SnackBar(content: Text('Copiado al portapapeles.')),
       );
     }
   }
@@ -938,53 +1115,62 @@ class EncoderConfigScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final slug = channelSlug.value.trim();
-    final rtmp = slug.isEmpty ? '$rtmpBase<TU_CANAL>' : buildRtmpUrl(slug);
-    final hls = slug.isEmpty
-        ? '${hlsBase}<TU_CANAL>/playlist.m3u8'
-        : buildHlsUrl(slug);
+    final valid = slug.isNotEmpty &&
+        RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(slug);
+    final rtmp = valid ? buildRtmpUrl(slug) : '${rtmpBase}<TU_CANAL>';
+    final hls = valid
+        ? buildHlsUrl(slug)
+        : '${hlsBase}<TU_CANAL>/playlist.m3u8';
 
     return Scaffold(
-      appBar: AppBar(title: Text(tr('encoder'))),
-      body: AppBackdrop(
-        child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: <Widget>[
-              _InfoCard(
-                title: tr('rtmp'),
-                value: rtmp,
-                onCopy: () => _copy(context, rtmp),
-              ),
-              const SizedBox(height: 12),
-              _InfoCard(
-                title: tr('hls'),
-                value: hls,
-                onCopy: () => _copy(context, hls),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                tr('settings_help'),
-                style: const TextStyle(color: muted, height: 1.45),
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: () => Navigator.of(context).push<void>(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const SettingsScreen(),
-                  ),
-                ),
-                child: Text(tr('settings')),
-              ),
-            ],
+      backgroundColor: appBg,
+      appBar: AppBar(
+        title: const Text(
+          'CONFIGURAR TRANSMISIÓN',
+          style: TextStyle(
+            color: appCyan,
+            fontWeight: FontWeight.w900,
+            fontSize: 13,
           ),
+        ),
+      ),
+      body: AppBackdrop(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: <Widget>[
+            const Text(
+              'Configura estas direcciones en tu encoder únicamente si '
+              'corresponden a tu cuenta y canal activos.',
+              style: TextStyle(color: appMuted, height: 1.45),
+            ),
+            const SizedBox(height: 16),
+            _CopyInfoCard(
+              title: 'Servidor RTMP',
+              value: rtmp,
+              onCopy: () => _copy(context, rtmp),
+            ),
+            const SizedBox(height: 10),
+            _CopyInfoCard(
+              title: 'URL HLS de reproducción',
+              value: hls,
+              onCopy: () => _copy(context, hls),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Si la señal no aparece, verifica el estado de tu canal y '
+              'consulta la documentación del servicio. Estas direcciones '
+              'por sí solas no garantizan que exista una retransmisión activa.',
+              style: TextStyle(color: appMuted, fontSize: 12, height: 1.5),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _InfoCard extends StatelessWidget {
-  const _InfoCard({
+class _CopyInfoCard extends StatelessWidget {
+  const _CopyInfoCard({
     required this.title,
     required this.value,
     required this.onCopy,
@@ -995,47 +1181,44 @@ class _InfoCard extends StatelessWidget {
   final VoidCallback onCopy;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: panel.withValues(alpha: .94),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: cyan.withValues(alpha: .5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            title,
-            style: const TextStyle(
-              color: cyan,
-              fontWeight: FontWeight.w900,
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: appPanel,
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(color: appLine),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              title,
+              style: const TextStyle(
+                color: appCyan,
+                fontWeight: FontWeight.w900,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          SelectableText(
-            value,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: OutlinedButton.icon(
-              onPressed: onCopy,
-              icon: const Icon(Icons.copy_rounded),
-              label: Text(tr('copy')),
+            const SizedBox(height: 8),
+            SelectableText(
+              value,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
             ),
-          ),
-        ],
-      ),
-    );
-  }
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: onCopy,
+                icon: const Icon(Icons.copy_rounded, size: 17),
+                label: const Text('Copiar'),
+                style: TextButton.styleFrom(foregroundColor: appGreen),
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 class LivePlayerScreen extends StatefulWidget {
   const LivePlayerScreen({super.key, required this.channel});
-
   final String channel;
 
   @override
@@ -1044,10 +1227,8 @@ class LivePlayerScreen extends StatefulWidget {
 
 class _LivePlayerScreenState extends State<LivePlayerScreen> {
   VideoPlayerController? _controller;
-  bool _initializing = true;
   String? _error;
-
-  String get _hlsUrl => buildHlsUrl(widget.channel);
+  bool _loading = true;
 
   @override
   void initState() {
@@ -1056,40 +1237,53 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
   }
 
   Future<void> _initializePlayer() async {
-    if (mounted) {
+    final slug = widget.channel.trim();
+    if (slug.isEmpty || !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(slug)) {
       setState(() {
-        _initializing = true;
-        _error = null;
+        _loading = false;
+        _error = 'El identificador del canal no es válido. Abre Ajustes y revísalo.';
       });
+      return;
     }
 
-    final old = _controller;
+    final uri = Uri.tryParse(buildHlsUrl(slug));
+    if (uri == null ||
+        uri.host.isEmpty ||
+        (uri.scheme != 'https' && uri.scheme != 'http')) {
+      setState(() {
+        _loading = false;
+        _error = 'La dirección de reproducción no es válida.';
+      });
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final oldController = _controller;
     _controller = null;
+    await oldController?.dispose();
 
-    if (old != null) {
-      await old.dispose();
-    }
-
-    final controller = VideoPlayerController.networkUrl(
-      Uri.parse(_hlsUrl),
-    );
+    final controller = VideoPlayerController.networkUrl(uri);
     _controller = controller;
-
     try {
       await controller.initialize();
       await controller.setLooping(false);
-
-      if (!mounted) return;
-
-      setState(() => _initializing = false);
-      await controller.play();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() => _loading = false);
     } catch (_) {
       if (!mounted) return;
-
       setState(() {
-        _initializing = false;
-        _error = tr('stream_error');
+        _loading = false;
+        _error =
+            'No se pudo abrir el canal. Puede estar fuera de línea o no permitir esta conexión.';
       });
+      await controller.dispose();
+      if (identical(_controller, controller)) _controller = null;
     }
   }
 
@@ -1102,100 +1296,139 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
-
     return Scaffold(
-      appBar: AppBar(title: Text(tr('player'))),
+      backgroundColor: appBg,
+      appBar: AppBar(
+        title: const Text(
+          'CANAL EN VIVO',
+          style: TextStyle(
+            color: appCyan,
+            fontWeight: FontWeight.w900,
+            fontSize: 14,
+          ),
+        ),
+      ),
       body: AppBackdrop(
-        child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: <Widget>[
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: cyan),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: AspectRatio(
-                  aspectRatio: controller != null &&
-                          controller.value.isInitialized
-                      ? controller.value.aspectRatio
-                      : 16 / 9,
-                  child: _initializing
-                      ? const Center(
-                          child: CircularProgressIndicator(color: cyan),
-                        )
-                      : _error != null
-                          ? Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Text(
+        child: ListView(
+          padding: const EdgeInsets.all(14),
+          children: <Widget>[
+            Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: appCyan),
+              ),
+              child: AspectRatio(
+                aspectRatio: controller?.value.isInitialized == true
+                    ? controller!.value.aspectRatio
+                    : 16 / 9,
+                child: _loading
+                    ? const Center(
+                        child: CircularProgressIndicator(color: appCyan),
+                      )
+                    : _error != null
+                        ? Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: <Widget>[
+                                const Icon(
+                                  Icons.portable_wifi_off_rounded,
+                                  color: appRed,
+                                  size: 42,
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
                                   _error!,
                                   textAlign: TextAlign.center,
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                              ),
-                            )
-                          : controller != null &&
-                                  controller.value.isInitialized
-                              ? VideoPlayer(controller)
-                              : Center(
-                                  child: Text(
-                                    tr('stream_error'),
-                                    textAlign: TextAlign.center,
-                                    style:
-                                        const TextStyle(color: Colors.white),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
                                   ),
                                 ),
+                                const SizedBox(height: 12),
+                                OutlinedButton.icon(
+                                  onPressed: _initializePlayer,
+                                  icon: const Icon(Icons.refresh_rounded),
+                                  label: const Text('Reintentar'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: appCyan,
+                                    side: const BorderSide(color: appCyan),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : controller == null || !controller.value.isInitialized
+                            ? const Center(
+                                child: Text(
+                                  'El reproductor no está disponible.',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              )
+                            : ValueListenableBuilder<VideoPlayerValue>(
+                                valueListenable: controller,
+                                builder: (context, value, _) => Stack(
+                                  alignment: Alignment.center,
+                                  children: <Widget>[
+                                    VideoPlayer(controller),
+                                    if (!value.isPlaying)
+                                      IconButton.filled(
+                                        onPressed: () => controller.play(),
+                                        iconSize: 44,
+                                        icon: const Icon(Icons.play_arrow_rounded),
+                                        style: IconButton.styleFrom(
+                                          backgroundColor: appBlue,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (controller != null &&
+                controller.value.isInitialized &&
+                _error == null)
+              FilledButton.icon(
+                onPressed: () async {
+                  if (controller.value.isPlaying) {
+                    await controller.pause();
+                  } else {
+                    await controller.play();
+                  }
+                  if (mounted) setState(() {});
+                },
+                icon: Icon(
+                  controller.value.isPlaying
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded,
+                ),
+                label: Text(
+                  controller.value.isPlaying ? 'Pausar' : 'Reproducir',
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: appBlue,
+                  foregroundColor: Colors.white,
                 ),
               ),
-              const SizedBox(height: 12),
-              if (_error != null)
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _initializePlayer,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: Text(tr('retry')),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: liveRed,
-                      foregroundColor: Colors.white,
-                      elevation: 7,
-                      shadowColor: liveRed,
-                    ),
-                  ),
-                )
-              else if (!_initializing &&
-                  controller != null &&
-                  controller.value.isInitialized)
-                ValueListenableBuilder<VideoPlayerValue>(
-                  valueListenable: controller,
-                  builder: (context, value, _) => SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () => value.isPlaying
-                          ? controller.pause()
-                          : controller.play(),
-                      icon: Icon(
-                        value.isPlaying
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                      ),
-                      label: Text(
-                        value.isPlaying ? tr('pause') : tr('play'),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: value.isPlaying ? panel : liveRed,
-                        foregroundColor: Colors.white,
-                        elevation: 7,
-                        shadowColor: liveRed,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+            const SizedBox(height: 8),
+            Text(
+              'Canal configurado: ${widget.channel}',
+              style: const TextStyle(
+                color: appCyan,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'La reproducción depende de que el servidor entregue una '
+              'señal compatible y que tengas permiso para acceder a ella.',
+              style: TextStyle(color: appMuted, fontSize: 12, height: 1.45),
+            ),
+          ],
         ),
       ),
     );
@@ -1211,49 +1444,68 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _channelController;
+  late final TextEditingController _telegramController;
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
     _channelController = TextEditingController(text: channelSlug.value);
+    _telegramController = TextEditingController(text: telegramLink.value);
   }
 
   @override
   void dispose() {
     _channelController.dispose();
+    _telegramController.dispose();
     super.dispose();
   }
 
-  Future<void> _saveChannel() async {
+  Future<void> _save() async {
     final slug = _channelController.text.trim();
+    final link = _telegramController.text.trim();
 
-    if (slug.isNotEmpty &&
-        !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(slug)) {
+    if (slug.isNotEmpty && !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(slug)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('invalid_channel'))),
+        const SnackBar(
+          content: Text(
+            'El identificador de canal solo puede contener letras, números, guion y guion bajo.',
+          ),
+        ),
       );
       return;
     }
 
-    setState(() => _saving = true);
+    if (link.isNotEmpty) {
+      final uri = Uri.tryParse(link);
+      if (uri == null ||
+          uri.scheme != 'https' ||
+          (uri.host != 't.me' && uri.host != 'telegram.me')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Usa el enlace público real https://t.me/tu_canal.'),
+          ),
+        );
+        return;
+      }
+    }
 
+    setState(() => _saving = true);
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('ssh101_channel', slug);
+      await prefs.setString('telegram_public_link', link);
       channelSlug.value = slug;
-
+      telegramLink.value = link;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(tr('saved'))),
+          const SnackBar(content: Text('Configuración guardada.')),
         );
       }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No se pudo guardar la configuración.'),
-          ),
+          const SnackBar(content: Text('No se pudo guardar. Vuelve a intentarlo.')),
         );
       }
     } finally {
@@ -1263,330 +1515,308 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _setLanguage(AppLanguage? value) async {
     if (value == null) return;
-
     appLanguage.value = value;
-
+    setState(() {});
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('app_language', languageCode(value));
     } catch (_) {
-      // El idioma sigue activo en esta sesión si falla el almacenamiento.
+      // El idioma permanece activo durante esta sesión.
     }
-
-    if (mounted) setState(() {});
   }
 
-  Future<void> _copy(BuildContext context, String value) async {
+  Future<void> _copy(String value) async {
     await Clipboard.setData(ClipboardData(text: value));
-
-    if (context.mounted) {
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('copy_done'))),
+        const SnackBar(content: Text('Copiado al portapapeles.')),
       );
     }
   }
 
-  Widget _damianBanner() {
-    return Container(
-      height: 132,
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[
-            Color(0xDD06152D),
-            Color(0xCC15082D),
-            Color(0xDD031E2B),
+  Widget _settingsCard({required Color border, required Widget child}) =>
+      Container(
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          color: appPanel.withAlpha(235),
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: border.withAlpha(190)),
+          boxShadow: <BoxShadow>[
+            BoxShadow(color: border.withAlpha(16), blurRadius: 15),
           ],
         ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cyan.withValues(alpha: .9), width: 1.5),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: cyan.withValues(alpha: .26),
-            blurRadius: 20,
-            spreadRadius: 1,
-            offset: const Offset(0, 5),
-          ),
-          BoxShadow(
-            color: pink.withValues(alpha: .16),
-            blurRadius: 24,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: <Widget>[
-          const Positioned(
-            left: 12,
-            top: 10,
-            child: Icon(
-              Icons.sports_soccer_rounded,
-              color: yellow,
-              size: 24,
-            ),
-          ),
-          const Positioned(
-            right: 12,
-            bottom: 10,
-            child: Icon(
-              Icons.bolt_rounded,
-              color: green,
-              size: 25,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                const Text(
-                  'DAMIAN.APK',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: cyan,
-                    fontSize: 27,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 2,
-                    shadows: <Shadow>[
-                      Shadow(
-                        color: cyan,
-                        blurRadius: 7,
-                      ),
-                      Shadow(
-                        color: cyan,
-                        blurRadius: 18,
-                      ),
-                      Shadow(
-                        color: pink,
-                        blurRadius: 28,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: 95,
-                  height: 3,
-                  decoration: BoxDecoration(
-                    color: pink,
-                    borderRadius: BorderRadius.circular(99),
-                    boxShadow: const <BoxShadow>[
-                      BoxShadow(color: pink, blurRadius: 9),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'DEPORTE TOTAL 360°',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+        child: child,
+      );
 
   @override
   Widget build(BuildContext context) {
     final slug = _channelController.text.trim();
     final valid =
         slug.isNotEmpty && RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(slug);
-    final rtmp = valid ? buildRtmpUrl(slug) : '$rtmpBase<TU_CANAL>';
-    final hls =
-        valid ? buildHlsUrl(slug) : '${hlsBase}<TU_CANAL>/playlist.m3u8';
+    final rtmp = valid ? buildRtmpUrl(slug) : '${rtmpBase}<TU_CANAL>';
+    final hls = valid
+        ? buildHlsUrl(slug)
+        : '${hlsBase}<TU_CANAL>/playlist.m3u8';
 
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: appBg,
       appBar: AppBar(
         title: Text(
-          tr('settings'),
+          tr('settings').toUpperCase(),
           style: const TextStyle(
-            color: cyan,
+            color: appCyan,
             fontWeight: FontWeight.w900,
+            fontSize: 14,
           ),
         ),
-        backgroundColor: const Color(0xEE071B35),
       ),
       body: SettingsBackdrop(
-        child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: <Widget>[
-              _damianBanner(),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: panel.withValues(alpha: .82),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: cyan.withValues(alpha: .8),
-                  ),
-                  boxShadow: <BoxShadow>[
-                    BoxShadow(
-                      color: cyan.withValues(alpha: .12),
-                      blurRadius: 12,
-                    ),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
+          children: <Widget>[
+            Container(
+              height: 125,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: const LinearGradient(
+                  colors: <Color>[
+                    Color(0xDD06152D),
+                    Color(0xCC15082D),
+                    Color(0xDD031E2B),
                   ],
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      tr('language'),
-                      style: const TextStyle(
-                        color: cyan,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<AppLanguage>(
-                      value: appLanguage.value,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        filled: true,
-                        fillColor: Color(0xDD06152D),
-                      ),
-                      items: const <DropdownMenuItem<AppLanguage>>[
-                        DropdownMenuItem(
-                          value: AppLanguage.spanish,
-                          child: Text('Español'),
-                        ),
-                        DropdownMenuItem(
-                          value: AppLanguage.english,
-                          child: Text('English'),
-                        ),
-                        DropdownMenuItem(
-                          value: AppLanguage.portuguese,
-                          child: Text('Português'),
-                        ),
-                        DropdownMenuItem(
-                          value: AppLanguage.french,
-                          child: Text('Français'),
-                        ),
-                      ],
-                      onChanged: _setLanguage,
-                    ),
-                  ],
-                ),
+                border: Border.all(color: appCyan.withAlpha(200)),
+                boxShadow: <BoxShadow>[
+                  BoxShadow(color: appCyan.withAlpha(25), blurRadius: 18),
+                ],
               ),
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: panel.withValues(alpha: .86),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: pink.withValues(alpha: .8),
+              child: Row(
+                children: <Widget>[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.asset(
+                      'assets/images/app_icon.png',
+                      width: 88,
+                      height: 88,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.emoji_events_rounded,
+                        color: appYellow,
+                        size: 62,
+                      ),
+                    ),
                   ),
-                  boxShadow: <BoxShadow>[
-                    BoxShadow(
-                      color: pink.withValues(alpha: .12),
-                      blurRadius: 12,
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      tr('stream_setup'),
-                      style: const TextStyle(
-                        color: cyan,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      tr('channel_slug'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 7),
-                    TextField(
-                      controller: _channelController,
-                      textInputAction: TextInputAction.done,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      onChanged: (_) => setState(() {}),
-                      decoration: InputDecoration(
-                        hintText: tr('channel_hint'),
-                        border: const OutlineInputBorder(),
-                        filled: true,
-                        fillColor: const Color(0xDD06152D),
-                        prefixIcon: const Icon(Icons.live_tv_rounded),
-                      ),
-                    ),
-                    const SizedBox(height: 7),
-                    Text(
-                      tr('settings_help'),
-                      style: const TextStyle(
-                        color: muted,
-                        fontSize: 12,
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _saving ? null : _saveChannel,
-                        icon: const Icon(Icons.save_rounded),
-                        label: Text(_saving ? '…' : tr('save')),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: green,
-                          foregroundColor: bg,
-                          elevation: 8,
-                          shadowColor: green,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          'DEPORTE TOTAL 360°',
+                          style: TextStyle(
+                            color: appCyan,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
                           ),
                         ),
+                        SizedBox(height: 6),
+                        Text(
+                          'Ajustes de la aplicación',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'DAMIAN.APK',
+                          style: TextStyle(
+                            color: appPink,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.1,
+                            fontSize: 11,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Configura tu idioma y tus enlaces oficiales.',
+                          style: TextStyle(color: appMuted, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 13),
+            _settingsCard(
+              border: appCyan,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    tr('settings'),
+                    style: const TextStyle(
+                      color: appCyan,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Idioma',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  DropdownButtonFormField<AppLanguage>(
+                    value: appLanguage.value,
+                    decoration: const InputDecoration(
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    _InfoCard(
-                      title: tr('rtmp'),
-                      value: rtmp,
-                      onCopy: () => _copy(context, rtmp),
-                    ),
-                    const SizedBox(height: 10),
-                    _InfoCard(
-                      title: tr('hls'),
-                      value: hls,
-                      onCopy: () => _copy(context, hls),
-                    ),
-                  ],
-                ),
+                    items: const <DropdownMenuItem<AppLanguage>>[
+                      DropdownMenuItem(
+                        value: AppLanguage.spanish,
+                        child: Text('Español'),
+                      ),
+                      DropdownMenuItem(
+                        value: AppLanguage.english,
+                        child: Text('English'),
+                      ),
+                      DropdownMenuItem(
+                        value: AppLanguage.portuguese,
+                        child: Text('Português'),
+                      ),
+                      DropdownMenuItem(
+                        value: AppLanguage.french,
+                        child: Text('Français'),
+                      ),
+                    ],
+                    onChanged: _setLanguage,
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              Text(
-                tr('settings_help'),
-                style: const TextStyle(
-                  color: Colors.white,
-                  height: 1.45,
-                  shadows: <Shadow>[
-                    Shadow(color: bg, blurRadius: 8),
-                  ],
-                ),
+            ),
+            const SizedBox(height: 12),
+            _settingsCard(
+              border: appPink,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text(
+                    'CANAL DE TELEGRAM',
+                    style: TextStyle(
+                      color: appCyan,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Este espacio queda reservado para tu canal real. No se '
+                    'abrirá ningún enlace genérico si lo dejas vacío.',
+                    style: TextStyle(
+                      color: appMuted,
+                      fontSize: 12,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 11),
+                  TextField(
+                    controller: _telegramController,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    decoration: const InputDecoration(
+                      labelText: 'Enlace público (opcional)',
+                      hintText: 'https://t.me/tu_canal',
+                      prefixIcon: Icon(Icons.send_rounded),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 12),
+            _settingsCard(
+              border: appGreen,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text(
+                    'CONFIGURACIÓN DE TRANSMISIÓN',
+                    style: TextStyle(
+                      color: appCyan,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Escribe el identificador del canal que has creado en el '
+                    'servicio de emisión. No pegues contraseñas ni tokens aquí.',
+                    style: TextStyle(
+                      color: appMuted,
+                      fontSize: 12,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 11),
+                  TextField(
+                    controller: _channelController,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      labelText: 'Identificador de canal',
+                      hintText: 'NombreDeTuCanal',
+                      prefixIcon: Icon(Icons.live_tv_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _saving ? null : _save,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: appGreen,
+                        foregroundColor: appBg,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      icon: const Icon(Icons.save_rounded),
+                      label: Text(
+                        _saving ? 'Guardando…' : 'GUARDAR CONFIGURACIÓN',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _CopyInfoCard(
+                    title: 'Servidor RTMP para emitir',
+                    value: rtmp,
+                    onCopy: () => _copy(rtmp),
+                  ),
+                  const SizedBox(height: 9),
+                  _CopyInfoCard(
+                    title: 'URL HLS de reproducción',
+                    value: hls,
+                    onCopy: () => _copy(hls),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 13),
+            const Text(
+              'Las transmisiones requieren que el canal y el servidor estén '
+              'activos. La agenda nativa necesita una fuente de calendario '
+              'autorizada que todavía no está configurada en este proyecto.',
+              style: TextStyle(color: appMuted, fontSize: 11, height: 1.5),
+            ),
+          ],
         ),
       ),
     );
@@ -1597,45 +1827,96 @@ class DonationsScreen extends StatelessWidget {
   const DonationsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(tr('support'))),
-      body: AppBackdrop(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(22),
-            child: Container(
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                color: panel.withValues(alpha: .95),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: pink),
-              ),
-              child: const Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Icon(Icons.favorite_rounded, color: pink, size: 54),
-                  SizedBox(height: 12),
-                  Text(
-                    'GRACIAS POR APOYAR',
-                    style: TextStyle(
-                      color: cyan,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 18,
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: appBg,
+        appBar: AppBar(
+          title: Text(
+            tr('donations'),
+            style: const TextStyle(
+              color: appCyan,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        body: AppBackdrop(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Container(
+                padding: const EdgeInsets.all(22),
+                decoration: BoxDecoration(
+                  color: appPanel,
+                  borderRadius: BorderRadius.circular(19),
+                  border: Border.all(color: appPink),
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(color: appPink.withAlpha(25), blurRadius: 22),
+                  ],
+                ),
+                child: const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(Icons.favorite_rounded, color: appPink, size: 56),
+                    SizedBox(height: 13),
+                    Text(
+                      'GRACIAS POR APOYAR',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: appCyan,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                      ),
                     ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Esta sección queda preparada para añadir el enlace oficial de apoyo cuando esté disponible.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: muted, height: 1.4),
-                  ),
-                ],
+                    SizedBox(height: 9),
+                    Text(
+                      'Tu apoyo ayuda a mantener y mejorar Deporte Total 360°. '
+                      'El cobro todavía no está conectado; no se realizará '
+                      'ningún pago desde esta pantalla.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: appMuted, height: 1.5),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
-      ),
+      );
+}
+
+Future<void> openExternalLink(
+  BuildContext context,
+  String value, {
+  String label = 'enlace',
+}) async {
+  final uri = Uri.tryParse(value.trim());
+  if (uri == null ||
+      (uri.scheme != 'https' && uri.scheme != 'http') ||
+      uri.host.isEmpty) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No hay un enlace válido configurado para $label.'),
+        ),
+      );
+    }
+    return;
+  }
+
+  try {
+    final opened = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
     );
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo abrir $label.')),
+      );
+    }
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo abrir $label.')),
+      );
+    }
   }
 }
