@@ -6,6 +6,7 @@ import 'package:video_player/video_player.dart';
 
 import 'agenda_screen.dart';
 import 'fantasy_screen.dart';
+import 'news_screen.dart';
 import 'web_agenda_screen.dart';
 
 // Identidad visual de DEPORTE TOTAL 360°: azul noche, cian, rosa y verde neón.
@@ -103,6 +104,12 @@ const Map<String, Map<AppLanguage, String>> _labels =
     AppLanguage.portuguese: 'Agenda',
     AppLanguage.french: 'Agenda',
   },
+  'news': <AppLanguage, String>{
+    AppLanguage.spanish: 'Noticias',
+    AppLanguage.english: 'News',
+    AppLanguage.portuguese: 'Notícias',
+    AppLanguage.french: 'Actualités',
+  },
   'settings': <AppLanguage, String>{
     AppLanguage.spanish: 'Ajustes',
     AppLanguage.english: 'Settings',
@@ -138,6 +145,90 @@ const Map<String, Map<AppLanguage, String>> _labels =
     AppLanguage.english: 'DONATIONS',
     AppLanguage.portuguese: 'DOAÇÕES',
     AppLanguage.french: 'DONS',
+  },
+  'language': {
+    AppLanguage.spanish: 'Idioma',
+    AppLanguage.english: 'Language',
+    AppLanguage.portuguese: 'Idioma',
+    AppLanguage.french: 'Langue',
+  },
+  'settings_description': {
+    AppLanguage.spanish: 'Ajustes de la aplicación',
+    AppLanguage.english: 'Application settings',
+    AppLanguage.portuguese: 'Configurações do aplicativo',
+    AppLanguage.french: 'Paramètres de l’application',
+  },
+  'settings_intro': {
+    AppLanguage.spanish: 'Configura tu idioma y tus enlaces oficiales.',
+    AppLanguage.english: 'Configure your language and official links.',
+    AppLanguage.portuguese: 'Configure seu idioma e links oficiais.',
+    AppLanguage.french: 'Configurez votre langue et vos liens officiels.',
+  },
+  'telegram_section': {
+    AppLanguage.spanish: 'CANAL DE TELEGRAM',
+    AppLanguage.english: 'TELEGRAM CHANNEL',
+    AppLanguage.portuguese: 'CANAL DO TELEGRAM',
+    AppLanguage.french: 'CHAÎNE TELEGRAM',
+  },
+  'telegram_description': {
+    AppLanguage.spanish: 'Este espacio queda reservado para tu canal real. No se abrirá ningún enlace genérico si lo dejas vacío.',
+    AppLanguage.english: 'This space is reserved for your real channel. No generic link will open if you leave it empty.',
+    AppLanguage.portuguese: 'Este espaço fica reservado para seu canal real. Nenhum link genérico será aberto se ficar vazio.',
+    AppLanguage.french: 'Cet espace est réservé à votre véritable chaîne. Aucun lien générique ne sera ouvert si vous le laissez vide.',
+  },
+  'public_link': {
+    AppLanguage.spanish: 'Enlace público (opcional)',
+    AppLanguage.english: 'Public link (optional)',
+    AppLanguage.portuguese: 'Link público (opcional)',
+    AppLanguage.french: 'Lien public (facultatif)',
+  },
+  'stream_config': {
+    AppLanguage.spanish: 'CONFIGURACIÓN DE TRANSMISIÓN',
+    AppLanguage.english: 'STREAMING SETTINGS',
+    AppLanguage.portuguese: 'CONFIGURAÇÃO DE TRANSMISSÃO',
+    AppLanguage.french: 'CONFIGURATION DE DIFFUSION',
+  },
+  'stream_description': {
+    AppLanguage.spanish: 'Escribe el identificador del canal que has creado en el servicio de emisión. No pegues contraseñas ni tokens aquí.',
+    AppLanguage.english: 'Enter the channel ID you created in the streaming service. Do not paste passwords or tokens here.',
+    AppLanguage.portuguese: 'Digite o identificador do canal criado no serviço de transmissão. Não cole senhas nem tokens aqui.',
+    AppLanguage.french: 'Saisissez l’identifiant de votre chaîne. Ne collez pas de mots de passe ni de jetons ici.',
+  },
+  'channel_id': {
+    AppLanguage.spanish: 'Identificador de canal',
+    AppLanguage.english: 'Channel ID',
+    AppLanguage.portuguese: 'Identificador do canal',
+    AppLanguage.french: 'Identifiant de chaîne',
+  },
+  'save_config': {
+    AppLanguage.spanish: 'GUARDAR CONFIGURACIÓN',
+    AppLanguage.english: 'SAVE SETTINGS',
+    AppLanguage.portuguese: 'SALVAR CONFIGURAÇÃO',
+    AppLanguage.french: 'ENREGISTRER',
+  },
+  'saving': {
+    AppLanguage.spanish: 'Guardando…',
+    AppLanguage.english: 'Saving…',
+    AppLanguage.portuguese: 'Salvando…',
+    AppLanguage.french: 'Enregistrement…',
+  },
+  'rtmp_server': {
+    AppLanguage.spanish: 'Servidor RTMP para emitir',
+    AppLanguage.english: 'RTMP streaming server',
+    AppLanguage.portuguese: 'Servidor RTMP para transmissão',
+    AppLanguage.french: 'Serveur RTMP de diffusion',
+  },
+  'hls_url': {
+    AppLanguage.spanish: 'URL HLS de reproducción',
+    AppLanguage.english: 'HLS playback URL',
+    AppLanguage.portuguese: 'URL HLS de reprodução',
+    AppLanguage.french: 'URL HLS de lecture',
+  },
+  'stream_notice': {
+    AppLanguage.spanish: 'Las transmisiones requieren que el canal y el servidor estén activos. La agenda nativa necesita una fuente de calendario autorizada que todavía no está configurada en este proyecto.',
+    AppLanguage.english: 'Streaming requires an active channel and server. The native schedule still needs an authorized calendar source, which is not configured in this project.',
+    AppLanguage.portuguese: 'As transmissões exigem que o canal e o servidor estejam ativos. A agenda nativa ainda precisa de uma fonte de calendário autorizada.',
+    AppLanguage.french: 'La diffusion nécessite une chaîne et un serveur actifs. Le calendrier natif nécessite encore une source autorisée qui n’est pas configurée.',
   },
 };
 
@@ -217,7 +308,7 @@ class _MainShellState extends State<MainShell> {
   static const int _homeTab = 0;
   static const int _footballTab = 1;
   static const int _agendaWebTab = 3;
-  static const int _settingsTab = 4;
+  static const int _settingsTab = 5;
 
   final GlobalKey<WebAgendaScreenState> _webAgendaKey =
       GlobalKey<WebAgendaScreenState>();
@@ -370,6 +461,7 @@ class _MainShellState extends State<MainShell> {
         key: _webAgendaKey,
         onExit: () => _selectTab(_homeTab),
       ),
+      const NewsScreen(),
       const SettingsScreen(),
     ];
 
@@ -437,6 +529,14 @@ class _MainShellState extends State<MainShell> {
                     color: appGreen,
                   ),
                   label: tr('agenda'),
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.article_outlined),
+                  selectedIcon: const Icon(
+                    Icons.article_rounded,
+                    color: appGreen,
+                  ),
+                  label: tr('news'),
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.settings_outlined),
@@ -591,7 +691,7 @@ class HomeDashboard extends StatelessWidget {
         actions: <Widget>[
           IconButton(
             tooltip: tr('settings'),
-            onPressed: () => onNavigate(4),
+            onPressed: () => onNavigate(5),
             icon: const Icon(Icons.settings_rounded, color: appCyan),
           ),
         ],
@@ -1741,7 +1841,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         SizedBox(height: 6),
                         Text(
-                          'Ajustes de la aplicación',
+                          tr('settings_description'),
                           style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
@@ -1759,7 +1859,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         SizedBox(height: 4),
                         Text(
-                          'Configura tu idioma y tus enlaces oficiales.',
+                          tr('settings_intro'),
                           style: TextStyle(color: appMuted, fontSize: 11),
                         ),
                       ],
@@ -1783,8 +1883,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  const Text(
-                    'Idioma',
+                  Text(
+                    tr('language'),
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w800,
@@ -1828,10 +1928,120 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  const Text(
-                    'CANAL DE TELEGRAM',
+                  Text(
+                    tr('telegram_section').toUpperCase(),
                     style: TextStyle(
                       color: appCyan,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    tr('telegram_description'),
+                    style: TextStyle(
+                      color: appMuted,
+                      fontSize: 12,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 11),
+                  TextField(
+                    controller: _telegramController,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    decoration: InputDecoration(
+                      labelText: tr('public_link'),
+                      hintText: 'https://t.me/tu_canal',
+                      prefixIcon: Icon(Icons.send_rounded),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            _settingsCard(
+              border: appGreen,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    tr('stream_config').toUpperCase(),
+                    style: TextStyle(
+                      color: appCyan,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    tr('stream_description'),
+                    style: TextStyle(
+                      color: appMuted,
+                      fontSize: 12,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 11),
+                  TextField(
+                    controller: _channelController,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      labelText: tr('channel_id'),
+                      hintText: 'NombreDeTuCanal',
+                      prefixIcon: Icon(Icons.live_tv_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _saving ? null : _save,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: appGreen,
+                        foregroundColor: appBg,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      icon: const Icon(Icons.save_rounded),
+                      label: Text(
+                        _saving ? tr('saving') : tr('save_config'),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _CopyInfoCard(
+                    title: tr('rtmp_server'),
+                    value: rtmp,
+                    onCopy: () => _copy(rtmp),
+                  ),
+                  const SizedBox(height: 9),
+                  _CopyInfoCard(
+                    title: tr('hls_url'),
+                    value: hls,
+                    onCopy: () => _copy(hls),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 13),
+            Text(
+              tr('stream_notice'),
+              style: TextStyle(
+                color: appMuted,
+                fontSize: 11,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+ color: appCyan,
                       fontWeight: FontWeight.w900,
                       fontSize: 15,
                     ),
