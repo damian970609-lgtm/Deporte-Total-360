@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
 import 'agenda_screen.dart';
+import 'fantasy_screen.dart';
 import 'web_agenda_screen.dart';
 
 // Identidad visual de DEPORTE TOTAL 360°: azul noche, cian, rosa y verde neón.
@@ -20,12 +21,17 @@ const Color appYellow = Color(0xFFFFD600);
 const Color appRed = Color(0xFFFF3155);
 const Color appMuted = Color(0xFFA9BDD6);
 
+// Se conservan las direcciones de servidor que ya existían en el proyecto.
+// No se usan para los partidos de la agenda; la agenda solo acepta fuentes
+// verificadas que le sean suministradas por una API autorizada.
 const String rtmpBase = 'rtmp://ssh101.bozztv.com/ssh101/';
 const String hlsBase = 'https://live21.bozztv.com/akamaissh101/ssh101/';
 const String contactUrl = 'https://wa.me/5927214741';
 const String settingsPhotoAsset =
     'assets/images/file_000000006048820e9e0720f1adf548f1.png';
 
+// No se inventa el enlace del canal Telegram: queda vacío hasta que el dueño
+// guarde su enlace público real desde Ajustes.
 enum AppLanguage { spanish, english, portuguese, french }
 
 final ValueNotifier<AppLanguage> appLanguage =
@@ -208,31 +214,56 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
-  int _selectedIndex = 0;
+  static const int _homeTab = 0;
+  static const int _footballTab = 1;
+  static const int _agendaWebTab = 3;
+  static const int _settingsTab = 4;
+
+  final GlobalKey<WebAgendaScreenState> _webAgendaKey =
+      GlobalKey<WebAgendaScreenState>();
+
+  int _selectedIndex = _homeTab;
   String _agendaSport = 'Fútbol';
+  bool _handlingBack = false;
 
   void _selectTab(int index) {
+    if (index < 0 || index > _settingsTab) return;
     setState(() {
       _selectedIndex = index;
-      if (index == 1) _agendaSport = 'Fútbol';
-      if (index == 3) _agendaSport = 'Todos';
+      if (index == _footballTab) _agendaSport = 'Fútbol';
     });
   }
 
   void _selectSport(String sport) {
     setState(() {
       _agendaSport = sport;
-      // Los mosaicos deportivos abren la agenda nativa filtrada por deporte.
-      // La pestaña principal Agenda abre la web dentro del marco de la app.
-      _selectedIndex = 1;
+      // Los mosaicos abren la agenda nativa filtrada por deporte.
+      // La pestaña inferior Agenda abre la web dentro de la app.
+      _selectedIndex = _footballTab;
     });
+  }
+
+  Future<void> _openFantasy() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const FantasyScreen(),
+      ),
+    );
+  }
+
+  Future<void> _openDonations() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const DonationsScreen(),
+      ),
+    );
   }
 
   Future<void> _openTelegram() async {
     final link = telegramLink.value.trim();
     if (link.isEmpty) {
       if (!mounted) return;
-      showDialog<void>(
+      await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
           backgroundColor: appPanel,
@@ -241,7 +272,7 @@ class _MainShellState extends State<MainShell> {
             style: TextStyle(color: appCyan, fontWeight: FontWeight.w900),
           ),
           content: const Text(
-            'Este espacio está reservado para tu canal. Todavía no hay un '
+            'Este espacio queda reservado para tu canal. Todavía no hay un '
             'enlace público configurado; no abriremos un canal genérico ni '
             'uno inventado.',
             style: TextStyle(color: appMuted, height: 1.45),
@@ -254,7 +285,7 @@ class _MainShellState extends State<MainShell> {
             FilledButton(
               onPressed: () {
                 Navigator.pop(dialogContext);
-                _selectTab(4);
+                _selectTab(_settingsTab);
               },
               child: const Text('Configurar enlace'),
             ),
@@ -266,6 +297,55 @@ class _MainShellState extends State<MainShell> {
     await openExternalLink(context, link, label: 'Telegram');
   }
 
+  Future<void> _handleSystemBack() async {
+    if (_handlingBack) return;
+    _handlingBack = true;
+    try {
+      // 1. Si estamos en la web integrada, retrocede dentro de ella.
+      if (_selectedIndex == _agendaWebTab) {
+        final handled =
+            await _webAgendaKey.currentState?.handleSystemBack() ?? false;
+        if (handled) return;
+      }
+
+      // 2. Desde cualquier otra sección vuelve a Inicio.
+      if (_selectedIndex != _homeTab) {
+        if (mounted) setState(() => _selectedIndex = _homeTab);
+        return;
+      }
+
+      // 3. Solo en Inicio se pregunta si se desea cerrar la app.
+      if (!mounted) return;
+      final shouldExit = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: appPanel,
+          title: const Text(
+            'Salir de Deporte Total 360°',
+            style: TextStyle(color: appCyan, fontWeight: FontWeight.w900),
+          ),
+          content: const Text(
+            '¿Quieres cerrar la aplicación?',
+            style: TextStyle(color: appMuted),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Salir'),
+            ),
+          ],
+        ),
+      );
+      if (shouldExit == true) await SystemNavigator.pop();
+    } finally {
+      _handlingBack = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
@@ -273,85 +353,101 @@ class _MainShellState extends State<MainShell> {
         onNavigate: _selectTab,
         onSportSelected: _selectSport,
         onTelegram: _openTelegram,
-        onContact: () => openExternalLink(context, contactUrl, label: 'WhatsApp'),
-        onDonations: () => Navigator.of(context).push<void>(
-          MaterialPageRoute<void>(
-            builder: (_) => const DonationsScreen(),
-          ),
+        onContact: () => openExternalLink(
+          context,
+          contactUrl,
+          label: 'WhatsApp',
         ),
+        onDonations: _openDonations,
+        onFantasy: _openFantasy,
       ),
       AgendaScreen(
         key: ValueKey<String>('football-$_agendaSport'),
-        initialSport: _agendaSport == 'Todos' ? 'Fútbol' : _agendaSport,
+        initialSport: _agendaSport,
       ),
       const LiveScreen(),
-      const WebAgendaScreen(),
+      WebAgendaScreen(
+        key: _webAgendaKey,
+        onExit: () => _selectTab(_homeTab),
+      ),
       const SettingsScreen(),
     ];
 
-    return Scaffold(
-      backgroundColor: appBg,
-      body: IndexedStack(index: _selectedIndex, children: pages),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF020B19),
-          border: const Border(top: BorderSide(color: appLine)),
-          boxShadow: <BoxShadow>[
-            BoxShadow(
-              color: appCyan.withAlpha(18),
-              blurRadius: 18,
-              offset: const Offset(0, -4),
-            ),
-          ],
+    return PopScope<void>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _handleSystemBack();
+      },
+      child: Scaffold(
+        backgroundColor: appBg,
+        body: IndexedStack(
+          index: _selectedIndex,
+          children: pages,
         ),
-        child: SafeArea(
-          top: false,
-          child: NavigationBar(
-            height: 64,
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: _selectTab,
-            backgroundColor: const Color(0xFF020B19),
-            indicatorColor: appBlue.withAlpha(95),
-            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-            destinations: <NavigationDestination>[
-              NavigationDestination(
-                icon: const Icon(Icons.home_outlined),
-                selectedIcon: const Icon(Icons.home_rounded, color: appCyan),
-                label: tr('home'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.sports_soccer_outlined),
-                selectedIcon: const Icon(
-                  Icons.sports_soccer_rounded,
-                  color: appCyan,
-                ),
-                label: tr('football'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.live_tv_outlined),
-                selectedIcon: const Icon(
-                  Icons.live_tv_rounded,
-                  color: appPink,
-                ),
-                label: tr('live'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.calendar_month_outlined),
-                selectedIcon: const Icon(
-                  Icons.calendar_month_rounded,
-                  color: appGreen,
-                ),
-                label: tr('agenda'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.settings_outlined),
-                selectedIcon: const Icon(
-                  Icons.settings_rounded,
-                  color: appCyan,
-                ),
-                label: tr('settings'),
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF020B19),
+            border: const Border(top: BorderSide(color: appLine)),
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: appCyan.withAlpha(18),
+                blurRadius: 18,
+                offset: const Offset(0, -4),
               ),
             ],
+          ),
+          child: SafeArea(
+            top: false,
+            child: NavigationBar(
+              height: 64,
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: _selectTab,
+              backgroundColor: const Color(0xFF020B19),
+              indicatorColor: appBlue.withAlpha(95),
+              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+              destinations: <NavigationDestination>[
+                NavigationDestination(
+                  icon: const Icon(Icons.home_outlined),
+                  selectedIcon: const Icon(
+                    Icons.home_rounded,
+                    color: appCyan,
+                  ),
+                  label: tr('home'),
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.sports_soccer_outlined),
+                  selectedIcon: const Icon(
+                    Icons.sports_soccer_rounded,
+                    color: appCyan,
+                  ),
+                  label: tr('football'),
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.live_tv_outlined),
+                  selectedIcon: const Icon(
+                    Icons.live_tv_rounded,
+                    color: appPink,
+                  ),
+                  label: tr('live'),
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  selectedIcon: const Icon(
+                    Icons.calendar_month_rounded,
+                    color: appGreen,
+                  ),
+                  label: tr('agenda'),
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.settings_outlined),
+                  selectedIcon: const Icon(
+                    Icons.settings_rounded,
+                    color: appCyan,
+                  ),
+                  label: tr('settings'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -397,7 +493,8 @@ class AppBackdrop extends StatelessWidget {
   }
 }
 
-/// Fondo de Ajustes con la imagen del proyecto y una capa oscura.
+/// Fondo original de Ajustes: conserva la fotografía del proyecto y la oscurece
+/// para que los controles sigan siendo legibles.
 class SettingsBackdrop extends StatelessWidget {
   const SettingsBackdrop({super.key, required this.child});
   final Widget child;
@@ -444,6 +541,7 @@ class HomeDashboard extends StatelessWidget {
     required this.onTelegram,
     required this.onContact,
     required this.onDonations,
+    required this.onFantasy,
   });
 
   final ValueChanged<int> onNavigate;
@@ -451,6 +549,7 @@ class HomeDashboard extends StatelessWidget {
   final VoidCallback onTelegram;
   final VoidCallback onContact;
   final VoidCallback onDonations;
+  final VoidCallback onFantasy;
 
   @override
   Widget build(BuildContext context) {
@@ -623,6 +722,13 @@ class HomeDashboard extends StatelessWidget {
                       color: appBlue,
                       onTap: onTelegram,
                     ),
+                    _ActionTile(
+                      title: 'FANTASY',
+                      subtitle: 'Jugar y competir',
+                      icon: Icons.emoji_events_rounded,
+                      color: appPink,
+                      onTap: onFantasy,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -700,11 +806,14 @@ class HomeDashboard extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  'La agenda online se abre dentro de la app; los partidos y la '
-                  'reproducción dependen del sitio y de la disponibilidad de '
-                  'cada señal.',
+                  'La agenda mostrará eventos y enlaces de reproducción cuando '
+                  'haya una fuente real y autorizada conectada.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: appMuted, fontSize: 10, height: 1.5),
+                  style: TextStyle(
+                    color: appMuted,
+                    fontSize: 10,
+                    height: 1.5,
+                  ),
                 ),
               ],
             ),
@@ -925,22 +1034,30 @@ class LiveScreen extends StatelessWidget {
     if (slug.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Primero configura tu identificador de canal en Ajustes.'),
+          content: Text(
+            'Primero configura tu identificador de canal en Ajustes.',
+          ),
         ),
       );
       Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+        MaterialPageRoute<void>(
+          builder: (_) => const SettingsScreen(),
+        ),
       );
       return;
     }
     await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => LivePlayerScreen(channel: slug)),
+      MaterialPageRoute<void>(
+        builder: (_) => LivePlayerScreen(channel: slug),
+      ),
     );
   }
 
   Future<void> _openEncoder(BuildContext context) async {
     await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const EncoderConfigScreen()),
+      MaterialPageRoute<void>(
+        builder: (_) => const EncoderConfigScreen(),
+      ),
     );
   }
 
@@ -986,9 +1103,9 @@ class LiveScreen extends StatelessWidget {
                     ),
                     SizedBox(height: 8),
                     Text(
-                      'El reproductor necesita un canal válido y una señal activa. '
-                      'Si el servidor está fuera de línea, se mostrará el error y '
-                      'podrás reintentar.',
+                      'El reproductor necesita un canal válido y una señal '
+                      'activa. Si el servidor está fuera de línea, se '
+                      'mostrará el error y podrás reintentar.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: appMuted,
@@ -1114,8 +1231,8 @@ class EncoderConfigScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final slug = channelSlug.value.trim();
-    final valid = slug.isNotEmpty &&
-        RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(slug);
+    final valid =
+        slug.isNotEmpty && RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(slug);
     final rtmp = valid ? buildRtmpUrl(slug) : '${rtmpBase}<TU_CANAL>';
     final hls = valid
         ? buildHlsUrl(slug)
@@ -1240,11 +1357,11 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
     if (slug.isEmpty || !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(slug)) {
       setState(() {
         _loading = false;
-        _error = 'El identificador del canal no es válido. Abre Ajustes y revísalo.';
+        _error =
+            'El identificador del canal no es válido. Abre Ajustes y revísalo.';
       });
       return;
     }
-
     final uri = Uri.tryParse(buildHlsUrl(slug));
     if (uri == null ||
         uri.host.isEmpty ||
@@ -1255,7 +1372,6 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
       });
       return;
     }
-
     setState(() {
       _loading = true;
       _error = null;
@@ -1263,7 +1379,6 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
     final oldController = _controller;
     _controller = null;
     await oldController?.dispose();
-
     final controller = VideoPlayerController.networkUrl(uri);
     _controller = controller;
     try {
@@ -1279,7 +1394,8 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
       setState(() {
         _loading = false;
         _error =
-            'No se pudo abrir el canal. Puede estar fuera de línea o no permitir esta conexión.';
+            'No se pudo abrir el canal. Puede estar fuera de línea o no '
+            'permitir esta conexión.';
       });
       await controller.dispose();
       if (identical(_controller, controller)) _controller = null;
@@ -1464,17 +1580,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final slug = _channelController.text.trim();
     final link = _telegramController.text.trim();
 
-    if (slug.isNotEmpty && !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(slug)) {
+    if (slug.isNotEmpty &&
+        !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(slug)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'El identificador de canal solo puede contener letras, números, guion y guion bajo.',
+            'El identificador de canal solo puede contener letras, números, '
+            'guion y guion bajo.',
           ),
         ),
       );
       return;
     }
-
     if (link.isNotEmpty) {
       final uri = Uri.tryParse(link);
       if (uri == null ||
@@ -1504,7 +1621,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se pudo guardar. Vuelve a intentarlo.')),
+          const SnackBar(
+            content: Text('No se pudo guardar. Vuelve a intentarlo.'),
+          ),
         );
       }
     } finally {
@@ -1813,7 +1932,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               'Las transmisiones requieren que el canal y el servidor estén '
               'activos. La agenda nativa necesita una fuente de calendario '
               'autorizada que todavía no está configurada en este proyecto.',
-              style: TextStyle(color: appMuted, fontSize: 11, height: 1.5),
+              style: TextStyle(
+                color: appMuted,
+                fontSize: 11,
+                height: 1.5,
+              ),
             ),
           ],
         ),
@@ -1893,14 +2016,11 @@ Future<void> openExternalLink(
       uri.host.isEmpty) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No hay un enlace válido configurado para $label.'),
-        ),
+        SnackBar(content: Text('No hay un enlace válido configurado para $label.')),
       );
     }
     return;
   }
-
   try {
     final opened = await launchUrl(
       uri,
