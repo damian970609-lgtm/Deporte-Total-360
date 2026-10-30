@@ -1,163 +1,277 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-const Color _appBg = Color(0xFF030814);
-const Color _appPanel = Color(0xFF071326);
-const Color _appLine = Color(0xFF123D65);
-const Color _appCyan = Color(0xFF00E5FF);
-const Color _appBlue = Color(0xFF087BFF);
-const Color _appGreen = Color(0xFF39FF9C);
-const Color _appPink = Color(0xFFFF28CF);
-const Color _appRed = Color(0xFFFF3155);
-const Color _appMuted = Color(0xFFA9BDD6);
+const Color _brandBg = Color(0xFF030814);
+const Color _brandPanel = Color(0xFF071326);
+const Color _brandLine = Color(0xFF123D65);
+const Color _brandCyan = Color(0xFF00E5FF);
+const Color _brandBlue = Color(0xFF087BFF);
+const Color _brandPink = Color(0xFFFF28CF);
+const Color _brandGreen = Color(0xFF39FF9C);
+const Color _brandMuted = Color(0xFFA9BDD6);
+const Color _brandRed = Color(0xFFFF3155);
 
-/// Integra la agenda de un proveedor externo en el marco visual de
-/// DEPORTE TOTAL 360°. El sitio sigue siendo contenido de un tercero.
+/// Web de agenda dentro de la identidad visual de Deporte Total 360°.
+/// El contenido de la web y sus reproductores siguen perteneciendo al proveedor.
 class WebAgendaScreen extends StatefulWidget {
-  const WebAgendaScreen({super.key});
+  const WebAgendaScreen({super.key, required this.onExit});
 
-  static const String agendaUrl = 'https://futbol-libre.cam/';
+  final VoidCallback onExit;
+
+  static const String initialUrl = 'https://futbol-libre.cam/';
 
   @override
-  State<WebAgendaScreen> createState() => _WebAgendaScreenState();
+  State<WebAgendaScreen> createState() => WebAgendaScreenState();
 }
 
-class _WebAgendaScreenState extends State<WebAgendaScreen> {
+class WebAgendaScreenState extends State<WebAgendaScreen> {
   InAppWebViewController? _controller;
   double _progress = 0;
   bool _loading = true;
-  String? _error;
-  String? _notice;
-  late final List<ContentBlocker> _contentBlockers;
+  bool _canGoBack = false;
+  bool _canGoForward = false;
+  bool _blockKnownTrackers = true;
+  String? _errorMessage;
+  String? _noticeMessage;
 
-  static const List<String> _adUrlFilters = <String>[
-    r'.*doubleclick\.net/.*',
-    r'.*googlesyndication\.com/.*',
-    r'.*googleadservices\.com/.*',
-    r'.*adservice\.google\..*/.*',
-    r'.*ads\.pubmatic\.com/.*',
-    r'.*adnxs\.com/.*',
-    r'.*popads\.net/.*',
-    r'.*popcash\.net/.*',
-    r'.*adsterra\.com/.*',
-    r'.*propellerads\.com/.*',
-    r'.*exoclick\.com/.*',
-    r'.*onclickads\.net/.*',
-    r'.*outbrain\.com/.*',
-    r'.*taboola\.com/.*',
-    r'.*trafficjunky\.net/.*',
-    r'.*adskeeper\.[^/]+/.*',
-    r'.*push-notification\.tools/.*',
+  // Dominios publicitarios/rastreadores conocidos. No es una lista universal:
+  // un proveedor puede utilizar otros dominios o alojar anuncios en su web.
+  static const List<String> _blockedDomains = <String>[
+    'doubleclick.net',
+    'googlesyndication.com',
+    'googleadservices.com',
+    'adservice.google.com',
+    'ads.pubmatic.com',
+    'pubmatic.com',
+    'adnxs.com',
+    'popads.net',
+    'popcash.net',
+    'propellerads.com',
+    'exoclick.com',
+    'onclickads.net',
+    'outbrain.com',
+    'taboola.com',
+    'trafficjunky.net',
+    'adbrite.com',
+    'exponential.com',
+    'quantserve.com',
+    'scorecardresearch.com',
+    'zedo.com',
+    'adsafeprotected.com',
+    'teads.tv',
   ];
 
-  @override
-  void initState() {
-    super.initState();
-
-    _contentBlockers = <ContentBlocker>[
-      for (final filter in _adUrlFilters)
-        ContentBlocker(
-          trigger: ContentBlockerTrigger(urlFilter: filter),
-          action: ContentBlockerAction(
-            type: ContentBlockerActionType.BLOCK,
-          ),
-        ),
-      ContentBlocker(
+  List<ContentBlocker> _buildContentBlockers() {
+    return _blockedDomains.map((domain) {
+      final escapedDomain = RegExp.escape(domain);
+      return ContentBlocker(
         trigger: ContentBlockerTrigger(
-          urlFilter: r'https?://(www\.)?futbol-libre\.cam/.*',
+          urlFilter: '.*$escapedDomain/.*',
         ),
         action: ContentBlockerAction(
-          type: ContentBlockerActionType.CSS_DISPLAY_NONE,
-          selector: '.ads, .ad-container, .ad-banner, .advertisement, '
-              '.advertising, .widget-ads, .ad-unit, [id^="ad-container"], '
-              '[class*="ad-container"], [id*="google_ads"]',
-        ),
-      ),
-    ];
-  }
-
-  bool _isTrustedHost(String host) {
-    final normalized = host.toLowerCase();
-    return normalized == 'futbol-libre.cam' ||
-        normalized == 'www.futbol-libre.cam' ||
-        normalized.endsWith('.futbol-libre.cam');
-  }
-
-  bool _isHttpOrHttps(WebUri uri) =>
-      uri.scheme == 'https' || uri.scheme == 'http';
-
-  Future<void> _reload() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-      _notice = null;
-      _progress = 0;
-    });
-    await _controller?.reload();
-  }
-
-  Future<void> _goBack() async {
-    final controller = _controller;
-    if (controller != null && await controller.canGoBack()) {
-      await controller.goBack();
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ya estás en la primera página de la agenda.'),
+          type: ContentBlockerActionType.BLOCK,
         ),
       );
+    }).toList();
+  }
+
+  bool _isKnownTrackerHost(String host) {
+    final normalized = host.toLowerCase().trim();
+    return _blockedDomains.any((domain) {
+      return normalized == domain || normalized.endsWith('.$domain');
+    });
+  }
+
+  bool _isHttpUrl(WebUri uri) {
+    final scheme = uri.scheme.toLowerCase();
+    return (scheme == 'https' || scheme == 'http') && uri.host.isNotEmpty;
+  }
+
+  void _showNotice(String message) {
+    if (!mounted) return;
+    setState(() => _noticeMessage = message);
+  }
+
+  Future<void> _refreshNavigationState() async {
+    final controller = _controller;
+    if (controller == null || !mounted) return;
+
+    try {
+      final canBack = await controller.canGoBack();
+      final canForward = await controller.canGoForward();
+      if (!mounted) return;
+
+      setState(() {
+        _canGoBack = canBack;
+        _canGoForward = canForward;
+      });
+    } catch (_) {
+      // La navegación sigue disponible aunque WebView no entregue historial.
     }
   }
 
-  void _showMessage(String message) {
-    if (!mounted) return;
-    setState(() => _notice = message);
+  /// Lo invoca MainShell cuando el usuario pulsa Atrás en Android.
+  /// Devuelve true si retrocedió dentro del historial web.
+  Future<bool> handleSystemBack() async {
+    final controller = _controller;
+    if (controller == null) return false;
+
+    try {
+      if (await controller.canGoBack()) {
+        await controller.goBack();
+        await _refreshNavigationState();
+        return true;
+      }
+    } catch (_) {
+      // Si WebView falla al consultar el historial, MainShell vuelve a Inicio.
+    }
+    return false;
+  }
+
+  Future<void> _handleToolbarBack() async {
+    final didGoBack = await handleSystemBack();
+    if (!didGoBack && mounted) widget.onExit();
+  }
+
+  Future<void> _goForward() async {
+    final controller = _controller;
+    if (controller == null) return;
+
+    try {
+      if (await controller.canGoForward()) {
+        await controller.goForward();
+        await _refreshNavigationState();
+      }
+    } catch (_) {
+      _showNotice('No se pudo avanzar en el historial de la página.');
+    }
+  }
+
+  Future<void> _reload() async {
+    final controller = _controller;
+    if (controller == null) return;
+
+    setState(() {
+      _loading = true;
+      _progress = 0;
+      _errorMessage = null;
+      _noticeMessage = null;
+    });
+
+    try {
+      await controller.reload();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _errorMessage =
+            'No se pudo recargar la agenda. Comprueba tu conexión.';
+      });
+    }
+  }
+
+  Future<void> _toggleTrackerProtection(bool enabled) async {
+    final controller = _controller;
+    setState(() => _blockKnownTrackers = enabled);
+    if (controller == null) return;
+
+    try {
+      await controller.setSettings(
+        settings: InAppWebViewSettings(
+          contentBlockers:
+              enabled ? _buildContentBlockers() : <ContentBlocker>[],
+        ),
+      );
+
+      _showNotice(
+        enabled
+            ? 'Protección activada. Si una señal deja de cargar, desactívala y recarga la página.'
+            : 'Protección desactivada. Recarga la página para probar de nuevo.',
+      );
+
+      await controller.reload();
+    } catch (_) {
+      _showNotice('No se pudo cambiar la protección del navegador.');
+    }
+  }
+
+  Future<bool> _handleNewWindow(
+    InAppWebViewController controller,
+    CreateWindowAction action,
+  ) async {
+    final target = action.request.url;
+
+    if (target == null || !_isHttpUrl(target)) {
+      _showNotice('Se bloqueó una ventana con una dirección no compatible.');
+      return false;
+    }
+
+    if (_isKnownTrackerHost(target.host)) {
+      _showNotice(
+        'Se bloqueó una ventana de publicidad o seguimiento conocida.',
+      );
+      return false;
+    }
+
+    // Algunos reproductores usan target="_blank" o window.open.
+    // Cargamos el destino HTTP/HTTPS en ESTA vista, no en otra ventana.
+    // Así el usuario conserva el marco de la app y puede retroceder.
+    try {
+      await controller.loadUrl(urlRequest: action.request);
+      return false;
+    } catch (_) {
+      _showNotice('No se pudo abrir el reproductor dentro de la app.');
+      return false;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _appBg,
+      backgroundColor: _brandBg,
       appBar: AppBar(
         backgroundColor: const Color(0xFF020B19),
-        foregroundColor: Colors.white,
-        titleSpacing: 12,
-        title: const Row(
+        titleSpacing: 8,
+        leading: IconButton(
+          tooltip: 'Atrás',
+          onPressed: _handleToolbarBack,
+          icon: const Icon(Icons.arrow_back_rounded, color: _brandCyan),
+        ),
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Icon(
-              Icons.calendar_month_rounded,
-              color: _appGreen,
-              size: 25,
+            Text(
+              'AGENDA DEPORTIVA',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: 13,
+                letterSpacing: .4,
+              ),
             ),
-            SizedBox(width: 9),
-            Expanded(
-              child: Text(
-                'AGENDA DE PARTIDOS',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: .35,
-                ),
+            Text(
+              'DEPORTE TOTAL 360°',
+              style: TextStyle(
+                color: _brandCyan,
+                fontWeight: FontWeight.w800,
+                fontSize: 9,
               ),
             ),
           ],
         ),
         actions: <Widget>[
           IconButton(
-            tooltip: 'Volver dentro de la agenda',
-            onPressed: _goBack,
-            icon: const Icon(
-              Icons.arrow_back_rounded,
-              color: _appCyan,
+            tooltip: 'Página siguiente',
+            onPressed: _canGoForward ? _goForward : null,
+            icon: Icon(
+              Icons.chevron_right_rounded,
+              color: _canGoForward ? _brandCyan : _brandMuted,
             ),
           ),
           IconButton(
-            tooltip: 'Recargar agenda',
+            tooltip: 'Recargar',
             onPressed: _reload,
-            icon: const Icon(Icons.refresh_rounded, color: _appCyan),
+            icon: const Icon(Icons.refresh_rounded, color: _brandCyan),
           ),
         ],
       ),
@@ -165,7 +279,7 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
         children: <Widget>[
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            padding: const EdgeInsets.fromLTRB(12, 7, 12, 7),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 colors: <Color>[
@@ -173,110 +287,120 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                   Color(0xFF150B30),
                 ],
               ),
-              border: Border(bottom: BorderSide(color: _appLine)),
+              border: Border(bottom: BorderSide(color: _brandLine)),
             ),
-            child: const Row(
+            child: Row(
               children: <Widget>[
-                Icon(Icons.shield_outlined, color: _appCyan, size: 16),
-                SizedBox(width: 7),
-                Expanded(
+                const Icon(
+                  Icons.shield_outlined,
+                  color: _brandCyan,
+                  size: 17,
+                ),
+                const SizedBox(width: 7),
+                const Expanded(
                   child: Text(
-                    'Vista integrada · bloqueador parcial de anuncios y ventanas emergentes',
+                    'Navegación integrada · protección de rastreadores conocidos',
                     style: TextStyle(
-                      color: _appMuted,
+                      color: _brandMuted,
                       fontSize: 10,
                       height: 1.3,
                     ),
                   ),
                 ),
-                Icon(Icons.bolt_rounded, color: _appPink, size: 16),
+                Switch.adaptive(
+                  value: _blockKnownTrackers,
+                  activeColor: _brandGreen,
+                  onChanged: _toggleTrackerProtection,
+                ),
               ],
             ),
           ),
-          if (_notice != null)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 8,
-              ),
-              color: const Color(0xFF3A1B20),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  const Icon(
-                    Icons.info_outline_rounded,
-                    color: _appRed,
-                    size: 17,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _notice!,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        height: 1.35,
+          if (_noticeMessage != null)
+            Material(
+              color: const Color(0xFF10243A),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 7, 6, 7),
+                child: Row(
+                  children: <Widget>[
+                    const Icon(
+                      Icons.info_outline_rounded,
+                      color: _brandCyan,
+                      size: 17,
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        _noticeMessage!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          height: 1.35,
+                        ),
                       ),
                     ),
-                  ),
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 28,
-                      minHeight: 28,
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () {
+                        setState(() => _noticeMessage = null);
+                      },
+                      icon: const Icon(Icons.close_rounded, size: 16),
                     ),
-                    onPressed: () => setState(() => _notice = null),
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          if (_loading && _progress < 1)
+          if (_loading)
             LinearProgressIndicator(
               value: _progress == 0 ? null : _progress,
               minHeight: 2,
-              backgroundColor: _appPanel,
-              color: _appCyan,
+              backgroundColor: _brandPanel,
+              color: _brandCyan,
             ),
           Expanded(
             child: Container(
-              margin: const EdgeInsets.fromLTRB(7, 7, 7, 7),
+              margin: const EdgeInsets.fromLTRB(6, 6, 6, 6),
               decoration: BoxDecoration(
                 color: Colors.black,
-                border: Border.all(color: _appBlue.withAlpha(170)),
+                border: Border.all(color: _brandBlue.withAlpha(170)),
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: <BoxShadow>[
                   BoxShadow(
-                    color: _appBlue.withAlpha(28),
+                    color: _brandBlue.withAlpha(25),
                     blurRadius: 14,
                   ),
                 ],
               ),
               clipBehavior: Clip.antiAlias,
-              child: _error != null
+              child: _errorMessage != null
                   ? _errorPanel()
                   : InAppWebView(
                       initialUrlRequest: URLRequest(
-                        url: WebUri(WebAgendaScreen.agendaUrl),
+                        url: WebUri(WebAgendaScreen.initialUrl),
                       ),
                       initialSettings: InAppWebViewSettings(
                         javaScriptEnabled: true,
+                        domStorageEnabled: true,
+                        databaseEnabled: true,
+                        thirdPartyCookiesEnabled: true,
                         useShouldOverrideUrlLoading: true,
-                        javaScriptCanOpenWindowsAutomatically: false,
                         supportMultipleWindows: true,
+                        javaScriptCanOpenWindowsAutomatically: true,
                         mediaPlaybackRequiresUserGesture: true,
                         allowsInlineMediaPlayback: true,
-                        contentBlockers: _contentBlockers,
-                        transparentBackground: false,
+                        iframeAllowFullscreen: true,
+                        isElementFullscreenEnabled: true,
+                        hardwareAcceleration: true,
+                        safeBrowsingEnabled: true,
+                        allowFileAccess: false,
+                        allowContentAccess: true,
+                        loadsImagesAutomatically: true,
+                        cacheEnabled: true,
                         supportZoom: true,
                         builtInZoomControls: true,
                         displayZoomControls: false,
+                        contentBlockers: _blockKnownTrackers
+                            ? _buildContentBlockers()
+                            : <ContentBlocker>[],
                       ),
                       onWebViewCreated: (controller) {
                         _controller = controller;
@@ -285,85 +409,90 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
                         if (!mounted) return;
                         setState(() {
                           _loading = true;
-                          _error = null;
                           _progress = 0;
+                          _errorMessage = null;
                         });
+                        _refreshNavigationState();
                       },
                       onProgressChanged: (controller, progress) {
                         if (!mounted) return;
                         setState(() {
                           _progress = progress / 100;
-                          if (progress >= 100) _loading = false;
+                          _loading = progress < 100;
                         });
                       },
                       onLoadStop: (controller, url) async {
-                        await _applyBrandStyles(controller);
                         if (!mounted) return;
                         setState(() {
                           _loading = false;
                           _progress = 1;
                         });
+                        await _refreshNavigationState();
                       },
-                      shouldOverrideUrlLoading:
-                          (controller, navigationAction) async {
-                        final uri = navigationAction.request.url;
-                        if (uri == null || !_isHttpOrHttps(uri)) {
-                          _showMessage(
-                            'Se bloqueó un enlace no seguro o un esquema externo.',
+                      onUpdateVisitedHistory:
+                          (controller, url, androidIsReload) {
+                        _refreshNavigationState();
+                      },
+                      shouldOverrideUrlLoading: (controller, action) async {
+                        final uri = action.request.url;
+                        if (uri == null) return NavigationActionPolicy.ALLOW;
+
+                        if (!_isHttpUrl(uri)) {
+                          _showNotice(
+                            'Se bloqueó un enlace externo no web para mantener la navegación dentro de la aplicación.',
                           );
                           return NavigationActionPolicy.CANCEL;
                         }
 
-                        // La ventana principal se mantiene en el sitio elegido.
-                        // Los reproductores incrustados pueden cargar recursos
-                        // de terceros dentro de sus iframes.
-                        if ((navigationAction.isForMainFrame ?? true) &&
-                            !_isTrustedHost(uri.host)) {
-                          _showMessage(
-                            'Redirección externa bloqueada para evitar salir '
-                            'de la agenda. Si el vídeo solo funciona en otra '
-                            'página, no se abrirá aquí automáticamente.',
+                        if (_isKnownTrackerHost(uri.host)) {
+                          _showNotice(
+                            'Se bloqueó un recurso de publicidad/seguimiento conocido.',
                           );
                           return NavigationActionPolicy.CANCEL;
                         }
 
+                        // Los dominios del reproductor pueden ser distintos
+                        // del dominio principal. Se permiten dentro de WebView.
                         return NavigationActionPolicy.ALLOW;
                       },
-                      onCreateWindow: (controller, createWindowAction) async {
-                        _showMessage(
-                          'Se bloqueó una ventana emergente para evitar que '
-                          'el botón Play abra otra página. El vídeo solo '
-                          'funcionará si el reproductor está integrado en '
-                          'la página actual.',
-                        );
-                        // No crear ventanas nuevas: bloquea pop-ups.
-                        return false;
-                      },
+                      onCreateWindow: _handleNewWindow,
                       onReceivedError: (controller, request, error) {
                         if (!(request.isForMainFrame ?? true) || !mounted) {
                           return;
                         }
                         setState(() {
                           _loading = false;
-                          _error = 'No se pudo cargar la agenda. Comprueba tu '
-                              'conexión o que el sitio siga disponible. '
-                              'Código: ${error.type}';
+                          _errorMessage =
+                              'No se pudo cargar esta página. Comprueba la conexión y pulsa Recargar. Código: ${error.type}';
                         });
+                      },
+                      onReceivedHttpError: (controller, request, response) {
+                        if (!(request.isForMainFrame ?? true) || !mounted) {
+                          return;
+                        }
+                        final statusCode = response.statusCode ?? 0;
+                        if (statusCode >= 400) {
+                          setState(() {
+                            _loading = false;
+                            _errorMessage =
+                                'El servidor respondió con error HTTP $statusCode. Puede estar temporalmente no disponible.';
+                          });
+                        }
                       },
                     ),
             ),
           ),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(12, 5, 12, 7),
+            padding: const EdgeInsets.fromLTRB(10, 5, 10, 7),
             color: const Color(0xFF020B19),
             child: const Text(
-              'La página y sus transmisiones pertenecen a sus proveedores. '
-              'El bloqueo no es total: algunos anuncios o redireccionamientos '
-              'pueden escapar y ciertos reproductores pueden requerir otra ventana.',
+              'La agenda y sus reproductores son servicios de terceros. '
+              'La protección detiene dominios conocidos, pero no garantiza '
+              'eliminar todos los anuncios ni que cada señal sea compatible.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: _appMuted,
+                color: _brandMuted,
                 fontSize: 9,
                 height: 1.35,
               ),
@@ -374,108 +503,44 @@ class _WebAgendaScreenState extends State<WebAgendaScreen> {
     );
   }
 
-  Future<void> _applyBrandStyles(
-    InAppWebViewController controller,
-  ) async {
-    // Colorea los controles visibles con la paleta de la app, sin sustituir
-    // logotipos, textos de autoría ni el contenido del proveedor externo.
-    const script = r"""
-      (function () {
-        try {
-          var id = 'deporte-total-360-theme';
-          var style = document.getElementById(id);
-          if (!style) {
-            style = document.createElement('style');
-            style.id = id;
-            (document.head || document.documentElement).appendChild(style);
-          }
-          style.textContent = `
-            :root {
-              color-scheme: dark !important;
-              --dt360-bg: #030814;
-              --dt360-panel: #071326;
-              --dt360-line: #123d65;
-              --dt360-cyan: #00e5ff;
-              --dt360-blue: #087bff;
-              --dt360-pink: #ff28cf;
-              --dt360-green: #39ff9c;
-            }
-            html, body {
-              background-color: #030814 !important;
-              color: #f4f8ff !important;
-            }
-            header, nav, .navbar, .topbar, .header, .site-header {
-              background-color: #071326 !important;
-              border-color: #123d65 !important;
-            }
-            a, .link, .text-link { color: #00e5ff !important; }
-            button, .btn, [role="button"] {
-              border-radius: 9px !important;
-              border-color: #087bff !important;
-            }
-            .ads, .ad-container, .ad-banner, .advertisement,
-            .advertising, .widget-ads, .ad-unit,
-            [id^="ad-container"], [class*="ad-container"],
-            [id*="google_ads"] {
-              display: none !important;
-            }
-          `;
-          // Impide que window.open abra una ventana desde la página.
-          try { window.open = function () { return null; }; } catch (_) {}
-          return true;
-        } catch (_) {
-          return false;
-        }
-      })();
-    """;
-
-    try {
-      await controller.evaluateJavascript(source: script);
-    } catch (_) {
-      // Si el sitio impide esta inyección, el WebView conserva sus otros
-      // controles de navegación y sus reglas de bloqueo de recursos.
-    }
-  }
-
   Widget _errorPanel() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(22),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             const Icon(
               Icons.wifi_off_rounded,
-              color: _appRed,
-              size: 45,
+              color: _brandRed,
+              size: 44,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 11),
             const Text(
               'AGENDA NO DISPONIBLE',
-              textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w900,
-                fontSize: 16,
+                fontSize: 15,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              _error ?? 'No se pudo abrir la página.',
+              _errorMessage ?? 'No se pudo abrir la página.',
               textAlign: TextAlign.center,
               style: const TextStyle(
-                color: _appMuted,
+                color: _brandMuted,
                 fontSize: 12,
                 height: 1.45,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 15),
             FilledButton.icon(
               onPressed: _reload,
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('REINTENTAR'),
               style: FilledButton.styleFrom(
-                backgroundColor: _appBlue,
+                backgroundColor: _brandBlue,
                 foregroundColor: Colors.white,
               ),
             ),
