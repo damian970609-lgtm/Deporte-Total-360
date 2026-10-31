@@ -1826,7 +1826,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
