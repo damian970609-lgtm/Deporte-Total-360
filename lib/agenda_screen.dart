@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
+import 'sports_api_service.dart';
+
 const Color agendaBg = Color(0xFF030814);
 const Color agendaPanel = Color(0xFF071326);
 const Color agendaLine = Color(0xFF123D65);
@@ -97,6 +99,12 @@ class _AgendaScreenState extends State<AgendaScreen> {
   String _statusFilter = 'Todos';
   String _query = '';
   final TextEditingController _searchController = TextEditingController();
+  final SportsApiService _apiService = SportsApiService();
+  late final VoidCallback _apiConfigurationListener;
+  List<MatchEvent> _remoteMatches = <MatchEvent>[];
+  bool _loadingApi = false;
+  String? _apiError;
+  int _apiRequestVersion = 0;
 
   @override
   void initState() {
@@ -104,12 +112,155 @@ class _AgendaScreenState extends State<AgendaScreen> {
     _sport = _sports.contains(widget.initialSport)
         ? widget.initialSport
         : 'Todos';
+    _apiConfigurationListener = _onApiConfigurationChanged;
+    sportsApiBaseUrl.addListener(_apiConfigurationListener);
+    if (sportsApiBaseUrl.value.trim().isNotEmpty) {
+      _loadRemoteMatches();
+    }
   }
 
   @override
   void dispose() {
+    sportsApiBaseUrl.removeListener(_apiConfigurationListener);
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onApiConfigurationChanged() {
+    if (sportsApiBaseUrl.value.trim().isEmpty) {
+      _apiRequestVersion++;
+      if (mounted) {
+        setState(() {
+          _remoteMatches = <MatchEvent>[];
+          _loadingApi = false;
+          _apiError = null;
+        });
+      }
+      return;
+    }
+    _loadRemoteMatches();
+  }
+
+  Future<void> _loadRemoteMatches() async {
+    if (sportsApiBaseUrl.value.trim().isEmpty) return;
+    final requestVersion = ++_apiRequestVersion;
+    if (mounted) {
+      setState(() {
+        _loadingApi = true;
+        _apiError = null;
+      });
+    }
+
+    try {
+      final rows = await _apiService.fetchFixtures();
+      final matches = rows.map(_matchFromApi).whereType<MatchEvent>().toList();
+      if (!mounted || requestVersion != _apiRequestVersion) return;
+      setState(() {
+        _remoteMatches = matches;
+        _loadingApi = false;
+        _apiError = null;
+      });
+    } catch (error) {
+      if (!mounted || requestVersion != _apiRequestVersion) return;
+      setState(() {
+        _loadingApi = false;
+        _apiError = error.toString();
+      });
+    }
+  }
+
+  MatchEvent? _matchFromApi(Map<String, dynamic> row) {
+    Map<String, dynamic> asMap(dynamic value) =>
+        value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
+    int? asInt(dynamic value) => value is num ? value.toInt() : int.tryParse('$value');
+
+    final fixture = asMap(row['fixture']);
+    final league = asMap(row['league']);
+    final teams = asMap(row['teams']);
+    final home = asMap(teams['home']);
+    final away = asMap(teams['away']);
+    final goals = asMap(row['goals']);
+    final status = asMap(fixture['status']);
+    final kickoff = DateTime.tryParse('${fixture['date'] ?? ''}');
+    final homeName = '${home['name'] ?? ''}'.trim();
+    final awayName = '${away['name'] ?? ''}'.trim();
+
+    if (kickoff == null || homeName.isEmpty || awayName.isEmpty) return null;
+
+    final statusCode = '${status['short'] ?? ''}'.toUpperCase();
+    const liveCodes = <String>{'1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'};
+    const finishedCodes = <String>{'FT', 'AET', 'PEN', 'AWD', 'WO', 'CANC', 'ABD'};
+    final matchStatus = liveCodes.contains(statusCode)
+        ? MatchStatus.live
+        : finishedCodes.contains(statusCode)
+            ? MatchStatus.finished
+            : MatchStatus.scheduled;
+
+    return MatchEvent(
+      id: '${fixture['id'] ?? '${homeName}_$awayName'}',
+      sport: 'Fútbol',
+      competition: '${league['name'] ?? 'Fútbol'}',
+      homeTeam: homeName,
+      awayTeam: awayName,
+      startsAt: kickoff.toLocal(),
+      status: matchStatus,
+      homeScore: asInt(goals['home']),
+      awayScore: asInt(goals['away']),
+      sourceName: 'API-Football',
+    );
+  }
+
+  Widget _buildEmptyAgendaContent() {
+    if (_loadingApi) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            CircularProgressIndicator(color: agendaCyan),
+            SizedBox(height: 12),
+            Text('Cargando partidos…', style: TextStyle(color: agendaMuted)),
+          ],
+        ),
+      );
+    }
+    if (_apiError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Icon(Icons.cloud_off_rounded, color: agendaRed, size: 42),
+              const SizedBox(height: 10),
+              const Text(
+                'No se pudo cargar la agenda',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                _apiError!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: agendaMuted, fontSize: 11, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _loadRemoteMatches,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Reintentar'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: agendaCyan,
+                  side: const BorderSide(color: agendaCyan),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return _EmptyAgenda(
+      hasSearch: _query.trim().isNotEmpty,
+      onClear: _clearFilters,
+    );
   }
 
   List<MatchEvent> get _filteredMatches {
@@ -118,7 +269,8 @@ class _AgendaScreenState extends State<AgendaScreen> {
     final tomorrow = today.add(const Duration(days: 1));
     final query = _query.trim().toLowerCase();
 
-    return widget.matches.where((event) {
+    final allMatches = <MatchEvent>[...widget.matches, ..._remoteMatches];
+    return allMatches.where((event) {
       if (_sport != 'Todos' && event.sport != _sport) return false;
       if (_statusFilter == 'En vivo' &&
           event.status != MatchStatus.live) {
@@ -193,7 +345,10 @@ class _AgendaScreenState extends State<AgendaScreen> {
         actions: <Widget>[
           IconButton(
             tooltip: 'Limpiar búsqueda',
-            onPressed: _clearFilters,
+            onPressed: () {
+              _clearFilters();
+              _loadRemoteMatches();
+            },
             icon: const Icon(Icons.refresh_rounded, color: agendaCyan),
           ),
         ],
@@ -378,10 +533,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
               ),
               Expanded(
                 child: events.isEmpty
-                    ? _EmptyAgenda(
-                        hasSearch: _query.trim().isNotEmpty,
-                        onClear: _clearFilters,
-                      )
+                    ? _buildEmptyAgendaContent()
                     : ListView.separated(
                         padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
                         itemCount: events.length,

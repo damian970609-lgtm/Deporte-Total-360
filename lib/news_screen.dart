@@ -610,91 +610,108 @@ class _NewsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       color: _newsPanel,
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 15),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(14),
         side: const BorderSide(color: _newsLine),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              if (story.imageUrl != null)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(9),
-                  child: Image.network(
-                    story.imageUrl!,
-                    width: 102,
-                    height: 92,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _imagePlaceholder(),
-                  ),
-                )
-              else
-                _imagePlaceholder(),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      story.source.toUpperCase(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: _newsCyan,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w900,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            if (story.imageUrl != null)
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Image.network(
+                  story.imageUrl!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _imagePlaceholder(),
+                ),
+              )
+            else
+              SizedBox(
+                height: 175,
+                child: _imagePlaceholder(),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(13, 12, 13, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          story.source.toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: _newsCyan,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      story.title,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        height: 1.25,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    if (story.summary.isNotEmpty) ...<Widget>[
-                      const SizedBox(height: 5),
                       Text(
-                        story.summary,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                        dateLabel.isEmpty ? story.category : dateLabel,
                         style: const TextStyle(
-                          color: _newsMuted,
-                          fontSize: 10,
-                          height: 1.3,
+                          color: _newsGreen,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
-                    const SizedBox(height: 6),
+                  ),
+                  const SizedBox(height: 9),
+                  Text(
+                    story.title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      height: 1.3,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  if (story.summary.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 9),
                     Text(
-                      dateLabel.isEmpty ? story.category : dateLabel,
+                      story.summary,
                       style: const TextStyle(
-                        color: _newsGreen,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
+                        color: _newsMuted,
+                        fontSize: 13,
+                        height: 1.5,
                       ),
                     ),
                   ],
-                ),
+                  const SizedBox(height: 12),
+                  const Divider(color: _newsLine, height: 1),
+                  const SizedBox(height: 9),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: <Widget>[
+                      Text(
+                        'LEER NOTICIA COMPLETA',
+                        style: TextStyle(
+                          color: _newsCyan,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      SizedBox(width: 5),
+                      Icon(
+                        Icons.arrow_forward_rounded,
+                        color: _newsCyan,
+                        size: 15,
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: _newsMuted,
-                size: 19,
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -702,17 +719,17 @@ class _NewsCard extends StatelessWidget {
 
   Widget _imagePlaceholder() {
     return Container(
-      width: 102,
-      height: 92,
+      width: double.infinity,
       decoration: BoxDecoration(
         color: _newsBlue.withAlpha(35),
-        borderRadius: BorderRadius.circular(9),
         border: Border.all(color: _newsLine),
       ),
-      child: const Icon(
-        Icons.sports_soccer_rounded,
-        color: _newsCyan,
-        size: 31,
+      child: const Center(
+        child: Icon(
+          Icons.sports_soccer_rounded,
+          color: _newsCyan,
+          size: 48,
+        ),
       ),
     );
   }

@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 import 'agenda_screen.dart';
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
+import 'sports_api_service.dart';
 import 'web_agenda_screen.dart';
 
 // Identidad visual de DEPORTE TOTAL 360°: azul noche, cian, rosa y verde neón.
@@ -37,7 +38,9 @@ enum AppLanguage { spanish, english, portuguese, french }
 
 final ValueNotifier<AppLanguage> appLanguage =
     ValueNotifier<AppLanguage>(AppLanguage.spanish);
-final ValueNotifier<String> channelSlug = ValueNotifier<String>('');
+const String defaultSsh101Channel = 'deportetotal360';
+final ValueNotifier<String> channelSlug =
+    ValueNotifier<String>(defaultSsh101Channel);
 final ValueNotifier<String> telegramLink = ValueNotifier<String>('');
 
 String languageCode(AppLanguage language) {
@@ -241,8 +244,12 @@ Future<void> main() async {
   try {
     final prefs = await SharedPreferences.getInstance();
     appLanguage.value = parseLanguage(prefs.getString('app_language'));
-    channelSlug.value = prefs.getString('ssh101_channel') ?? '';
+    final savedChannel = prefs.getString('ssh101_channel')?.trim();
+    channelSlug.value = savedChannel == null || savedChannel.isEmpty
+        ? defaultSsh101Channel
+        : savedChannel;
     telegramLink.value = prefs.getString('telegram_public_link') ?? '';
+    sportsApiBaseUrl.value = prefs.getString('sports_api_base_url') ?? '';
   } catch (_) {
     // La app puede abrirse aunque el almacenamiento local no esté disponible.
   }
@@ -1676,6 +1683,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
+  int _signatureTapCount = 0;
+  DateTime? _lastSignatureTapAt;
+
+  void _handleSignatureTap() {
+    final now = DateTime.now();
+    final lastTap = _lastSignatureTapAt;
+    if (lastTap == null || now.difference(lastTap) > const Duration(seconds: 3)) {
+      _signatureTapCount = 0;
+    }
+    _lastSignatureTapAt = now;
+    _signatureTapCount++;
+
+    if (_signatureTapCount >= 10) {
+      _signatureTapCount = 0;
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => const DeveloperSettingsScreen(),
+        ),
+      );
+    }
+  }
+
   Future<void> _save() async {
     final slug = _channelController.text.trim();
     final link = _telegramController.text.trim();
@@ -1848,13 +1877,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                         SizedBox(height: 4),
-                        Text(
-                          'DAMIAN.APK',
-                          style: TextStyle(
-                            color: appPink,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.1,
-                            fontSize: 11,
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _handleSignatureTap,
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 2),
+                            child: Text(
+                              'DAMIAN.APK',
+                              style: TextStyle(
+                                color: appPink,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.1,
+                                fontSize: 11,
+                              ),
+                            ),
                           ),
                         ),
                         SizedBox(height: 4),
@@ -2032,6 +2068,216 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 color: appMuted,
                 fontSize: 11,
                 height: 1.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class DeveloperSettingsScreen extends StatefulWidget {
+  const DeveloperSettingsScreen({super.key});
+
+  @override
+  State<DeveloperSettingsScreen> createState() => _DeveloperSettingsScreenState();
+}
+
+class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
+  late final TextEditingController _apiUrlController;
+  bool _testing = false;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _apiUrlController = TextEditingController(text: sportsApiBaseUrl.value);
+  }
+
+  @override
+  void dispose() {
+    _apiUrlController.dispose();
+    super.dispose();
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _testConnection() async {
+    final url = SportsApiService.normalizeBaseUrl(_apiUrlController.text);
+    if (url == null) {
+      _showMessage('Introduce una URL HTTPS válida del Worker.');
+      return;
+    }
+
+    setState(() => _testing = true);
+    try {
+      await SportsApiService().checkHealth(url);
+      _showMessage('Conexión correcta con Deporte Total 360 API.');
+    } catch (error) {
+      _showMessage('No se pudo verificar el servidor: $error');
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
+  Future<void> _saveApiUrl() async {
+    final url = SportsApiService.normalizeBaseUrl(_apiUrlController.text);
+    if (url == null) {
+      _showMessage('Introduce una URL HTTPS válida del Worker.');
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('sports_api_base_url', url);
+      sportsApiBaseUrl.value = url;
+      _apiUrlController.text = url;
+      _showMessage('Dirección de la API guardada.');
+    } catch (_) {
+      _showMessage('No se pudo guardar la dirección. Inténtalo de nuevo.');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _clearApiUrl() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('sports_api_base_url');
+      sportsApiBaseUrl.value = '';
+      _apiUrlController.clear();
+      _showMessage('Dirección de la API eliminada.');
+    } catch (_) {
+      _showMessage('No se pudo eliminar la dirección guardada.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: appBg,
+      appBar: AppBar(
+        title: const Text(
+          'MENÚ DE DESARROLLADOR',
+          style: TextStyle(
+            color: appCyan,
+            fontWeight: FontWeight.w900,
+            fontSize: 13,
+          ),
+        ),
+      ),
+      body: AppBackdrop(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: <Widget>[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: appPanel,
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: appCyan.withAlpha(180)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Row(
+                    children: <Widget>[
+                      Icon(Icons.developer_mode_rounded, color: appCyan),
+                      SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          'CONEXIÓN DEL SERVIDOR DEPORTIVO',
+                          style: TextStyle(
+                            color: appCyan,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Introduce la dirección HTTPS pública del Cloudflare Worker. No pegues aquí la clave de API.',
+                    style: TextStyle(color: appMuted, height: 1.5, fontSize: 12),
+                  ),
+                  const SizedBox(height: 13),
+                  TextField(
+                    controller: _apiUrlController,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    decoration: const InputDecoration(
+                      labelText: 'URL del servidor API',
+                      hintText: 'https://tu-worker.tu-cuenta.workers.dev',
+                      prefixIcon: Icon(Icons.cloud_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _testing ? null : _testConnection,
+                      icon: _testing
+                          ? const SizedBox(
+                              width: 17,
+                              height: 17,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.network_check_rounded),
+                      label: Text(_testing ? 'COMPROBANDO…' : 'PROBAR CONEXIÓN'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: appCyan,
+                        side: const BorderSide(color: appCyan),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _saving ? null : _saveApiUrl,
+                      icon: const Icon(Icons.save_rounded),
+                      label: Text(_saving ? 'GUARDANDO…' : 'GUARDAR SERVIDOR'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: appGreen,
+                        foregroundColor: appBg,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: _clearApiUrl,
+                      icon: const Icon(Icons.delete_outline_rounded, size: 17),
+                      label: const Text('Borrar dirección guardada'),
+                      style: TextButton.styleFrom(foregroundColor: appPink),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: appPanel2,
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(color: appGreen.withAlpha(150)),
+              ),
+              child: const Text(
+                'SEGURIDAD: la clave APIFOOTBALL_KEY debe permanecer como secreto del Worker en Cloudflare. La aplicación solo guarda la URL pública del servidor. Este acceso oculto por diez toques es discreto, pero no sustituye autenticación real.',
+                style: TextStyle(color: appMuted, fontSize: 11, height: 1.5),
               ),
             ),
           ],
