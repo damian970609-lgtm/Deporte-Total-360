@@ -50,6 +50,58 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
     setState(() => _noticeMessage = message);
   }
 
+  Future<void> _installAdElementCleanup(InAppWebViewController controller) async {
+    // Limpia iframes y contenedores publicitarios identificables sin tocar
+    // los controles del reproductor ni los iframes de vídeo genéricos.
+    try {
+      await controller.evaluateJavascript(source: r'''
+        (() => {
+          const selectors = [
+            'iframe[src*="juicyads"]',
+            'iframe[src*="trafficjunky"]',
+            'iframe[src*="porn"]',
+            'iframe[src*="adult"]',
+            'iframe[src*="xxx"]',
+            'iframe[src*="popads"]',
+            'iframe[src*="popcash"]',
+            'iframe[src*="popunder"]',
+            '[id*="popunder"]',
+            '[class*="popunder"]',
+            '[id*="interstitial"]',
+            '[class*="interstitial"]',
+            '[data-advertisement]',
+            '[data-ad="true"]',
+            'ins.adsbygoogle'
+          ];
+          const removeAds = (root) => {
+            if (!root || !root.querySelectorAll) return;
+            root.querySelectorAll(selectors.join(',')).forEach((element) => {
+              if (!element.closest('video, audio, .video-player, [class*="player"]')) {
+                element.remove();
+              }
+            });
+          };
+          removeAds(document);
+          if (!window.__dt360AdObserver && document.documentElement) {
+            window.__dt360AdObserver = new MutationObserver((records) => {
+              records.forEach((record) => record.addedNodes.forEach((node) => {
+                if (node.nodeType === 1) {
+                  if (node.matches && node.matches(selectors.join(','))) node.remove();
+                  else removeAds(node);
+                }
+              }));
+            });
+            window.__dt360AdObserver.observe(document.documentElement, {
+              childList: true, subtree: true
+            });
+          }
+        })();
+      ''');
+    } catch (_) {
+      // La web sigue funcionando aunque el sitio impida la limpieza DOM.
+    }
+  }
+
   Future<void> _refreshNavigationState() async {
     final controller = _controller;
     if (controller == null || !mounted) return;
@@ -391,6 +443,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                           _loading = false;
                           _progress = 1;
                         });
+                        await _installAdElementCleanup(controller);
                         await _refreshNavigationState();
                       },
                       onUpdateVisitedHistory:
