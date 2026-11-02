@@ -164,6 +164,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
   bool _loadingApi = false;
   String? _apiError;
   String? _apiWarning;
+  String? _apiProgress;
   int _apiRequestVersion = 0;
   Timer? _scorePollingTimer;
 
@@ -211,6 +212,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
           _loadingApi = false;
           _apiError = null;
           _apiWarning = null;
+          _apiProgress = null;
         });
       }
       return;
@@ -226,16 +228,42 @@ class _AgendaScreenState extends State<AgendaScreen> {
         _loadingApi = true;
         _apiError = null;
         _apiWarning = null;
+        _apiProgress = _sport == 'Todos'
+            ? appText('Preparando la carga multideporte…', 'Preparing multi-sport data…', 'Preparando a carga multiesportiva…', 'Préparation des données multisports…')
+            : appText('Actualizando agenda…', 'Updating schedule…', 'Atualizando agenda…', 'Mise à jour du calendrier…');
       });
     }
 
     try {
       final sportErrors = <String, String>{};
+      final partialRows = <Map<String, dynamic>>[];
+      var completedSports = 0;
       final rows = _sport == 'Todos'
           ? await _apiService.fetchAllAgendaEvents(
               dateFilter: _dateFilter,
               onSportError: (sport, error) {
                 sportErrors[sport] = error.toString();
+              },
+              onSportComplete: (sport, sportRows) {
+                completedSports++;
+                partialRows.addAll(sportRows);
+                if (!mounted || requestVersion != _apiRequestVersion) return;
+                final partialMatches = partialRows
+                    .map((row) => _matchFromApi(
+                          row,
+                          (row['_sportName'] ?? sport).toString(),
+                        ))
+                    .whereType<MatchEvent>()
+                    .toList(growable: false);
+                setState(() {
+                  _remoteMatches = partialMatches;
+                  _apiProgress = appText(
+                    'Consultando $sport ($completedSports/${SportsApiService.supportedSports.length})…',
+                    'Checking $sport ($completedSports/${SportsApiService.supportedSports.length})…',
+                    'Consultando $sport ($completedSports/${SportsApiService.supportedSports.length})…',
+                    'Consultation de $sport ($completedSports/${SportsApiService.supportedSports.length})…',
+                  );
+                });
               },
             )
           : await _apiService.fetchAgendaEvents(
@@ -276,6 +304,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
         _loadingApi = false;
         _apiError = matches.isEmpty ? warning : null;
         _apiWarning = matches.isEmpty ? null : warning;
+        _apiProgress = null;
       });
       for (final event in scoreChanges) {
         await NotificationService.showLiveScoreUpdate(
@@ -296,6 +325,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
         _loadingApi = false;
         _apiError = error.toString();
         _apiWarning = null;
+        _apiProgress = null;
       });
     }
   }
@@ -520,7 +550,11 @@ class _AgendaScreenState extends State<AgendaScreen> {
           children: <Widget>[
             CircularProgressIndicator(color: agendaCyan),
             SizedBox(height: 12),
-            Text('Cargando partidos…', style: TextStyle(color: agendaMuted)),
+            Text(
+              _apiProgress ?? appText('Cargando partidos…', 'Loading matches…', 'Carregando partidas…', 'Chargement des matchs…'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: agendaMuted),
+            ),
           ],
         ),
       );
@@ -833,6 +867,32 @@ class _AgendaScreenState extends State<AgendaScreen> {
                   },
                 ),
               ),
+              if (_loadingApi && _apiProgress != null && events.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
+                  child: Row(
+                    children: <Widget>[
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: agendaCyan,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _apiProgress!,
+                          style: const TextStyle(
+                            color: agendaMuted,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               if (_apiWarning != null && events.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
