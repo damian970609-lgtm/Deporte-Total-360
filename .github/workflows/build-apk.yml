@@ -12,6 +12,16 @@ on:
       - 'pubspec.yaml'
       - 'analysis_options.yaml'
       - '.github/workflows/build-apk.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'lib/**'
+      - 'test/**'
+      - 'assets/**'
+      - 'pubspec.yaml'
+      - 'analysis_options.yaml'
+      - '.github/workflows/build-apk.yml'
 
 permissions:
   contents: read
