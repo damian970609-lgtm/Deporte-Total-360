@@ -9,6 +9,7 @@ import 'agenda_screen.dart';
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
 import 'notification_service.dart';
+import 'public_chat_screen.dart';
 import 'sports_api_service.dart';
 import 'sports_statistics_screen.dart';
 import 'web_agenda_screen.dart';
@@ -74,6 +75,10 @@ class DeporteTotal360App extends StatelessWidget {
       valueListenable: appLanguage,
       builder: (context, language, _) => MaterialApp(
         title: tr('title'),
+        locale: Locale(languageCode(language)),
+        supportedLocales: const <Locale>[
+          Locale('es'), Locale('en'), Locale('pt'), Locale('fr'),
+        ],
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,
@@ -122,7 +127,7 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   static const int _homeTab = 0;
-  static const int _footballTab = 1;
+  static const int _statisticsTab = 1;
   static const int _agendaWebTab = 3;
   static const int _settingsTab = 5;
 
@@ -130,29 +135,39 @@ class _MainShellState extends State<MainShell> {
       GlobalKey<WebAgendaScreenState>();
 
   int _selectedIndex = _homeTab;
-  String _agendaSport = 'Fútbol';
+  String _selectedStatisticsSport = 'Fútbol';
   bool _handlingBack = false;
 
   void _selectTab(int index) {
     if (index < 0 || index > _settingsTab) return;
     setState(() {
       _selectedIndex = index;
-      if (index == _footballTab) _agendaSport = 'Fútbol';
+      if (index == _statisticsTab) _selectedStatisticsSport = 'Fútbol';
     });
   }
 
   void _selectSport(String sport) {
     setState(() {
-      _agendaSport = sport;
-      // Los mosaicos abren la agenda nativa filtrada por deporte.
-      // La pestaña inferior Agenda abre la web dentro de la app.
-      _selectedIndex = _footballTab;
+      _selectedStatisticsSport = sport;
+      _selectedIndex = _statisticsTab;
     });
   }
 
   Future<void> _openStatistics() async {
+    _selectTab(_statisticsTab);
+  }
+
+  Future<void> _openAgenda() async {
     await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const SportsStatisticsScreen()),
+      MaterialPageRoute<void>(
+        builder: (_) => AgendaScreen(initialSport: _selectedStatisticsSport),
+      ),
+    );
+  }
+
+  Future<void> _openPublicChat() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const PublicChatScreen()),
     );
   }
 
@@ -274,10 +289,13 @@ class _MainShellState extends State<MainShell> {
         onDonations: _openDonations,
         onFantasy: _openFantasy,
         onStatistics: _openStatistics,
+        onOpenAgenda: _openAgenda,
+        onChat: _openPublicChat,
       ),
-      AgendaScreen(
-        key: ValueKey<String>('football-$_agendaSport'),
-        initialSport: _agendaSport,
+      SportsStatisticsScreen(
+        key: ValueKey<String>('statistics-$_selectedStatisticsSport'),
+        initialSport: _selectedStatisticsSport,
+        onOpenAgenda: _openAgenda,
       ),
       const LiveScreen(),
       WebAgendaScreen(
@@ -331,12 +349,12 @@ class _MainShellState extends State<MainShell> {
                   label: tr('home'),
                 ),
                 NavigationDestination(
-                  icon: const Icon(Icons.sports_soccer_outlined),
+                  icon: const Icon(Icons.query_stats_outlined),
                   selectedIcon: const Icon(
-                    Icons.sports_soccer_rounded,
+                    Icons.query_stats_rounded,
                     color: appCyan,
                   ),
-                  label: tr('football'),
+                  label: tr('stats_title'),
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.live_tv_outlined),
@@ -467,6 +485,8 @@ class HomeDashboard extends StatelessWidget {
     required this.onDonations,
     required this.onFantasy,
     required this.onStatistics,
+    required this.onOpenAgenda,
+    required this.onChat,
   });
 
   final ValueChanged<int> onNavigate;
@@ -476,6 +496,8 @@ class HomeDashboard extends StatelessWidget {
   final VoidCallback onDonations;
   final VoidCallback onFantasy;
   final VoidCallback onStatistics;
+  final VoidCallback onOpenAgenda;
+  final VoidCallback onChat;
 
   @override
   Widget build(BuildContext context) {
@@ -644,7 +666,7 @@ class HomeDashboard extends StatelessWidget {
                       subtitle: appText('Calendario y resultados', 'Schedule and results', 'Calendário e resultados', 'Calendrier et résultats'),
                       icon: Icons.calendar_month_rounded,
                       color: appGreen,
-                      onTap: () => onNavigate(1),
+                      onTap: onOpenAgenda,
                     ),
                     _ActionTile(
                       title: tr('telegram'),
@@ -659,6 +681,13 @@ class HomeDashboard extends StatelessWidget {
                       icon: Icons.emoji_events_rounded,
                       color: appPink,
                       onTap: onFantasy,
+                    ),
+                    _ActionTile(
+                      title: tr('public_chat'),
+                      subtitle: appText('Sala para todos', 'Room for everyone', 'Sala para todos', 'Salon pour tous'),
+                      icon: Icons.forum_rounded,
+                      color: appCyan,
+                      onTap: onChat,
                     ),
                   ],
                 ),
