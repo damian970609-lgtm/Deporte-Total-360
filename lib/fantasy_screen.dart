@@ -18,7 +18,9 @@ const Color _fantasyMuted = Color(0xFFA9BDD6);
 /// Mister Fantasy. No copia ni modifica el código, marca o interfaz interna
 /// del servicio: el contenido se carga desde el dominio de su propietario.
 class FantasyScreen extends StatefulWidget {
-  const FantasyScreen({super.key});
+  const FantasyScreen({super.key, this.onExit});
+
+  final VoidCallback? onExit;
 
   static const String officialUrl =
       'https://mister.mundodeportivo.com/new-onboarding/';
@@ -54,6 +56,10 @@ class _FantasyScreenState extends State<FantasyScreen> {
       }
 
       if (!mounted) return;
+      if (widget.onExit != null) {
+        widget.onExit!();
+        return;
+      }
       setState(() => _allowPop = true);
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -193,7 +199,7 @@ class _FantasyScreenState extends State<FantasyScreen> {
     return PopScope<void>(
       canPop: _allowPop,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) _handleBackRequest();
+        if (!didPop && widget.onExit == null) _handleBackRequest();
       },
       child: Scaffold(
         backgroundColor: _fantasyBg,
