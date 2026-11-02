@@ -377,7 +377,7 @@ class _MainShellState extends State<MainShell> {
                     Icons.calendar_month_rounded,
                     color: appGreen,
                   ),
-                  label: tr('agenda'),
+                  label: tr('web_agenda'),
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.article_outlined),
@@ -564,7 +564,7 @@ class HomeDashboard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                const _BrandHero(),
+                _BrandHero()
                 const SizedBox(height: 8),
                 Text(
                   tr('tagline'),
@@ -1110,7 +1110,7 @@ class _BrandHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 178,
+      height: 148,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(17),
@@ -2454,10 +2454,31 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
 
     setState(() => _testing = true);
     try {
-      await SportsApiService().checkHealth(url);
-      _showMessage(appText('Conexión correcta con Deporte Total 360 API.', 'Connected to Deporte Total 360 API.', 'Conectado à API Deporte Total 360.', 'Connecté à l’API Deporte Total 360.'));
+      final service = SportsApiService();
+      await service.checkHealth(url);
+      final fixtureCount = await service.checkFootballFixtures(url);
+      _showMessage(
+        fixtureCount == 0
+            ? appText(
+                'Worker operativo y API-Sports configurada. La consulta respondió correctamente, pero no hay partidos en los próximos 7 días.',
+                'Worker online and API-Sports configured. The fixture request succeeded, but there are no matches in the next 7 days.',
+                'Worker online e API-Sports configurada. A consulta funcionou, mas não há jogos nos próximos 7 dias.',
+                'Worker en ligne et API-Sports configurée. La requête a réussi, mais aucun match dans les 7 prochains jours.',
+              )
+            : appText(
+                'Conexión verificada: $fixtureCount partidos recibidos en los próximos 7 días.',
+                'Connection verified: $fixtureCount matches received in the next 7 days.',
+                'Conexão verificada: $fixtureCount jogos recebidos nos próximos 7 dias.',
+                'Connexion vérifiée : $fixtureCount matchs reçus dans les 7 prochains jours.',
+              ),
+      );
     } catch (error) {
-      _showMessage(appText('No se pudo verificar el servidor: $error', 'Could not verify the server: $error', 'Não foi possível verificar o servidor: $error', 'Impossible de vérifier le serveur : $error'));
+      _showMessage(appText(
+        'La prueba del servidor o de partidos falló: $error',
+        'The server or fixtures test failed: $error',
+        'O teste do servidor ou dos jogos falhou: $error',
+        'Le test du serveur ou des matchs a échoué : $error',
+      ));
     } finally {
       if (mounted) setState(() => _testing = false);
     }
