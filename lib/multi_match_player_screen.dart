@@ -164,8 +164,9 @@ class _MultiMatchPlayerTileState extends State<_MultiMatchPlayerTile> {
   }
 
   Future<void> _initialize() async {
-    final uri = _source?.validatedUri;
-    if (uri == null) {
+    final source = _source;
+    final uri = source?.validatedUri;
+    if (source == null || uri == null) {
       if (mounted) setState(() { _loading = false; _error = 'Fuente no válida'; });
       return;
     }
@@ -180,7 +181,7 @@ class _MultiMatchPlayerTileState extends State<_MultiMatchPlayerTile> {
         : path.endsWith('.mpd')
             ? VideoFormat.dash
             : VideoFormat.other;
-    final controller = VideoPlayerController.networkUrl(uri, formatHint: format, httpHeaders: source!.httpHeaders);
+    final controller = VideoPlayerController.networkUrl(uri, formatHint: format, httpHeaders: source.httpHeaders);
     _controller = controller;
     try {
       await controller.initialize().timeout(const Duration(seconds: 25));
@@ -308,7 +309,7 @@ class _MultiMatchPlayerTileState extends State<_MultiMatchPlayerTile> {
                     constraints: const BoxConstraints.tightFor(width: 27, height: 25),
                     padding: EdgeInsets.zero,
                     onPressed: () async {
-                      if (controller!.value.isPlaying) {
+                      if (controller.value.isPlaying) {
                         await controller.pause();
                       } else {
                         await controller.play();
