@@ -9,6 +9,8 @@ Archivos principales:
 - lib/sports_api_service.dart: conexión con el Worker sin introducir claves en la APK.
 - lib/web_agenda_screen.dart: agenda externa integrada.
 - lib/news_screen.dart: feed RSS y lector de noticias.
+- lib/sports_summaries_screen.dart: resúmenes recientes de canales oficiales de YouTube, reproducidos dentro de la APK.
+- lib/public_chat_screen.dart: chat neón, fondo de Ajustes y traducción local según el idioma elegido.
 - lib/web_protection_policy.dart: reglas compartidas de protección web.
 - lib/fantasy_screen.dart: módulo Fantasy.
 - test/: pruebas automatizadas.
