@@ -1825,6 +1825,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 13),
             _settingsCard(
+              border: appBlue,
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0x332D8CFF),
+                  child: Icon(Icons.cloud_sync_rounded, color: appCyan),
+                ),
+                title: Text(
+                  appText(
+                    'Servidor de estadísticas y agenda',
+                    'Statistics and schedule server',
+                    'Servidor de estatísticas e agenda',
+                    'Serveur des statistiques et du calendrier',
+                  ),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                ),
+                subtitle: Text(
+                  appText(
+                    'Comprobar la conexión y configurar la URL pública del Worker.',
+                    'Check the connection and configure the public Worker URL.',
+                    'Verifique a conexão e configure a URL pública do Worker.',
+                    'Vérifier la connexion et configurer l’URL publique du Worker.',
+                  ),
+                  style: const TextStyle(color: appMuted, fontSize: 11, height: 1.4),
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded, color: appCyan),
+                onTap: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const DeveloperSettingsScreen(),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 13),
+            _settingsCard(
               border: appCyan,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2138,7 +2177,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
       backgroundColor: appBg,
       appBar: AppBar(
         title: Text(
-          appText('MENÚ DE DESARROLLADOR', 'DEVELOPER MENU', 'MENU DO DESENVOLVEDOR', 'MENU DÉVELOPPEUR'),
+          appText('SERVIDOR Y DATOS DEPORTIVOS', 'SPORTS DATA SERVER', 'SERVIDOR E DADOS ESPORTIVOS', 'SERVEUR ET DONNÉES SPORTIVES'),
           style: TextStyle(
             color: appCyan,
             fontWeight: FontWeight.w900,
@@ -2248,7 +2287,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                 border: Border.all(color: appGreen.withAlpha(150)),
               ),
               child: Text(
-                appText('SEGURIDAD: la clave APISPORTS_KEY debe permanecer como secreto del Worker en Cloudflare. La aplicación solo guarda la URL pública del servidor. Este acceso oculto por diez toques es discreto, pero no sustituye autenticación real.', 'SECURITY: keep APISPORTS_KEY as a Cloudflare Worker secret. The app stores only the public server URL. This hidden ten-tap entry is discreet, but it is not real authentication.', 'SEGURANÇA: mantenha APISPORTS_KEY como segredo do Worker no Cloudflare. O app salva apenas a URL pública do servidor. O acesso oculto por dez toques não substitui autenticação real.', 'SÉCURITÉ : gardez APISPORTS_KEY comme secret du Worker Cloudflare. L’application ne stocke que l’URL publique du serveur. L’accès caché par dix touches ne remplace pas une authentification réelle.'),
+                appText('SEGURIDAD: la clave APISPORTS_KEY permanece como secreto del Worker en Cloudflare. La aplicación guarda solo la URL pública. El acceso directo desde Ajustes y el atajo de diez toques abren esta misma pantalla; ninguno sustituye autenticación real.', 'SECURITY: APISPORTS_KEY remains a Cloudflare Worker secret. The app stores only the public URL. The Settings shortcut and the ten-tap shortcut open this same screen; neither replaces real authentication.', 'SEGURANÇA: APISPORTS_KEY permanece como segredo do Worker no Cloudflare. O app salva apenas a URL pública. O atalho em Configurações e o atalho de dez toques abrem esta mesma tela; nenhum substitui autenticação real.', 'SÉCURITÉ : APISPORTS_KEY reste un secret du Worker Cloudflare. L’application ne conserve que l’URL publique. Le raccourci des paramètres et celui de dix pressions ouvrent le même écran ; aucun ne remplace une véritable authentification.'),
                 style: TextStyle(color: appMuted, fontSize: 11, height: 1.5),
               ),
             ),
