@@ -12,6 +12,7 @@ import 'notification_service.dart';
 import 'public_chat_screen.dart';
 import 'sports_api_service.dart';
 import 'sports_statistics_screen.dart';
+import 'sports_summaries_screen.dart';
 import 'web_agenda_screen.dart';
 
 // Identidad visual de DEPORTE TOTAL 360°: azul noche, cian, rosa y verde neón.
@@ -129,7 +130,7 @@ class _MainShellState extends State<MainShell> {
   static const int _homeTab = 0;
   static const int _statisticsTab = 1;
   static const int _agendaWebTab = 3;
-  static const int _settingsTab = 5;
+  static const int _settingsTab = 8;
 
   final GlobalKey<WebAgendaScreenState> _webAgendaKey =
       GlobalKey<WebAgendaScreenState>();
@@ -151,6 +152,48 @@ class _MainShellState extends State<MainShell> {
       _selectedStatisticsSport = sport;
       _selectedIndex = _statisticsTab;
     });
+  }
+
+  Widget _tabButton(int index, IconData icon, String label, Color accent) {
+    final selected = _selectedIndex == index;
+    return SizedBox(
+      width: 78,
+      child: InkWell(
+        onTap: () => _selectTab(index),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          margin: const EdgeInsets.fromLTRB(3, 6, 3, 5),
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
+          decoration: BoxDecoration(
+            color: selected ? accent.withAlpha(30) : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? accent.withAlpha(180) : Colors.transparent,
+            ),
+            boxShadow: selected
+                ? <BoxShadow>[BoxShadow(color: accent.withAlpha(28), blurRadius: 10)]
+                : const <BoxShadow>[],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(icon, color: selected ? accent : appMuted, size: 20),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected ? Colors.white : appMuted,
+                  fontSize: 9,
+                  fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _openStatistics() async {
@@ -311,6 +354,9 @@ class _MainShellState extends State<MainShell> {
         onOpenLive: () => _selectTab(2),
       ),
       const NewsScreen(),
+      SportsSummariesScreen(isActive: _selectedIndex == 5),
+      const FantasyScreen(),
+      PublicChatScreen(isActive: _selectedIndex == 7),
       const SettingsScreen(),
     ];
 
@@ -326,6 +372,7 @@ class _MainShellState extends State<MainShell> {
           children: pages,
         ),
         bottomNavigationBar: Container(
+          height: 66,
           decoration: BoxDecoration(
             color: const Color(0xFF020B19),
             border: const Border(top: BorderSide(color: appLine)),
@@ -339,63 +386,22 @@ class _MainShellState extends State<MainShell> {
           ),
           child: SafeArea(
             top: false,
-            child: NavigationBar(
-              height: 64,
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: _selectTab,
-              backgroundColor: const Color(0xFF020B19),
-              indicatorColor: appBlue.withAlpha(95),
-              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-              destinations: <NavigationDestination>[
-                NavigationDestination(
-                  icon: const Icon(Icons.home_outlined),
-                  selectedIcon: const Icon(
-                    Icons.home_rounded,
-                    color: appCyan,
-                  ),
-                  label: tr('home'),
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.query_stats_outlined),
-                  selectedIcon: const Icon(
-                    Icons.query_stats_rounded,
-                    color: appCyan,
-                  ),
-                  label: tr('statistics'),
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.live_tv_outlined),
-                  selectedIcon: const Icon(
-                    Icons.live_tv_rounded,
-                    color: appPink,
-                  ),
-                  label: tr('live'),
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.calendar_month_outlined),
-                  selectedIcon: const Icon(
-                    Icons.calendar_month_rounded,
-                    color: appGreen,
-                  ),
-                  label: tr('web_agenda'),
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.article_outlined),
-                  selectedIcon: const Icon(
-                    Icons.article_rounded,
-                    color: appGreen,
-                  ),
-                  label: tr('news'),
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.settings_outlined),
-                  selectedIcon: const Icon(
-                    Icons.settings_rounded,
-                    color: appCyan,
-                  ),
-                  label: tr('settings'),
-                ),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: <Widget>[
+                  _tabButton(0, Icons.home_rounded, tr('home'), appCyan),
+                  _tabButton(1, Icons.query_stats_rounded, tr('statistics'), appCyan),
+                  _tabButton(2, Icons.live_tv_rounded, tr('live'), appPink),
+                  _tabButton(3, Icons.calendar_month_rounded, tr('web_agenda'), appGreen),
+                  _tabButton(4, Icons.article_rounded, tr('news'), appGreen),
+                  _tabButton(5, Icons.play_circle_fill_rounded,
+                      appText('Resúmenes', 'Highlights', 'Resumos', 'Résumés'), appPink),
+                  _tabButton(6, Icons.emoji_events_rounded, 'Fantasy', appYellow),
+                  _tabButton(7, Icons.forum_rounded, 'Chat', appCyan),
+                  _tabButton(8, Icons.settings_rounded, tr('settings'), appCyan),
+                ],
+              ),
             ),
           ),
         ),
@@ -551,7 +557,7 @@ class HomeDashboard extends StatelessWidget {
           ),
           IconButton(
             tooltip: tr('settings'),
-            onPressed: () => onNavigate(5),
+            onPressed: () => onNavigate(8),
             icon: const Icon(Icons.settings_rounded, color: appCyan),
           ),
         ],

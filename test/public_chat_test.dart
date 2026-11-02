@@ -9,11 +9,13 @@ void main() {
         'name': 'Invitado',
         'text': '¡Vamos equipo! ⚽🔥',
         'createdAt': '2026-11-02T14:30:00Z',
+        'language': 'pt',
       });
 
       expect(message.id, 'message-1');
       expect(message.name, 'Invitado');
       expect(message.text, '¡Vamos equipo! ⚽🔥');
+      expect(message.language, 'pt');
       expect(message.createdAt.toUtc(), DateTime.utc(2026, 11, 2, 14, 30));
     });
 
@@ -23,6 +25,7 @@ void main() {
       expect(message.id, isEmpty);
       expect(message.name, 'Invitado');
       expect(message.text, isEmpty);
+      expect(message.language, 'es');
     });
   });
 

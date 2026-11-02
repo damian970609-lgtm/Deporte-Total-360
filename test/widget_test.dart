@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:deporte_total_360/agenda_screen.dart';
 import 'package:deporte_total_360/main.dart';
@@ -7,10 +11,39 @@ import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sports_statistics_screen.dart';
 
 void main() {
+  setUp(() {
+    SportsApiService.clientOverride = MockClient((request) async {
+      if (request.url.path.endsWith('/leagues')) {
+        return http.Response(jsonEncode(<String, dynamic>{
+          'response': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'league': <String, dynamic>{'id': 39, 'name': 'Premier League'},
+              'country': <String, dynamic>{'name': 'England'},
+              'seasons': <Map<String, dynamic>>[
+                <String, dynamic>{'year': DateTime.now().year, 'current': true},
+              ],
+            },
+          ],
+          'errors': <String, dynamic>{},
+        }), 200);
+      }
+      return http.Response(jsonEncode(<String, dynamic>{
+        'response': <dynamic>[],
+        'errors': <String, dynamic>{},
+      }), 200);
+    });
+  });
+
+  tearDown(() {
+    SportsApiService.clientOverride = null;
+    SportsApiService.resetForTesting();
+  });
+
   testWidgets('estadísticas muestra selector multideporte e IDs', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(home: SportsStatisticsScreen()),
     );
+    await tester.pump();
 
     expect(find.text('ESTADÍSTICAS DEPORTIVAS'), findsOneWidget);
     expect(find.text('BUSCAR LIGAS'), findsOneWidget);
@@ -24,6 +57,7 @@ void main() {
         home: SportsStatisticsScreen(initialSport: 'Fórmula 1'),
       ),
     );
+    await tester.pump();
 
     expect(find.text('SPORT ID  •  formula-1'), findsOneWidget);
     expect(find.textContaining('Tipo de clasificación'), findsOneWidget);

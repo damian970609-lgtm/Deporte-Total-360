@@ -116,6 +116,30 @@ class NewsRepository {
       url:
           'https://news.google.com/rss/search?q=futbol&hl=es-419&gl=US&ceid=US:es-419',
     ),
+    NewsSource(
+      name: 'Google News • Baloncesto',
+      category: 'Baloncesto',
+      url:
+          'https://news.google.com/rss/search?q=baloncesto+NBA&hl=es-419&gl=US&ceid=US:es-419',
+    ),
+    NewsSource(
+      name: 'Google News • Tenis',
+      category: 'Tenis',
+      url:
+          'https://news.google.com/rss/search?q=tenis+ATP+WTA&hl=es-419&gl=US&ceid=US:es-419',
+    ),
+    NewsSource(
+      name: 'Google News • Motor',
+      category: 'Motor',
+      url:
+          'https://news.google.com/rss/search?q=Formula+1+F1&hl=es-419&gl=US&ceid=US:es-419',
+    ),
+    NewsSource(
+      name: 'Google News • Béisbol',
+      category: 'Otros',
+      url:
+          'https://news.google.com/rss/search?q=beisbol+MLB&hl=es-419&gl=US&ceid=US:es-419',
+    ),
   ];
 
   static Future<List<NewsStory>> load() async {

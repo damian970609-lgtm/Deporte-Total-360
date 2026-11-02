@@ -21,7 +21,8 @@ class WebAgendaScreen extends StatefulWidget {
   final VoidCallback onExit;
   final VoidCallback onOpenLive;
 
-  static const String initialUrl = 'https://futbol-libre.cam/';
+  static const String initialUrl = 'https://futbol-libre.futbol/';
+  static const String previousUrl = 'https://futbol-libre.cam/';
 
   @override
   State<WebAgendaScreen> createState() => WebAgendaScreenState();
@@ -286,6 +287,13 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
               Icons.chevron_right_rounded,
               color: _canGoForward ? _brandCyan : _brandMuted,
             ),
+          ),
+          IconButton(
+            tooltip: 'Probar dirección anterior',
+            onPressed: () => _controller?.loadUrl(
+              urlRequest: URLRequest(url: WebUri(WebAgendaScreen.previousUrl)),
+            ),
+            icon: const Icon(Icons.swap_horiz_rounded, color: _brandMuted),
           ),
           IconButton(
             tooltip: 'Recargar',
