@@ -229,7 +229,7 @@ const Map<String, Map<AppLanguage, String>> _labels =
     AppLanguage.english: 'Enable reminders',
     AppLanguage.portuguese: 'Ativar lembretes',
     AppLanguage.french: 'Activer les rappels',
-  },,
+  },
   'public_chat': <AppLanguage, String>{
     AppLanguage.spanish: 'CHAT PÚBLICO',
     AppLanguage.english: 'PUBLIC CHAT',
