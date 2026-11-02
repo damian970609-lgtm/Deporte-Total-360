@@ -275,7 +275,47 @@ class SportsApiService {
     required String ranking,
   }) async {
     final year = season.trim();
-    if (!RegExp(r'^\\d{4}
+    if (year.length != 4 || int.tryParse(year) == null) {
+      throw const SportsApiException('La temporada debe tener formato YYYY.');
+    }
+    if (ranking != 'driver-rankings' && ranking != 'team-rankings') {
+      throw const SportsApiException('Clasificación de Fórmula 1 no válida.');
+    }
+    final base = normalizeBaseUrl(sportsApiBaseUrl.value);
+    if (base == null) throw const SportsApiException('Configura una URL HTTPS válida del servidor.');
+    final uri = Uri.parse(base + '/api/formula-1/' + ranking).replace(
+      queryParameters: <String, String>{'season': year},
+    );
+    return _getRows(uri);
+  }
+
+  /// Calendario de combates de MMA para una fecha concreta.
+  Future<List<Map<String, dynamic>>> fetchMmaFights({DateTime? date}) async {
+    final base = normalizeBaseUrl(sportsApiBaseUrl.value);
+    if (base == null) throw const SportsApiException('Configura una URL HTTPS válida del servidor.');
+    final selectedDate = date ?? DateTime.now();
+    final day = selectedDate.year.toString().padLeft(4, '0') + '-' +
+        selectedDate.month.toString().padLeft(2, '0') + '-' +
+        selectedDate.day.toString().padLeft(2, '0');
+    final uri = Uri.parse(base + '/api/mma/fights').replace(
+      queryParameters: <String, String>{'date': day},
+    );
+    return _getRows(uri);
+  }
+
+  /// Busca luchadores por nombre sin exponer la clave del proveedor.
+  Future<List<Map<String, dynamic>>> fetchMmaFighters({required String search}) async {
+    final term = search.trim();
+    if (term.isEmpty) throw const SportsApiException('Escribe el nombre de un luchador.');
+    final base = normalizeBaseUrl(sportsApiBaseUrl.value);
+    if (base == null) throw const SportsApiException('Configura una URL HTTPS válida del servidor.');
+    final uri = Uri.parse(base + '/api/mma/fighters').replace(
+      queryParameters: <String, String>{'search': term},
+    );
+    return _getRows(uri);
+  }
+
+
   static Future<void> _reserveRequestSlot() async {
     final previous = _requestQueue;
     final release = Completer<void>();
