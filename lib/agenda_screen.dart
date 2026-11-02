@@ -329,17 +329,22 @@ class _AgendaScreenState extends State<AgendaScreen> {
           .whereType<MatchEvent>()
           .toList(growable: false);
 
-      // Match only explicit XMLTV programme entries that name both teams.
-      final catalogueMatches = await ChannelCatalogService.instance.findMatchesForEvents(
-        matches.map((event) => ChannelMatchQuery(
-          id: event.id,
-          sport: event.sport,
-          homeTeam: event.homeTeam,
-          awayTeam: event.awayTeam,
-          competition: event.competition,
-          startsAt: event.startsAt,
-        )).toList(growable: false),
-      );
+      // Optional catalogue failures must never hide valid sports fixtures.
+      var catalogueMatches = const <String, List<ChannelMatchSuggestion>>{};
+      try {
+        catalogueMatches = await ChannelCatalogService.instance.findMatchesForEvents(
+          matches.map((event) => ChannelMatchQuery(
+            id: event.id,
+            sport: event.sport,
+            homeTeam: event.homeTeam,
+            awayTeam: event.awayTeam,
+            competition: event.competition,
+            startsAt: event.startsAt,
+          )).toList(growable: false),
+        );
+      } catch (_) {
+        catalogueMatches = const <String, List<ChannelMatchSuggestion>>{};
+      }
       final enrichedMatches = matches.map((event) {
         final merged = <MatchStreamSource>[
           ...event.streamSources,
