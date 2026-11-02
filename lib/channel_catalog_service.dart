@@ -202,14 +202,8 @@ class ChannelCatalogService {
       final isCompressed = Uri.parse(config.epgUrl).path.toLowerCase().endsWith('.gz') ||
           contentType.contains('gzip') ||
           contentType.contains('application/x-gzip');
-      final epgBytes = isCompressed
-          ? gzip.decode(epgResponse.bodyBytes)
-          : epgResponse.bodyBytes;
-      if (epgBytes.length > maxDecodedEpgBytes) {
-        throw const FormatException('La guía XMLTV descomprimida supera el límite de 40 MB.');
-      }
       programmes = parseXmlTv(
-        utf8.decode(epgBytes, allowMalformed: true),
+        decodeXmlTvPayload(epgResponse.bodyBytes, gzipEncoded: isCompressed),
       );
     }
 
@@ -282,6 +276,17 @@ class ChannelCatalogService {
     }
     final seen = <String>{};
     return result.where((channel) => seen.add(channel.url)).toList(growable: false);
+  }
+
+  static String decodeXmlTvPayload(
+    List<int> bytes, {
+    required bool gzipEncoded,
+  }) {
+    final decoded = gzipEncoded ? gzip.decode(bytes) : bytes;
+    if (decoded.length > maxDecodedEpgBytes) {
+      throw const FormatException('La guía XMLTV descomprimida supera el límite de 40 MB.');
+    }
+    return utf8.decode(decoded, allowMalformed: true);
   }
 
   static List<TvGuideProgramme> parseXmlTv(String content) {
