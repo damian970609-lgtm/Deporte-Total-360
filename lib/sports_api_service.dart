@@ -355,6 +355,7 @@ class SportsApiService {
   Future<List<Map<String, dynamic>>> fetchAllAgendaEvents({
     required String dateFilter,
     void Function(String sport, Object error)? onSportError,
+    void Function(String sport, List<Map<String, dynamic>> rows)? onSportComplete,
   }) async {
     final sports = supportedSports.keys.toList(growable: false);
     final results = await Future.wait(sports.map((sport) async {
@@ -363,12 +364,15 @@ class SportsApiService {
           sport: sport,
           dateFilter: dateFilter,
         );
-        return rows.map((row) => <String, dynamic>{
+        final taggedRows = rows.map((row) => <String, dynamic>{
           ...row,
           '_sportName': sport,
         }).toList(growable: false);
+        onSportComplete?.call(sport, taggedRows);
+        return taggedRows;
       } catch (error) {
         onSportError?.call(sport, error);
+        onSportComplete?.call(sport, const <Map<String, dynamic>>[]);
         return <Map<String, dynamic>>[];
       }
     }));
