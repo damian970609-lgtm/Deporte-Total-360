@@ -634,28 +634,28 @@ class HomeDashboard extends StatelessWidget {
                   children: <Widget>[
                     _ActionTile(
                       title: tr('streams'),
-                      subtitle: 'Ver canales',
+                      subtitle: appText('Ver canales', 'Watch channels', 'Ver canais', 'Voir les chaînes'),
                       icon: Icons.live_tv_rounded,
                       color: appRed,
                       onTap: () => onNavigate(2),
                     ),
                     _ActionTile(
                       title: tr('matches'),
-                      subtitle: 'Calendario y resultados',
+                      subtitle: appText('Calendario y resultados', 'Schedule and results', 'Calendário e resultados', 'Calendrier et résultats'),
                       icon: Icons.calendar_month_rounded,
                       color: appGreen,
                       onTap: () => onNavigate(1),
                     ),
                     _ActionTile(
                       title: tr('telegram'),
-                      subtitle: 'Canal oficial',
+                      subtitle: appText('Canal oficial', 'Official channel', 'Canal oficial', 'Chaîne officielle'),
                       icon: Icons.send_rounded,
                       color: appBlue,
                       onTap: onTelegram,
                     ),
                     _ActionTile(
-                      title: 'FANTASY',
-                      subtitle: 'Jugar y competir',
+                      title: appText('FANTASY', 'FANTASY', 'FANTASY', 'FANTASY'),
+                      subtitle: appText('Jugar y competir', 'Play and compete', 'Jogar e competir', 'Jouer et concourir'),
                       icon: Icons.emoji_events_rounded,
                       color: appPink,
                       onTap: onFantasy,
@@ -668,7 +668,7 @@ class HomeDashboard extends StatelessWidget {
                     Expanded(
                       child: _ActionTile(
                         title: tr('contact'),
-                        subtitle: 'En caso de fallas',
+                        subtitle: appText('En caso de fallas', 'For support', 'Em caso de problemas', 'En cas de problème'),
                         icon: Icons.chat_rounded,
                         color: appGreen,
                         onTap: onContact,
@@ -678,7 +678,7 @@ class HomeDashboard extends StatelessWidget {
                     Expanded(
                       child: _ActionTile(
                         title: tr('donations'),
-                        subtitle: 'Apoya el proyecto',
+                        subtitle: appText('Apoya el proyecto', 'Support the project', 'Apoie o projeto', 'Soutenir le projet'),
                         icon: Icons.favorite_rounded,
                         color: appYellow,
                         onTap: onDonations,
