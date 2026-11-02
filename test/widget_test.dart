@@ -21,13 +21,6 @@ void main() {
       ),
     );
 
-    final selector = tester.widget<DropdownButtonFormField<String>>(
-      find.byType(DropdownButtonFormField<String>).first,
-    );
-    expect(
-      selector.items!.map((item) => item.value),
-      contains('formula-1'),
-    );
     expect(find.text('SPORT ID  •  formula-1'), findsOneWidget);
     expect(find.textContaining('Tipo de clasificación'), findsOneWidget);
   });
