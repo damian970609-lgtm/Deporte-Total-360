@@ -1933,27 +1933,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       height: 1.4,
                     ),
                   ),
-                  SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      tr('notifications_enabled'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
+                  Material(
+                    color: Colors.transparent,
+                    child: SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        tr('notifications_enabled'),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                    ),
-                    subtitle: Text(
-                      appText(
-                        'Aviso antes de los eventos que cargues en la agenda.',
-                        'Reminder before events you load in the schedule.',
-                        'Aviso antes dos eventos carregados na agenda.',
-                        'Alerte avant les événements chargés dans le calendrier.',
+                      subtitle: Text(
+                        appText(
+                          'Aviso antes de los eventos que cargues en la agenda.',
+                          'Reminder before events you load in the schedule.',
+                          'Aviso antes dos eventos carregados na agenda.',
+                          'Alerte avant les événements chargés dans le calendrier.',
+                        ),
+                        style: const TextStyle(color: appMuted, fontSize: 10),
                       ),
-                      style: const TextStyle(color: appMuted, fontSize: 10),
+                      value: _notificationsEnabled,
+                      activeThumbColor: appGreen,
+                      onChanged: _toggleNotifications,
                     ),
-                    value: _notificationsEnabled,
-                    activeThumbColor: appGreen,
-                    onChanged: _toggleNotifications,
                   ),
                   if (_notificationsEnabled)
                     Align(
