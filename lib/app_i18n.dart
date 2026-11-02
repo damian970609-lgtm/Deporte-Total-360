@@ -229,6 +229,54 @@ const Map<String, Map<AppLanguage, String>> _labels =
     AppLanguage.english: 'Enable reminders',
     AppLanguage.portuguese: 'Ativar lembretes',
     AppLanguage.french: 'Activer les rappels',
+  },,
+  'public_chat': <AppLanguage, String>{
+    AppLanguage.spanish: 'CHAT PÚBLICO',
+    AppLanguage.english: 'PUBLIC CHAT',
+    AppLanguage.portuguese: 'CHAT PÚBLICO',
+    AppLanguage.french: 'CHAT PUBLIC',
+  },
+  'public_chat_online': <AppLanguage, String>{
+    AppLanguage.spanish: 'SALA COMPARTIDA · TODOS LOS USUARIOS',
+    AppLanguage.english: 'SHARED ROOM · ALL USERS',
+    AppLanguage.portuguese: 'SALA COMPARTILHADA · TODOS OS USUÁRIOS',
+    AppLanguage.french: 'SALON PARTAGÉ · TOUS LES UTILISATEURS',
+  },
+  'public_chat_name': <AppLanguage, String>{
+    AppLanguage.spanish: 'Tu nombre público',
+    AppLanguage.english: 'Your public name',
+    AppLanguage.portuguese: 'Seu nome público',
+    AppLanguage.french: 'Votre nom public',
+  },
+  'public_chat_name_hint': <AppLanguage, String>{
+    AppLanguage.spanish: 'Ej.: Damian',
+    AppLanguage.english: 'e.g. Alex',
+    AppLanguage.portuguese: 'Ex.: Alex',
+    AppLanguage.french: 'Ex. : Alex',
+  },
+  'public_chat_message_hint': <AppLanguage, String>{
+    AppLanguage.spanish: 'Escribe un mensaje…',
+    AppLanguage.english: 'Write a message…',
+    AppLanguage.portuguese: 'Escreva uma mensagem…',
+    AppLanguage.french: 'Écrivez un message…',
+  },
+  'public_chat_retry': <AppLanguage, String>{
+    AppLanguage.spanish: 'REINTENTAR',
+    AppLanguage.english: 'RETRY',
+    AppLanguage.portuguese: 'TENTAR NOVAMENTE',
+    AppLanguage.french: 'RÉESSAYER',
+  },
+  'public_chat_empty': <AppLanguage, String>{
+    AppLanguage.spanish: 'Todavía no hay mensajes. ¡Saluda a la comunidad!',
+    AppLanguage.english: 'There are no messages yet. Say hello to the community!',
+    AppLanguage.portuguese: 'Ainda não há mensagens. Dê oi à comunidade!',
+    AppLanguage.french: 'Aucun message pour le moment. Saluez la communauté !',
+  },
+  'public_chat_rules': <AppLanguage, String>{
+    AppLanguage.spanish: 'Chat público: todos pueden leer y escribir. No compartas contraseñas, teléfonos ni datos personales. Los nombres son alias y no están verificados.',
+    AppLanguage.english: 'Public chat: everyone can read and post. Do not share passwords, phone numbers or personal data. Names are unverified nicknames.',
+    AppLanguage.portuguese: 'Chat público: todos podem ler e escrever. Não compartilhe senhas, telefones ou dados pessoais. Os nomes são apelidos não verificados.',
+    AppLanguage.french: 'Chat public : tout le monde peut lire et écrire. Ne partagez pas de mots de passe, numéros de téléphone ou données personnelles. Les noms sont des pseudonymes non vérifiés.',
   },
 };
 
