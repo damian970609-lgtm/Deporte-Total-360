@@ -589,6 +589,29 @@ class SportsApiException implements Exception {
     return results.expand((rows) => rows).toList(growable: false);
   }
 
+  /// Loads all sports calendars independently, so one unsupported provider
+  /// cannot hide results from the other sports.
+  Future<List<Map<String, dynamic>>> fetchAllAgendaEvents({
+    required String dateFilter,
+  }) async {
+    final sports = supportedSports.keys.toList(growable: false);
+    final results = await Future.wait(sports.map((sport) async {
+      try {
+        final rows = await fetchAgendaEvents(
+          sport: sport,
+          dateFilter: dateFilter,
+        );
+        return rows.map((row) => <String, dynamic>{
+          ...row,
+          '_sportName': sport,
+        }).toList(growable: false);
+      } catch (_) {
+        return <Map<String, dynamic>>[];
+      }
+    }));
+    return results.expand((rows) => rows).toList(growable: false);
+  }
+
   /// Ordena las solicitudes para evitar ráfagas de consultas.
   static Future<void> _reserveRequestSlot() async {
     final previous = _requestQueue;
