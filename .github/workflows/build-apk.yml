@@ -117,49 +117,79 @@ jobs:
       - name: Configurar desugaring para notificaciones
         run: |
           python3 - <<'PY'
+          import re
           from pathlib import Path
 
           kotlin = Path('android/app/build.gradle.kts')
           groovy = Path('android/app/build.gradle')
 
           if kotlin.exists():
-              content = kotlin.read_text(encoding='utf-8')
-              marker = 'compileOptions {'
-              if marker not in content:
-                  raise SystemExit('No se encontró compileOptions en build.gradle.kts')
-              if 'isCoreLibraryDesugaringEnabled' not in content:
-                  content = content.replace(
-                      marker,
-                      marker + '\n        isCoreLibraryDesugaringEnabled = true',
-                      1,
-                  )
+              path = kotlin
+              content = path.read_text(encoding='utf-8')
+              flag = 'isCoreLibraryDesugaringEnabled = true'
               dependency = 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")'
-              if dependency not in content:
-                  content = content.replace(
-                      'dependencies {',
-                      'dependencies {\n    ' + dependency,
-                      1,
+
+              if not re.search(r'(?m)^\\s*compileOptions\\s*\\{', content):
+                  raise SystemExit('No se encontró compileOptions en build.gradle.kts')
+              if flag not in content:
+                  content = re.sub(
+                      r'(?m)^(\\s*compileOptions\\s*\\{)',
+                      r'\\1\\n        ' + flag,
+                      content,
+                      count=1,
                   )
-              kotlin.write_text(content, encoding='utf-8')
+
+              if dependency not in content:
+                  match = re.search(r'(?m)^(\\s*dependencies\\s*\\{)', content)
+                  if match:
+                      content = (
+                          content[:match.end()] + '\\n    ' + dependency +
+                          content[match.end():]
+                      )
+                  else:
+                      content += '\\n\\ndependencies {\\n    ' + dependency + '\\n}\\n'
+
+              if flag not in content or dependency not in content:
+                  raise SystemExit('No quedó configurado el desugaring en build.gradle.kts')
+              path.write_text(content, encoding='utf-8')
+              print('Desugaring Kotlin DSL verificado:')
+              print(dependency)
+
           elif groovy.exists():
-              content = groovy.read_text(encoding='utf-8')
-              if 'coreLibraryDesugaringEnabled true' not in content:
-                  content = content.replace(
-                      'compileOptions {',
-                      'compileOptions {\n        coreLibraryDesugaringEnabled true',
-                      1,
-                  )
+              path = groovy
+              content = path.read_text(encoding='utf-8')
+              flag = 'coreLibraryDesugaringEnabled true'
               dependency = "coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'"
-              if dependency not in content:
-                  content = content.replace(
-                      'dependencies {',
-                      'dependencies {\n    ' + dependency,
-                      1,
+
+              if not re.search(r'(?m)^\\s*compileOptions\\s*\\{', content):
+                  raise SystemExit('No se encontró compileOptions en build.gradle')
+              if flag not in content:
+                  content = re.sub(
+                      r'(?m)^(\\s*compileOptions\\s*\\{)',
+                      r'\\1\\n        ' + flag,
+                      content,
+                      count=1,
                   )
-              groovy.write_text(content, encoding='utf-8')
+
+              if dependency not in content:
+                  match = re.search(r'(?m)^(\\s*dependencies\\s*\\{)', content)
+                  if match:
+                      content = (
+                          content[:match.end()] + '\\n    ' + dependency +
+                          content[match.end():]
+                      )
+                  else:
+                      content += '\\n\\ndependencies {\\n    ' + dependency + '\\n}\\n'
+
+              if flag not in content or dependency not in content:
+                  raise SystemExit('No quedó configurado el desugaring en build.gradle')
+              path.write_text(content, encoding='utf-8')
+              print('Desugaring Groovy verificado:')
+              print(dependency)
           else:
               raise SystemExit('No se encontró el archivo Gradle de la app Android')
           PY
+
 
       - name: Configurar compatibilidad de ProGuard
         run: |
