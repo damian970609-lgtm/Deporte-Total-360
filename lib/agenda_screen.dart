@@ -257,7 +257,9 @@ class _AgendaScreenState extends State<AgendaScreen> {
           awayScore: event.awayScore,
         );
       }
-      await _updateMatchNotifications(matches);
+      if (!announceScoreChanges) {
+        await _updateMatchNotifications(matches);
+      }
     } catch (error) {
       if (!mounted || requestVersion != _apiRequestVersion) return;
       setState(() {
