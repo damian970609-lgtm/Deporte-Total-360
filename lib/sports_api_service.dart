@@ -262,7 +262,7 @@ class SportsApiService {
             ? 'season'
             : 'search';
     final queryValue = sport == 'Fórmula 1'
-        ? (RegExp(r'^\\d{4}$').hasMatch(term)
+        ? (RegExp(r'^\d{4}$').hasMatch(term)
             ? term
             : throw const SportsApiException('Para Fórmula 1 escribe el año de temporada, por ejemplo 2026.'))
         : term;
@@ -281,7 +281,7 @@ class SportsApiService {
     if (base == null) throw const SportsApiException('Configura una URL HTTPS válida del servidor.');
     final id = leagueId.trim();
     final year = season.trim();
-    if (!RegExp(r'^\\d{4}(?:-\\d{4})?$').hasMatch(year)) {
+    if (!RegExp(r'^\d{4}(?:-\d{4})?$').hasMatch(year)) {
       throw const SportsApiException('La temporada debe tener formato 2026 o 2025-2026.');
     }
     final route = _resourceRoute(sport, 'standings');
@@ -294,7 +294,7 @@ class SportsApiService {
         ..clear()
         ..['date'] = _dateParam(DateTime.now());
     } else {
-      if (!RegExp(r'^\\d+$').hasMatch(id) || int.tryParse(id) == null || int.parse(id) < 1) {
+      if (!RegExp(r'^\d+$').hasMatch(id) || int.tryParse(id) == null || int.parse(id) < 1) {
         throw const SportsApiException('El identificador de liga debe ser numérico.');
       }
       parameters['league'] = id;
