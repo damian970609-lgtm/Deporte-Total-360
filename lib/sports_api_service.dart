@@ -66,6 +66,93 @@ class SportsApiService {
         '${date.day.toString().padLeft(2, '0')}';
   }
 
+
+
+  /// Comprueba el endpoint real de partidos después de validar el Worker.
+  /// Una respuesta 204 o una lista vacía significa que no hay eventos en el
+  /// rango, no que la conexión esté rota.
+  Future<int> checkFootballFixtures([String? baseUrl]) async {
+    final base = normalizeBaseUrl(baseUrl ?? sportsApiBaseUrl.value);
+    if (base == null) {
+      throw const SportsApiException('La URL del servidor no es válida.');
+    }
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final end = start.add(const Duration(days: 6));
+    final uri = Uri.parse('$base/api/fixtures').replace(
+      queryParameters: <String, String>{
+        'from': _dateParam(start),
+        'to': _dateParam(end),
+        'timezone': 'America/Guyana',
+      },
+    );
+    try {
+      final response = await _httpClient.get(uri).timeout(_timeout);
+      if (response.statusCode == 204) return 0;
+      if (response.statusCode != 200) {
+        var detail = '';
+        try {
+          final decoded = jsonDecode(response.body);
+          if (decoded is Map) {
+            final message = decoded['error'] ?? decoded['message'];
+            final details = decoded['details'] ?? decoded['errors'];
+            if (message != null) detail = message.toString();
+            if (details != null) {
+              detail = detail.isEmpty ? details.toString() : detail + ': ' + details.toString();
+            }
+          }
+        } catch (_) {
+          // Se conserva el código HTTP aunque el servidor no envíe JSON.
+        }
+        if (detail.length > 240) detail = detail.substring(0, 237) + '…';
+        throw SportsApiException(
+          'La consulta de partidos respondió HTTP ' +
+          response.statusCode.toString() +
+          (detail.isEmpty ? '.' : ': ' + detail),
+        );
+      }
+      dynamic decoded;
+      try {
+        decoded = jsonDecode(response.body);
+      } catch (_) {
+        throw const SportsApiException(
+          'La consulta de partidos devolvió JSON inválido.',
+        );
+      }
+      if (decoded is! Map) {
+        throw const SportsApiException(
+          'La respuesta de partidos no tiene el formato esperado.',
+        );
+      }
+      final errors = decoded['errors'];
+      final hasErrors = errors is List
+          ? errors.isNotEmpty
+          : errors is Map
+              ? errors.isNotEmpty
+              : errors != null && errors != false && errors.toString().trim().isNotEmpty;
+      if (hasErrors) {
+        throw SportsApiException('API-Sports devolvió errores: ' + errors.toString());
+      }
+      final rows = decoded['response'];
+      if (rows is! List) {
+        throw const SportsApiException(
+          'La respuesta del proveedor no contiene una lista de partidos.',
+        );
+      }
+      return rows.length;
+    } on TimeoutException {
+      throw const SportsApiException(
+        'El servidor tardó demasiado al consultar los partidos.',
+      );
+    } on SportsApiException {
+      rethrow;
+    } catch (_) {
+      throw const SportsApiException(
+        'No se pudo consultar el endpoint real de partidos. Comprueba Internet y el Worker.',
+      );
+    }
+  }
+
   Future<void> checkHealth([String? baseUrl]) async {
     final base = normalizeBaseUrl(
       baseUrl ?? sportsApiBaseUrl.value,
