@@ -8,6 +8,7 @@ import 'agenda_screen.dart';
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
 import 'sports_api_service.dart';
+import 'sports_statistics_screen.dart';
 import 'web_agenda_screen.dart';
 
 // Identidad visual de DEPORTE TOTAL 360°: azul noche, cian, rosa y verde neón.
@@ -88,6 +89,12 @@ const Map<String, Map<AppLanguage, String>> _labels =
     AppLanguage.english: 'Home',
     AppLanguage.portuguese: 'Início',
     AppLanguage.french: 'Accueil',
+  },
+  'statistics': <AppLanguage, String>{
+    AppLanguage.spanish: 'Estadísticas',
+    AppLanguage.english: 'Statistics',
+    AppLanguage.portuguese: 'Estatísticas',
+    AppLanguage.french: 'Statistiques',
   },
   'football': <AppLanguage, String>{
     AppLanguage.spanish: 'Fútbol',
@@ -316,7 +323,7 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   static const int _homeTab = 0;
-  static const int _footballTab = 1;
+  static const int _statisticsTab = 1;
   static const int _agendaWebTab = 3;
   static const int _settingsTab = 5;
 
@@ -325,22 +332,23 @@ class _MainShellState extends State<MainShell> {
 
   int _selectedIndex = _homeTab;
   String _agendaSport = 'Fútbol';
+  String _selectedStatisticsSport = 'Fútbol';
   bool _handlingBack = false;
 
   void _selectTab(int index) {
     if (index < 0 || index > _settingsTab) return;
     setState(() {
       _selectedIndex = index;
-      if (index == _footballTab) _agendaSport = 'Fútbol';
+      if (index == _statisticsTab) _selectedStatisticsSport = 'Fútbol';
     });
   }
 
   void _selectSport(String sport) {
     setState(() {
       _agendaSport = sport;
-      // Los mosaicos abren la agenda nativa filtrada por deporte.
-      // La pestaña inferior Agenda abre la web dentro de la app.
-      _selectedIndex = _footballTab;
+      _selectedStatisticsSport = sport;
+      // Los mosaicos deportivos abren Estadísticas con el deporte elegido.
+      _selectedIndex = _statisticsTab;
     });
   }
 
@@ -462,9 +470,9 @@ class _MainShellState extends State<MainShell> {
         onDonations: _openDonations,
         onFantasy: _openFantasy,
       ),
-      AgendaScreen(
-        key: ValueKey<String>('football-$_agendaSport'),
-        initialSport: _agendaSport,
+      SportsStatisticsScreen(
+        key: ValueKey<String>('statistics-$_selectedStatisticsSport'),
+        initialSport: _selectedStatisticsSport,
       ),
       const LiveScreen(),
       WebAgendaScreen(
@@ -518,12 +526,12 @@ class _MainShellState extends State<MainShell> {
                   label: tr('home'),
                 ),
                 NavigationDestination(
-                  icon: const Icon(Icons.sports_soccer_outlined),
+                  icon: const Icon(Icons.query_stats_outlined),
                   selectedIcon: const Icon(
-                    Icons.sports_soccer_rounded,
+                    Icons.query_stats_rounded,
                     color: appCyan,
                   ),
-                  label: tr('football'),
+                  label: tr('statistics'),
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.live_tv_outlined),
