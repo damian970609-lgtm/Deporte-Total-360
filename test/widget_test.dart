@@ -153,11 +153,14 @@ void main() {
     await tester.pump();
     expect(find.byType(SportsNotificationsScreen), findsOneWidget);
 
-    final partidosBottomTab = find.text('Partidos').last;
+    final partidosBottomTab = find.byKey(
+      const ValueKey<String>('bottom-tab-6'),
+    );
+    expect(partidosBottomTab, findsOneWidget);
     await tester.ensureVisible(partidosBottomTab);
     await tester.pumpAndSettle();
     await tester.tap(partidosBottomTab);
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.byType(AgendaScreen), findsOneWidget);
     expect(find.text('Fantasy'), findsOneWidget);

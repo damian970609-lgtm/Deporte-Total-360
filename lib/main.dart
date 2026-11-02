@@ -183,6 +183,7 @@ class _MainShellState extends State<MainShell> {
   Widget _tabButton(int index, IconData icon, String label, Color accent) {
     final selected = _selectedIndex == index;
     return SizedBox(
+      key: ValueKey<String>('bottom-tab-$index'),
       width: 78,
       child: InkWell(
         onTap: () => _selectTab(index),
