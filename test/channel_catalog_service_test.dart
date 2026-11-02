@@ -20,6 +20,20 @@ https://media.example/live/sports-two/manifest.mpd
       expect(channels.first.group, 'Sports');
     });
 
+    test('conserva User-Agent y Referer autorizados de EXT VlcOpt', () {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.one",Sports One
+#EXTVLCOPT:http-user-agent=DeporteTotal360/1.0
+#EXTVLCOPT:http-referrer=https://provider.example/watch
+https://media.example/live/sports-one/playlist.m3u8
+''';
+      final channels = ChannelCatalogService.parseM3u(playlist);
+      expect(channels, hasLength(1));
+      expect(channels.single.httpHeaders['User-Agent'], 'DeporteTotal360/1.0');
+      expect(channels.single.httpHeaders['Referer'], 'https://provider.example/watch');
+    });
+
     test('rechaza esquemas no HTTP y URL con credenciales', () {
       const playlist = '''
 #EXTM3U
