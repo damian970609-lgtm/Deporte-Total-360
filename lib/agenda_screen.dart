@@ -3,7 +3,6 @@ import 'package:video_player/video_player.dart';
 
 import 'sports_api_service.dart';
 import 'notification_service.dart';
-import 'app_i18n.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'sports_statistics_screen.dart';
 
@@ -170,13 +169,17 @@ class _AgendaScreenState extends State<AgendaScreen> {
     }
 
     try {
-      final requestedSport = _sport == 'Todos' ? 'Fútbol' : _sport;
-      final rows = await _apiService.fetchAgendaEvents(
-        sport: requestedSport,
-        dateFilter: _dateFilter,
-      );
+      final rows = _sport == 'Todos'
+          ? await _apiService.fetchAllAgendaEvents(dateFilter: _dateFilter)
+          : await _apiService.fetchAgendaEvents(
+              sport: _sport,
+              dateFilter: _dateFilter,
+            );
       final matches = rows
-          .map((row) => _matchFromApi(row, requestedSport))
+          .map((row) => _matchFromApi(
+                row,
+                (row['_sportName'] ?? _sport).toString(),
+              ))
           .whereType<MatchEvent>()
           .toList(growable: false);
       if (!mounted || requestVersion != _apiRequestVersion) return;
@@ -246,27 +249,39 @@ class _AgendaScreenState extends State<AgendaScreen> {
 
     final fixture = asMap(row['fixture']);
     final game = asMap(row['game']);
-    final league = asMap(row['league'] ?? game['league']);
+    final race = asMap(row['race']);
+    final fight = asMap(row['fight']);
+    final league = asMap(row['league'] ?? game['league'] ?? race['competition']);
     final teams = asMap(row['teams'] ?? game['teams']);
+    final fighters = asMap(row['fighters'] ?? fight['fighters']);
 
-    final homeRaw = teams['home'] ?? row['home'] ?? game['home'];
-    final awayRaw = teams['away'] ?? row['away'] ?? game['away'];
+    final homeRaw = teams['home'] ?? row['home'] ?? game['home'] ??
+        fighters['fighter1'] ?? fighters['red'] ?? row['fighter1'] ??
+        row['red'] ?? (sport == 'Fórmula 1' ? race['competition'] ?? row['competition'] : null) ??
+        row['driver'];
+    final awayRaw = teams['away'] ?? row['away'] ?? game['away'] ??
+        fighters['fighter2'] ?? fighters['blue'] ?? row['fighter2'] ??
+        row['blue'] ?? (sport == 'Fórmula 1' ? race['circuit'] ?? row['circuit'] : null);
 
     final home = asMap(homeRaw);
     final away = asMap(awayRaw);
     final homeNested = asMap(home['team']);
     final awayNested = asMap(away['team']);
+    final homeFighter = asMap(home['fighter']);
+    final awayFighter = asMap(away['fighter']);
 
     final homeName = '${home['name'] ??
         homeNested['name'] ??
+        homeFighter['name'] ??
         (homeRaw is String ? homeRaw : '')}'.trim();
 
     final awayName = '${away['name'] ??
         awayNested['name'] ??
+        awayFighter['name'] ??
         (awayRaw is String ? awayRaw : '')}'.trim();
 
-    final rawDate =
-        fixture['date'] ?? row['date'] ?? game['date'];
+    final rawDate = fixture['date'] ?? row['date'] ?? game['date'] ??
+        fight['date'] ?? race['date'] ?? row['start_date'];
 
     final kickoff = DateTime.tryParse('${rawDate ?? ''}');
 
@@ -322,17 +337,18 @@ class _AgendaScreenState extends State<AgendaScreen> {
     return MatchEvent(
       id: '${eventId ?? '${homeName}_$awayName'}',
       sport: sport,
-      competition: '${league['name'] ?? row['competition'] ?? sport}',
+      competition: '${league['name'] ?? row['competition'] ?? race['name'] ?? fight['name'] ?? sport}',
       homeTeam: homeName,
       awayTeam: awayName,
       startsAt: kickoff.toLocal(),
-      homeLogoUrl: (home['logo'] ?? homeNested['logo']) is String
-          ? (home['logo'] ?? homeNested['logo']) as String
+      homeLogoUrl: (home['logo'] ?? homeNested['logo'] ?? homeFighter['photo']) is String
+          ? (home['logo'] ?? homeNested['logo'] ?? homeFighter['photo']) as String
           : null,
-      awayLogoUrl: (away['logo'] ?? awayNested['logo']) is String
-          ? (away['logo'] ?? awayNested['logo']) as String
+      awayLogoUrl: (away['logo'] ?? awayNested['logo'] ?? awayFighter['photo']) is String
+          ? (away['logo'] ?? awayNested['logo'] ?? awayFighter['photo']) as String
           : null,
-      leagueId: league['id']?.toString(),
+      leagueId: league['id']?.toString() ?? race['id']?.toString() ??
+          fight['id']?.toString(),
       sportId: const <String, String>{
         'Fútbol': 'football', 'Básquet': 'basketball', 'NBA': 'nba',
         'Béisbol': 'baseball', 'Fútbol americano': 'american-football',
