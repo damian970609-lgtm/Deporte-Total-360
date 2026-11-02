@@ -50,4 +50,36 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+
+  testWidgets('Inicio conserva accesos y Explorar abre Estadísticas', (tester) async {
+    var statisticsOpened = 0;
+    var wrongTabSelected = -1;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeDashboard(
+          onNavigate: (index) => wrongTabSelected = index,
+          onSportSelected: (_) {},
+          onTelegram: () {},
+          onContact: () {},
+          onDonations: () {},
+          onFantasy: () {},
+          onStatistics: () => statisticsOpened++,
+          onOpenAgenda: () {},
+          onChat: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('TODOS LOS DEPORTES'), findsOneWidget);
+    expect(find.text('TRANSMISIONES EN VIVO'), findsOneWidget);
+    expect(find.text('AGENDA DE PARTIDOS'), findsOneWidget);
+    expect(find.text('TELEGRAM'), findsOneWidget);
+    expect(find.text('FACEBOOK'), findsNothing);
+    expect(find.text('FANTASY'), findsOneWidget);
+
+    await tester.tap(find.text('Explorar →'));
+    expect(statisticsOpened, 1);
+    expect(wrongTabSelected, -1);
+  });
+
 }
