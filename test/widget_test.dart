@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:deporte_total_360/agenda_screen.dart';
+import 'package:deporte_total_360/main.dart';
+import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sports_statistics_screen.dart';
 
 void main() {
@@ -24,4 +28,26 @@ void main() {
     expect(find.text('SPORT ID  •  formula-1'), findsOneWidget);
     expect(find.textContaining('Tipo de clasificación'), findsOneWidget);
   });
+  testWidgets('la agenda de fútbol muestra por defecto los próximos siete días', (tester) async {
+    sportsApiBaseUrl.value = '';
+    await tester.pumpWidget(
+      const MaterialApp(home: AgendaScreen(initialSport: 'Fútbol')),
+    );
+
+    expect(find.text('Próximos 7 días'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
+  });
+
+  testWidgets('Ajustes expone un acceso visible al servidor deportivo', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    await tester.pumpWidget(
+      const MaterialApp(home: SettingsScreen()),
+    );
+    await tester.pump();
+
+    expect(find.text('Servidor de estadísticas y agenda'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
 }
