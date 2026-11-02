@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
@@ -158,6 +160,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
   bool _loadingApi = false;
   String? _apiError;
   int _apiRequestVersion = 0;
+  Timer? _scorePollingTimer;
 
   @override
   void initState() {
@@ -170,10 +173,17 @@ class _AgendaScreenState extends State<AgendaScreen> {
     if (sportsApiBaseUrl.value.trim().isNotEmpty) {
       _loadRemoteMatches();
     }
+    _scorePollingTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      // No sondear el resumen de todos los deportes continuamente: las
+      // alertas de marcador se consultan para el deporte que el usuario ve.
+      if (!mounted || _sport == 'Todos' || _dateFilter != 'Hoy' || _loadingApi) return;
+      _loadRemoteMatches(announceScoreChanges: true);
+    });
   }
 
   @override
   void dispose() {
+    _scorePollingTimer?.cancel();
     sportsApiBaseUrl.removeListener(_apiConfigurationListener);
     _searchController.dispose();
     super.dispose();
@@ -194,7 +204,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
     _loadRemoteMatches();
   }
 
-  Future<void> _loadRemoteMatches() async {
+  Future<void> _loadRemoteMatches({bool announceScoreChanges = false}) async {
     if (sportsApiBaseUrl.value.trim().isEmpty) return;
     final requestVersion = ++_apiRequestVersion;
     if (mounted) {
@@ -219,11 +229,34 @@ class _AgendaScreenState extends State<AgendaScreen> {
           .whereType<MatchEvent>()
           .toList(growable: false);
       if (!mounted || requestVersion != _apiRequestVersion) return;
+      final previousById = <String, MatchEvent>{
+        for (final previous in _remoteMatches) previous.id: previous,
+      };
+      final scoreChanges = announceScoreChanges
+          ? matches.where((current) {
+              final previous = previousById[current.id];
+              return previous != null &&
+                  current.status == MatchStatus.live &&
+                  (current.homeScore != previous.homeScore ||
+                      current.awayScore != previous.awayScore) &&
+                  (current.homeScore != null || current.awayScore != null);
+            }).toList(growable: false)
+          : const <MatchEvent>[];
       setState(() {
         _remoteMatches = matches;
         _loadingApi = false;
         _apiError = null;
       });
+      for (final event in scoreChanges) {
+        await NotificationService.showLiveScoreUpdate(
+          eventId: event.id,
+          sport: event.sport,
+          homeTeam: event.homeTeam,
+          awayTeam: event.awayTeam,
+          homeScore: event.homeScore,
+          awayScore: event.awayScore,
+        );
+      }
       await _updateMatchNotifications(matches);
     } catch (error) {
       if (!mounted || requestVersion != _apiRequestVersion) return;
