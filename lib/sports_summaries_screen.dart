@@ -578,7 +578,36 @@ class _SummaryPlayerScreenState extends State<_SummaryPlayerScreen> {
 
   String get _playerHtml {
     final id = widget.video.id;
-    if (!RegExp(r'^[A-Za-z0-9_-]{6,20}
+    if (id.isEmpty || id.contains(RegExp(r'[^A-Za-z0-9_-]'))) {
+      return '<!doctype html><html><body>Video ID no válido</body></html>';
+    }
+    return '''
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="referrer" content="origin">
+<style>
+html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}
+.player{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+iframe{width:100%;height:100%;border:0;background:#000}
+</style>
+</head>
+<body>
+<div class="player">
+<iframe
+  src="https://www.youtube-nocookie.com/embed/$id?autoplay=1&controls=1&playsinline=1&rel=0"
+  title="Resumen deportivo"
+  referrerpolicy="origin"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+  allowfullscreen>
+</iframe>
+</div>
+</body>
+</html>
+''';
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
