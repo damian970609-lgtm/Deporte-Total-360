@@ -46,6 +46,31 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
     if(_sports.contains(widget.initialSport))_sport=widget.initialSport;
   }
 
+  String _t(String es,String en,String pt,String fr){
+    switch(Localizations.localeOf(context).languageCode){
+      case 'en':return en;
+      case 'pt':return pt;
+      case 'fr':return fr;
+      default:return es;
+    }
+  }
+
+  String _sportLabel(String sport){
+    switch(sport){
+      case 'Fútbol':return _t('Fútbol','Football','Futebol','Football');
+      case 'Básquet':return _t('Básquet','Basketball','Basquete','Basket-ball');
+      case 'Béisbol':return _t('Béisbol','Baseball','Beisebol','Baseball');
+      case 'Fútbol americano':return _t('Fútbol americano','American football','Futebol americano','Football américain');
+      case 'Hockey sobre hielo':return _t('Hockey sobre hielo','Ice hockey','Hóquei no gelo','Hockey sur glace');
+      case 'Balonmano':return _t('Balonmano','Handball','Handebol','Handball');
+      case 'Vóley':return _t('Vóley','Volleyball','Vôlei','Volley-ball');
+      case 'Fútbol australiano':return _t('Fútbol australiano','Australian football','Futebol australiano','Football australien');
+      case 'Fórmula 1':return 'Formula 1';
+      case 'MMA':return 'MMA';
+      default:return sport;
+    }
+  }
+
   @override
   void dispose(){_searchController.dispose();super.dispose();}
 
@@ -240,8 +265,8 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
       backgroundColor:_statsBg,
       appBar:AppBar(
         backgroundColor:_statsBg,
-        title:const Text('ESTADÍSTICAS',
-          style:TextStyle(color:_statsCyan,fontSize:14,fontWeight:FontWeight.w900)),
+        title:Text(_t('ESTADÍSTICAS','STATISTICS','ESTATÍSTICAS','STATISTIQUES'),
+          style:const TextStyle(color:_statsCyan,fontSize:14,fontWeight:FontWeight.w900)),
         actions:<Widget>[
           if(widget.onOpenAgenda!=null)IconButton(
             tooltip:'Abrir agenda de partidos',
@@ -253,17 +278,17 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
       body:ListView(
         padding:const EdgeInsets.fromLTRB(14,10,14,24),
         children:<Widget>[
-          const Text('Consulta estadísticas, competiciones y clasificaciones de varios deportes.',
-            style:TextStyle(color:_statsMuted,fontSize:12,height:1.45)),
+          Text(_t('Consulta estadísticas, competiciones y clasificaciones de varios deportes.','Browse statistics, competitions and standings across sports.','Consulte estatísticas, competições e classificações de vários esportes.','Consultez les statistiques, compétitions et classements de plusieurs sports.'),
+            style:const TextStyle(color:_statsMuted,fontSize:12,height:1.45)),
           const SizedBox(height:5),
-          Text('IDENTIFICADOR DEL DEPORTE: ${_sportIds[_sport]??'no disponible'}',
+          Text(_t('IDENTIFICADOR DEL DEPORTE:','SPORT ID:','ID DO ESPORTE:','ID DU SPORT:')+' ${_sportIds[_sport]??'—'}',
             style:const TextStyle(color:_statsCyan,fontSize:10,fontWeight:FontWeight.w800)),
           const SizedBox(height:12),
           DropdownButtonFormField<String>(
             value:_sport,
-            decoration:const InputDecoration(labelText:'Deporte',filled:true,fillColor:_statsPanel),
+            decoration:InputDecoration(labelText:_t('Deporte','Sport','Esporte','Sport'),filled:true,fillColor:_statsPanel),
             dropdownColor:_statsPanel,
-            items:_sports.map((sport)=>DropdownMenuItem<String>(value:sport,child:Text(sport))).toList(),
+            items:_sports.map((sport)=>DropdownMenuItem<String>(value:sport,child:Text(_sportLabel(sport)))).toList(),
             onChanged:(value){
               if(value==null)return;
               setState((){
@@ -279,10 +304,10 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
             onSubmitted:(_)=>_searchLeagues(),
             style:const TextStyle(color:Colors.white),
             decoration:InputDecoration(
-              labelText:'Buscar liga o competición',hintText:'Ej.: Premier League',
+              labelText:_t('Buscar liga o competición','Search league or competition','Buscar liga ou competição','Rechercher une ligue ou compétition'),hintText:_sport=='Fórmula 1'?'Ej.: 2026':_sport=='MMA'?'Ej.: peso ligero':'Ej.: Premier League',
               filled:true,fillColor:_statsPanel,
               suffixIcon:IconButton(
-                tooltip:'Buscar ligas',onPressed:_searching?null:_searchLeagues,
+                tooltip:_t('Buscar competiciones','Search competitions','Buscar competições','Rechercher des compétitions'),onPressed:_searching?null:_searchLeagues,
                 icon:const Icon(Icons.search_rounded,color:_statsCyan),
               ),
             ),
@@ -293,13 +318,13 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
             child:OutlinedButton.icon(
               onPressed:_searching?null:_searchLeagues,
               icon:_searching?const SizedBox(width:17,height:17,child:CircularProgressIndicator(strokeWidth:2)):const Icon(Icons.manage_search_rounded),
-              label:Text(_searching?'BUSCANDO LIGAS…':'BUSCAR LIGAS'),
+              label:Text(_searching?_t('BUSCANDO…','SEARCHING…','BUSCANDO…','RECHERCHE…'):_t('BUSCAR','SEARCH','BUSCAR','RECHERCHER')),
               style:OutlinedButton.styleFrom(foregroundColor:_statsCyan,side:const BorderSide(color:_statsCyan)),
             ),
           ),
           if(_leagues.isNotEmpty)...<Widget>[
             const SizedBox(height:16),
-            const Text('RESULTADOS DE LIGAS',style:TextStyle(color:Colors.white,fontWeight:FontWeight.w900)),
+            Text(_t('RESULTADOS DE COMPETICIONES','COMPETITION RESULTS','RESULTADOS DAS COMPETIÇÕES','RÉSULTATS DES COMPÉTITIONS'),style:const TextStyle(color:Colors.white,fontWeight:FontWeight.w900)),
             const SizedBox(height:7),
             ..._leagues.take(12).map((row){
               final id=_leagueId(row);
@@ -343,7 +368,7 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
                   const SizedBox(height:9),
                   DropdownButtonFormField<String>(
                     value:_season,
-                    decoration:const InputDecoration(labelText:'Temporada',filled:true,fillColor:Color(0xFF0B1B31)),
+                    decoration:const InputDecoration(labelText:_t('Temporada','Season','Temporada','Saison'),filled:true,fillColor:Color(0xFF0B1B31)),
                     dropdownColor:_statsPanel,
                     items:(_seasons.isEmpty?<String>[_season]:_seasons)
                         .map((season)=>DropdownMenuItem<String>(value:season,child:Text(season))).toList(),
@@ -355,7 +380,7 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
                     icon:_loadingStandings
                         ?const SizedBox(width:17,height:17,child:CircularProgressIndicator(strokeWidth:2,color:_statsBg))
                         :const Icon(Icons.leaderboard_rounded),
-                    label:Text(_loadingStandings?'CARGANDO TABLA…':'VER CLASIFICACIÓN'),
+                    label:Text(_loadingStandings?_t('CARGANDO…','LOADING…','CARREGANDO…','CHARGEMENT…'):_t('VER ESTADÍSTICAS','VIEW STATISTICS','VER ESTATÍSTICAS','VOIR LES STATISTIQUES')),
                     style:FilledButton.styleFrom(backgroundColor:_statsCyan,foregroundColor:_statsBg),
                   ),
                 ],
@@ -379,7 +404,7 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
           ],
           if(_standingRows.isNotEmpty)...<Widget>[
             const SizedBox(height:18),
-            Text('TABLA • '+_selectedLeagueName+' • '+_season,
+            Text(_t('ESTADÍSTICAS • ','STATISTICS • ','ESTATÍSTICAS • ','STATISTIQUES • ')+_selectedLeagueName+' • '+_season,
               style:const TextStyle(color:Colors.white,fontWeight:FontWeight.w900,fontSize:12)),
             const SizedBox(height:7),
             ..._standingRows.asMap().entries.map((entry){
@@ -432,8 +457,8 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
             }),
           ],
           const SizedBox(height:12),
-          const Text('Los datos dependen de la cobertura y del plan de tu proveedor API-Sports. La aplicación no inventa clasificaciones cuando la fuente no devuelve información.',
-            textAlign:TextAlign.center,style:TextStyle(color:_statsMuted,fontSize:10,height:1.4)),
+          Text(_t('Los datos dependen de la cobertura y del plan de API-Sports. No se inventan resultados cuando la fuente no devuelve información.','Data depends on API-Sports coverage and subscription. Results are never fabricated when the source has no data.','Os dados dependem da cobertura e do plano API-Sports. Os resultados não são inventados quando a fonte não retorna dados.','Les données dépendent de la couverture et de l’abonnement API-Sports. Aucun résultat n’est inventé lorsque la source ne renvoie aucune donnée.'),
+            textAlign:TextAlign.center,style:const TextStyle(color:_statsMuted,fontSize:10,height:1.4)),
         ],
       ),
     );
