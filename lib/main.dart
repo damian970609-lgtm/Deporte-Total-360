@@ -167,7 +167,7 @@ class _MainShellState extends State<MainShell> {
   bool _handlingBack = false;
 
   void _selectTab(int index) {
-    if (index < 0 || index > _notificationsTab) return;
+    if (index < 0 || index > _settingsTab) return;
     setState(() {
       _selectedIndex = index;
     });
