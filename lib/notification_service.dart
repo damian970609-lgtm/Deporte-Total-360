@@ -4,6 +4,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
+import 'app_i18n.dart';
+
 class NotificationService {
   NotificationService._();
 
@@ -61,12 +63,17 @@ class NotificationService {
     final reminderAt = startsAt.toLocal().subtract(const Duration(minutes: 15));
     if (!reminderAt.isAfter(DateTime.now())) return;
 
-    final id = _stableId(eventId);
-    final channelName = 'Recordatorios deportivos';
+    final id = _stableId('$sport:$eventId');
+    final channelName = tr('notifications');
     await _plugin.zonedSchedule(
       id: id,
-      title: 'DEPORTE TOTAL 360°',
-      body: '$sport: $homeTeam vs $awayTeam comienza en 15 minutos.',
+      title: tr('title'),
+      body: appText(
+        '$sport: $homeTeam vs $awayTeam comienza en 15 minutos.',
+        '$sport: $homeTeam vs $awayTeam starts in 15 minutes.',
+        '$sport: $homeTeam vs $awayTeam começa em 15 minutos.',
+        '$sport : $homeTeam vs $awayTeam commence dans 15 minutes.',
+      ),
       scheduledDate: tz.TZDateTime.from(reminderAt, tz.local),
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
@@ -120,8 +127,13 @@ class NotificationService {
     await initialize();
     await _plugin.show(
       id: 360,
-      title: 'DEPORTE TOTAL 360°',
-      body: 'Las notificaciones deportivas están activadas.',
+      title: tr('title'),
+      body: appText(
+        'Las notificaciones deportivas están activadas.',
+        'Sports notifications are enabled.',
+        'As notificações esportivas estão ativadas.',
+        'Les notifications sportives sont activées.',
+      ),
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           'sports_match_reminders',
