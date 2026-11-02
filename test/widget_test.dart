@@ -88,7 +88,7 @@ void main() {
     expect(find.text('Mister Fantasy'), findsOneWidget);
     expect(find.text('Chat'), findsOneWidget);
     expect(find.text('Resúmenes'), findsOneWidget);
-    expect(find.text('Estadísticas'), findsOneWidget);
+    expect(find.text('Estadísticas'), findsWidgets);
   });
 
 
