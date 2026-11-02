@@ -138,7 +138,9 @@ class PublicChatService {
 }
 
 class PublicChatScreen extends StatefulWidget {
-  const PublicChatScreen({super.key});
+  const PublicChatScreen({super.key, this.isActive = true});
+
+  final bool isActive;
 
   @override
   State<PublicChatScreen> createState() => _PublicChatScreenState();
@@ -161,7 +163,29 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
   void initState() {
     super.initState();
     _loadSavedName();
-    _refreshMessages();
+    if (widget.isActive) {
+      _refreshMessages();
+      _startPolling();
+    } else {
+      _loading = false;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant PublicChatScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive == widget.isActive) return;
+    if (widget.isActive) {
+      _refreshMessages();
+      _startPolling();
+    } else {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+    }
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
     _pollTimer = Timer.periodic(
       const Duration(seconds: 4),
       (_) => _refreshMessages(silent: true),
