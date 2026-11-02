@@ -239,6 +239,9 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
   }
 
   String _rowName(Map<String,dynamic> row){
+    if(_sport=='Fórmula 1'){
+      return _text(row['driver']??row['name']??row['team']);
+    }
     final team=row['team']??row['competitor']??row['participant'];
     if(_text(team).isNotEmpty)return _text(team);
     if(_text(row['name']).isNotEmpty)return _text(row['name']);
@@ -246,6 +249,11 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
   }
 
   String _rowSubtitle(Map<String,dynamic> row){
+    if(_sport=='Fórmula 1'){
+      final team=_text(row['team']);
+      final wins=row['wins']??row['win'];
+      return <String>[team,wins==null?'':'Victorias $wins'].where((v)=>v.isNotEmpty).join('  ·  ');
+    }
     if(_sport=='MMA'){
       final fight=_asMap(row['fight']);
       final status=_text(fight['status']??fight['result']);
@@ -347,7 +355,7 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
                 child:ListTile(
                   dense:true,
                   leading:_badgeImage(
-                    (_asMap(row['league'])['logo']??_asMap(row['country'])['flag']??row['logo']??'').toString(),
+                    (_asMap(row['league'])['logo']??_asMap(row['competition'])['logo']??_asMap(row['country'])['flag']??row['logo']??'').toString(),
                     Icons.emoji_events_rounded,
                   ),
                   title:Text(_leagueName(row).isEmpty?'Liga '+id:_leagueName(row),
