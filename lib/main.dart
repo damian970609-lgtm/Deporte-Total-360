@@ -1826,38 +1826,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 13),
             _settingsCard(
               border: appBlue,
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0x332D8CFF),
-                  child: Icon(Icons.cloud_sync_rounded, color: appCyan),
-                ),
-                title: Text(
-                  appText(
-                    'Servidor de estadísticas y agenda',
-                    'Statistics and schedule server',
-                    'Servidor de estatísticas e agenda',
-                    'Serveur des statistiques et du calendrier',
+              child: Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0x332D8CFF),
+                    child: Icon(Icons.cloud_sync_rounded, color: appCyan),
                   ),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
+                  title: Text(
+                    appText(
+                      'Servidor de estadísticas y agenda',
+                      'Statistics and schedule server',
+                      'Servidor de estatísticas e agenda',
+                      'Serveur des statistiques et du calendrier',
+                    ),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                    ),
                   ),
-                ),
-                subtitle: Text(
-                  appText(
-                    'Comprobar la conexión y configurar la URL pública del Worker.',
-                    'Check the connection and configure the public Worker URL.',
-                    'Verifique a conexão e configure a URL pública do Worker.',
-                    'Vérifier la connexion et configurer l’URL publique du Worker.',
+                  subtitle: Text(
+                    appText(
+                      'Comprobar la conexión y configurar la URL pública del Worker.',
+                      'Check the connection and configure the public Worker URL.',
+                      'Verifique a conexão e configure a URL pública do Worker.',
+                      'Vérifier la connexion et configurer l’URL publique du Worker.',
+                    ),
+                    style: const TextStyle(color: appMuted, fontSize: 11, height: 1.4),
                   ),
-                  style: const TextStyle(color: appMuted, fontSize: 11, height: 1.4),
-                ),
-                trailing: const Icon(Icons.chevron_right_rounded, color: appCyan),
-                onTap: () => Navigator.of(context).push<void>(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const DeveloperSettingsScreen(),
+                  trailing: const Icon(Icons.chevron_right_rounded, color: appCyan),
+                  onTap: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const DeveloperSettingsScreen(),
+                    ),
                   ),
                 ),
               ),
