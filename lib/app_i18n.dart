@@ -4,7 +4,7 @@ enum AppLanguage { spanish, english, portuguese, french }
 
 final ValueNotifier<AppLanguage> appLanguage =
     ValueNotifier<AppLanguage>(AppLanguage.spanish);
-const String defaultSsh101Channel = 'deportetotal360';
+const String defaultSsh101Channel = '';
 final ValueNotifier<String> channelSlug =
     ValueNotifier<String>(defaultSsh101Channel);
 final ValueNotifier<String> telegramLink = ValueNotifier<String>('');
@@ -72,6 +72,12 @@ const Map<String, Map<AppLanguage, String>> _labels =
     AppLanguage.english: 'Schedule',
     AppLanguage.portuguese: 'Agenda',
     AppLanguage.french: 'Agenda',
+  },
+  'web_agenda': <AppLanguage, String>{
+    AppLanguage.spanish: 'Agenda web',
+    AppLanguage.english: 'Web schedule',
+    AppLanguage.portuguese: 'Agenda web',
+    AppLanguage.french: 'Agenda web',
   },
   'news': <AppLanguage, String>{
     AppLanguage.spanish: 'Noticias',
