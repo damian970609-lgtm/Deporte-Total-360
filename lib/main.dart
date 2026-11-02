@@ -9,7 +9,6 @@ import 'fantasy_screen.dart';
 import 'news_screen.dart';
 import 'sports_api_service.dart';
 import 'web_agenda_screen.dart';
-import 'web_protection_policy.dart';
 
 // Identidad visual de DEPORTE TOTAL 360°: azul noche, cian, rosa y verde neón.
 const Color appBg = Color(0xFF030814);
