@@ -249,7 +249,10 @@ Future<void> main() async {
         ? defaultSsh101Channel
         : savedChannel;
     telegramLink.value = prefs.getString('telegram_public_link') ?? '';
-    sportsApiBaseUrl.value = prefs.getString('sports_api_base_url') ?? '';
+    final savedApiUrl = prefs.getString('sports_api_base_url');
+    sportsApiBaseUrl.value =
+        SportsApiService.normalizeBaseUrl(savedApiUrl ?? '') ??
+        defaultSportsApiBaseUrl;
   } catch (_) {
     // La app puede abrirse aunque el almacenamiento local no esté disponible.
   }
@@ -1497,7 +1500,11 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
       }
       setState(() => _loading = false);
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) {
+        await controller.dispose();
+        if (identical(_controller, controller)) _controller = null;
+        return;
+      }
       setState(() {
         _loading = false;
         _error =
@@ -2276,7 +2283,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                 border: Border.all(color: appGreen.withAlpha(150)),
               ),
               child: const Text(
-                'SEGURIDAD: la clave APIFOOTBALL_KEY debe permanecer como secreto del Worker en Cloudflare. La aplicación solo guarda la URL pública del servidor. Este acceso oculto por diez toques es discreto, pero no sustituye autenticación real.',
+                'SEGURIDAD: la clave APISPORTS_KEY debe permanecer como secreto del Worker en Cloudflare. La aplicación solo guarda la URL pública del servidor. Este acceso oculto por diez toques es discreto, pero no sustituye autenticación real.',
                 style: TextStyle(color: appMuted, fontSize: 11, height: 1.5),
               ),
             ),
