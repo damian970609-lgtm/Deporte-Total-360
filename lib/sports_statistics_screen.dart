@@ -131,7 +131,10 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
 
   void _selectLeague(Map<String,dynamic> row){
     final id=_leagueId(row);
-    if(id.isEmpty || (_sport!='MMA' && !RegExp(r'^\d+
+    if (id.isEmpty || (_sport != 'MMA' && !RegExp(r'^\d+$').hasMatch(id))) {
+      setState(() => _error = 'La competición seleccionada no tiene un identificador válido.');
+      return;
+    }
     final seasons=_leagueSeasons(row);
     String? currentSeason;
     final rawSeasons=row['seasons'];
