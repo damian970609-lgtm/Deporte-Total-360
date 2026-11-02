@@ -43,11 +43,6 @@ String buildHlsUrl(String channel) => '$hlsBase$channel/playlist.m3u8';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    await NotificationService.initialize();
-  } catch (_) {
-    // La app continúa funcionando aunque el dispositivo no admita avisos.
-  }
-  try {
     final prefs = await SharedPreferences.getInstance();
     appLanguage.value = parseLanguage(prefs.getString('app_language'));
     final savedChannel = prefs.getString('ssh101_channel')?.trim();
@@ -61,6 +56,11 @@ Future<void> main() async {
         defaultSportsApiBaseUrl;
   } catch (_) {
     // La app puede abrirse aunque el almacenamiento local no esté disponible.
+  }
+  try {
+    await NotificationService.initialize();
+  } catch (_) {
+    // La app continúa funcionando aunque el dispositivo no admita avisos.
   }
   runApp(const DeporteTotal360App());
 }
