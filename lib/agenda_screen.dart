@@ -512,7 +512,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
       backgroundColor: agendaBg,
       appBar: AppBar(
         backgroundColor: agendaBg,
-        title: const Row(
+        title: Row(
           children: <Widget>[
             Icon(
               Icons.calendar_month_rounded,
@@ -724,7 +724,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                 padding: const EdgeInsets.fromLTRB(14, 13, 14, 8),
                 child: Row(
                   children: <Widget>[
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         appText('PARTIDOS Y EVENTOS', 'MATCHES AND EVENTS', 'JOGOS E EVENTOS', 'MATCHS ET ÉVÉNEMENTS'),
                         style: TextStyle(
