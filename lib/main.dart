@@ -1355,10 +1355,13 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
     final oldController = _controller;
     _controller = null;
     await oldController?.dispose();
-    final controller = VideoPlayerController.networkUrl(uri);
+    final controller = VideoPlayerController.networkUrl(
+      uri,
+      formatHint: VideoFormat.hls,
+    );
     _controller = controller;
     try {
-      await controller.initialize();
+      await controller.initialize().timeout(const Duration(seconds: 25));
       await controller.setLooping(false);
       if (!mounted) {
         await controller.dispose();
