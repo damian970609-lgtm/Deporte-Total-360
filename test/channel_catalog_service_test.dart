@@ -1,7 +1,19 @@
+import 'dart:convert';
+import 'dart:io' show gzip;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:deporte_total_360/channel_catalog_service.dart';
 
 void main() {
+  test('decodifica una guía XMLTV comprimida con gzip', () {
+    const xml = '<tv><channel id="sports.one"/></tv>';
+    final compressed = gzip.encode(utf8.encode(xml));
+    expect(
+      ChannelCatalogService.decodeXmlTvPayload(compressed, gzipEncoded: true),
+      xml,
+    );
+  });
+
   group('ChannelCatalogService.parseM3u', () {
     test('lee metadatos y limita formatos a HLS/DASH', () {
       const playlist = '''
