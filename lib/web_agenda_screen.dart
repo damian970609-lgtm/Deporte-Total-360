@@ -40,6 +40,8 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
 
   bool _isKnownTrackerHost(String host) => WebProtectionPolicy.isBlockedHost(host);
 
+  bool _isBlockedTarget(WebUri uri) => WebProtectionPolicy.isBlockedUrl(uri);
+
   bool _isHttpUrl(WebUri uri) {
     final scheme = uri.scheme.toLowerCase();
     return (scheme == 'https' || scheme == 'http') && uri.host.isNotEmpty;
@@ -164,9 +166,9 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
       return false;
     }
 
-    if (_isKnownTrackerHost(target.host)) {
+    if (_isBlockedTarget(target)) {
       _showNotice(
-        'Se bloqueó una ventana de publicidad o seguimiento conocida.',
+        'Se bloqueó una ventana emergente publicitaria o de contenido no solicitado.',
       );
       return false;
     }
@@ -408,9 +410,9 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                           return NavigationActionPolicy.CANCEL;
                         }
 
-                        if (_isKnownTrackerHost(uri.host)) {
+                        if (_isBlockedTarget(uri)) {
                           _showNotice(
-                            'Se bloqueó un recurso de publicidad/seguimiento conocido.',
+                            'Se bloqueó una red publicitaria o una red de anuncios para adultos.',
                           );
                           return NavigationActionPolicy.CANCEL;
                         }
