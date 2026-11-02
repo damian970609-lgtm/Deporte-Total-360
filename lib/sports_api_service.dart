@@ -208,7 +208,7 @@ class SportsApiService {
     return _getRows(uri);
   }
 
-  static const Map<String, String> _sportRouteIds = <String, String>{
+  static const Map<String, String> supportedSports = <String, String>{
     'Fútbol': 'football',
     'Básquet': 'basketball',
     'NBA': 'nba',
@@ -224,7 +224,7 @@ class SportsApiService {
   };
 
   String _resourceRoute(String sport, String resource) {
-    final sportId = _sportRouteIds[sport];
+    final sportId = supportedSports[sport];
     if (sportId == null) {
       throw SportsApiException(sport + ' no tiene un recurso de ' + resource + ' disponible.');
     }
