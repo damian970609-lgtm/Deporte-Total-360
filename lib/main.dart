@@ -395,7 +395,7 @@ class _MainShellState extends State<MainShell> {
       case _summariesTab:
         return SportsSummariesScreen(isActive: _selectedIndex == _summariesTab);
       case _fantasyTab:
-        return const FantasyScreen();
+        return FantasyScreen(onExit: () => _selectTab(_homeTab));
       case _chatTab:
         return PublicChatScreen(isActive: _selectedIndex == _chatTab);
       case _channelsTab:
