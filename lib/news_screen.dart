@@ -140,6 +140,38 @@ class NewsRepository {
       url:
           'https://news.google.com/rss/search?q=beisbol+MLB&hl=es-419&gl=US&ceid=US:es-419',
     ),
+    NewsSource(
+      name: 'Yahoo Sports',
+      category: 'Otros',
+      url: 'https://sports.yahoo.com/rss/',
+    ),
+    NewsSource(
+      name: 'The Athletic',
+      category: 'Otros',
+      url: 'https://www.nytimes.com/athletic/rss/news/',
+    ),
+    NewsSource(
+      name: 'CBS Sports',
+      category: 'Otros',
+      url: 'https://www.cbssports.com/rss/headlines/',
+    ),
+    NewsSource(
+      name: 'Fórmula 1 • Oficial',
+      category: 'Motor',
+      url: 'https://www.formula1.com/en/latest/all.xml',
+    ),
+    NewsSource(
+      name: 'Google News • ESPN Fútbol',
+      category: 'Fútbol',
+      url:
+          'https://news.google.com/rss/search?q=when:7d+site:espn.com/soccer&hl=es-419&gl=US&ceid=US:es-419',
+    ),
+    NewsSource(
+      name: 'Google News • ESPN NBA',
+      category: 'Baloncesto',
+      url:
+          'https://news.google.com/rss/search?q=when:7d+site:espn.com/nba&hl=es-419&gl=US&ceid=US:es-419',
+    ),
   ];
 
   static Future<List<NewsStory>> load() async {
@@ -190,7 +222,7 @@ class NewsRepository {
             'Accept': 'application/rss+xml, application/xml, text/xml, */*',
           },
         )
-        .timeout(const Duration(seconds: 15));
+        .timeout(const Duration(seconds: 10));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('HTTP ${response.statusCode}');
@@ -418,6 +450,105 @@ class _NewsScreenState extends State<NewsScreen> {
       ),
       body: Column(
         children: <Widget>[
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 10, 12, 5),
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: <Color>[
+                  Color(0xFF073B70),
+                  Color(0xFF111A42),
+                  Color(0xFF35134B),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _newsCyan.withAlpha(135)),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: _newsBlue.withAlpha(55),
+                  blurRadius: 18,
+                  offset: const Offset(0, 7),
+                ),
+                BoxShadow(
+                  color: _newsPink.withAlpha(24),
+                  blurRadius: 12,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: <Widget>[
+                Container(
+                  width: 43,
+                  height: 43,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(15),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(color: _newsCyan.withAlpha(150)),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: _newsCyan.withAlpha(45),
+                        blurRadius: 12,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.sports_soccer_rounded,
+                    color: _newsCyan,
+                    size: 27,
+                  ),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        appText(
+                          'EL DEPORTE EN PRIMER PLANO',
+                          'SPORTS IN THE SPOTLIGHT',
+                          'O ESPORTE EM DESTAQUE',
+                          'LE SPORT À LA UNE',
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 11,
+                          letterSpacing: .35,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        appText(
+                          'Noticias de fútbol, NBA, tenis, motor y más',
+                          'Football, NBA, tennis, motorsport and more',
+                          'Futebol, NBA, tênis, automobilismo e mais',
+                          'Football, NBA, tennis, sport automobile et plus',
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: _newsMuted,
+                          fontSize: 10,
+                          height: 1.25,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Icon(
+                  Icons.bolt_rounded,
+                  color: _newsPink,
+                  size: 26,
+                ),
+              ],
+            ),
+          ),
           SizedBox(
             height: 46,
             child: ListView.separated(
@@ -658,6 +789,8 @@ class _NewsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       color: _newsPanel,
+      elevation: 9,
+      shadowColor: _newsCyan.withAlpha(48),
       margin: const EdgeInsets.only(bottom: 15),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
@@ -675,6 +808,10 @@ class _NewsCard extends StatelessWidget {
                 child: Image.network(
                   story.imageUrl!,
                   fit: BoxFit.cover,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return _imagePlaceholder();
+                  },
                   errorBuilder: (_, __, ___) => _imagePlaceholder(),
                 ),
               )
