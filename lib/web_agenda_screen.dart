@@ -86,7 +86,8 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
             window.__dt360AdObserver = new MutationObserver((records) => {
               records.forEach((record) => record.addedNodes.forEach((node) => {
                 if (node.nodeType === 1) {
-                  if (node.matches && node.matches(selectors.join(','))) node.remove();
+                  if (node.matches && node.matches(selectors.join(',')) &&
+                      !node.closest('video, audio, .video-player, [class*="player"]')) node.remove();
                   else removeAds(node);
                 }
               }));
