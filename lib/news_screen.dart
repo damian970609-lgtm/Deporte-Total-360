@@ -498,7 +498,7 @@ class _NewsScreenState extends State<NewsScreen> {
                               size: 19,
                             ),
                             const SizedBox(width: 7),
-                            const Expanded(
+                            Expanded(
                               child: Text(
                                 appText('ÚLTIMA HORA', 'LATEST', 'ÚLTIMA HORA', 'DERNIÈRES ACTUALITÉS'),
                                 style: TextStyle(
@@ -519,8 +519,8 @@ class _NewsScreenState extends State<NewsScreen> {
                         ),
                       ),
                       if (stories.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(28),
+                        Padding(
+                          padding: const EdgeInsets.all(28),
                           child: Text(
                             appText(
                               'No hay noticias para este filtro. Prueba otra categoría o búsqueda.',
@@ -548,7 +548,7 @@ class _NewsScreenState extends State<NewsScreen> {
                           ),
                         ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         appText(
                           'Titulares y extractos procedentes de sus medios. El artículo completo pertenece a su editor original.',
                           'Headlines and excerpts are provided by their publishers. Full articles remain with their original publishers.',
@@ -586,7 +586,7 @@ class _NewsScreenState extends State<NewsScreen> {
               size: 42,
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               appText('NO SE PUDIERON CARGAR LAS NOTICIAS', 'NEWS COULD NOT BE LOADED', 'NÃO FOI POSSÍVEL CARREGAR AS NOTÍCIAS', 'IMPOSSIBLE DE CHARGER LES ACTUALITÉS'),
               textAlign: TextAlign.center,
               style: TextStyle(
