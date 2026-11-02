@@ -195,27 +195,29 @@ class _MainShellState extends State<MainShell> {
         context: context,
         builder: (dialogContext) => AlertDialog(
           backgroundColor: appPanel,
-          title: const Text(
-            'Canal de Telegram',
+          title: Text(
+            appText('Canal de Telegram', 'Telegram channel', 'Canal do Telegram', 'Canal Telegram'),
             style: TextStyle(color: appCyan, fontWeight: FontWeight.w900),
           ),
-          content: const Text(
-            'Este espacio queda reservado para tu canal. Todavía no hay un '
-            'enlace público configurado; no abriremos un canal genérico ni '
-            'uno inventado.',
+          content: Text(
+            appText(
+              'Este espacio queda reservado para tu canal. Todavía no hay un enlace público configurado; no abriremos uno genérico.',
+              'This space is reserved for your channel. No public link is configured yet; we will not open a generic or invented one.',
+              'Este espaço está reservado para seu canal. Ainda não há um link público configurado; não abriremos um link genérico ou inventado.',
+              'Cet espace est réservé à votre chaîne. Aucun lien public n’est encore configuré ; aucun lien générique ou inventé ne sera ouvert.'),
             style: TextStyle(color: appMuted, height: 1.45),
           ),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cerrar'),
+              child: Text(appText('Cerrar', 'Close', 'Fechar', 'Fermer')),
             ),
             FilledButton(
               onPressed: () {
                 Navigator.pop(dialogContext);
                 _selectTab(_settingsTab);
               },
-              child: const Text('Configurar enlace'),
+              child: Text(appText('Configurar enlace', 'Set link', 'Configurar link', 'Configurer le lien')),
             ),
           ],
         ),
@@ -252,18 +254,17 @@ class _MainShellState extends State<MainShell> {
             'Salir de Deporte Total 360°',
             style: TextStyle(color: appCyan, fontWeight: FontWeight.w900),
           ),
-          content: const Text(
-            '¿Quieres cerrar la aplicación?',
+          content: Text(appText('¿Quieres cerrar la aplicación?', 'Do you want to close the app?', 'Deseja fechar o aplicativo?', 'Voulez-vous fermer l’application?')),
             style: TextStyle(color: appMuted),
           ),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancelar'),
+              child: Text(appText('Cancelar', 'Cancel', 'Cancelar', 'Annuler')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Salir'),
+              child: Text(appText('Salir', 'Exit', 'Sair', 'Quitter')),
             ),
           ],
         ),
@@ -354,7 +355,7 @@ class _MainShellState extends State<MainShell> {
                     Icons.query_stats_rounded,
                     color: appCyan,
                   ),
-                  label: tr('stats_title'),
+                  label: tr('statistics'),
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.live_tv_outlined),
@@ -572,17 +573,17 @@ class HomeDashboard extends StatelessWidget {
                 const SizedBox(height: 17),
                 Row(
                   children: <Widget>[
-                    const Expanded(
+                    Expanded(
                       child: _SectionHeading(
-                        title: 'TODOS LOS DEPORTES',
+                        title: appText('TODOS LOS DEPORTES', 'ALL SPORTS', 'TODOS OS ESPORTES', 'TOUS LES SPORTS'),
                         icon: Icons.public_rounded,
                       ),
                     ),
                     TextButton(
                       onPressed: () => onNavigate(3),
-                      child: const Text(
-                        'Explorar →',
-                        style: TextStyle(color: appCyan, fontSize: 11),
+                      child: Text(
+                        appText('Explorar →', 'Explore →', 'Explorar →', 'Explorer →'),
+                        style: const TextStyle(color: appCyan, fontSize: 11),
                       ),
                     ),
                   ],
@@ -597,42 +598,42 @@ class HomeDashboard extends StatelessWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   children: <Widget>[
                     _SportTile(
-                      title: 'FÚTBOL',
-                      subtitle: 'Ligas • Copas',
+                      title: appText('FÚTBOL', 'FOOTBALL', 'FUTEBOL', 'FOOTBALL'),
+                      subtitle: appText('Ligas • Copas', 'Leagues • Cups', 'Ligas • Copas', 'Ligues • Coupes'),
                       icon: Icons.sports_soccer_rounded,
                       color: appGreen,
                       onTap: () => onSportSelected('Fútbol'),
                     ),
                     _SportTile(
-                      title: 'BÁSQUET',
+                      title: appText('BÁSQUET', 'BASKETBALL', 'BASQUETE', 'BASKET-BALL'),
                       subtitle: 'NBA • FIBA',
                       icon: Icons.sports_basketball_rounded,
                       color: appYellow,
                       onTap: () => onSportSelected('Básquet'),
                     ),
                     _SportTile(
-                      title: 'BÉISBOL',
-                      subtitle: 'MLB • Ligas',
+                      title: appText('BÉISBOL', 'BASEBALL', 'BEISEBOL', 'BASEBALL'),
+                      subtitle: 'MLB • Leagues',
                       icon: Icons.sports_baseball_rounded,
                       color: appPink,
                       onTap: () => onSportSelected('Béisbol'),
                     ),
                     _SportTile(
                       title: 'RUGBY',
-                      subtitle: 'Ligas • Torneos',
+                      subtitle: appText('Ligas • Torneos', 'Leagues • Tournaments', 'Ligas • Torneios', 'Ligues • Tournois'),
                       icon: Icons.sports_tennis_rounded,
                       color: appGreen,
                       onTap: () => onSportSelected('Rugby'),
                     ),
                     _SportTile(
-                      title: 'VÓLEY',
+                      title: appText('VÓLEY', 'VOLLEYBALL', 'VÔLEI', 'VOLLEY-BALL'),
                       subtitle: 'Ligas • Torneos',
                       icon: Icons.sports_volleyball_rounded,
                       color: appBlue,
                       onTap: () => onSportSelected('Vóley'),
                     ),
                     _SportTile(
-                      title: 'HOCKEY',
+                      title: appText('HOCKEY', 'HOCKEY', 'HÓQUEI', 'HOCKEY'),
                       subtitle: 'NHL • Ligas',
                       icon: Icons.emoji_events_rounded,
                       color: appCyan,
@@ -641,8 +642,8 @@ class HomeDashboard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 17),
-                const _SectionHeading(
-                  title: 'ACCESO RÁPIDO',
+                _SectionHeading(
+                  title: appText('ACCESO RÁPIDO', 'QUICK ACCESS', 'ACESSO RÁPIDO', 'ACCÈS RAPIDE'),
                   icon: Icons.bolt_rounded,
                 ),
                 const SizedBox(height: 9),
@@ -735,7 +736,7 @@ class HomeDashboard extends StatelessWidget {
                       BoxShadow(color: appBlue.withAlpha(24), blurRadius: 18),
                     ],
                   ),
-                  child: const Row(
+                  child: Row(
                     children: <Widget>[
                       Icon(Icons.sports_rounded, color: appPink, size: 34),
                       SizedBox(width: 12),
@@ -744,7 +745,7 @@ class HomeDashboard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
                             Text(
-                              '¡EL DEPORTE NOS UNE!',
+                              appText('¡EL DEPORTE NOS UNE!', 'SPORT BRINGS US TOGETHER!', 'O ESPORTE NOS UNE!', 'LE SPORT NOUS UNIT !'),
                               style: TextStyle(
                                 color: appCyan,
                                 fontWeight: FontWeight.w900,
@@ -754,7 +755,7 @@ class HomeDashboard extends StatelessWidget {
                             ),
                             SizedBox(height: 4),
                             Text(
-                              'Tu pasión, en todas partes.',
+                              appText('Tu pasión, en todas partes.', 'Your passion, everywhere.', 'Sua paixão, em todos os lugares.', 'Votre passion, partout.'),
                               style: TextStyle(color: appMuted, fontSize: 12),
                             ),
                           ],
@@ -765,9 +766,8 @@ class HomeDashboard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  'La agenda mostrará eventos y enlaces de reproducción cuando '
-                  'haya una fuente real y autorizada conectada.',
+                Text(
+                  appText('La agenda mostrará eventos y enlaces de reproducción cuando haya una fuente real y autorizada conectada.', 'The schedule will show events and playback links when a real, authorized source is connected.', 'A agenda mostrará eventos e links de reprodução quando houver uma fonte real e autorizada conectada.', 'Le calendrier affichera les événements et les liens de lecture lorsqu’une source réelle et autorisée sera connectée.'),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: appMuted,
@@ -1079,15 +1079,15 @@ class LiveScreen extends StatelessWidget {
               const SizedBox(height: 12),
               _LiveActionCard(
                 title: 'PRISM LIVE STUDIO',
-                subtitle: 'Configurar datos para emitir desde tu encoder.',
+                subtitle: appText('Configurar datos para emitir desde tu encoder.', 'Configure streaming details for your encoder.', 'Configure os dados de transmissão do encoder.', 'Configurez les paramètres de diffusion de votre encodeur.'),
                 icon: Icons.settings_input_antenna_rounded,
                 color: appPink,
                 onTap: () => _openEncoder(context),
               ),
               const SizedBox(height: 10),
               _LiveActionCard(
-                title: 'SSH101 • REPRODUCCIÓN',
-                subtitle: 'Abrir la señal del canal configurado en Ajustes.',
+                title: 'SSH101 • ' + appText('REPRODUCCIÓN', 'PLAYBACK', 'REPRODUÇÃO', 'LECTURE'),
+                subtitle: appText('Abrir la señal del canal configurado en Ajustes.', 'Open the channel configured in Settings.', 'Abrir o canal configurado em Configurações.', 'Ouvrir la chaîne configurée dans les paramètres.'),
                 icon: Icons.play_circle_fill_rounded,
                 color: appGreen,
                 onTap: () => _openPlayer(context),
@@ -1100,7 +1100,7 @@ class LiveScreen extends StatelessWidget {
                   ),
                 ),
                 icon: const Icon(Icons.copy_rounded),
-                label: const Text('Ver configuración de emisión'),
+                label: Text(appText('Ver configuración de emisión', 'View streaming settings', 'Ver configurações de transmissão', 'Voir les paramètres de diffusion')),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: appCyan,
                   side: const BorderSide(color: appCyan),
