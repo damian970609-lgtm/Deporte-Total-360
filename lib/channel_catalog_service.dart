@@ -11,11 +11,12 @@ class ChannelCatalogConfig {
 }
 
 class TvCatalogChannel {
-  const TvCatalogChannel({required this.name, required this.url, this.group = '', this.tvgId = ''});
+  const TvCatalogChannel({required this.name, required this.url, this.group = '', this.tvgId = '', this.httpHeaders = const <String, String>{}});
   final String name;
   final String url;
   final String group;
   final String tvgId;
+  final Map<String, String> httpHeaders;
 }
 
 class TvGuideProgramme {
@@ -45,12 +46,13 @@ class ChannelMatchQuery {
 }
 
 class ChannelMatchSuggestion {
-  const ChannelMatchSuggestion({required this.channelName, required this.url, required this.programmeTitle, required this.programmeStartsAt, required this.programmeEndsAt});
+  const ChannelMatchSuggestion({required this.channelName, required this.url, required this.programmeTitle, required this.programmeStartsAt, required this.programmeEndsAt, this.httpHeaders = const <String, String>{}});
   final String channelName;
   final String url;
   final String programmeTitle;
   final DateTime programmeStartsAt;
   final DateTime programmeEndsAt;
+  final Map<String, String> httpHeaders;
 }
 
 /// Uses only an M3U playlist and XMLTV guide explicitly configured by the app owner.
@@ -206,6 +208,7 @@ class ChannelCatalogService {
     String? pendingName;
     String pendingGroup = '';
     String pendingTvgId = '';
+    final pendingHeaders = <String, String>{};
     for (final rawLine in const LineSplitter().convert(content)) {
       final line = rawLine.trim();
       if (line.isEmpty) continue;
@@ -221,6 +224,29 @@ class ChannelCatalogService {
         pendingGroup = attributes['group-title'] ?? '';
         pendingName = (attributes['tvg-name'] ?? '').trim().isNotEmpty
             ? attributes['tvg-name']!.trim() : displayName;
+        pendingHeaders.clear();
+        continue;
+      }
+      if (line.startsWith('#EXTVLCOPT:')) {
+        final option = line.substring('#EXTVLCOPT:'.length);
+        final separator = option.indexOf('=');
+        if (separator > 0) {
+          final key = option.substring(0, separator).trim().toLowerCase();
+          final value = option.substring(separator + 1).trim();
+          if (value.isNotEmpty && !value.contains('\r') && !value.contains('\n')) {
+            if (key == 'http-user-agent' && value.length <= 256) {
+              pendingHeaders['User-Agent'] = value;
+            } else if (key == 'http-referrer' && value.length <= 2048) {
+              final referer = Uri.tryParse(value);
+              if (referer != null &&
+                  referer.scheme == 'https' &&
+                  referer.host.isNotEmpty &&
+                  referer.userInfo.isEmpty) {
+                pendingHeaders['Referer'] = referer.toString();
+              }
+            }
+          }
+        }
         continue;
       }
       if (line.startsWith('#') || pendingName == null || pendingName!.isEmpty) continue;
@@ -230,11 +256,12 @@ class ChannelCatalogService {
       if (uri != null && uri.hasAuthority && uri.host.isNotEmpty &&
           (uri.scheme == 'https' || uri.scheme == 'http') &&
           uri.userInfo.isEmpty && supportedFormat) {
-        result.add(TvCatalogChannel(name: pendingName!, url: uri.toString(), group: pendingGroup, tvgId: pendingTvgId));
+        result.add(TvCatalogChannel(name: pendingName!, url: uri.toString(), group: pendingGroup, tvgId: pendingTvgId, httpHeaders: Map<String, String>.unmodifiable(pendingHeaders)));
       }
       pendingName = null;
       pendingGroup = '';
       pendingTvgId = '';
+      pendingHeaders.clear();
     }
     final seen = <String>{};
     return result.where((channel) => seen.add(channel.url)).toList(growable: false);
@@ -304,6 +331,7 @@ class ChannelCatalogService {
         programmeTitle: programme.title,
         programmeStartsAt: programme.startsAt,
         programmeEndsAt: programme.endsAt,
+        httpHeaders: channel.httpHeaders,
       ));
     }
     final seen = <String>{};
