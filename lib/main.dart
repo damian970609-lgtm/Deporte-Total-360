@@ -10,6 +10,7 @@ import 'fantasy_screen.dart';
 import 'news_screen.dart';
 import 'notification_service.dart';
 import 'sports_api_service.dart';
+import 'sports_statistics_screen.dart';
 import 'web_agenda_screen.dart';
 
 // Identidad visual de DEPORTE TOTAL 360°: azul noche, cian, rosa y verde neón.
@@ -149,6 +150,12 @@ class _MainShellState extends State<MainShell> {
     });
   }
 
+  Future<void> _openStatistics() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const SportsStatisticsScreen()),
+    );
+  }
+
   Future<void> _openFantasy() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -266,6 +273,7 @@ class _MainShellState extends State<MainShell> {
         ),
         onDonations: _openDonations,
         onFantasy: _openFantasy,
+        onStatistics: _openStatistics,
       ),
       AgendaScreen(
         key: ValueKey<String>('football-$_agendaSport'),
@@ -458,6 +466,7 @@ class HomeDashboard extends StatelessWidget {
     required this.onContact,
     required this.onDonations,
     required this.onFantasy,
+    required this.onStatistics,
   });
 
   final ValueChanged<int> onNavigate;
@@ -466,6 +475,7 @@ class HomeDashboard extends StatelessWidget {
   final VoidCallback onContact;
   final VoidCallback onDonations;
   final VoidCallback onFantasy;
+  final VoidCallback onStatistics;
 
   @override
   Widget build(BuildContext context) {
@@ -505,6 +515,11 @@ class HomeDashboard extends StatelessWidget {
           ],
         ),
         actions: <Widget>[
+          IconButton(
+            tooltip: tr('stats_title'),
+            onPressed: onStatistics,
+            icon: const Icon(Icons.query_stats_rounded, color: appGreen),
+          ),
           IconButton(
             tooltip: tr('settings'),
             onPressed: () => onNavigate(5),
