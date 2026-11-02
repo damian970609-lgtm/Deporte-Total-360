@@ -34,7 +34,7 @@ class WebProtectionPolicy {
       'porn-ad', 'adult-ad', 'xxx-ad', 'juicyads', 'trafficjunky',
       'adulttraffic', 'porntraffic', 'sexad', 'webcam-ad',
     ];
-    return adultAdMarkers.any(host.contains);
+    return adultAdMarkers.any((marker) => host.contains(marker));
   }
 
   static bool isHttpUrl(WebUri uri) {
