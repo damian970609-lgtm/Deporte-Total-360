@@ -49,6 +49,63 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
     setState(() => _noticeMessage = message);
   }
 
+  Future<void> _installAdElementCleanup(InAppWebViewController controller) async {
+    // Elimina solo elementos publicitarios identificables. No elimina iframes
+    // genéricos ni elementos que formen parte de un reproductor de vídeo.
+    try {
+      await controller.evaluateJavascript(source: r'''
+        (() => {
+          const selectors = [
+            'iframe[src*="juicyads"]',
+            'iframe[src*="trafficjunky"]',
+            'iframe[src*="porn"]',
+            'iframe[src*="porno"]',
+            'iframe[src*="adult"]',
+            'iframe[src*="xxx"]',
+            'iframe[src*="popads"]',
+            'iframe[src*="popcash"]',
+            'iframe[src*="popunder"]',
+            '[id*="popunder"]',
+            '[class*="popunder"]',
+            '[id*="interstitial"]',
+            '[class*="interstitial"]',
+            '[data-advertisement]',
+            '[data-ad="true"]',
+            'ins.adsbygoogle'
+          ];
+          const selector = selectors.join(',');
+          const insidePlayer = (element) =>
+            !!element.closest('video,audio,.video-player,[class*="player"],[id*="player"]');
+          const removeAds = (root) => {
+            if (!root || !root.querySelectorAll) return;
+            root.querySelectorAll(selector).forEach((element) => {
+              if (!insidePlayer(element)) element.remove();
+            });
+          };
+          removeAds(document);
+          if (!window.__dt360AdObserver && document.documentElement) {
+            window.__dt360AdObserver = new MutationObserver((records) => {
+              records.forEach((record) => record.addedNodes.forEach((node) => {
+                if (node.nodeType !== 1) return;
+                if (node.matches && node.matches(selector)) {
+                  if (!insidePlayer(node)) node.remove();
+                } else {
+                  removeAds(node);
+                }
+              }));
+            });
+            window.__dt360AdObserver.observe(document.documentElement, {
+              childList: true,
+              subtree: true
+            });
+          }
+        })();
+      ''');
+    } catch (_) {
+      // La WebView permanece funcional si el sitio impide la limpieza DOM.
+    }
+  }
+
   Future<void> _refreshNavigationState() async {
     final controller = _controller;
     if (controller == null || !mounted) return;
@@ -390,6 +447,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                           _loading = false;
                           _progress = 1;
                         });
+                        await _installAdElementCleanup(controller);
                         await _refreshNavigationState();
                       },
                       onUpdateVisitedHistory:
