@@ -412,8 +412,11 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         databaseEnabled: true,
                         thirdPartyCookiesEnabled: true,
                         useShouldOverrideUrlLoading: true,
+                        // Se mantiene el evento de ventanas nuevas para
+                        // interceptar enlaces del sitio, pero no se permiten
+                        // pop-ups automáticos disparados por scripts.
                         supportMultipleWindows: true,
-                        javaScriptCanOpenWindowsAutomatically: true,
+                        javaScriptCanOpenWindowsAutomatically: false,
                         useShouldInterceptRequest: true,
                         mediaPlaybackRequiresUserGesture: true,
                         allowsInlineMediaPlayback: true,
