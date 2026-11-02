@@ -573,6 +573,184 @@ class _SummaryPlayerScreenState extends State<_SummaryPlayerScreen> {
   String? _error;
   InAppWebViewController? _controller;
 
+  static const String _playerBaseUrl =
+      'https://deporte-total-360-api.damian970609.workers.dev/';
+
+  String get _playerHtml {
+    final id = widget.video.id;
+    if (!RegExp(r'^[A-Za-z0-9_-]{6,20}
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _summaryBg,
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF020B19),
+        title: Text(
+          widget.video.channel,
+          style: const TextStyle(
+            color: _summaryCyan,
+            fontSize: 13,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        actions: <Widget>[
+          IconButton(
+            tooltip: 'Recargar vídeo',
+            onPressed: () => _controller?.reload(),
+            icon: const Icon(Icons.refresh_rounded, color: _summaryCyan),
+          ),
+        ],
+      ),
+      body: Column(
+        children: <Widget>[
+          if (_loading)
+            const LinearProgressIndicator(
+              minHeight: 2,
+              color: _summaryCyan,
+              backgroundColor: _summaryPanel,
+            ),
+          Expanded(
+            child: _error != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(22),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          const Icon(Icons.error_outline_rounded,
+                              color: _summaryPink, size: 40),
+                          const SizedBox(height: 10),
+                          Text(
+                            _error!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 12),
+                          ),
+                          const SizedBox(height: 12),
+                          FilledButton(
+                            onPressed: () {
+                              setState(() {
+                                _error = null;
+                                _loading = true;
+                              });
+                              _controller?.reload();
+                            },
+                            child: Text(appText('Reintentar', 'Retry',
+                                'Tentar novamente', 'Réessayer')),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : InAppWebView(
+                    // baseUrl HTTPS genera el Referer que YouTube requiere
+                    // para identificar la app y evitar el error de reproducción 153.
+                    initialData: InAppWebViewInitialData(
+                      data: _playerHtml,
+                      baseUrl: WebUri(_playerBaseUrl),
+                    ),
+                    initialSettings: InAppWebViewSettings(
+                      javaScriptEnabled: true,
+                      domStorageEnabled: true,
+                      thirdPartyCookiesEnabled: true,
+                      allowsInlineMediaPlayback: true,
+                      mediaPlaybackRequiresUserGesture: false,
+                      iframeAllowFullscreen: true,
+                      isElementFullscreenEnabled: true,
+                      supportMultipleWindows: false,
+                      safeBrowsingEnabled: true,
+                      useShouldOverrideUrlLoading: true,
+                    ),
+                    onWebViewCreated: (controller) {
+                      _controller = controller;
+                    },
+                    onLoadStart: (controller, url) {
+                      if (!mounted) return;
+                      setState(() {
+                        _loading = true;
+                        _error = null;
+                      });
+                    },
+                    onProgressChanged: (controller, progress) {
+                      if (!mounted) return;
+                      setState(() => _loading = progress < 100);
+                    },
+                    onLoadStop: (controller, url) {
+                      if (!mounted) return;
+                      setState(() => _loading = false);
+                    },
+                    shouldOverrideUrlLoading: (controller, action) async {
+                      // El iframe y sus subframes deben poder cargar recursos.
+                      if (!(action.isForMainFrame ?? true)) {
+                        return NavigationActionPolicy.ALLOW;
+                      }
+                      final uri = action.request.url;
+                      if (uri == null) return NavigationActionPolicy.CANCEL;
+                      final host = uri.host.toLowerCase();
+                      if (host == 'youtube-nocookie.com' ||
+                          host == 'www.youtube-nocookie.com') {
+                        return NavigationActionPolicy.ALLOW;
+                      }
+                      // Un toque sobre logotipo/enlace no abre YouTube fuera
+                      // del reproductor. El iframe conserva su propia sesión.
+                      if (host == 'youtube.com' ||
+                          host.endsWith('.youtube.com') ||
+                          host == 'youtu.be') {
+                        return NavigationActionPolicy.CANCEL;
+                      }
+                      return NavigationActionPolicy.CANCEL;
+                    },
+                    onCreateWindow: (controller, action) async => false,
+                    onReceivedError: (controller, request, error) {
+                      if (!(request.isForMainFrame ?? true) || !mounted) return;
+                      setState(() {
+                        _loading = false;
+                        _error = appText(
+                          'No se pudo cargar el vídeo incrustado. Puede estar restringido por su canal o región.',
+                          'The embedded video could not be loaded. It may be restricted by its channel or region.',
+                          'Não foi possível carregar o vídeo incorporado. Ele pode estar restrito pelo canal ou região.',
+                          'La vidéo intégrée n’a pas pu être chargée. Elle peut être restreinte par la chaîne ou la région.',
+                        );
+                      });
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+).hasMatch(id)) {
+      return '<!doctype html><html><body>Video ID no válido</body></html>';
+    }
+    return '''
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="referrer" content="origin">
+<style>
+html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}
+.player{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+iframe{width:100%;height:100%;border:0;background:#000}
+</style>
+</head>
+<body>
+<div class="player">
+<iframe
+  src="https://www.youtube-nocookie.com/embed/$id?autoplay=1&controls=1&playsinline=1&rel=0"
+  title="Resumen deportivo"
+  referrerpolicy="origin"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+  allowfullscreen>
+</iframe>
+</div>
+</body>
+</html>
+''';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
