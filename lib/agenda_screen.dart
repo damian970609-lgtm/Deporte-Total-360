@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import 'sports_api_service.dart';
+import 'channel_catalog_service.dart';
 import 'notification_service.dart';
 import 'app_i18n.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -30,7 +31,7 @@ class MatchStreamSource {
   Uri? get validatedUri {
     final uri = Uri.tryParse(url.trim());
     if (uri == null || !uri.hasAuthority || uri.host.isEmpty) return null;
-    if (uri.scheme != 'https' && uri.scheme != 'http') return null;
+    if ((uri.scheme != 'https' && uri.scheme != 'http') || uri.userInfo.isNotEmpty) return null;
     return uri;
   }
 }
@@ -72,6 +73,24 @@ class MatchEvent {
 
   bool get hasValidStream =>
       streamSources.any((source) => source.validatedUri != null);
+
+  MatchEvent copyWith({List<MatchStreamSource>? streamSources}) => MatchEvent(
+        id: id,
+        sport: sport,
+        competition: competition,
+        homeTeam: homeTeam,
+        awayTeam: awayTeam,
+        startsAt: startsAt,
+        status: status,
+        homeScore: homeScore,
+        awayScore: awayScore,
+        streamSources: streamSources ?? this.streamSources,
+        sourceName: sourceName,
+        homeLogoUrl: homeLogoUrl,
+        awayLogoUrl: awayLogoUrl,
+        leagueId: leagueId,
+        sportId: sportId,
+      );
 }
 
 /// Agenda nativa para la sección Fútbol y los mosaicos deportivos.
@@ -85,6 +104,8 @@ class AgendaScreen extends StatefulWidget {
     this.onOpenPersonalChannel,
     this.onOpenEncoder,
     this.onOpenWebAgenda,
+    this.onOpenMultiView,
+    this.onOpenChannelCatalog,
   });
 
   final String initialSport;
@@ -93,6 +114,8 @@ class AgendaScreen extends StatefulWidget {
   final VoidCallback? onOpenPersonalChannel;
   final VoidCallback? onOpenEncoder;
   final VoidCallback? onOpenWebAgenda;
+  final ValueChanged<List<MatchEvent>>? onOpenMultiView;
+  final VoidCallback? onOpenChannelCatalog;
 
   @override
   State<AgendaScreen> createState() => _AgendaScreenState();
@@ -305,12 +328,40 @@ class _AgendaScreenState extends State<AgendaScreen> {
               ))
           .whereType<MatchEvent>()
           .toList(growable: false);
+
+      // Match only explicit XMLTV programme entries that name both teams.
+      final catalogueMatches = await ChannelCatalogService.instance.findMatchesForEvents(
+        matches.map((event) => ChannelMatchQuery(
+          id: event.id,
+          sport: event.sport,
+          homeTeam: event.homeTeam,
+          awayTeam: event.awayTeam,
+          competition: event.competition,
+          startsAt: event.startsAt,
+        )).toList(growable: false),
+      );
+      final enrichedMatches = matches.map((event) {
+        final merged = <MatchStreamSource>[
+          ...event.streamSources,
+          ...(catalogueMatches[event.id] ?? const <ChannelMatchSuggestion>[])
+              .map((suggestion) => MatchStreamSource(
+                    name: suggestion.channelName,
+                    url: suggestion.url,
+                  )),
+        ];
+        final seen = <String>{};
+        return event.copyWith(
+          streamSources: merged.where((source) =>
+              source.validatedUri != null && seen.add(source.url)).toList(growable: false),
+        );
+      }).toList(growable: false);
+
       if (!mounted || requestVersion != _apiRequestVersion) return;
       final previousById = <String, MatchEvent>{
         for (final previous in _remoteMatches) previous.id: previous,
       };
       final scoreChanges = announceScoreChanges
-          ? matches.where((current) {
+          ? enrichedMatches.where((current) {
               final previous = previousById[current.id];
               return previous != null &&
                   current.status == MatchStatus.live &&
@@ -320,7 +371,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
             }).toList(growable: false)
           : const <MatchEvent>[];
       setState(() {
-        _remoteMatches = matches;
+        _remoteMatches = enrichedMatches;
         _loadingApi = false;
         _apiError = matches.isEmpty ? warning : null;
         _apiWarning = matches.isEmpty ? null : warning;
@@ -337,7 +388,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
         );
       }
       if (!announceScoreChanges) {
-        await _updateMatchNotifications(matches);
+        await _updateMatchNotifications(enrichedMatches);
       }
     } catch (error) {
       if (!mounted || requestVersion != _apiRequestVersion) return;
@@ -530,8 +581,35 @@ class _AgendaScreenState extends State<AgendaScreen> {
       row['goals'] ?? row['scores'] ?? game['scores'],
     );
 
-    final eventId =
-        fixture['id'] ?? game['id'] ?? row['id'];
+    final eventId = fixture['id'] ?? game['id'] ?? row['id'];
+    final rawSources = row['streamSources'] ??
+        row['stream_sources'] ??
+        row['streams'] ??
+        row['broadcasts'];
+    final sourceRows = rawSources is List
+        ? rawSources
+        : rawSources is Map
+            ? <dynamic>[rawSources]
+            : const <dynamic>[];
+    final streamSources = <MatchStreamSource>[];
+    for (var index = 0; index < sourceRows.length; index++) {
+      final value = sourceRows[index];
+      if (value is String) {
+        streamSources.add(MatchStreamSource(name: 'Fuente ${index + 1}', url: value));
+      } else if (value is Map) {
+        final source = Map<String, dynamic>.from(value);
+        final url = source['url'] ??
+            source['stream_url'] ??
+            source['video_url'] ??
+            source['src'];
+        if (url is String && url.trim().isNotEmpty) {
+          streamSources.add(MatchStreamSource(
+            name: (source['name'] ?? source['label'] ?? 'Fuente ${index + 1}').toString(),
+            url: url.trim(),
+          ));
+        }
+      }
+    }
 
     return MatchEvent(
       id: '${eventId ?? '${homeName}_$awayName'}',
@@ -556,6 +634,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
         'Fútbol australiano': 'afl', 'Fórmula 1': 'formula-1', 'MMA': 'mma',
       }[sport] ?? sport.toLowerCase(),
       status: matchStatus,
+      streamSources: streamSources,
       homeScore: asScore(scores['home'] ?? home['score']),
       awayScore: asScore(scores['away'] ?? away['score']),
       sourceName: 'API-Sports',
@@ -743,6 +822,27 @@ class _AgendaScreenState extends State<AgendaScreen> {
               ),
               onPressed: widget.onOpenWebAgenda,
               icon: const Icon(Icons.public_rounded, color: agendaGreen),
+            ),
+          if (widget.onOpenMultiView != null)
+            IconButton(
+              tooltip: appText('Abrir partidos con señal en multipantalla', 'Open available matches in multiview', 'Abrir partidas disponíveis em várias telas', 'Ouvrir les matchs disponibles en multivue'),
+              onPressed: () {
+                final playable = events.where((event) => event.hasValidStream).toList(growable: false);
+                if (playable.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('No hay señales autorizadas asociadas a los partidos visibles.')),
+                  );
+                  return;
+                }
+                widget.onOpenMultiView!(playable);
+              },
+              icon: const Icon(Icons.grid_view_rounded, color: agendaPink),
+            ),
+          if (widget.onOpenChannelCatalog != null)
+            IconButton(
+              tooltip: 'Configurar lista M3U y guía EPG',
+              onPressed: widget.onOpenChannelCatalog,
+              icon: const Icon(Icons.playlist_add_check_rounded, color: agendaCyan),
             ),
           IconButton(
             tooltip: tr('stats_title'),
