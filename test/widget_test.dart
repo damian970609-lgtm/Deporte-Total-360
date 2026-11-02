@@ -20,6 +20,10 @@ void main() {
     );
     await tester.tap(find.byType(DropdownButtonFormField<String>).first);
     await tester.pumpAndSettle();
-    expect(find.textContaining('formula-1'), findsOneWidget);
+    expect(find.text('Fórmula 1'), findsOneWidget);
+    await tester.tap(find.text('Fórmula 1'));
+    await tester.pumpAndSettle();
+    expect(find.text('SPORT ID  •  formula-1'), findsOneWidget);
+    expect(find.textContaining('Tipo de clasificación'), findsOneWidget);
   });
 }
