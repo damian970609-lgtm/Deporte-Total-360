@@ -13,6 +13,25 @@ const Color _brandGreen = Color(0xFF39FF9C);
 const Color _brandMuted = Color(0xFFA9BDD6);
 const Color _brandRed = Color(0xFFFF3155);
 
+class _FutbolLibreChannel {
+  const _FutbolLibreChannel(this.name, this.slug);
+
+  final String name;
+  final String slug;
+}
+
+// Son las páginas de canal anunciadas públicamente en la portada de Fútbol Libre.
+// Se abre la página publicada por el sitio; no se extraen ni se sustituyen sus señales.
+const List<_FutbolLibreChannel> _futbolLibreChannels = <_FutbolLibreChannel>[
+  _FutbolLibreChannel('ESPN', 'espn'),
+  _FutbolLibreChannel('ESPN 2', 'espn-2'),
+  _FutbolLibreChannel('DSports', 'dsports'),
+  _FutbolLibreChannel('DSports 2', 'dsports-2'),
+  _FutbolLibreChannel('TyC Sports', 'tyc-sports'),
+  _FutbolLibreChannel('FOX Sports', 'fox-sports'),
+  _FutbolLibreChannel('Liga 1 MAX', 'liga-1-max'),
+];
+
 /// Web de agenda dentro de la identidad visual de Deporte Total 360°.
 /// El contenido de la web y sus reproductores siguen perteneciendo al proveedor.
 class WebAgendaScreen extends StatefulWidget {
@@ -51,6 +70,50 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
   bool _isHttpUrl(WebUri uri) {
     final scheme = uri.scheme.toLowerCase();
     return (scheme == 'https' || scheme == 'http') && uri.host.isNotEmpty;
+  }
+
+  Future<void> _openFutbolLibrePage(String path) async {
+    final controller = _controller;
+    if (controller == null) return;
+
+    final target = Uri.parse(WebAgendaScreen.initialUrl).resolve(path);
+    setState(() {
+      _loading = true;
+      _progress = 0;
+      _errorMessage = null;
+      _noticeMessage = null;
+    });
+
+    try {
+      await controller.loadUrl(
+        urlRequest: URLRequest(url: WebUri(target.toString())),
+      );
+      await _refreshNavigationState();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _errorMessage = 'No se pudo abrir la página solicitada de Fútbol Libre.';
+      });
+    }
+  }
+
+  Widget _quickChannelButton(String label, String path) {
+    return OutlinedButton(
+      onPressed: () => _openFutbolLibrePage(path),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: _brandCyan,
+        side: BorderSide(color: _brandCyan.withAlpha(130)),
+        backgroundColor: const Color(0xFF071326),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        minimumSize: const Size(0, 34),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
+      ),
+    );
   }
 
   void _showNotice(String message) {
@@ -224,9 +287,8 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
   ) async {
     final target = action.request.url;
 
-    if (target == null || !_isHttpUrl(target) ||
-        !WebAgendaScreen.isAgendaPageUrl(target.toString())) {
-      _showNotice('Solo se permite la agenda diaria de Futbol-Libre dentro de esta sección.');
+    if (target == null || !_isHttpUrl(target)) {
+      _showNotice('Se bloqueó una ventana que no usa una dirección web segura.');
       return false;
     }
 
@@ -237,9 +299,17 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
       return false;
     }
 
-    // Algunos reproductores usan target="_blank" o window.open.
-    // Cargamos el destino HTTP/HTTPS en ESTA vista, no en otra ventana.
-    // Así el usuario conserva el marco de la app y puede retroceder.
+    // Los enlaces de canales pueden abrir una página del proveedor de vídeo.
+    // Se aceptan solo cuando nacen de una interacción del usuario o de una
+    // redirección de esa navegación; los pop-ups automáticos siguen bloqueados.
+    if (!WebAgendaScreen.isAgendaPageUrl(target.toString()) &&
+        action.hasGesture != true &&
+        action.isRedirect != true) {
+      _showNotice('Se bloqueó una ventana externa que no procede de un toque del usuario.');
+      return false;
+    }
+
+    // Carga la página dentro de este WebView, sin abrir ventanas adicionales.
     try {
       await controller.loadUrl(urlRequest: action.request);
       return false;
@@ -378,6 +448,26 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 ),
               ),
             ),
+          SizedBox(
+            height: 46,
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              scrollDirection: Axis.horizontal,
+              children: <Widget>[
+                _quickChannelButton('AGENDA', '/'),
+                const SizedBox(width: 7),
+                ..._futbolLibreChannels.map(
+                  (channel) => Padding(
+                    padding: const EdgeInsets.only(right: 7),
+                    child: _quickChannelButton(
+                      channel.name,
+                      '/canal/${channel.slug}',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           if (_loading)
             LinearProgressIndicator(
               value: _progress == 0 ? null : _progress,
@@ -424,6 +514,9 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         isElementFullscreenEnabled: true,
                         hardwareAcceleration: true,
                         safeBrowsingEnabled: true,
+                        transparentBackground: true,
+                        underPageBackgroundColor: _brandBg,
+                        cacheEnabled: true,
                         allowFileAccess: false,
                         allowContentAccess: true,
                         loadsImagesAutomatically: true,
@@ -478,15 +571,6 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                           return NavigationActionPolicy.CANCEL;
                         }
 
-                        // Esta pestaña es exclusivamente la agenda. Se bloquea
-                        // la navegación principal a canales o páginas externas;
-                        // scripts, estilos e imágenes del sitio siguen cargando.
-                        if ((action.isForMainFrame ?? true) &&
-                            !WebAgendaScreen.isAgendaPageUrl(uri.toString())) {
-                          _showNotice('La agenda está bloqueada en modo solo lectura. Abre los partidos en la sección En Vivo.');
-                          return NavigationActionPolicy.CANCEL;
-                        }
-
                         if (WebProtectionPolicy.isBlockedUrl(uri.toString())) {
                           _showNotice(
                             'Se bloqueó un recurso de publicidad/seguimiento conocido.',
@@ -494,8 +578,17 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                           return NavigationActionPolicy.CANCEL;
                         }
 
-                        // Los dominios del reproductor pueden ser distintos
-                        // del dominio principal. Se permiten dentro de WebView.
+                        // La navegación interna de Fútbol Libre queda abierta.
+                        // Una página de reproductor externa solo se admite cuando
+                        // el usuario la abrió con un toque o continúa una redirección.
+                        if ((action.isForMainFrame ?? true) &&
+                            !WebAgendaScreen.isAgendaPageUrl(uri.toString()) &&
+                            action.hasGesture != true &&
+                            action.isRedirect != true) {
+                          _showNotice('Se bloqueó una navegación externa automática.');
+                          return NavigationActionPolicy.CANCEL;
+                        }
+
                         return NavigationActionPolicy.ALLOW;
                       },
                       onCreateWindow: _handleNewWindow,
