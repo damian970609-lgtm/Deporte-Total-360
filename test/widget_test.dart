@@ -11,6 +11,7 @@ import 'package:deporte_total_360/news_screen.dart';
 import 'package:deporte_total_360/web_agenda_screen.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sports_statistics_screen.dart';
+import 'package:deporte_total_360/sports_community_screen.dart';
 
 void main() {
   setUp(() {
@@ -136,11 +137,21 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
     await tester.pump();
 
+    expect(find.text('Feed'), findsOneWidget);
+    expect(find.text('Notificaciones'), findsOneWidget);
     expect(find.text('Fútbol Libre'), findsOneWidget);
     expect(find.text('Partidos'), findsOneWidget);
     expect(find.text('Fantasy'), findsOneWidget);
     expect(find.text('Chat'), findsOneWidget);
     expect(find.text('Canales TV'), findsOneWidget);
+
+    await tester.tap(find.text('Feed'));
+    await tester.pump();
+    expect(find.byType(SportsFeedScreen), findsOneWidget);
+
+    await tester.tap(find.text('Notificaciones'));
+    await tester.pump();
+    expect(find.byType(SportsNotificationsScreen), findsOneWidget);
 
     await tester.tap(find.text('Partidos'));
     await tester.pump();

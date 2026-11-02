@@ -16,6 +16,7 @@ import 'public_chat_screen.dart';
 import 'sports_api_service.dart';
 import 'sports_statistics_screen.dart';
 import 'sports_summaries_screen.dart';
+import 'sports_community_screen.dart';
 import 'web_agenda_screen.dart';
 
 // Identidad visual de DEPORTE TOTAL 360°: azul noche, cian, rosa y verde neón.
@@ -151,6 +152,8 @@ class _MainShellState extends State<MainShell> {
   static const int _chatTab = 8;
   static const int _channelsTab = 9;
   static const int _settingsTab = 10;
+  static const int _feedTab = 11;
+  static const int _notificationsTab = 12;
 
   final GlobalKey<WebAgendaScreenState> _webAgendaKey =
       GlobalKey<WebAgendaScreenState>();
@@ -158,12 +161,13 @@ class _MainShellState extends State<MainShell> {
   int _selectedIndex = _homeTab;
   final List<bool> _initializedTabs = <bool>[
     true, false, false, false, false, false, false, false, false, false, false,
+    false, false,
   ];
   String _selectedStatisticsSport = 'Fútbol';
   bool _handlingBack = false;
 
   void _selectTab(int index) {
-    if (index < 0 || index > _settingsTab) return;
+    if (index < 0 || index > _notificationsTab) return;
     setState(() {
       _selectedIndex = index;
     });
@@ -402,6 +406,19 @@ class _MainShellState extends State<MainShell> {
         return const ChannelCatalogScreen();
       case _settingsTab:
         return const SettingsScreen();
+      case _feedTab:
+        return SportsFeedScreen(
+          onOpenLive: () => _selectTab(_liveTab),
+          onOpenAgenda: () => _selectTab(_nativeAgendaTab),
+          onOpenNews: () => _selectTab(_newsTab),
+          onOpenSummaries: () => _selectTab(_summariesTab),
+          onOpenChat: () => _selectTab(_chatTab),
+        );
+      case _notificationsTab:
+        return SportsNotificationsScreen(
+          onOpenAgenda: () => _selectTab(_nativeAgendaTab),
+          onOpenLive: () => _selectTab(_liveTab),
+        );
       default:
         return const SizedBox.shrink();
     }
@@ -409,11 +426,17 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final pages = List<Widget>.generate(11, (index) {
+    final pages = List<Widget>.generate(13, (index) {
       if (index == _selectedIndex) {
         _initializedTabs[index] = true;
       }
       if (!_initializedTabs[index]) {
+        return const SizedBox.shrink();
+      }
+      // Los WebViews ocultos consumen memoria. Android puede destruir su
+      // renderizador; los recreamos al volver a seleccionar cada sección.
+      if (index != _selectedIndex &&
+          (index == _agendaWebTab || index == _fantasyTab)) {
         return const SizedBox.shrink();
       }
       return _buildTab(index);
@@ -461,6 +484,8 @@ class _MainShellState extends State<MainShell> {
                   _tabButton(_chatTab, Icons.forum_rounded, 'Chat', appCyan),
                   _tabButton(_channelsTab, Icons.live_tv_rounded, 'Canales TV', appGreen),
                   _tabButton(_settingsTab, Icons.settings_rounded, tr('settings'), appCyan),
+                  _tabButton(_feedTab, Icons.dynamic_feed_rounded, 'Feed', appGreen),
+                  _tabButton(_notificationsTab, Icons.notifications_active_rounded, 'Notificaciones', appYellow),
                 ],
               ),
             ),
@@ -618,7 +643,7 @@ class HomeDashboard extends StatelessWidget {
           ),
           IconButton(
             tooltip: tr('settings'),
-            onPressed: () => onNavigate(9),
+            onPressed: () => onNavigate(10),
             icon: const Icon(Icons.settings_rounded, color: appCyan),
           ),
         ],
@@ -922,7 +947,7 @@ class HomeDashboard extends StatelessWidget {
                   ),
                   icon: Icons.article_rounded,
                   color: appYellow,
-                  onTap: () => onNavigate(4),
+                  onTap: () => onNavigate(5),
                 ),
                 const SizedBox(height: 8),
                 _HomeActionCard(

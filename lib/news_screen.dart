@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'web_protection_policy.dart';
 import 'app_i18n.dart';
@@ -935,6 +936,72 @@ class _NewsArticleReaderState extends State<NewsArticleReader> {
   bool _allowPop = false;
   bool _handlingBack = false;
   double _progress = 0;
+  String? _loadError;
+  int _webViewGeneration = 0;
+
+  void _retryArticle() {
+    setState(() {
+      _webViewGeneration++;
+      _loading = true;
+      _progress = 0;
+      _loadError = null;
+      _controller = null;
+    });
+  }
+
+  Future<void> _openOriginalArticle() async {
+    final uri = Uri.tryParse(widget.story.link);
+    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return;
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir el artículo en el navegador.')),
+      );
+    }
+  }
+
+  Widget _articleErrorPanel() {
+    return ColoredBox(
+      color: _newsBg,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Icon(Icons.article_outlined, color: _newsPink, size: 46),
+              const SizedBox(height: 12),
+              const Text('NO SE PUDO MOSTRAR EL ARTÍCULO',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              Text(_loadError ?? 'La página no respondió dentro del navegador integrado.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: _newsMuted, fontSize: 12, height: 1.4)),
+              const SizedBox(height: 14),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  OutlinedButton.icon(
+                    onPressed: _retryArticle,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Reintentar'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: _openOriginalArticle,
+                    icon: const Icon(Icons.open_in_browser_rounded),
+                    label: const Text('Abrir en navegador'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _back() async {
     if (_handlingBack) return;
@@ -1019,7 +1086,11 @@ class _NewsArticleReaderState extends State<NewsArticleReader> {
                 color: _newsCyan,
               ),
             Expanded(
-              child: InAppWebView(
+              child: Stack(
+                fit: StackFit.expand,
+                children: <Widget>[
+                  InAppWebView(
+                key: ValueKey<int>(_webViewGeneration),
                 initialUrlRequest: URLRequest(
                   url: WebUri(widget.story.link),
                 ),
@@ -1047,6 +1118,7 @@ class _NewsArticleReaderState extends State<NewsArticleReader> {
                   setState(() {
                     _loading = true;
                     _progress = 0;
+                    _loadError = null;
                   });
                 },
                 onProgressChanged: (controller, progress) {
@@ -1077,8 +1149,35 @@ class _NewsArticleReaderState extends State<NewsArticleReader> {
                 shouldInterceptRequest: (controller, request) async => WebProtectionPolicy.intercept(request),
                 onReceivedError: (controller, request, error) {
                   if (!(request.isForMainFrame ?? true) || !mounted) return;
-                  setState(() => _loading = false);
+                  setState(() {
+                    _loading = false;
+                    _loadError =
+                        'El medio no pudo cargar esta página (código ${error.type}).';
+                  });
                 },
+                onReceivedHttpError: (controller, request, response) {
+                  if (!(request.isForMainFrame ?? true) || !mounted) return;
+                  final status = response.statusCode ?? 0;
+                  if (status >= 400) {
+                    setState(() {
+                      _loading = false;
+                      _loadError = 'El sitio del medio respondió HTTP $status.';
+                    });
+                  }
+                },
+                androidOnRenderProcessGone: (controller, detail) {
+                  if (!mounted) return;
+                  _controller = null;
+                  setState(() {
+                    _loading = false;
+                    _loadError =
+                        'Android cerró el navegador de esta página. Reintenta para abrirlo de nuevo.';
+                  });
+                },
+                  ),
+                  if (_loadError != null)
+                    Positioned.fill(child: _articleErrorPanel()),
+                ],
               ),
             ),
           ],

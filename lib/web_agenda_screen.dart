@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
@@ -64,6 +66,59 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
   bool _blockKnownTrackers = true;
   String? _errorMessage;
   String? _noticeMessage;
+  int _webViewGeneration = 0;
+  Timer? _loadTimeoutTimer;
+
+  void _armLoadTimeout() {
+    _loadTimeoutTimer?.cancel();
+    _loadTimeoutTimer = Timer(const Duration(seconds: 35), () {
+      if (!mounted || !_loading) return;
+      setState(() {
+        _loading = false;
+        _errorMessage =
+            'La página tardó más de 35 segundos en responder. Puedes reintentar o desactivar temporalmente la protección web y recargar.';
+      });
+    });
+  }
+
+  Future<void> _checkForBlankPage(InAppWebViewController controller) async {
+    await Future<void>.delayed(const Duration(seconds: 7));
+    if (!mounted ||
+        !identical(_controller, controller) ||
+        _loading ||
+        _errorMessage != null) {
+      return;
+    }
+    try {
+      final visible = await controller.evaluateJavascript(source: r'''
+        (() => {
+          const body = document.body;
+          if (!body) return false;
+          const text = (body.innerText || '').trim();
+          const media = body.querySelector(
+            'main,iframe,video,audio,canvas,img,svg,[role="main"],#root > *,#app > *'
+          );
+          return text.length > 12 || media !== null;
+        })()
+      ''');
+      final result = visible?.toString().toLowerCase();
+      if (visible == false || result == 'false' || result == '0') {
+        if (!mounted) return;
+        setState(() {
+          _errorMessage =
+              'El sitio respondió, pero no dibujó contenido. Prueba Recargar; si persiste, desactiva la protección web o abre la página en Chrome. Puede ser un bloqueo del sitio o de la red.';
+        });
+      }
+    } catch (_) {
+      // Algunas páginas aíslan el DOM; no se declara un fallo por esto.
+    }
+  }
+
+  @override
+  void dispose() {
+    _loadTimeoutTimer?.cancel();
+    super.dispose();
+  }
 
   List<ContentBlocker> _buildContentBlockers() => WebProtectionPolicy.buildContentBlockers();
 
@@ -83,6 +138,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
       _errorMessage = null;
       _noticeMessage = null;
     });
+    _armLoadTimeout();
 
     try {
       await controller.loadUrl(
@@ -235,7 +291,15 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
 
   Future<void> _reload() async {
     final controller = _controller;
-    if (controller == null) return;
+    if (controller == null) {
+      setState(() {
+        _webViewGeneration++;
+        _loading = true;
+        _progress = 0;
+        _errorMessage = null;
+      });
+      return;
+    }
 
     setState(() {
       _loading = true;
@@ -244,9 +308,11 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
       _noticeMessage = null;
     });
 
+    _armLoadTimeout();
     try {
       await controller.reload();
     } catch (_) {
+      _loadTimeoutTimer?.cancel();
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -493,6 +559,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
               child: _errorMessage != null
                   ? _errorPanel()
                   : InAppWebView(
+                      key: ValueKey<int>(_webViewGeneration),
                       initialUrlRequest: URLRequest(
                         url: WebUri(WebAgendaScreen.initialUrl),
                       ),
@@ -537,6 +604,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                           _progress = 0;
                           _errorMessage = null;
                         });
+                        _armLoadTimeout();
                         _refreshNavigationState();
                       },
                       onProgressChanged: (controller, progress) {
@@ -547,6 +615,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         });
                       },
                       onLoadStop: (controller, url) async {
+                        _loadTimeoutTimer?.cancel();
                         if (!mounted) return;
                         setState(() {
                           _loading = false;
@@ -554,6 +623,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         });
                         await _installAdElementCleanup(controller);
                         await _refreshNavigationState();
+                        unawaited(_checkForBlankPage(controller));
                       },
                       onUpdateVisitedHistory:
                           (controller, url, androidIsReload) {
@@ -598,10 +668,21 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         if (!(request.isForMainFrame ?? true) || !mounted) {
                           return;
                         }
+                        _loadTimeoutTimer?.cancel();
                         setState(() {
                           _loading = false;
                           _errorMessage =
                               'No se pudo cargar esta página. Comprueba la conexión y pulsa Recargar. Código: ${error.type}';
+                        });
+                      },
+                      androidOnRenderProcessGone: (controller, detail) {
+                        if (!mounted) return;
+                        _loadTimeoutTimer?.cancel();
+                        _controller = null;
+                        setState(() {
+                          _loading = false;
+                          _errorMessage =
+                              'Android cerró el navegador integrado. Pulsa Recargar para crear un WebView nuevo.';
                         });
                       },
                       onReceivedHttpError: (controller, request, response) {
@@ -610,6 +691,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         }
                         final statusCode = response.statusCode ?? 0;
                         if (statusCode >= 400) {
+                          _loadTimeoutTimer?.cancel();
                           setState(() {
                             _loading = false;
                             _errorMessage =
