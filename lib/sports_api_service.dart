@@ -183,12 +183,8 @@ class SportsApiService {
 
     // El Worker de fútbol admite rangos from/to.
     // Los otros calendarios requieren una fecha concreta.
-    if (sport != 'Fútbol' && dateFilter == 'Todos') {
-      throw const SportsApiException(
-        'Para este deporte selecciona Hoy o Mañana. '
-        'La ruta actual no admite un rango de fechas.',
-      );
-    }
+    // Los calendarios no futbolísticos consultan una fecha concreta; cuando
+    // se elige Todos se usa hoy sin fallar la carga del deporte.
 
     final query = <String, String>{};
 
@@ -213,6 +209,7 @@ class SportsApiService {
   }
 
   static const Map<String, String> _sportRouteIds = <String, String>{
+    'Fútbol': 'football',
     'Básquet': 'basketball',
     'NBA': 'nba',
     'Béisbol': 'baseball',
@@ -222,13 +219,11 @@ class SportsApiService {
     'Rugby': 'rugby',
     'Vóley': 'volleyball',
     'Fútbol australiano': 'afl',
+    'Fórmula 1': 'formula-1',
+    'MMA': 'mma',
   };
 
   String _resourceRoute(String sport, String resource) {
-    if (sport == 'Fútbol') {
-      if (resource == 'leagues') return '/api/leagues';
-      if (resource == 'standings') return '/api/standings';
-    }
     final sportId = _sportRouteIds[sport];
     if (sportId == null) {
       throw SportsApiException(sport + ' no tiene un recurso de ' + resource + ' disponible.');
@@ -270,6 +265,241 @@ class SportsApiService {
     }
     final route = _resourceRoute(sport, 'standings');
     final uri = Uri.parse('$base$route').replace(queryParameters: <String, String>{'league': id, 'season': year});
+    return _getRows(uri);
+  }
+
+
+  /// Clasificaciones específicas de Fórmula 1: pilotos o constructores.
+  Future<List<Map<String, dynamic>>> fetchFormula1Rankings({
+    required String season,
+    required String ranking,
+  }) async {
+    final year = season.trim();
+    if (!RegExp(r'^\\d{4}
+  static Future<void> _reserveRequestSlot() async {
+    final previous = _requestQueue;
+    final release = Completer<void>();
+
+    _requestQueue = release.future;
+
+    await previous;
+
+    try {
+      final last = _lastRequestAt;
+
+      if (last != null) {
+        final elapsed = DateTime.now().difference(last);
+
+        if (elapsed < _minimumRequestInterval) {
+          await Future<void>.delayed(
+            _minimumRequestInterval - elapsed,
+          );
+        }
+      }
+
+      _lastRequestAt = DateTime.now();
+    } finally {
+      release.complete();
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _getRows(Uri uri) async {
+    final key = uri.toString();
+
+    final cached = _cache[key];
+
+    if (cached != null) {
+      if (DateTime.now().isBefore(cached.expiresAt)) {
+        return cached.rows;
+      }
+
+      _cache.remove(key);
+    }
+
+    final pending = _inFlight[key];
+
+    if (pending != null) {
+      return pending;
+    }
+
+    final future = _requestRows(uri, key);
+    _inFlight[key] = future;
+
+    try {
+      return await future;
+    } finally {
+      _inFlight.remove(key);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _requestRows(
+    Uri uri,
+    String cacheKey,
+  ) async {
+    try {
+      await _reserveRequestSlot();
+
+      final response = await http.get(uri).timeout(_timeout);
+
+      if (response.statusCode == 204) {
+        const emptyRows = <Map<String, dynamic>>[];
+
+        _cache[cacheKey] = _CachedRows(
+          emptyRows,
+          DateTime.now().add(_cacheDuration),
+        );
+
+        return emptyRows;
+      }
+
+      final bodyLower = response.body.toLowerCase();
+
+      if (response.statusCode == 429 ||
+          bodyLower.contains('too many requests') ||
+          bodyLower.contains('rate limit') ||
+          bodyLower.contains('ratelimit')) {
+        throw const SportsApiException(
+          'API-Sports alcanzó el límite de consultas. '
+          'Espera al menos un minuto antes de volver a intentarlo.',
+        );
+      }
+
+      if (response.statusCode != 200) {
+        throw SportsApiException(
+          'El servidor de partidos respondió HTTP ${response.statusCode}.',
+        );
+      }
+
+      dynamic decoded;
+
+      try {
+        decoded = jsonDecode(response.body);
+      } catch (_) {
+        throw const SportsApiException(
+          'El servidor devolvió una respuesta JSON inválida.',
+        );
+      }
+
+      if (decoded is! Map) {
+        throw const SportsApiException(
+          'La respuesta deportiva no tiene el formato esperado.',
+        );
+      }
+
+      final data = Map<String, dynamic>.from(decoded);
+      final errors = data['errors'];
+
+      final hasErrors = errors is List
+          ? errors.isNotEmpty
+          : errors is Map
+              ? errors.isNotEmpty
+              : errors != null &&
+                  errors != false &&
+                  errors.toString().trim().isNotEmpty;
+
+      if (hasErrors) {
+        final errorText = errors.toString().toLowerCase();
+
+        if (errorText.contains('too many requests') ||
+            errorText.contains('rate limit') ||
+            errorText.contains('ratelimit')) {
+          throw const SportsApiException(
+            'API-Sports alcanzó el límite de consultas. '
+            'Espera al menos un minuto antes de volver a intentarlo.',
+          );
+        }
+
+        throw SportsApiException(
+          'El proveedor deportivo devolvió un error: $errors',
+        );
+      }
+
+      final rawRows = data['response'];
+
+      if (rawRows is! List) {
+        throw const SportsApiException(
+          'La respuesta no contiene la lista de eventos.',
+        );
+      }
+
+      final rows = rawRows
+          .whereType<Map>()
+          .map(
+            (row) => Map<String, dynamic>.from(row),
+          )
+          .toList(growable: false);
+
+      _cache[cacheKey] = _CachedRows(
+        rows,
+        DateTime.now().add(_cacheDuration),
+      );
+
+      return rows;
+    } on TimeoutException {
+      throw const SportsApiException(
+        'La consulta tardó demasiado. Comprueba tu conexión.',
+      );
+    } on SportsApiException {
+      rethrow;
+    } catch (_) {
+      throw const SportsApiException(
+        'No se pudo conectar con el servidor deportivo.',
+      );
+    }
+  }
+}
+
+class _CachedRows {
+  const _CachedRows(this.rows, this.expiresAt);
+
+  final List<Map<String, dynamic>> rows;
+  final DateTime expiresAt;
+}
+
+class SportsApiException implements Exception {
+  const SportsApiException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}).hasMatch(year)) {
+      throw const SportsApiException('La temporada debe tener formato YYYY.');
+    }
+    if (ranking != 'driver-rankings' && ranking != 'team-rankings') {
+      throw const SportsApiException('Clasificación de Fórmula 1 no válida.');
+    }
+    final base = normalizeBaseUrl(sportsApiBaseUrl.value);
+    if (base == null) throw const SportsApiException('Configura una URL HTTPS válida del servidor.');
+    final uri = Uri.parse('$base/api/formula-1/$ranking').replace(
+      queryParameters: <String, String>{'season': year},
+    );
+    return _getRows(uri);
+  }
+
+  /// Calendario de combates de MMA para una fecha concreta.
+  Future<List<Map<String, dynamic>>> fetchMmaFights({DateTime? date}) async {
+    final base = normalizeBaseUrl(sportsApiBaseUrl.value);
+    if (base == null) throw const SportsApiException('Configura una URL HTTPS válida del servidor.');
+    final uri = Uri.parse('$base/api/mma/fights').replace(
+      queryParameters: <String, String>{
+        'date': _dateParam(date ?? DateTime.now()),
+      },
+    );
+    return _getRows(uri);
+  }
+
+  /// Busca luchadores por nombre sin exponer la clave del proveedor.
+  Future<List<Map<String, dynamic>>> fetchMmaFighters({
+    required String search,
+  }) async {
+    final term = search.trim();
+    if (term.isEmpty) throw const SportsApiException('Escribe el nombre de un luchador.');
+    final base = normalizeBaseUrl(sportsApiBaseUrl.value);
+    if (base == null) throw const SportsApiException('Configura una URL HTTPS válida del servidor.');
+    final uri = Uri.parse('$base/api/mma/fighters').replace(
+      queryParameters: <String, String>{'search': term},
+    );
     return _getRows(uri);
   }
 
