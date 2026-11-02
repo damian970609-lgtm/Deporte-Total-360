@@ -254,14 +254,14 @@ class ChannelCatalogService {
         }
         continue;
       }
-      if (line.startsWith('#') || pendingName == null || pendingName!.isEmpty) continue;
+      if (line.startsWith('#') || pendingName == null || pendingName.isEmpty) continue;
       final uri = Uri.tryParse(line);
       final path = uri?.path.toLowerCase() ?? '';
       final supportedFormat = path.endsWith('.m3u8') || path.endsWith('.mpd');
       if (uri != null && uri.hasAuthority && uri.host.isNotEmpty &&
           (uri.scheme == 'https' || uri.scheme == 'http') &&
           uri.userInfo.isEmpty && supportedFormat) {
-        result.add(TvCatalogChannel(name: pendingName!, url: uri.toString(), group: pendingGroup, tvgId: pendingTvgId, httpHeaders: Map<String, String>.unmodifiable(pendingHeaders)));
+        result.add(TvCatalogChannel(name: pendingName, url: uri.toString(), group: pendingGroup, tvgId: pendingTvgId, httpHeaders: Map<String, String>.unmodifiable(pendingHeaders)));
       }
       pendingName = null;
       pendingGroup = '';
