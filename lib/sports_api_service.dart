@@ -222,12 +222,22 @@ class SportsApiService {
     'Rugby': 'rugby',
     'Vóley': 'volleyball',
     'Fútbol australiano': 'afl',
+    'Fórmula 1': 'formula-1',
+    'MMA': 'mma',
   };
 
   String _resourceRoute(String sport, String resource) {
     if (sport == 'Fútbol') {
       if (resource == 'leagues') return '/api/leagues';
       if (resource == 'standings') return '/api/standings';
+    }
+    if (sport == 'Fórmula 1') {
+      if (resource == 'leagues') return '/api/formula-1/races';
+      if (resource == 'standings') return '/api/formula-1/driver-rankings';
+    }
+    if (sport == 'MMA') {
+      if (resource == 'leagues') return '/api/mma/categories';
+      if (resource == 'standings') return '/api/mma/fights';
     }
     final sportId = _sportRouteIds[sport];
     if (sportId == null) {
@@ -245,10 +255,19 @@ class SportsApiService {
     final term = search.trim();
     if (term.isEmpty) throw const SportsApiException('Escribe el nombre de una liga o competición.');
     final route = _resourceRoute(sport, 'leagues');
-    // La API de NBA usa "name"; los demás catálogos usan "search".
-    final queryKey = sport == 'NBA' ? 'name' : 'search';
+    // NBA usa "name"; Fórmula 1 consulta carreras por temporada.
+    final queryKey = sport == 'NBA'
+        ? 'name'
+        : sport == 'Fórmula 1'
+            ? 'season'
+            : 'search';
+    final queryValue = sport == 'Fórmula 1'
+        ? (RegExp(r'^\\d{4}$').hasMatch(term)
+            ? term
+            : throw const SportsApiException('Para Fórmula 1 escribe el año de temporada, por ejemplo 2026.'))
+        : term;
     final uri = Uri.parse('$base$route').replace(
-      queryParameters: <String, String>{queryKey: term},
+      queryParameters: <String, String>{queryKey: queryValue},
     );
     return _getRows(uri);
   }
@@ -262,14 +281,25 @@ class SportsApiService {
     if (base == null) throw const SportsApiException('Configura una URL HTTPS válida del servidor.');
     final id = leagueId.trim();
     final year = season.trim();
-    if (!RegExp(r'^\d+$').hasMatch(id) || int.tryParse(id) == null || int.parse(id) < 1) {
-      throw const SportsApiException('El identificador de liga debe ser numérico.');
-    }
-    if (!RegExp(r'^\d{4}(?:-\d{4})?$').hasMatch(year)) {
+    if (!RegExp(r'^\\d{4}(?:-\\d{4})?$').hasMatch(year)) {
       throw const SportsApiException('La temporada debe tener formato 2026 o 2025-2026.');
     }
     final route = _resourceRoute(sport, 'standings');
-    final uri = Uri.parse('$base$route').replace(queryParameters: <String, String>{'league': id, 'season': year});
+    final parameters = <String, String>{'season': year};
+    if (sport == 'Fórmula 1') {
+      // La API de Fórmula 1 expone rankings por temporada, no por liga.
+    } else if (sport == 'MMA') {
+      // MMA expone combates por fecha, no tablas de posiciones.
+      parameters
+        ..clear()
+        ..['date'] = _dateParam(DateTime.now());
+    } else {
+      if (!RegExp(r'^\\d+$').hasMatch(id) || int.tryParse(id) == null || int.parse(id) < 1) {
+        throw const SportsApiException('El identificador de liga debe ser numérico.');
+      }
+      parameters['league'] = id;
+    }
+    final uri = Uri.parse('$base$route').replace(queryParameters: parameters);
     return _getRows(uri);
   }
 
