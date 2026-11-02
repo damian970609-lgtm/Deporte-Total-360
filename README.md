@@ -4,7 +4,10 @@ Aplicación Android en Flutter. El APK se compila en GitHub Actions; la carpeta 
 
 Archivos principales:
 - lib/main.dart: navegación, inicio, reproductor SSH101 y ajustes.
-- lib/agenda_screen.dart: agenda nativa y eventos API-Sports.
+- lib/agenda_screen.dart: agenda nativa, eventos API-Sports y asociación con canales del catálogo autorizado.
+- lib/channel_catalog_service.dart: lectura de listas M3U y guías XMLTV/EPG autorizadas, coincidencia de partidos y soporte limitado para Referer/User-Agent.
+- lib/channel_catalog_screen.dart: configuración y prueba de las fuentes de canales.
+- lib/multi_match_player_screen.dart: hasta cuatro ventanas simultáneas con sesiones independientes del reproductor ExoPlayer de Android.
 - lib/sports_statistics_screen.dart: búsqueda de ligas y clasificaciones.
 - lib/sports_api_service.dart: conexión con el Worker sin introducir claves en la APK.
 - lib/web_agenda_screen.dart: agenda externa integrada.
@@ -23,6 +26,11 @@ Recursos:
 API deportiva:
 La app usa el Worker público deporte-total-360-api para no incluir la clave API-Sports dentro del APK. La clave debe guardarse únicamente como secreto APISPORTS_KEY del repositorio del Worker:
 https://github.com/damian970609-lgtm/Deporte-Total-360-
+
+Canales y multipantalla:
+En Agenda y En Vivo se puede abrir la vista multipantalla para eventos que tengan una fuente válida asociada. La asociación automática necesita una URL HTTPS de lista M3U y, para identificar el partido, una guía XMLTV/EPG HTTPS. La app cruza el identificador tvg-id con programas cuyo título contiene los dos equipos del evento. La opción de configuración está en el icono de lista de la Agenda. El botón PROBAR LISTA valida cuántos enlaces HLS/DASH compatibles hay en la M3U.
+
+Solo deben configurarse listas y señales que el usuario tenga autorización para reproducir. No se extraen canales ni credenciales de otras aplicaciones. Si la guía no incluye el nombre de ambos equipos o el identificador tvg-id no coincide, la app no asigna un canal automáticamente. La multipantalla abre hasta cuatro reproductores a la vez por página; los límites reales dependen del hardware, ancho de banda y compatibilidad de cada señal. El recordatorio de diez minutos notifica, pero Android no permite garantizar que la app abra automáticamente pantallas de vídeo mientras está en segundo plano.
 
 Compilación:
 El workflow configura Java y Flutter, genera Android en el runner, prepara permisos de red e icono, ejecuta flutter analyze y flutter test, compila el APK release y publica deporte-total-360-apk durante 30 días.
