@@ -23,10 +23,11 @@ const Color agendaMuted = Color(0xFFA9BDD6);
 enum MatchStatus { live, scheduled, finished }
 
 class MatchStreamSource {
-  const MatchStreamSource({required this.name, required this.url});
+  const MatchStreamSource({required this.name, required this.url, this.httpHeaders = const <String, String>{}});
 
   final String name;
   final String url;
+  final Map<String, String> httpHeaders;
 
   Uri? get validatedUri {
     final uri = Uri.tryParse(url.trim());
@@ -352,6 +353,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
               .map((suggestion) => MatchStreamSource(
                     name: suggestion.channelName,
                     url: suggestion.url,
+                    httpHeaders: suggestion.httpHeaders,
                   )),
         ];
         final seen = <String>{};
@@ -608,9 +610,41 @@ class _AgendaScreenState extends State<AgendaScreen> {
             source['video_url'] ??
             source['src'];
         if (url is String && url.trim().isNotEmpty) {
+          final headers = <String, String>{};
+          final rawHeaders = source['headers'];
+          if (rawHeaders is Map) {
+            for (final entry in rawHeaders.entries) {
+              final key = entry.key.toString().toLowerCase().trim();
+              final value = entry.value.toString().trim();
+              if (value.isEmpty || value.contains('\r') || value.contains('\n')) continue;
+              if (key == 'user-agent' && value.length <= 256) {
+                headers['User-Agent'] = value;
+              } else if (key == 'referer' && value.length <= 2048) {
+                final referer = Uri.tryParse(value);
+                if (referer != null && referer.scheme == 'https' &&
+                    referer.host.isNotEmpty && referer.userInfo.isEmpty) {
+                  headers['Referer'] = referer.toString();
+                }
+              }
+            }
+          }
+          final userAgent = source['user_agent']?.toString().trim() ?? '';
+          if (userAgent.isNotEmpty && userAgent.length <= 256 &&
+              !userAgent.contains('\r') && !userAgent.contains('\n')) {
+            headers['User-Agent'] = userAgent;
+          }
+          final refererText = source['referer']?.toString().trim() ?? '';
+          if (refererText.isNotEmpty && refererText.length <= 2048) {
+            final referer = Uri.tryParse(refererText);
+            if (referer != null && referer.scheme == 'https' &&
+                referer.host.isNotEmpty && referer.userInfo.isEmpty) {
+              headers['Referer'] = referer.toString();
+            }
+          }
           streamSources.add(MatchStreamSource(
             name: (source['name'] ?? source['label'] ?? 'Fuente ${index + 1}').toString(),
             url: url.trim(),
+            httpHeaders: Map<String, String>.unmodifiable(headers),
           ));
         }
       }
@@ -1754,7 +1788,7 @@ class _AgendaVideoPlayerScreenState extends State<AgendaVideoPlayerScreen> {
     _controller = null;
     await oldController?.dispose();
 
-    final controller = VideoPlayerController.networkUrl(uri);
+    final controller = VideoPlayerController.networkUrl(uri, httpHeaders: widget.source.httpHeaders);
     _controller = controller;
     try {
       await controller.initialize();
