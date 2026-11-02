@@ -12,6 +12,7 @@ import 'notification_service.dart';
 import 'public_chat_screen.dart';
 import 'sports_api_service.dart';
 import 'sports_statistics_screen.dart';
+import 'sports_summaries_screen.dart';
 import 'web_agenda_screen.dart';
 
 // Identidad visual de DEPORTE TOTAL 360°: azul noche, cian, rosa y verde neón.
@@ -129,7 +130,7 @@ class _MainShellState extends State<MainShell> {
   static const int _homeTab = 0;
   static const int _statisticsTab = 1;
   static const int _agendaWebTab = 3;
-  static const int _settingsTab = 5;
+  static const int _settingsTab = 8;
 
   final GlobalKey<WebAgendaScreenState> _webAgendaKey =
       GlobalKey<WebAgendaScreenState>();
@@ -137,12 +138,14 @@ class _MainShellState extends State<MainShell> {
   int _selectedIndex = _homeTab;
   String _selectedStatisticsSport = 'Fútbol';
   bool _handlingBack = false;
+  final Set<int> _visitedTabs = <int>{_homeTab};
 
   void _selectTab(int index) {
     if (index < 0 || index > _settingsTab) return;
     setState(() {
       _selectedIndex = index;
-      if (index == _statisticsTab) _selectedStatisticsSport = 'Fútbol';
+      _visitedTabs.add(index);
+      // Conserva el deporte elegido al cambiar de pestaña.
     });
   }
 
@@ -150,6 +153,7 @@ class _MainShellState extends State<MainShell> {
     setState(() {
       _selectedStatisticsSport = sport;
       _selectedIndex = _statisticsTab;
+      _visitedTabs.add(_statisticsTab);
     });
   }
 
@@ -157,7 +161,11 @@ class _MainShellState extends State<MainShell> {
     _selectTab(_statisticsTab);
   }
 
-  Future<void> _openAgenda() async {
+  void _openWebAgenda() {
+    _selectTab(_agendaWebTab);
+  }
+
+  Future<void> _openNativeAgenda() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => AgendaScreen(initialSport: _selectedStatisticsSport),
@@ -281,6 +289,44 @@ class _MainShellState extends State<MainShell> {
     }
   }
 
+  Widget _buildBottomTab(
+    int index,
+    IconData icon,
+    String label,
+    Color accent,
+  ) {
+    final selected = _selectedIndex == index;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: InkWell(
+        onTap: () => _selectTab(index),
+        child: SizedBox(
+          width: 82,
+          height: 66,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(icon, size: 20, color: selected ? accent : appMuted),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected ? accent : appMuted,
+                  fontSize: 9,
+                  fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
@@ -296,22 +342,35 @@ class _MainShellState extends State<MainShell> {
         onDonations: _openDonations,
         onFantasy: _openFantasy,
         onStatistics: _openStatistics,
-        onOpenAgenda: _openAgenda,
+        onOpenAgenda: _openWebAgenda,
         onChat: _openPublicChat,
       ),
-      SportsStatisticsScreen(
-        key: ValueKey<String>('statistics-$_selectedStatisticsSport'),
-        initialSport: _selectedStatisticsSport,
-        onOpenAgenda: _openAgenda,
-      ),
-      const LiveScreen(),
-      WebAgendaScreen(
-        key: _webAgendaKey,
-        onExit: () => _selectTab(_homeTab),
-        onOpenLive: () => _selectTab(2),
-      ),
-      const NewsScreen(),
-      const SettingsScreen(),
+      _visitedTabs.contains(_statisticsTab)
+          ? SportsStatisticsScreen(
+              key: ValueKey<String>('statistics-$_selectedStatisticsSport'),
+              initialSport: _selectedStatisticsSport,
+              onOpenAgenda: _openNativeAgenda,
+            )
+          : const SizedBox.shrink(),
+      _visitedTabs.contains(2) ? const LiveScreen() : const SizedBox.shrink(),
+      _visitedTabs.contains(_agendaWebTab)
+          ? WebAgendaScreen(
+              key: _webAgendaKey,
+              onExit: () => _selectTab(_homeTab),
+              onOpenLive: () => _selectTab(2),
+            )
+          : const SizedBox.shrink(),
+      _visitedTabs.contains(4) ? const NewsScreen() : const SizedBox.shrink(),
+      _visitedTabs.contains(5) ? const FantasyScreen() : const SizedBox.shrink(),
+      _visitedTabs.contains(6)
+          ? PublicChatScreen(isActive: _selectedIndex == 6)
+          : const SizedBox.shrink(),
+      _visitedTabs.contains(7)
+          ? const SportsSummariesScreen()
+          : const SizedBox.shrink(),
+      _visitedTabs.contains(_settingsTab)
+          ? const SettingsScreen()
+          : const SizedBox.shrink(),
     ];
 
     return PopScope<void>(
@@ -339,63 +398,21 @@ class _MainShellState extends State<MainShell> {
           ),
           child: SafeArea(
             top: false,
-            child: NavigationBar(
-              height: 64,
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: _selectTab,
-              backgroundColor: const Color(0xFF020B19),
-              indicatorColor: appBlue.withAlpha(95),
-              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-              destinations: <NavigationDestination>[
-                NavigationDestination(
-                  icon: const Icon(Icons.home_outlined),
-                  selectedIcon: const Icon(
-                    Icons.home_rounded,
-                    color: appCyan,
-                  ),
-                  label: tr('home'),
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.query_stats_outlined),
-                  selectedIcon: const Icon(
-                    Icons.query_stats_rounded,
-                    color: appCyan,
-                  ),
-                  label: tr('statistics'),
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.live_tv_outlined),
-                  selectedIcon: const Icon(
-                    Icons.live_tv_rounded,
-                    color: appPink,
-                  ),
-                  label: tr('live'),
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.calendar_month_outlined),
-                  selectedIcon: const Icon(
-                    Icons.calendar_month_rounded,
-                    color: appGreen,
-                  ),
-                  label: tr('web_agenda'),
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.article_outlined),
-                  selectedIcon: const Icon(
-                    Icons.article_rounded,
-                    color: appGreen,
-                  ),
-                  label: tr('news'),
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.settings_outlined),
-                  selectedIcon: const Icon(
-                    Icons.settings_rounded,
-                    color: appCyan,
-                  ),
-                  label: tr('settings'),
-                ),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: <Widget>[
+                  _buildBottomTab(0, Icons.home_rounded, tr('home'), appCyan),
+                  _buildBottomTab(1, Icons.query_stats_rounded, tr('statistics'), appCyan),
+                  _buildBottomTab(2, Icons.live_tv_rounded, tr('live'), appPink),
+                  _buildBottomTab(3, Icons.calendar_month_rounded, tr('web_agenda'), appGreen),
+                  _buildBottomTab(4, Icons.article_rounded, tr('news'), appGreen),
+                  _buildBottomTab(5, Icons.emoji_events_rounded, 'Mister Fantasy', appYellow),
+                  _buildBottomTab(6, Icons.forum_rounded, 'Chat', appCyan),
+                  _buildBottomTab(7, Icons.play_circle_fill_rounded, appText('Resúmenes', 'Highlights', 'Resumos', 'Résumés'), appPink),
+                  _buildBottomTab(8, Icons.settings_rounded, tr('settings'), appCyan),
+                ],
+              ),
             ),
           ),
         ),
@@ -551,7 +568,7 @@ class HomeDashboard extends StatelessWidget {
           ),
           IconButton(
             tooltip: tr('settings'),
-            onPressed: () => onNavigate(5),
+            onPressed: () => onNavigate(8),
             icon: const Icon(Icons.settings_rounded, color: appCyan),
           ),
         ],

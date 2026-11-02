@@ -82,4 +82,14 @@ void main() {
     expect(wrongTabSelected, -1);
   });
 
+  testWidgets('muestra las pestañas inferiores de Fantasy, Chat y Resúmenes', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: MainShell()));
+
+    expect(find.text('Mister Fantasy'), findsOneWidget);
+    expect(find.text('Chat'), findsOneWidget);
+    expect(find.text('Resúmenes'), findsOneWidget);
+    expect(find.text('Estadísticas'), findsWidgets);
+  });
+
+
 }
