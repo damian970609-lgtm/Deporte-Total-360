@@ -106,7 +106,7 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
 
   void _selectLeague(Map<String,dynamic> row){
     final id=_leagueId(row);
-    if(id.isEmpty || (_sport!='MMA' && !RegExp(r'^\\d+
+    if(id.isEmpty || (_sport!='MMA' && !RegExp(r'^\d+
     final seasons=_leagueSeasons(row);
     String? currentSeason;
     final rawSeasons=row['seasons'];
