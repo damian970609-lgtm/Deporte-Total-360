@@ -418,7 +418,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
       if (fallbackTime is String &&
           fallbackTime.trim().isNotEmpty &&
           RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(text)) {
-        text = '\${text}T\${fallbackTime.trim()}';
+        text = '${text}T${fallbackTime.trim()}';
       }
       return DateTime.tryParse(text);
     }
