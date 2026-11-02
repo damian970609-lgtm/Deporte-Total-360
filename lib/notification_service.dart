@@ -58,21 +58,23 @@ class NotificationService {
     required String homeTeam,
     required String awayTeam,
     required DateTime startsAt,
+    required int minutesBefore,
   }) async {
     await initialize();
-    final reminderAt = startsAt.toLocal().subtract(const Duration(minutes: 15));
+    if (minutesBefore <= 0) return;
+    final reminderAt = startsAt.toLocal().subtract(Duration(minutes: minutesBefore));
     if (!reminderAt.isAfter(DateTime.now())) return;
 
-    final id = _stableId('$sport:$eventId');
+    final id = _stableId('$sport:$eventId:$minutesBefore');
     final channelName = tr('notifications');
     await _plugin.zonedSchedule(
       id: id,
       title: tr('title'),
       body: appText(
-        '$sport: $homeTeam vs $awayTeam comienza en 15 minutos.',
-        '$sport: $homeTeam vs $awayTeam starts in 15 minutes.',
-        '$sport: $homeTeam vs $awayTeam começa em 15 minutos.',
-        '$sport : $homeTeam vs $awayTeam commence dans 15 minutes.',
+        '$sport: $homeTeam vs $awayTeam comienza en $minutesBefore minutos.',
+        '$sport: $homeTeam vs $awayTeam starts in $minutesBefore minutes.',
+        '$sport: $homeTeam vs $awayTeam começa em $minutesBefore minutos.',
+        '$sport : $homeTeam vs $awayTeam commence dans $minutesBefore minutes.',
       ),
       scheduledDate: tz.TZDateTime.from(reminderAt, tz.local),
       notificationDetails: const NotificationDetails(
@@ -103,13 +105,16 @@ class NotificationService {
         return left.compareTo(right);
       });
     for (final event in ordered.take(40)) {
-      await scheduleMatchReminder(
-        eventId: event['id'] as String,
-        sport: event['sport'] as String,
-        homeTeam: event['homeTeam'] as String,
-        awayTeam: event['awayTeam'] as String,
-        startsAt: event['startsAt'] as DateTime,
-      );
+      for (final minutesBefore in <int>[60, 30, 15, 5]) {
+        await scheduleMatchReminder(
+          eventId: event['id'] as String,
+          sport: event['sport'] as String,
+          homeTeam: event['homeTeam'] as String,
+          awayTeam: event['awayTeam'] as String,
+          startsAt: event['startsAt'] as DateTime,
+          minutesBefore: minutesBefore,
+        );
+      }
     }
   }
 
