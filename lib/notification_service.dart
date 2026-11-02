@@ -107,7 +107,7 @@ class NotificationService {
         return left.compareTo(right);
       });
     for (final event in ordered.take(40)) {
-      for (final minutesBefore in <int>[60, 30, 15, 5]) {
+      for (final minutesBefore in <int>[60, 30, 15, 10, 5]) {
         await scheduleMatchReminder(
           eventId: event['id'] as String,
           sport: event['sport'] as String,
