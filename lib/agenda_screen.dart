@@ -135,6 +135,10 @@ class _AgendaScreenState extends State<AgendaScreen> {
     switch (value) {
       case 'Hoy': return appText('Hoy', 'Today', 'Hoje', 'Aujourd’hui');
       case 'Mañana': return appText('Mañana', 'Tomorrow', 'Amanhã', 'Demain');
+      case 'Todos':
+        return _sport == 'Fútbol'
+            ? appText('Próximos 7 días', 'Next 7 days', 'Próximos 7 dias', '7 prochains jours')
+            : _localizedSport(value);
       default: return _localizedSport(value);
     }
   }
@@ -150,7 +154,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
   }
 
   late String _sport;
-  String _dateFilter = 'Hoy';
+  String _dateFilter = 'Todos';
   String _statusFilter = 'Todos';
   String _query = '';
   final TextEditingController _searchController = TextEditingController();
@@ -159,6 +163,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
   List<MatchEvent> _remoteMatches = <MatchEvent>[];
   bool _loadingApi = false;
   String? _apiError;
+  String? _apiWarning;
   int _apiRequestVersion = 0;
   Timer? _scorePollingTimer;
 
@@ -168,6 +173,9 @@ class _AgendaScreenState extends State<AgendaScreen> {
     _sport = _sports.contains(widget.initialSport)
         ? widget.initialSport
         : 'Todos';
+    if (_sport != 'Todos' && _sport != 'Fútbol') {
+      _dateFilter = 'Hoy';
+    }
     _apiConfigurationListener = _onApiConfigurationChanged;
     sportsApiBaseUrl.addListener(_apiConfigurationListener);
     if (sportsApiBaseUrl.value.trim().isNotEmpty) {
@@ -176,7 +184,12 @@ class _AgendaScreenState extends State<AgendaScreen> {
     _scorePollingTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       // No sondear el resumen de todos los deportes continuamente: las
       // alertas de marcador se consultan para el deporte que el usuario ve.
-      if (!mounted || _sport == 'Todos' || _dateFilter != 'Hoy' || _loadingApi) return;
+      if (!mounted ||
+          _sport == 'Todos' ||
+          (_dateFilter != 'Hoy' && _dateFilter != 'Todos') ||
+          _loadingApi) {
+        return;
+      }
       _loadRemoteMatches(announceScoreChanges: true);
     });
   }
@@ -211,15 +224,30 @@ class _AgendaScreenState extends State<AgendaScreen> {
       setState(() {
         _loadingApi = true;
         _apiError = null;
+        _apiWarning = null;
       });
     }
 
     try {
+      final sportErrors = <String, String>{};
       final rows = _sport == 'Todos'
-          ? await _apiService.fetchAllAgendaEvents(dateFilter: _dateFilter)
+          ? await _apiService.fetchAllAgendaEvents(
+              dateFilter: _dateFilter,
+              onSportError: (sport, error) {
+                sportErrors[sport] = error.toString();
+              },
+            )
           : await _apiService.fetchAgendaEvents(
               sport: _sport,
               dateFilter: _dateFilter,
+            );
+      final warning = sportErrors.isEmpty
+          ? null
+          : appText(
+              'Algunos deportes no respondieron: ${sportErrors.entries.take(3).map((entry) => '${entry.key}: ${entry.value}').join(' · ')}',
+              'Some sports did not respond: ${sportErrors.entries.take(3).map((entry) => '${entry.key}: ${entry.value}').join(' · ')}',
+              'Alguns esportes não responderam: ${sportErrors.entries.take(3).map((entry) => '${entry.key}: ${entry.value}').join(' · ')}',
+              'Certains sports n’ont pas répondu : ${sportErrors.entries.take(3).map((entry) => '${entry.key}: ${entry.value}').join(' · ')}',
             );
       final matches = rows
           .map((row) => _matchFromApi(
@@ -245,7 +273,8 @@ class _AgendaScreenState extends State<AgendaScreen> {
       setState(() {
         _remoteMatches = matches;
         _loadingApi = false;
-        _apiError = null;
+        _apiError = matches.isEmpty ? warning : null;
+        _apiWarning = matches.isEmpty ? null : warning;
       });
       for (final event in scoreChanges) {
         await NotificationService.showLiveScoreUpdate(
@@ -265,6 +294,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
       setState(() {
         _loadingApi = false;
         _apiError = error.toString();
+        _apiWarning = null;
       });
     }
   }
@@ -755,6 +785,33 @@ class _AgendaScreenState extends State<AgendaScreen> {
                   },
                 ),
               ),
+              if (_apiWarning != null && events.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2A2414),
+                      border: Border.all(color: const Color(0xFFFFD166)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        const Icon(Icons.warning_amber_rounded, color: Color(0xFFFFD166), size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _apiWarning!,
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white, fontSize: 10, height: 1.35),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 13, 14, 8),
                 child: Row(
