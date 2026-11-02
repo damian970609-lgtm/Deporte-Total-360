@@ -417,7 +417,29 @@ class _AgendaScreenState extends State<AgendaScreen> {
       }
       if (fallbackTime is String &&
           fallbackTime.trim().isNotEmpty &&
-          RegExp(r'^\\d{4}-\\d{2}-\\d{2}
+          RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(text)) {
+        text = '\${text}T\${fallbackTime.trim()}';
+      }
+      return DateTime.tryParse(text);
+    }
+
+    final rawDate = fixture['date'] ??
+        fixture['timestamp'] ??
+        row['date'] ??
+        row['timestamp'] ??
+        game['date'] ??
+        game['timestamp'] ??
+        fight['date'] ??
+        fight['timestamp'] ??
+        race['date'] ??
+        race['timestamp'] ??
+        row['start_date'];
+
+    final kickoff = parseKickoff(
+      rawDate,
+      fixture['time'] ?? game['time'] ?? fight['time'] ?? race['time'] ?? row['time'],
+    );
+
     if (kickoff == null || homeName.isEmpty || awayName.isEmpty) {
       return null;
     }
