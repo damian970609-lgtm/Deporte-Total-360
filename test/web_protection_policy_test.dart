@@ -6,6 +6,8 @@ void main() {
     test('bloquea dominios publicitarios y sus subdominios', () {
       expect(WebProtectionPolicy.isBlockedHost('doubleclick.net'), isTrue);
       expect(WebProtectionPolicy.isBlockedHost('secure.pubmatic.com'), isTrue);
+      expect(WebProtectionPolicy.isBlockedHost('cdn.juicyads.com'), isTrue);
+      expect(WebProtectionPolicy.isBlockedHost('ads.trafficjunky.com'), isTrue);
     });
 
     test('no bloquea el sitio de agenda ni un host de vídeo genérico', () {
