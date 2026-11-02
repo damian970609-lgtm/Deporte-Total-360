@@ -132,7 +132,8 @@ class _MainShellState extends State<MainShell> {
   static const int _homeTab = 0;
   static const int _statisticsTab = 1;
   static const int _agendaWebTab = 3;
-  static const int _settingsTab = 8;
+  static const int _channelsTab = 8;
+  static const int _settingsTab = 9;
 
   final GlobalKey<WebAgendaScreenState> _webAgendaKey =
       GlobalKey<WebAgendaScreenState>();
@@ -399,6 +400,7 @@ class _MainShellState extends State<MainShell> {
       SportsSummariesScreen(isActive: _selectedIndex == 5),
       const FantasyScreen(),
       PublicChatScreen(isActive: _selectedIndex == 7),
+      const ChannelCatalogScreen(),
       const SettingsScreen(),
     ];
 
@@ -441,7 +443,8 @@ class _MainShellState extends State<MainShell> {
                       appText('Resúmenes', 'Highlights', 'Resumos', 'Résumés'), appPink),
                   _tabButton(6, Icons.emoji_events_rounded, 'Fantasy', appYellow),
                   _tabButton(7, Icons.forum_rounded, 'Chat', appCyan),
-                  _tabButton(8, Icons.settings_rounded, tr('settings'), appCyan),
+                  _tabButton(_channelsTab, Icons.live_tv_rounded, 'Canales TV', appGreen),
+                  _tabButton(_settingsTab, Icons.settings_rounded, tr('settings'), appCyan),
                 ],
               ),
             ),
