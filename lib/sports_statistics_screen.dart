@@ -161,10 +161,13 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
       final team=map['team']??map['competitor']??map['participant'];
       final hasPosition=map.containsKey('rank')||map.containsKey('position')||map.containsKey('place');
       if(_sport=='MMA'){
-        final first=_asMap(map['fighter1']??map['home']);
-        final second=_asMap(map['fighter2']??map['away']);
-        final firstName=_text(first['name']??map['fighter1']);
-        final secondName=_text(second['name']??map['fighter2']);
+        final fighters=map['fighters'] is List ? map['fighters'] as List : const <dynamic>[];
+        final firstRaw=map['fighter1']??map['home']??(fighters.isNotEmpty?fighters[0]:null);
+        final secondRaw=map['fighter2']??map['away']??(fighters.length>1?fighters[1]:null);
+        final first=_asMap(firstRaw);
+        final second=_asMap(secondRaw);
+        final firstName=_text(first['name']??firstRaw);
+        final secondName=_text(second['name']??secondRaw);
         final fightName=[firstName,secondName].where((v)=>v.isNotEmpty).join(' vs ');
         rows.add(<String,dynamic>{'rank':rows.length+1,'name':fightName.isEmpty?'Combate ${map['id']??''}':fightName,'fight':map,'id':map['id']});
         return;
@@ -209,7 +212,9 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
 
   String _rowLogo(Map<String,dynamic> row){
     final fight=_asMap(row['fight']);
-    final team=_asMap(row['team']??row['competitor']??row['participant']??fight['fighter1']);
+    final fighters=fight['fighters'] is List ? fight['fighters'] as List : const <dynamic>[];
+    final firstFighter=fight['fighter1']??(fighters.isNotEmpty?fighters[0]:null);
+    final team=_asMap(row['team']??row['competitor']??row['participant']??firstFighter);
     final nested=_asMap(team['team']);
     return (team['logo']??team['image']??nested['logo']??row['logo']??'').toString().trim();
   }
