@@ -7,6 +7,8 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:deporte_total_360/agenda_screen.dart';
 import 'package:deporte_total_360/main.dart';
+import 'package:deporte_total_360/news_screen.dart';
+import 'package:deporte_total_360/web_agenda_screen.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sports_statistics_screen.dart';
 
@@ -84,6 +86,18 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+
+  testWidgets('Inicio aparece antes de crear pantallas de red', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    await tester.pumpWidget(const MaterialApp(home: MainShell()));
+    await tester.pump();
+
+    expect(find.text('TODOS LOS DEPORTES'), findsOneWidget);
+    expect(find.byType(NewsScreen), findsNothing);
+    expect(find.byType(WebAgendaScreen), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('Inicio conserva accesos y Explorar abre Estadísticas', (tester) async {
     var statisticsOpened = 0;
