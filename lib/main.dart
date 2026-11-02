@@ -254,8 +254,14 @@ class _MainShellState extends State<MainShell> {
             'Salir de Deporte Total 360°',
             style: TextStyle(color: appCyan, fontWeight: FontWeight.w900),
           ),
-          content: Text(appText('¿Quieres cerrar la aplicación?', 'Do you want to close the app?', 'Deseja fechar o aplicativo?', 'Voulez-vous fermer l’application?')),
-            style: TextStyle(color: appMuted),
+          content: Text(
+            appText(
+              '¿Quieres cerrar la aplicación?',
+              'Do you want to close the app?',
+              'Deseja fechar o aplicativo?',
+              'Voulez-vous fermer l’application?',
+            ),
+            style: const TextStyle(color: appMuted),
           ),
           actions: <Widget>[
             TextButton(
