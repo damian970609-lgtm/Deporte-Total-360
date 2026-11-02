@@ -544,12 +544,12 @@ class _AgendaScreenState extends State<AgendaScreen> {
 
   Widget _buildEmptyAgendaContent() {
     if (_loadingApi) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            CircularProgressIndicator(color: agendaCyan),
-            SizedBox(height: 12),
+            const CircularProgressIndicator(color: agendaCyan),
+            const SizedBox(height: 12),
             Text(
               _apiProgress ?? appText('Cargando partidos…', 'Loading matches…', 'Carregando partidas…', 'Chargement des matchs…'),
               textAlign: TextAlign.center,
