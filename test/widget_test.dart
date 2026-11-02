@@ -153,6 +153,8 @@ void main() {
     await tester.pump();
     expect(find.byType(SportsNotificationsScreen), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Partidos'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Partidos'));
     await tester.pump();
 

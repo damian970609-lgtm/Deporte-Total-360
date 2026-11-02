@@ -142,18 +142,18 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   static const int _homeTab = 0;
-  static const int _statisticsTab = 1;
-  static const int _liveTab = 2;
-  static const int _agendaWebTab = 3;
-  static const int _nativeAgendaTab = 4;
-  static const int _newsTab = 5;
-  static const int _summariesTab = 6;
-  static const int _fantasyTab = 7;
-  static const int _chatTab = 8;
-  static const int _channelsTab = 9;
-  static const int _settingsTab = 10;
-  static const int _feedTab = 11;
-  static const int _notificationsTab = 12;
+  static const int _feedTab = 1;
+  static const int _notificationsTab = 2;
+  static const int _statisticsTab = 3;
+  static const int _liveTab = 4;
+  static const int _agendaWebTab = 5;
+  static const int _nativeAgendaTab = 6;
+  static const int _newsTab = 7;
+  static const int _summariesTab = 8;
+  static const int _fantasyTab = 9;
+  static const int _chatTab = 10;
+  static const int _channelsTab = 11;
+  static const int _settingsTab = 12;
 
   final GlobalKey<WebAgendaScreenState> _webAgendaKey =
       GlobalKey<WebAgendaScreenState>();
@@ -354,7 +354,7 @@ class _MainShellState extends State<MainShell> {
 
   Widget _buildTab(int index) {
     switch (index) {
-      case 0:
+      case _homeTab:
         return HomeDashboard(
           onNavigate: _selectTab,
           onSportSelected: _selectSport,
@@ -370,7 +370,7 @@ class _MainShellState extends State<MainShell> {
           onOpenAgenda: _openAgenda,
           onChat: _openPublicChat,
         );
-      case 1:
+      case _statisticsTab:
         return SportsStatisticsScreen(
           key: ValueKey<String>('statistics-$_selectedStatisticsSport'),
           initialSport: _selectedStatisticsSport,
@@ -473,6 +473,8 @@ class _MainShellState extends State<MainShell> {
               child: Row(
                 children: <Widget>[
                   _tabButton(_homeTab, Icons.home_rounded, tr('home'), appCyan),
+                  _tabButton(_feedTab, Icons.dynamic_feed_rounded, 'Feed', appGreen),
+                  _tabButton(_notificationsTab, Icons.notifications_active_rounded, 'Notificaciones', appYellow),
                   _tabButton(_statisticsTab, Icons.query_stats_rounded, tr('statistics'), appCyan),
                   _tabButton(_liveTab, Icons.live_tv_rounded, tr('live'), appPink),
                   _tabButton(_agendaWebTab, Icons.public_rounded, 'Fútbol Libre', appGreen),
@@ -484,8 +486,6 @@ class _MainShellState extends State<MainShell> {
                   _tabButton(_chatTab, Icons.forum_rounded, 'Chat', appCyan),
                   _tabButton(_channelsTab, Icons.live_tv_rounded, 'Canales TV', appGreen),
                   _tabButton(_settingsTab, Icons.settings_rounded, tr('settings'), appCyan),
-                  _tabButton(_feedTab, Icons.dynamic_feed_rounded, 'Feed', appGreen),
-                  _tabButton(_notificationsTab, Icons.notifications_active_rounded, 'Notificaciones', appYellow),
                 ],
               ),
             ),
@@ -643,7 +643,7 @@ class HomeDashboard extends StatelessWidget {
           ),
           IconButton(
             tooltip: tr('settings'),
-            onPressed: () => onNavigate(10),
+            onPressed: () => onNavigate(12),
             icon: const Icon(Icons.settings_rounded, color: appCyan),
           ),
         ],
@@ -895,7 +895,7 @@ class HomeDashboard extends StatelessWidget {
                   ),
                   icon: Icons.live_tv_rounded,
                   color: appRed,
-                  onTap: () => onNavigate(2),
+                  onTap: () => onNavigate(4),
                 ),
                 const SizedBox(height: 8),
                 _HomeActionCard(
@@ -947,7 +947,7 @@ class HomeDashboard extends StatelessWidget {
                   ),
                   icon: Icons.article_rounded,
                   color: appYellow,
-                  onTap: () => onNavigate(5),
+                  onTap: () => onNavigate(7),
                 ),
                 const SizedBox(height: 8),
                 _HomeActionCard(
