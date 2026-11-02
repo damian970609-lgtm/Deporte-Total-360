@@ -39,8 +39,6 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
 
   List<ContentBlocker> _buildContentBlockers() => WebProtectionPolicy.buildContentBlockers();
 
-  bool _isKnownTrackerHost(String host) => WebProtectionPolicy.isBlockedHost(host);
-
   bool _isHttpUrl(WebUri uri) {
     final scheme = uri.scheme.toLowerCase();
     return (scheme == 'https' || scheme == 'http') && uri.host.isNotEmpty;
