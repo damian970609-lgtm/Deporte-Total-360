@@ -6,6 +6,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
 import 'agenda_screen.dart';
+import 'channel_catalog_screen.dart';
+import 'multi_match_player_screen.dart';
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
 import 'notification_service.dart';
@@ -206,7 +208,25 @@ class _MainShellState extends State<MainShell> {
         builder: (_) => AgendaScreen(
           initialSport: _selectedStatisticsSport,
           onOpenWebAgenda: _openEmbeddedWebAgenda,
+          onOpenMultiView: _openMultiMatchView,
+          onOpenChannelCatalog: _openChannelCatalog,
         ),
+      ),
+    );
+  }
+
+  Future<void> _openMultiMatchView(List<MatchEvent> matches) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => MultiMatchPlayerScreen(matches: matches),
+      ),
+    );
+  }
+
+  Future<void> _openChannelCatalog() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const ChannelCatalogSettingsScreen(),
       ),
     );
   }
@@ -365,10 +385,15 @@ class _MainShellState extends State<MainShell> {
         initialSport: _selectedStatisticsSport,
         onOpenAgenda: _openAgenda,
       ),
-      const LiveScreen(),
+      LiveScreen(
+        onOpenMultiView: _openMultiMatchView,
+        onOpenChannelCatalog: _openChannelCatalog,
+      ),
       AgendaScreen(
         initialSport: 'Todos',
         onOpenWebAgenda: _openEmbeddedWebAgenda,
+        onOpenMultiView: _openMultiMatchView,
+        onOpenChannelCatalog: _openChannelCatalog,
       ),
       const NewsScreen(),
       SportsSummariesScreen(isActive: _selectedIndex == 5),
@@ -1332,7 +1357,14 @@ class _ActionTile extends StatelessWidget {
 }
 
 class LiveScreen extends StatelessWidget {
-  const LiveScreen({super.key});
+  const LiveScreen({
+    super.key,
+    this.onOpenMultiView,
+    this.onOpenChannelCatalog,
+  });
+
+  final ValueChanged<List<MatchEvent>>? onOpenMultiView;
+  final VoidCallback? onOpenChannelCatalog;
 
   Future<void> _openPlayer(BuildContext context) async {
     final slug = channelSlug.value.trim();
@@ -1373,6 +1405,8 @@ class LiveScreen extends StatelessWidget {
       initialStatus: 'En vivo',
       onOpenPersonalChannel: () => _openPlayer(context),
       onOpenEncoder: () => _openEncoder(context),
+      onOpenMultiView: onOpenMultiView,
+      onOpenChannelCatalog: onOpenChannelCatalog,
     );
   }
 }
