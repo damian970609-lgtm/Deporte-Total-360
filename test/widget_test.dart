@@ -171,7 +171,8 @@ void main() {
       const ValueKey<String>('bottom-tab-0'),
     );
     await tester.ensureVisible(homeBottomTab);
-    await tester.pumpAndSettle();
+    // No se espera a que termine el indicador animado de Agenda.
+    await tester.pump(const Duration(milliseconds: 250));
     await tester.tap(homeBottomTab);
     await tester.pump();
     expect(find.text('TODOS LOS DEPORTES'), findsOneWidget);
