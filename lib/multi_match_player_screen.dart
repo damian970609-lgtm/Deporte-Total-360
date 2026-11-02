@@ -180,7 +180,7 @@ class _MultiMatchPlayerTileState extends State<_MultiMatchPlayerTile> {
         : path.endsWith('.mpd')
             ? VideoFormat.dash
             : VideoFormat.other;
-    final controller = VideoPlayerController.networkUrl(uri, formatHint: format);
+    final controller = VideoPlayerController.networkUrl(uri, formatHint: format, httpHeaders: source!.httpHeaders);
     _controller = controller;
     try {
       await controller.initialize().timeout(const Duration(seconds: 25));
