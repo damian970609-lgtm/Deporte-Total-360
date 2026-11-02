@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
@@ -126,6 +128,48 @@ class NotificationService {
         await _plugin.cancel(id: request.id);
       }
     }
+  }
+
+  static Future<void> showLiveScoreUpdate({
+    required String eventId,
+    required String sport,
+    required String homeTeam,
+    required String awayTeam,
+    required int? homeScore,
+    required int? awayScore,
+  }) async {
+    if (homeScore == null && awayScore == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool('notifications_enabled') ?? false)) return;
+    await initialize();
+    final channelName = tr('notifications');
+    await _plugin.show(
+      id: _stableId('live-score:$eventId'),
+      title: tr('title'),
+      body: appText(
+        'Marcador actualizado · $sport: $homeTeam $homeScore - $awayScore $awayTeam',
+        'Score update · $sport: $homeTeam $homeScore - $awayScore $awayTeam',
+        'Placar atualizado · $sport: $homeTeam $homeScore - $awayScore $awayTeam',
+        'Score mis à jour · $sport : $homeTeam $homeScore - $awayScore $awayTeam',
+      ),
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          'sports_live_scores',
+          channelName,
+          channelDescription: appText(
+            'Cambios de marcador de eventos en directo.',
+            'Live event score updates.',
+            'Atualizações de placar de eventos ao vivo.',
+            'Mises à jour des scores des événements en direct.',
+          ),
+          importance: Importance.high,
+          priority: Priority.high,
+          category: AndroidNotificationCategory.event,
+        ),
+        iOS: const DarwinNotificationDetails(),
+      ),
+      payload: eventId,
+    );
   }
 
   static Future<void> showTestNotification() async {
