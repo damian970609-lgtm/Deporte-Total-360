@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'app_i18n.dart';
 
 const Color _fantasyBg = Color(0xFF030814);
 const Color _fantasyPanel = Color(0xFF071326);
@@ -79,7 +80,7 @@ class _FantasyScreenState extends State<FantasyScreen> {
     } catch (_) {
       if (mounted) {
         setState(() {
-          _error = 'No se pudo abrir esta sección de Mister Fantasy.';
+          _error = appText('No se pudo abrir esta sección de Mister Fantasy.', 'Could not open this Mister Fantasy section.', 'Não foi possível abrir esta seção do Mister Fantasy.', 'Impossible d’ouvrir cette section de Mister Fantasy.');
           _loading = false;
         });
       }
@@ -103,7 +104,7 @@ class _FantasyScreenState extends State<FantasyScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'No se pudo recargar Mister Fantasy. Comprueba tu conexión.';
+        _error = appText('No se pudo recargar Mister Fantasy. Comprueba tu conexión.', 'Could not reload Mister Fantasy. Check your connection.', 'Não foi possível recarregar o Mister Fantasy. Verifique sua conexão.', 'Impossible de recharger Mister Fantasy. Vérifiez votre connexion.');
       });
     }
   }
@@ -120,7 +121,7 @@ class _FantasyScreenState extends State<FantasyScreen> {
         appBar: AppBar(
           backgroundColor: const Color(0xFF020B19),
           leading: IconButton(
-            tooltip: 'Atrás',
+            tooltip: appText('Atrás', 'Back', 'Voltar', 'Retour'),
             onPressed: _handleBackRequest,
             icon: const Icon(
               Icons.arrow_back_rounded,
@@ -131,7 +132,7 @@ class _FantasyScreenState extends State<FantasyScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                'FANTASY DEPORTE TOTAL 360°',
+                appText('FANTASY DEPORTE TOTAL 360°', 'TOTAL SPORTS 360° FANTASY', 'FANTASY ESPORTE TOTAL 360°', 'FANTASY SPORT TOTAL 360°'),
                 style: TextStyle(
                   color: _fantasyCyan,
                   fontSize: 12,
@@ -139,7 +140,7 @@ class _FantasyScreenState extends State<FantasyScreen> {
                 ),
               ),
               Text(
-                'Servicio oficial de Mister Fantasy',
+                appText('Servicio oficial de Mister Fantasy', 'Official Mister Fantasy service', 'Serviço oficial do Mister Fantasy', 'Service officiel de Mister Fantasy'),
                 style: TextStyle(
                   color: _fantasyMuted,
                   fontSize: 9,
@@ -149,7 +150,7 @@ class _FantasyScreenState extends State<FantasyScreen> {
           ),
           actions: <Widget>[
             IconButton(
-              tooltip: 'Recargar',
+              tooltip: appText('Recargar', 'Reload', 'Recarregar', 'Recharger'),
               onPressed: _reload,
               icon: const Icon(
                 Icons.refresh_rounded,
@@ -348,7 +349,7 @@ class _FantasyScreenState extends State<FantasyScreen> {
             FilledButton.icon(
               onPressed: _reload,
               icon: const Icon(Icons.refresh_rounded),
-              label: const Text('REINTENTAR'),
+              label: Text(appText('REINTENTAR', 'RETRY', 'TENTAR NOVAMENTE', 'RÉESSAYER')),
               style: FilledButton.styleFrom(
                 backgroundColor: _fantasyBlue,
                 foregroundColor: Colors.white,
