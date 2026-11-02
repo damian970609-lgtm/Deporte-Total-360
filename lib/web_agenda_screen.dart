@@ -21,8 +21,17 @@ class WebAgendaScreen extends StatefulWidget {
   final VoidCallback onExit;
   final VoidCallback onOpenLive;
 
-  static const String initialUrl = 'https://futbol-libre.futbol/';
-  static const String previousUrl = 'https://futbol-libre.cam/';
+  static const String initialUrl = 'https://futbol-libre.cam/';
+  static const String previousUrl = 'https://futbol-libre.futbol/';
+
+  static bool isAgendaPageUrl(String value) {
+    final uri = Uri.tryParse(value);
+    if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) {
+      return false;
+    }
+    final host = uri.host.toLowerCase();
+    return host == 'futbol-libre.cam' || host == 'www.futbol-libre.cam';
+  }
 
   @override
   State<WebAgendaScreen> createState() => WebAgendaScreenState();
@@ -216,8 +225,9 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
   ) async {
     final target = action.request.url;
 
-    if (target == null || !_isHttpUrl(target)) {
-      _showNotice('Se bloqueó una ventana con una dirección no compatible.');
+    if (target == null || !_isHttpUrl(target) ||
+        !WebAgendaScreen.isAgendaPageUrl(target.toString())) {
+      _showNotice('Solo se permite la agenda diaria de Futbol-Libre dentro de esta sección.');
       return false;
     }
 
@@ -470,6 +480,15 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                           _showNotice(
                             'Se bloqueó un enlace externo no web para mantener la navegación dentro de la aplicación.',
                           );
+                          return NavigationActionPolicy.CANCEL;
+                        }
+
+                        // Esta pestaña es exclusivamente la agenda. Se bloquea
+                        // la navegación principal a canales o páginas externas;
+                        // scripts, estilos e imágenes del sitio siguen cargando.
+                        if ((action.isForMainFrame ?? true) &&
+                            !WebAgendaScreen.isAgendaPageUrl(uri.toString())) {
+                          _showNotice('La agenda está bloqueada en modo solo lectura. Abre los partidos en la sección En Vivo.');
                           return NavigationActionPolicy.CANCEL;
                         }
 

@@ -1351,96 +1351,11 @@ class LiveScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: appBg,
-      appBar: AppBar(
-        title: Text(
-          tr('streams'),
-          style: const TextStyle(
-            color: appCyan,
-            fontWeight: FontWeight.w900,
-            fontSize: 14,
-          ),
-        ),
-      ),
-      body: AppBackdrop(
-        child: SafeArea(
-          top: false,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
-            children: <Widget>[
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: appPanel,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: appCyan.withAlpha(170)),
-                ),
-                child: Column(
-                  children: <Widget>[
-                    const Icon(Icons.live_tv_rounded, color: appPink, size: 52),
-                    SizedBox(height: 12),
-                    Text(
-                      appText('CANAL EN VIVO DE DEPORTE TOTAL 360°', 'DEPORTE TOTAL 360° LIVE CHANNEL', 'CANAL AO VIVO DEPORTE TOTAL 360°', 'CHAÎNE EN DIRECT DEPORTE TOTAL 360°'),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: appCyan,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      appText(
-                        'El reproductor necesita un canal válido y una señal activa. Si el servidor está fuera de línea, podrás reintentar.',
-                        'The player needs a valid channel and active stream. If the server is offline, you can retry.',
-                        'O player precisa de um canal válido e sinal ativo. Se o servidor estiver offline, você poderá tentar novamente.',
-                        'Le lecteur nécessite une chaîne valide et un signal actif. Si le serveur est hors ligne, vous pourrez réessayer.'),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: appMuted,
-                        fontSize: 12,
-                        height: 1.45,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              _LiveActionCard(
-                title: 'PRISM LIVE STUDIO',
-                subtitle: appText('Configurar datos para emitir desde tu encoder.', 'Configure streaming details for your encoder.', 'Configure os dados de transmissão do encoder.', 'Configurez les paramètres de diffusion de votre encodeur.'),
-                icon: Icons.settings_input_antenna_rounded,
-                color: appPink,
-                onTap: () => _openEncoder(context),
-              ),
-              const SizedBox(height: 10),
-              _LiveActionCard(
-                title: 'SSH101 • ' + appText('REPRODUCCIÓN', 'PLAYBACK', 'REPRODUÇÃO', 'LECTURE'),
-                subtitle: appText('Abrir la señal del canal configurado en Ajustes.', 'Open the channel configured in Settings.', 'Abrir o canal configurado em Configurações.', 'Ouvrir la chaîne configurée dans les paramètres.'),
-                icon: Icons.play_circle_fill_rounded,
-                color: appGreen,
-                onTap: () => _openPlayer(context),
-              ),
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).push<void>(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const EncoderConfigScreen(),
-                  ),
-                ),
-                icon: const Icon(Icons.copy_rounded),
-                label: Text(appText('Ver configuración de emisión', 'View streaming settings', 'Ver configurações de transmissão', 'Voir les paramètres de diffusion')),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: appCyan,
-                  side: const BorderSide(color: appCyan),
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return AgendaScreen(
+      initialSport: 'Todos',
+      initialStatus: 'En vivo',
+      onOpenPersonalChannel: () => _openPlayer(context),
+      onOpenEncoder: () => _openEncoder(context),
     );
   }
 }

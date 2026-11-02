@@ -80,11 +80,17 @@ class AgendaScreen extends StatefulWidget {
   const AgendaScreen({
     super.key,
     this.initialSport = 'Todos',
+    this.initialStatus = 'Todos',
     this.matches = const <MatchEvent>[],
+    this.onOpenPersonalChannel,
+    this.onOpenEncoder,
   });
 
   final String initialSport;
+  final String initialStatus;
   final List<MatchEvent> matches;
+  final VoidCallback? onOpenPersonalChannel;
+  final VoidCallback? onOpenEncoder;
 
   @override
   State<AgendaScreen> createState() => _AgendaScreenState();
@@ -177,6 +183,9 @@ class _AgendaScreenState extends State<AgendaScreen> {
     if (_sport != 'Todos' && _sport != 'Fútbol') {
       _dateFilter = 'Hoy';
     }
+    _statusFilter = _statuses.contains(widget.initialStatus)
+        ? widget.initialStatus
+        : 'Todos';
     _apiConfigurationListener = _onApiConfigurationChanged;
     sportsApiBaseUrl.addListener(_apiConfigurationListener);
     if (sportsApiBaseUrl.value.trim().isNotEmpty) {
@@ -185,9 +194,12 @@ class _AgendaScreenState extends State<AgendaScreen> {
     _scorePollingTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       // No sondear el resumen de todos los deportes continuamente: las
       // alertas de marcador se consultan para el deporte que el usuario ve.
+      final liveAllSports =
+          _sport == 'Todos' && _statusFilter == 'En vivo';
+      final selectedSportSchedule = _sport != 'Todos' &&
+          (_dateFilter == 'Hoy' || _dateFilter == 'Todos');
       if (!mounted ||
-          _sport == 'Todos' ||
-          (_dateFilter != 'Hoy' && _dateFilter != 'Todos') ||
+          (!liveAllSports && !selectedSportSchedule) ||
           _loadingApi) {
         return;
       }
@@ -593,6 +605,37 @@ class _AgendaScreenState extends State<AgendaScreen> {
         ),
       );
     }
+    if (widget.initialStatus == 'En vivo') {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(26),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Icon(Icons.sports_score_rounded, color: agendaGreen, size: 48),
+              const SizedBox(height: 12),
+              Text(
+                appText('No hay partidos en vivo ahora mismo', 'No matches are live right now', 'Não há partidas ao vivo neste momento', 'Aucun match en direct pour le moment'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                appText('Seguimos revisando los marcadores y retiraremos cada evento cuando termine.', 'We keep checking scores and remove each event when it ends.', 'Continuamos verificando os placares e retiraremos cada evento quando terminar.', 'Nous continuons de vérifier les scores et retirerons chaque événement à sa fin.'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: agendaMuted, fontSize: 11, height: 1.45),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _loadRemoteMatches,
+                icon: const Icon(Icons.refresh_rounded),
+                label: Text(appText('Comprobar ahora', 'Check now', 'Verificar agora', 'Vérifier maintenant')),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return _EmptyAgenda(
       hasSearch: _query.trim().isNotEmpty,
       onClear: _clearFilters,
@@ -669,7 +712,9 @@ class _AgendaScreenState extends State<AgendaScreen> {
             SizedBox(width: 9),
             Expanded(
               child: Text(
-                tr('matches'),
+                widget.initialStatus == 'En vivo'
+                    ? appText('PARTIDOS EN VIVO', 'LIVE MATCHES', 'JOGOS AO VIVO', 'MATCHS EN DIRECT')
+                    : tr('matches'),
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 14,
@@ -687,9 +732,21 @@ class _AgendaScreenState extends State<AgendaScreen> {
             ),
             icon: const Icon(Icons.leaderboard_rounded, color: agendaCyan),
           ),
+          if (widget.onOpenPersonalChannel != null)
+            IconButton(
+              tooltip: appText('Abrir mi canal SSH101', 'Open my SSH101 channel', 'Abrir meu canal SSH101', 'Ouvrir ma chaîne SSH101'),
+              onPressed: widget.onOpenPersonalChannel,
+              icon: const Icon(Icons.play_circle_fill_rounded, color: agendaGreen),
+            ),
+          if (widget.onOpenEncoder != null)
+            IconButton(
+              tooltip: appText('Configurar mi transmisión', 'Configure my stream', 'Configurar minha transmissão', 'Configurer ma diffusion'),
+              onPressed: widget.onOpenEncoder,
+              icon: const Icon(Icons.settings_input_antenna_rounded, color: agendaPink),
+            ),
           IconButton(
-            tooltip: appText('Limpiar búsqueda', 'Clear search', 'Limpar busca', 'Effacer la recherche'),
-            onPressed: _clearFilters,
+            tooltip: appText('Actualizar partidos', 'Refresh matches', 'Atualizar partidas', 'Actualiser les matchs'),
+            onPressed: _loadRemoteMatches,
             icon: const Icon(Icons.refresh_rounded, color: agendaCyan),
           ),
         ],
@@ -918,6 +975,27 @@ class _AgendaScreenState extends State<AgendaScreen> {
                         ),
                       ],
                     ),
+                  ),
+                ),
+              if (widget.initialStatus == 'En vivo')
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+                  child: Row(
+                    children: <Widget>[
+                      const Icon(Icons.autorenew_rounded, color: agendaGreen, size: 15),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          appText(
+                            'Actualización automática cada minuto · los partidos finalizados se retiran.',
+                            'Auto-refresh every minute · finished matches are removed.',
+                            'Atualização automática a cada minuto · partidas finalizadas são removidas.',
+                            'Actualisation automatique chaque minute · les matchs terminés sont retirés.',
+                          ),
+                          style: const TextStyle(color: agendaMuted, fontSize: 9),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               Padding(
