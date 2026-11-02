@@ -5,7 +5,7 @@ Aplicación Android en Flutter. El APK se compila en GitHub Actions; la carpeta 
 Archivos principales:
 - lib/main.dart: navegación, inicio, reproductor SSH101 y ajustes.
 - lib/agenda_screen.dart: agenda nativa, eventos API-Sports y asociación con canales del catálogo autorizado.
-- lib/channel_catalog_service.dart: lectura de listas M3U y guías XMLTV/EPG autorizadas, coincidencia de partidos y soporte limitado para Referer/User-Agent.
+- lib/channel_catalog_service.dart: lectura de listas M3U y guías XMLTV/EPG autorizadas (XML y gzip), coincidencia de partidos y soporte limitado para Referer/User-Agent.
 - lib/channel_catalog_screen.dart: configuración y prueba de las fuentes de canales.
 - lib/multi_match_player_screen.dart: hasta cuatro ventanas simultáneas con sesiones independientes del reproductor ExoPlayer de Android.
 - lib/sports_statistics_screen.dart: búsqueda de ligas y clasificaciones.
