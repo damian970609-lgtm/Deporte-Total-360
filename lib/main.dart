@@ -203,7 +203,25 @@ class _MainShellState extends State<MainShell> {
   Future<void> _openAgenda() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => AgendaScreen(initialSport: _selectedStatisticsSport),
+        builder: (_) => AgendaScreen(
+          initialSport: _selectedStatisticsSport,
+          onOpenWebAgenda: _openEmbeddedWebAgenda,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openEmbeddedWebAgenda() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => WebAgendaScreen(
+          key: _webAgendaKey,
+          onExit: () => Navigator.of(context).maybePop(),
+          onOpenLive: () {
+            Navigator.of(context).maybePop();
+            _selectTab(2);
+          },
+        ),
       ),
     );
   }
@@ -348,10 +366,9 @@ class _MainShellState extends State<MainShell> {
         onOpenAgenda: _openAgenda,
       ),
       const LiveScreen(),
-      WebAgendaScreen(
-        key: _webAgendaKey,
-        onExit: () => _selectTab(_homeTab),
-        onOpenLive: () => _selectTab(2),
+      AgendaScreen(
+        initialSport: 'Todos',
+        onOpenWebAgenda: _openEmbeddedWebAgenda,
       ),
       const NewsScreen(),
       SportsSummariesScreen(isActive: _selectedIndex == 5),
