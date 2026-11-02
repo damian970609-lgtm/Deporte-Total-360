@@ -153,6 +153,7 @@ class _MainShellState extends State<MainShell> {
     setState(() {
       _selectedStatisticsSport = sport;
       _selectedIndex = _statisticsTab;
+      _visitedTabs.add(_statisticsTab);
     });
   }
 
