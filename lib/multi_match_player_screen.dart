@@ -166,7 +166,7 @@ class _MultiMatchPlayerTileState extends State<_MultiMatchPlayerTile> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.audioEnabled != widget.audioEnabled) {
       final controller = _controller;
-      if (controller?.value.isInitialized == true) {
+      if (controller != null && controller.value.isInitialized) {
         controller.setVolume(widget.audioEnabled ? 1 : 0);
       }
     }
