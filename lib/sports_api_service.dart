@@ -169,6 +169,15 @@ class SportsApiService {
         route = '/api/afl/games';
         break;
 
+      case 'Fórmula 1':
+        route = '/api/formula-1/races';
+        includeTimezone = false;
+        break;
+
+      case 'MMA':
+        route = '/api/mma/fights';
+        break;
+
       case 'Tenis':
       case 'Otros':
         throw SportsApiException(
@@ -188,7 +197,9 @@ class SportsApiService {
 
     final query = <String, String>{};
 
-    if (sport == 'Fútbol' && dateFilter == 'Todos') {
+    if (sport == 'Fórmula 1') {
+      query['season'] = today.year.toString();
+    } else if (sport == 'Fútbol' && dateFilter == 'Todos') {
       query['from'] = _dateParam(today);
       query['to'] = _dateParam(
         today.add(const Duration(days: 6)),
@@ -541,6 +552,41 @@ class SportsApiException implements Exception {
       queryParameters: <String, String>{'search': term},
     );
     return _getRows(uri);
+  }
+
+  /// Carga todos los deportes con calendario. Cada proveedor se aísla:
+  /// si una API no tiene cobertura o falla, no oculta los resultados de las demás.
+  Future<List<Map<String, dynamic>>> fetchAllAgendaEvents({
+    required String dateFilter,
+  }) async {
+    const sports = <String>[
+      'Fútbol',
+      'Básquet',
+      'NBA',
+      'Béisbol',
+      'Fútbol americano',
+      'Hockey sobre hielo',
+      'Balonmano',
+      'Rugby',
+      'Vóley',
+      'Fútbol australiano',
+      'Fórmula 1',
+      'MMA',
+    ];
+    final results = await Future.wait(sports.map((sport) async {
+      try {
+        final rows = await fetchAgendaEvents(
+          sport: sport,
+          dateFilter: dateFilter,
+        );
+        return rows.map((row) {
+          return <String, dynamic>{...row, '_sportName': sport};
+        }).toList(growable: false);
+      } catch (_) {
+        return <Map<String, dynamic>>[];
+      }
+    }));
+    return results.expand((rows) => rows).toList(growable: false);
   }
 
   /// Ordena las solicitudes para evitar ráfagas de consultas.
