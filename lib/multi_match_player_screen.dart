@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
@@ -16,7 +18,9 @@ class _MultiMatchPlayerScreenState extends State<MultiMatchPlayerScreen> {
   String? _audioEventId;
 
   List<MatchEvent> get _playableMatches => widget.matches
-      .where((event) => event.streamSources.any((source) => source.validatedUri != null))
+      .where((event) =>
+          event.status != MatchStatus.finished &&
+          event.streamSources.any((source) => source.validatedUri != null))
       .toList(growable: false);
   int get _pageCount => (_playableMatches.length / _playersPerPage).ceil();
   List<MatchEvent> get _pageMatches => _playableMatches
@@ -140,6 +144,8 @@ class _MultiMatchPlayerTile extends StatefulWidget {
 class _MultiMatchPlayerTileState extends State<_MultiMatchPlayerTile> {
   VideoPlayerController? _controller;
   bool _loading = true;
+  bool _waitingForKickoff = false;
+  Timer? _kickoffTimer;
   String? _error;
 
   MatchStreamSource? get _source {
@@ -187,6 +193,22 @@ class _MultiMatchPlayerTileState extends State<_MultiMatchPlayerTile> {
       await controller.initialize().timeout(const Duration(seconds: 25));
       await controller.setLooping(false);
       await controller.setVolume(widget.audioEnabled ? 1 : 0);
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+
+      final kickoffDelay = widget.event.startsAt.difference(DateTime.now());
+      if (widget.event.status == MatchStatus.scheduled &&
+          kickoffDelay > Duration.zero) {
+        setState(() {
+          _loading = false;
+          _waitingForKickoff = true;
+        });
+        _kickoffTimer = Timer(kickoffDelay, () => _playAtKickoff(controller));
+        return;
+      }
+
       await controller.play();
       if (!mounted) {
         await controller.dispose();
@@ -201,8 +223,26 @@ class _MultiMatchPlayerTileState extends State<_MultiMatchPlayerTile> {
     }
   }
 
+  Future<void> _playAtKickoff(VideoPlayerController controller) async {
+    if (!mounted || !identical(_controller, controller)) return;
+    try {
+      await controller.play();
+      if (mounted) {
+        setState(() => _waitingForKickoff = false);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _waitingForKickoff = false;
+          _error = 'No se pudo iniciar la señal a la hora del partido.';
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
+    _kickoffTimer?.cancel();
     _controller?.dispose();
     super.dispose();
   }
@@ -267,7 +307,22 @@ class _MultiMatchPlayerTileState extends State<_MultiMatchPlayerTile> {
                             ],
                           ),
                         )
-                      : ValueListenableBuilder<VideoPlayerValue>(
+                      : _waitingForKickoff
+                          ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  const Icon(Icons.schedule_rounded, color: Color(0xFF00E5FF), size: 25),
+                                  const SizedBox(height: 6),
+                                  const Text('ESPERANDO EL INICIO', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900)),
+                                  Text(
+                                    'Comienza a las ${widget.event.startsAt.hour.toString().padLeft(2, '0')}:${widget.event.startsAt.minute.toString().padLeft(2, '0')}',
+                                    style: const TextStyle(color: Color(0xFFA9BDD6), fontSize: 9),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ValueListenableBuilder<VideoPlayerValue>(
                           valueListenable: controller,
                           builder: (context, value, _) => Stack(
                             fit: StackFit.expand,
@@ -303,7 +358,7 @@ class _MultiMatchPlayerTileState extends State<_MultiMatchPlayerTile> {
                     ),
                   ),
                 ),
-                if (controller?.value.isInitialized == true)
+                if (controller?.value.isInitialized == true && !_waitingForKickoff)
                   IconButton(
                     visualDensity: VisualDensity.compact,
                     constraints: const BoxConstraints.tightFor(width: 27, height: 25),
