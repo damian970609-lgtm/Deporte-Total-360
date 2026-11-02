@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
 import 'web_protection_policy.dart';
+import 'app_i18n.dart';
 
 const Color _newsBg = Color(0xFF030814);
 const Color _newsPanel = Color(0xFF071326);
@@ -332,6 +333,19 @@ class _NewsScreenState extends State<NewsScreen> {
     'Otros',
   ];
 
+
+  String _localizedCategory(String value) {
+    switch (value) {
+      case 'Todos': return appText('Todos', 'All', 'Todos', 'Tous');
+      case 'Fútbol': return appText('Fútbol', 'Football', 'Futebol', 'Football');
+      case 'Baloncesto': return appText('Baloncesto', 'Basketball', 'Basquete', 'Basket');
+      case 'Tenis': return appText('Tenis', 'Tennis', 'Tênis', 'Tennis');
+      case 'Motor': return appText('Motor', 'Motorsport', 'Automobilismo', 'Sports mécaniques');
+      case 'Otros': return appText('Otros', 'Other', 'Outros', 'Autres');
+      default: return value;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -360,8 +374,8 @@ class _NewsScreenState extends State<NewsScreen> {
       backgroundColor: _newsBg,
       appBar: AppBar(
         backgroundColor: const Color(0xFF020B19),
-        title: const Text(
-          'NOTICIAS DEPORTIVAS',
+        title: Text(
+          appText('NOTICIAS DEPORTIVAS', 'SPORTS NEWS', 'NOTÍCIAS ESPORTIVAS', 'ACTUALITÉS SPORTIVES'),
           style: TextStyle(
             color: _newsCyan,
             fontSize: 14,
@@ -370,7 +384,7 @@ class _NewsScreenState extends State<NewsScreen> {
         ),
         actions: <Widget>[
           IconButton(
-            tooltip: 'Actualizar noticias',
+            tooltip: appText('Actualizar noticias', 'Refresh news', 'Atualizar notícias', 'Actualiser les actualités'),
             onPressed: () {
               _refresh().catchError((_) {});
             },
@@ -391,7 +405,7 @@ class _NewsScreenState extends State<NewsScreen> {
                 final category = _categories[index];
                 final selected = category == _category;
                 return ChoiceChip(
-                  label: Text(category),
+                  label: Text(_localizedCategory(category)),
                   selected: selected,
                   onSelected: (_) => setState(() => _category = category),
                   selectedColor: _newsBlue,
@@ -415,7 +429,7 @@ class _NewsScreenState extends State<NewsScreen> {
               onChanged: (value) => setState(() => _query = value),
               style: const TextStyle(color: Colors.white, fontSize: 13),
               decoration: InputDecoration(
-                hintText: 'Buscar noticia, equipo o competición…',
+                hintText: appText('Buscar noticia, equipo o competición…', 'Search news, team or competition…', 'Buscar notícia, equipe ou competição…', 'Rechercher une actualité, équipe ou compétition…'),
                 prefixIcon: const Icon(
                   Icons.search_rounded,
                   color: _newsCyan,
@@ -486,7 +500,7 @@ class _NewsScreenState extends State<NewsScreen> {
                             const SizedBox(width: 7),
                             const Expanded(
                               child: Text(
-                                'ÚLTIMA HORA',
+                                appText('ÚLTIMA HORA', 'LATEST', 'ÚLTIMA HORA', 'DERNIÈRES ACTUALITÉS'),
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w900,
@@ -495,7 +509,7 @@ class _NewsScreenState extends State<NewsScreen> {
                               ),
                             ),
                             Text(
-                              '${stories.length} noticias',
+                              appText('${stories.length} noticias', '${stories.length} stories', '${stories.length} notícias', '${stories.length} actualités'),
                               style: const TextStyle(
                                 color: _newsMuted,
                                 fontSize: 10,
@@ -508,8 +522,12 @@ class _NewsScreenState extends State<NewsScreen> {
                         const Padding(
                           padding: EdgeInsets.all(28),
                           child: Text(
-                            'No hay noticias para este filtro. '
-                            'Prueba otra categoría o búsqueda.',
+                            appText(
+                              'No hay noticias para este filtro. Prueba otra categoría o búsqueda.',
+                              'No news matches this filter. Try another category or search.',
+                              'Não há notícias para este filtro. Tente outra categoria ou busca.',
+                              'Aucune actualité pour ce filtre. Essayez une autre catégorie ou recherche.',
+                            ),
                             textAlign: TextAlign.center,
                             style: TextStyle(color: _newsMuted),
                           ),
@@ -531,8 +549,12 @@ class _NewsScreenState extends State<NewsScreen> {
                         ),
                       const SizedBox(height: 8),
                       const Text(
-                        'Titulares y extractos procedentes de sus medios. '
-                        'El artículo completo pertenece a su editor original.',
+                        appText(
+                          'Titulares y extractos procedentes de sus medios. El artículo completo pertenece a su editor original.',
+                          'Headlines and excerpts are provided by their publishers. Full articles remain with their original publishers.',
+                          'Manchetes e resumos são fornecidos pelos veículos. A matéria completa pertence ao editor original.',
+                          'Les titres et extraits proviennent des médias. L’article complet reste la propriété de son éditeur.',
+                        ),
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: _newsMuted,
@@ -565,7 +587,7 @@ class _NewsScreenState extends State<NewsScreen> {
             ),
             const SizedBox(height: 12),
             const Text(
-              'NO SE PUDIERON CARGAR LAS NOTICIAS',
+              appText('NO SE PUDIERON CARGAR LAS NOTICIAS', 'NEWS COULD NOT BE LOADED', 'NÃO FOI POSSÍVEL CARREGAR AS NOTÍCIAS', 'IMPOSSIBLE DE CHARGER LES ACTUALITÉS'),
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white,
@@ -584,7 +606,7 @@ class _NewsScreenState extends State<NewsScreen> {
                 _refresh().catchError((_) {});
               },
               icon: const Icon(Icons.refresh_rounded),
-              label: const Text('VOLVER A INTENTAR'),
+              label: Text(appText('VOLVER A INTENTAR', 'TRY AGAIN', 'TENTAR NOVAMENTE', 'RÉESSAYER')),
               style: FilledButton.styleFrom(
                 backgroundColor: _newsBlue,
                 foregroundColor: Colors.white,
