@@ -142,16 +142,22 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   static const int _homeTab = 0;
   static const int _statisticsTab = 1;
+  static const int _liveTab = 2;
   static const int _agendaWebTab = 3;
-  static const int _channelsTab = 8;
-  static const int _settingsTab = 9;
+  static const int _nativeAgendaTab = 4;
+  static const int _newsTab = 5;
+  static const int _summariesTab = 6;
+  static const int _fantasyTab = 7;
+  static const int _chatTab = 8;
+  static const int _channelsTab = 9;
+  static const int _settingsTab = 10;
 
   final GlobalKey<WebAgendaScreenState> _webAgendaKey =
       GlobalKey<WebAgendaScreenState>();
 
   int _selectedIndex = _homeTab;
   final List<bool> _initializedTabs = <bool>[
-    true, false, false, false, false, false, false, false, false, false,
+    true, false, false, false, false, false, false, false, false, false, false,
   ];
   String _selectedStatisticsSport = 'Fútbol';
   bool _handlingBack = false;
@@ -160,7 +166,6 @@ class _MainShellState extends State<MainShell> {
     if (index < 0 || index > _settingsTab) return;
     setState(() {
       _selectedIndex = index;
-      if (index == _statisticsTab) _selectedStatisticsSport = 'Fútbol';
     });
   }
 
@@ -217,18 +222,7 @@ class _MainShellState extends State<MainShell> {
     _selectTab(_statisticsTab);
   }
 
-  Future<void> _openAgenda() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => AgendaScreen(
-          initialSport: _selectedStatisticsSport,
-          onOpenWebAgenda: _openEmbeddedWebAgenda,
-          onOpenMultiView: _openMultiMatchView,
-          onOpenChannelCatalog: _openChannelCatalog,
-        ),
-      ),
-    );
-  }
+  void _openAgenda() => _selectTab(_nativeAgendaTab);
 
   Future<void> _openMultiMatchView(List<MatchEvent> matches) async {
     await Navigator.of(context).push<void>(
@@ -246,34 +240,11 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  Future<void> _openEmbeddedWebAgenda() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => WebAgendaScreen(
-          key: _webAgendaKey,
-          onExit: () => Navigator.of(context).maybePop(),
-          onOpenLive: () {
-            Navigator.of(context).maybePop();
-            _selectTab(2);
-          },
-        ),
-      ),
-    );
-  }
+  void _openEmbeddedWebAgenda() => _selectTab(_agendaWebTab);
 
-  Future<void> _openPublicChat() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const PublicChatScreen()),
-    );
-  }
+  void _openPublicChat() => _selectTab(_chatTab);
 
-  Future<void> _openFantasy() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => const FantasyScreen(),
-      ),
-    );
-  }
+  void _openFantasy() => _selectTab(_fantasyTab);
 
   Future<void> _openDonations() async {
     await Navigator.of(context).push<void>(
@@ -401,29 +372,35 @@ class _MainShellState extends State<MainShell> {
           initialSport: _selectedStatisticsSport,
           onOpenAgenda: _openAgenda,
         );
-      case 2:
+      case _liveTab:
         return LiveScreen(
           onOpenMultiView: _openMultiMatchView,
           onOpenChannelCatalog: _openChannelCatalog,
         );
-      case 3:
+      case _agendaWebTab:
+        return WebAgendaScreen(
+          key: _webAgendaKey,
+          onExit: () => _selectTab(_nativeAgendaTab),
+          onOpenLive: () => _selectTab(_liveTab),
+        );
+      case _nativeAgendaTab:
         return AgendaScreen(
           initialSport: 'Todos',
           onOpenWebAgenda: _openEmbeddedWebAgenda,
           onOpenMultiView: _openMultiMatchView,
           onOpenChannelCatalog: _openChannelCatalog,
         );
-      case 4:
+      case _newsTab:
         return const NewsScreen();
-      case 5:
-        return SportsSummariesScreen(isActive: _selectedIndex == 5);
-      case 6:
+      case _summariesTab:
+        return SportsSummariesScreen(isActive: _selectedIndex == _summariesTab);
+      case _fantasyTab:
         return const FantasyScreen();
-      case 7:
-        return PublicChatScreen(isActive: _selectedIndex == 7);
-      case 8:
+      case _chatTab:
+        return PublicChatScreen(isActive: _selectedIndex == _chatTab);
+      case _channelsTab:
         return const ChannelCatalogScreen();
-      case 9:
+      case _settingsTab:
         return const SettingsScreen();
       default:
         return const SizedBox.shrink();
@@ -432,7 +409,7 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final pages = List<Widget>.generate(10, (index) {
+    final pages = List<Widget>.generate(11, (index) {
       if (index == _selectedIndex) {
         _initializedTabs[index] = true;
       }
@@ -472,15 +449,16 @@ class _MainShellState extends State<MainShell> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: <Widget>[
-                  _tabButton(0, Icons.home_rounded, tr('home'), appCyan),
-                  _tabButton(1, Icons.query_stats_rounded, tr('statistics'), appCyan),
-                  _tabButton(2, Icons.live_tv_rounded, tr('live'), appPink),
-                  _tabButton(3, Icons.calendar_month_rounded, tr('web_agenda'), appGreen),
-                  _tabButton(4, Icons.article_rounded, tr('news'), appGreen),
-                  _tabButton(5, Icons.play_circle_fill_rounded,
+                  _tabButton(_homeTab, Icons.home_rounded, tr('home'), appCyan),
+                  _tabButton(_statisticsTab, Icons.query_stats_rounded, tr('statistics'), appCyan),
+                  _tabButton(_liveTab, Icons.live_tv_rounded, tr('live'), appPink),
+                  _tabButton(_agendaWebTab, Icons.public_rounded, 'Fútbol Libre', appGreen),
+                  _tabButton(_nativeAgendaTab, Icons.calendar_month_rounded, 'Partidos', appYellow),
+                  _tabButton(_newsTab, Icons.article_rounded, tr('news'), appGreen),
+                  _tabButton(_summariesTab, Icons.play_circle_fill_rounded,
                       appText('Resúmenes', 'Highlights', 'Resumos', 'Résumés'), appPink),
-                  _tabButton(6, Icons.emoji_events_rounded, 'Fantasy', appYellow),
-                  _tabButton(7, Icons.forum_rounded, 'Chat', appCyan),
+                  _tabButton(_fantasyTab, Icons.emoji_events_rounded, 'Fantasy', appYellow),
+                  _tabButton(_chatTab, Icons.forum_rounded, 'Chat', appCyan),
                   _tabButton(_channelsTab, Icons.live_tv_rounded, 'Canales TV', appGreen),
                   _tabButton(_settingsTab, Icons.settings_rounded, tr('settings'), appCyan),
                 ],
