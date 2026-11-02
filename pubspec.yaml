@@ -25,7 +25,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/images/home_reference.png
     - assets/images/app_icon.png
     - assets/images/file_000000006048820e9e0720f1adf548f1.png
 

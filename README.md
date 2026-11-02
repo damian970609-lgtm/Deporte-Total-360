@@ -15,7 +15,7 @@ Archivos principales:
 
 Recursos:
 - assets/images/app_icon.png: icono y recurso gráfico reutilizado en Inicio.
-- assets/images/home_reference.png: referencia visual; Inicio se construye con widgets Flutter.
+- assets/images/home_reference.png: referencia visual conservada en GitHub; no se incluye en la APK porque Inicio se construye con widgets Flutter.
 - assets/images/file_000000006048820e9e0720f1adf548f1.png: fondo de ajustes.
 
 API deportiva:
