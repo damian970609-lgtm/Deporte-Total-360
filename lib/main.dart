@@ -9,6 +9,7 @@ import 'fantasy_screen.dart';
 import 'news_screen.dart';
 import 'sports_api_service.dart';
 import 'web_agenda_screen.dart';
+import 'web_protection_policy.dart';
 
 // Identidad visual de DEPORTE TOTAL 360°: azul noche, cian, rosa y verde neón.
 const Color appBg = Color(0xFF030814);
@@ -470,6 +471,7 @@ class _MainShellState extends State<MainShell> {
       WebAgendaScreen(
         key: _webAgendaKey,
         onExit: () => _selectTab(_homeTab),
+        onOpenLive: () => _selectTab(2),
       ),
       const NewsScreen(),
       const SettingsScreen(),
@@ -775,11 +777,11 @@ class HomeDashboard extends StatelessWidget {
                       onTap: () => onSportSelected('Béisbol'),
                     ),
                     _SportTile(
-                      title: 'TENIS',
-                      subtitle: 'ATP • WTA',
+                      title: 'RUGBY',
+                      subtitle: 'Ligas • Torneos',
                       icon: Icons.sports_tennis_rounded,
                       color: appGreen,
-                      onTap: () => onSportSelected('Tenis'),
+                      onTap: () => onSportSelected('Rugby'),
                     ),
                     _SportTile(
                       title: 'VÓLEY',
@@ -789,11 +791,11 @@ class HomeDashboard extends StatelessWidget {
                       onTap: () => onSportSelected('Vóley'),
                     ),
                     _SportTile(
-                      title: 'OTROS',
-                      subtitle: 'Boxeo • Motor',
+                      title: 'HOCKEY',
+                      subtitle: 'NHL • Ligas',
                       icon: Icons.emoji_events_rounded,
                       color: appCyan,
-                      onTap: () => onSportSelected('Otros'),
+                      onTap: () => onSportSelected('Hockey sobre hielo'),
                     ),
                   ],
                 ),
@@ -820,10 +822,10 @@ class HomeDashboard extends StatelessWidget {
                     ),
                     _ActionTile(
                       title: tr('matches'),
-                      subtitle: 'Calendario completo',
+                      subtitle: 'Calendario y resultados',
                       icon: Icons.calendar_month_rounded,
                       color: appGreen,
-                      onTap: () => onNavigate(3),
+                      onTap: () => onNavigate(1),
                     ),
                     _ActionTile(
                       title: tr('telegram'),
@@ -962,7 +964,7 @@ class _BrandHero extends StatelessWidget {
         ],
       ),
       child: Image.asset(
-        'assets/images/logo.png',
+        'assets/images/app_icon.png',
         fit: BoxFit.contain,
         errorBuilder: (_, __, ___) => const Column(
           mainAxisAlignment: MainAxisAlignment.center,

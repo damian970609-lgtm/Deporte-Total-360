@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import 'sports_api_service.dart';
+import 'sports_statistics_screen.dart';
 
 const Color agendaBg = Color(0xFF030814);
 const Color agendaPanel = Color(0xFF071326);
@@ -89,8 +90,6 @@ class _AgendaScreenState extends State<AgendaScreen> {
     'Rugby',
     'Vóley',
     'Fútbol australiano',
-    'Tenis',
-    'Otros',
   ];
 
   static const List<String> _statuses = <String>[
@@ -432,6 +431,13 @@ class _AgendaScreenState extends State<AgendaScreen> {
           ],
         ),
         actions: <Widget>[
+          IconButton(
+            tooltip: 'Estadísticas y clasificaciones',
+            onPressed: () => Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(builder: (_) => const SportsStatisticsScreen()),
+            ),
+            icon: const Icon(Icons.leaderboard_rounded, color: agendaCyan),
+          ),
           IconButton(
             tooltip: 'Limpiar búsqueda',
             onPressed: _clearFilters,

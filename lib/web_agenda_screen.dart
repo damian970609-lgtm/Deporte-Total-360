@@ -14,9 +14,10 @@ const Color _brandRed = Color(0xFFFF3155);
 /// Web de agenda dentro de la identidad visual de Deporte Total 360°.
 /// El contenido de la web y sus reproductores siguen perteneciendo al proveedor.
 class WebAgendaScreen extends StatefulWidget {
-  const WebAgendaScreen({super.key, required this.onExit});
+  const WebAgendaScreen({super.key, required this.onExit, required this.onOpenLive});
 
   final VoidCallback onExit;
+  final VoidCallback onOpenLive;
 
   static const String initialUrl = 'https://futbol-libre.cam/';
 
@@ -34,53 +35,9 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
   String? _errorMessage;
   String? _noticeMessage;
 
-  // Dominios publicitarios/rastreadores conocidos. No es una lista universal:
-  // un proveedor puede utilizar otros dominios o alojar anuncios en su web.
-  static const List<String> _blockedDomains = <String>[
-    'doubleclick.net',
-    'googlesyndication.com',
-    'googleadservices.com',
-    'adservice.google.com',
-    'ads.pubmatic.com',
-    'pubmatic.com',
-    'adnxs.com',
-    'popads.net',
-    'popcash.net',
-    'propellerads.com',
-    'exoclick.com',
-    'onclickads.net',
-    'outbrain.com',
-    'taboola.com',
-    'trafficjunky.net',
-    'adbrite.com',
-    'exponential.com',
-    'quantserve.com',
-    'scorecardresearch.com',
-    'zedo.com',
-    'adsafeprotected.com',
-    'teads.tv',
-  ];
+  List<ContentBlocker> _buildContentBlockers() => WebProtectionPolicy.buildContentBlockers();
 
-  List<ContentBlocker> _buildContentBlockers() {
-    return _blockedDomains.map((domain) {
-      final escapedDomain = RegExp.escape(domain);
-      return ContentBlocker(
-        trigger: ContentBlockerTrigger(
-          urlFilter: '.*$escapedDomain/.*',
-        ),
-        action: ContentBlockerAction(
-          type: ContentBlockerActionType.BLOCK,
-        ),
-      );
-    }).toList();
-  }
-
-  bool _isKnownTrackerHost(String host) {
-    final normalized = host.toLowerCase().trim();
-    return _blockedDomains.any((domain) {
-      return normalized == domain || normalized.endsWith('.$domain');
-    });
-  }
+  bool _isKnownTrackerHost(String host) => WebProtectionPolicy.isBlockedHost(host);
 
   bool _isHttpUrl(WebUri uri) {
     final scheme = uri.scheme.toLowerCase();
@@ -260,6 +217,11 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
           ],
         ),
         actions: <Widget>[
+          TextButton.icon(
+            onPressed: widget.onOpenLive,
+            icon: const Icon(Icons.play_circle_fill_rounded, color: _brandGreen, size: 17),
+            label: const Text('VIVO AQUÍ', style: TextStyle(color: _brandGreen, fontSize: 10, fontWeight: FontWeight.w900)),
+          ),
           IconButton(
             tooltip: 'Página siguiente',
             onPressed: _canGoForward ? _goForward : null,
@@ -385,6 +347,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         useShouldOverrideUrlLoading: true,
                         supportMultipleWindows: true,
                         javaScriptCanOpenWindowsAutomatically: true,
+                        useShouldInterceptRequest: true,
                         mediaPlaybackRequiresUserGesture: true,
                         allowsInlineMediaPlayback: true,
                         iframeAllowFullscreen: true,
@@ -456,6 +419,9 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         return NavigationActionPolicy.ALLOW;
                       },
                       onCreateWindow: _handleNewWindow,
+                      shouldInterceptRequest: _blockKnownTrackers
+                          ? (controller, request) async => WebProtectionPolicy.intercept(request)
+                          : null,
                       onReceivedError: (controller, request, error) {
                         if (!(request.isForMainFrame ?? true) || !mounted) {
                           return;
