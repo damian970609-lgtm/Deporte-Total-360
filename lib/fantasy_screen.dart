@@ -128,7 +128,7 @@ class _FantasyScreenState extends State<FantasyScreen> {
               color: _fantasyCyan,
             ),
           ),
-          title: const Column(
+          title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
