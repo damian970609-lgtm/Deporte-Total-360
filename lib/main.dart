@@ -473,6 +473,11 @@ class _MainShellState extends State<MainShell> {
       SportsStatisticsScreen(
         key: ValueKey<String>('statistics-$_selectedStatisticsSport'),
         initialSport: _selectedStatisticsSport,
+        onOpenAgenda: () => Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => AgendaScreen(initialSport: _selectedStatisticsSport),
+          ),
+        ),
       ),
       const LiveScreen(),
       WebAgendaScreen(
