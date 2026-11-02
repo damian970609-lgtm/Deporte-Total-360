@@ -1054,12 +1054,12 @@ class LiveScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: appCyan.withAlpha(170)),
                 ),
-                child: const Column(
+                child: Column(
                   children: <Widget>[
-                    Icon(Icons.live_tv_rounded, color: appPink, size: 52),
+                    const Icon(Icons.live_tv_rounded, color: appPink, size: 52),
                     SizedBox(height: 12),
                     Text(
-                      'CANAL EN VIVO DE DEPORTE TOTAL 360°',
+                      appText('CANAL EN VIVO DE DEPORTE TOTAL 360°', 'DEPORTE TOTAL 360° LIVE CHANNEL', 'CANAL AO VIVO DEPORTE TOTAL 360°', 'CHAÎNE EN DIRECT DEPORTE TOTAL 360°'),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: appCyan,
@@ -1069,9 +1069,11 @@ class LiveScreen extends StatelessWidget {
                     ),
                     SizedBox(height: 8),
                     Text(
-                      'El reproductor necesita un canal válido y una señal '
-                      'activa. Si el servidor está fuera de línea, se '
-                      'mostrará el error y podrás reintentar.',
+                      appText(
+                        'El reproductor necesita un canal válido y una señal activa. Si el servidor está fuera de línea, podrás reintentar.',
+                        'The player needs a valid channel and active stream. If the server is offline, you can retry.',
+                        'O player precisa de um canal válido e sinal ativo. Se o servidor estiver offline, você poderá tentar novamente.',
+                        'Le lecteur nécessite une chaîne valide et un signal actif. Si le serveur est hors ligne, vous pourrez réessayer.'),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: appMuted,
@@ -1207,8 +1209,8 @@ class EncoderConfigScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: appBg,
       appBar: AppBar(
-        title: const Text(
-          'CONFIGURAR TRANSMISIÓN',
+        title: Text(
+          appText('CONFIGURAR TRANSMISIÓN', 'STREAMING SETUP', 'CONFIGURAR TRANSMISSÃO', 'CONFIGURATION DU STREAM'),
           style: TextStyle(
             color: appCyan,
             fontWeight: FontWeight.w900,
@@ -1220,28 +1222,33 @@ class EncoderConfigScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: <Widget>[
-            const Text(
-              'Configura estas direcciones en tu encoder únicamente si '
-              'corresponden a tu cuenta y canal activos.',
+            Text(
+              appText(
+                'Configura estas direcciones en tu encoder únicamente si corresponden a tu cuenta y canal activos.',
+                'Use these encoder addresses only if they match your active account and channel.',
+                'Use estes endereços no encoder somente se corresponderem à sua conta e canal ativos.',
+                'Utilisez ces adresses dans votre encodeur uniquement si elles correspondent à votre compte et chaîne actifs.'),
               style: TextStyle(color: appMuted, height: 1.45),
             ),
             const SizedBox(height: 16),
             _CopyInfoCard(
-              title: 'Servidor RTMP',
+              title: appText('Servidor RTMP', 'RTMP server', 'Servidor RTMP', 'Serveur RTMP'),
               value: rtmp,
               onCopy: () => _copy(context, rtmp),
             ),
             const SizedBox(height: 10),
             _CopyInfoCard(
-              title: 'URL HLS de reproducción',
+              title: appText('URL HLS de reproducción', 'HLS playback URL', 'URL HLS de reprodução', 'URL de lecture HLS'),
               value: hls,
               onCopy: () => _copy(context, hls),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Si la señal no aparece, verifica el estado de tu canal y '
-              'consulta la documentación del servicio. Estas direcciones '
-              'por sí solas no garantizan que exista una retransmisión activa.',
+            Text(
+              appText(
+                'Si la señal no aparece, verifica el estado de tu canal y consulta la documentación. Estas direcciones no garantizan que exista una retransmisión activa.',
+                'If the stream does not appear, check your channel status and service documentation. These addresses do not guarantee an active broadcast.',
+                'Se o sinal não aparecer, verifique o status do canal e a documentação. Esses endereços não garantem uma transmissão ativa.',
+                'Si le signal n’apparaît pas, vérifiez l’état de votre chaîne et la documentation. Ces adresses ne garantissent pas une diffusion active.'),
               style: TextStyle(color: appMuted, fontSize: 12, height: 1.5),
             ),
           ],
@@ -1290,7 +1297,7 @@ class _CopyInfoCard extends StatelessWidget {
               child: TextButton.icon(
                 onPressed: onCopy,
                 icon: const Icon(Icons.copy_rounded, size: 17),
-                label: const Text('Copiar'),
+                label: Text(appText('Copiar', 'Copy', 'Copiar', 'Copier')),
                 style: TextButton.styleFrom(foregroundColor: appGreen),
               ),
             ),
@@ -1323,8 +1330,11 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
     if (slug.isEmpty || !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(slug)) {
       setState(() {
         _loading = false;
-        _error =
-            'El identificador del canal no es válido. Abre Ajustes y revísalo.';
+        _error = appText(
+            'El identificador del canal no es válido. Abre Ajustes y revísalo.',
+            'The channel ID is invalid. Open Settings and check it.',
+            'O ID do canal é inválido. Abra Configurações e verifique.',
+            'L’identifiant de la chaîne est invalide. Ouvrez les paramètres et vérifiez-le.');
       });
       return;
     }
@@ -1334,7 +1344,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
         (uri.scheme != 'https' && uri.scheme != 'http')) {
       setState(() {
         _loading = false;
-        _error = 'La dirección de reproducción no es válida.';
+        _error = appText('La dirección de reproducción no es válida.', 'The playback URL is invalid.', 'O endereço de reprodução é inválido.', 'L’adresse de lecture est invalide.');
       });
       return;
     }
@@ -1363,9 +1373,11 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
       }
       setState(() {
         _loading = false;
-        _error =
-            'No se pudo abrir el canal. Puede estar fuera de línea o no '
-            'permitir esta conexión.';
+        _error = appText(
+            'No se pudo abrir el canal. Puede estar fuera de línea o no permitir esta conexión.',
+            'The channel could not be opened. It may be offline or may not allow this connection.',
+            'Não foi possível abrir o canal. Ele pode estar offline ou não permitir esta conexão.',
+            'Impossible d’ouvrir la chaîne. Elle peut être hors ligne ou refuser cette connexion.');
       });
       await controller.dispose();
       if (identical(_controller, controller)) _controller = null;
@@ -1384,8 +1396,8 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
     return Scaffold(
       backgroundColor: appBg,
       appBar: AppBar(
-        title: const Text(
-          'CANAL EN VIVO',
+        title: Text(
+          appText('CANAL EN VIVO', 'LIVE CHANNEL', 'CANAL AO VIVO', 'CHAÎNE EN DIRECT'),
           style: TextStyle(
             color: appCyan,
             fontWeight: FontWeight.w900,
@@ -1436,7 +1448,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
                                 OutlinedButton.icon(
                                   onPressed: _initializePlayer,
                                   icon: const Icon(Icons.refresh_rounded),
-                                  label: const Text('Reintentar'),
+                                  label: Text(appText('Reintentar', 'Retry', 'Tentar novamente', 'Réessayer')),
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: appCyan,
                                     side: const BorderSide(color: appCyan),
@@ -1448,7 +1460,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
                         : controller == null || !controller.value.isInitialized
                             ? const Center(
                                 child: Text(
-                                  'El reproductor no está disponible.',
+                                  appText('El reproductor no está disponible.', 'The player is unavailable.', 'O player não está disponível.', 'Le lecteur n’est pas disponible.'),
                                   style: TextStyle(color: Colors.white),
                                 ),
                               )
@@ -1492,7 +1504,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
                       : Icons.play_arrow_rounded,
                 ),
                 label: Text(
-                  controller.value.isPlaying ? 'Pausar' : 'Reproducir',
+                  controller.value.isPlaying ? appText('Pausar', 'Pause', 'Pausar', 'Pause') : appText('Reproducir', 'Play', 'Reproduzir', 'Lire'),
                 ),
                 style: FilledButton.styleFrom(
                   backgroundColor: appBlue,
@@ -1501,16 +1513,19 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
               ),
             const SizedBox(height: 8),
             Text(
-              'Canal configurado: ${widget.channel}',
+              appText('Canal configurado: ${widget.channel}', 'Configured channel: ${widget.channel}', 'Canal configurado: ${widget.channel}', 'Chaîne configurée : ${widget.channel}'),
               style: const TextStyle(
                 color: appCyan,
                 fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'La reproducción depende de que el servidor entregue una '
-              'señal compatible y que tengas permiso para acceder a ella.',
+            Text(
+              appText(
+                'La reproducción depende de que el servidor entregue una señal compatible y que tengas permiso para acceder a ella.',
+                'Playback depends on the server providing a compatible stream and your permission to access it.',
+                'A reprodução depende de o servidor fornecer um sinal compatível e de você ter permissão para acessá-lo.',
+                'La lecture dépend d’un signal compatible fourni par le serveur et de votre autorisation d’y accéder.'),
               style: TextStyle(color: appMuted, fontSize: 12, height: 1.45),
             ),
           ],
