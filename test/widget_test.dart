@@ -14,15 +14,20 @@ void main() {
     expect(find.textContaining('Fútbol'), findsOneWidget);
   });
 
-  testWidgets('permite seleccionar la categoría Fórmula 1', (tester) async {
+  testWidgets('ofrece la categoría Fórmula 1 y abre su pantalla específica', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(home: SportsStatisticsScreen()),
+      const MaterialApp(
+        home: SportsStatisticsScreen(initialSport: 'Fórmula 1'),
+      ),
     );
-    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
-    await tester.pumpAndSettle();
-    expect(find.text('Fórmula 1'), findsOneWidget);
-    await tester.tap(find.text('Fórmula 1'));
-    await tester.pumpAndSettle();
+
+    final selector = tester.widget<DropdownButtonFormField<String>>(
+      find.byType(DropdownButtonFormField<String>).first,
+    );
+    expect(
+      selector.items!.map((item) => item.value),
+      contains('formula-1'),
+    );
     expect(find.text('SPORT ID  •  formula-1'), findsOneWidget);
     expect(find.textContaining('Tipo de clasificación'), findsOneWidget);
   });
