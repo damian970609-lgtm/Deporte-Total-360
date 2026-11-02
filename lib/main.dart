@@ -2288,10 +2288,10 @@ class DonationsScreen extends StatelessWidget {
                     BoxShadow(color: appPink.withAlpha(25), blurRadius: 22),
                   ],
                 ),
-                child: const Column(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    Icon(Icons.favorite_rounded, color: appPink, size: 56),
+                    const Icon(Icons.favorite_rounded, color: appPink, size: 56),
                     SizedBox(height: 13),
                     Text(
                       appText('GRACIAS POR APOYAR', 'THANK YOU FOR SUPPORTING US', 'OBRIGADO POR APOIAR', 'MERCI DE VOTRE SOUTIEN'),
