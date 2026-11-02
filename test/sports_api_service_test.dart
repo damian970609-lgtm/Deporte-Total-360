@@ -7,6 +7,17 @@ import 'package:deporte_total_360/sports_api_service.dart';
 
 void main() {
   group('SportsApiService', () {
+    setUp(() {
+      SportsApiService.clientOverride = null;
+      SportsApiService.resetForTesting();
+      sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
+    });
+
+    tearDown(() {
+      SportsApiService.clientOverride = null;
+      SportsApiService.resetForTesting();
+      sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
+    });
     test('expone las doce categorías multideporte configuradas', () {
       expect(SportsApiService.supportedSports.length, 12);
       expect(SportsApiService.supportedSports['Fútbol'], 'football');
