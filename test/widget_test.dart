@@ -160,7 +160,8 @@ void main() {
     await tester.ensureVisible(partidosBottomTab);
     await tester.pumpAndSettle();
     await tester.tap(partidosBottomTab);
-    await tester.pumpAndSettle();
+    // Agenda may contain a continuously animated loading indicator.
+    await tester.pump();
 
     expect(find.byType(AgendaScreen), findsOneWidget);
     expect(find.text('Fantasy'), findsOneWidget);
