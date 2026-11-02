@@ -226,6 +226,11 @@ class SportsApiService {
     'MMA': 'mma',
   };
 
+  static String? sportIdFor(String sport) {
+    if (sport == 'Fútbol') return 'football';
+    return _sportRouteIds[sport];
+  }
+
   String _resourceRoute(String sport, String resource) {
     if (sport == 'Fútbol') {
       if (resource == 'leagues') return '/api/leagues';
