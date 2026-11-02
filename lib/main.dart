@@ -8,6 +8,7 @@ import 'package:video_player/video_player.dart';
 import 'agenda_screen.dart';
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
+import 'notification_service.dart';
 import 'sports_api_service.dart';
 import 'web_agenda_screen.dart';
 
@@ -40,6 +41,11 @@ String buildHlsUrl(String channel) => '$hlsBase$channel/playlist.m3u8';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await NotificationService.initialize();
+  } catch (_) {
+    // La app continúa funcionando aunque el dispositivo no admita avisos.
+  }
   try {
     final prefs = await SharedPreferences.getInstance();
     appLanguage.value = parseLanguage(prefs.getString('app_language'));
@@ -1475,12 +1481,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _channelController;
   late final TextEditingController _telegramController;
   bool _saving = false;
+  bool _notificationsEnabled = false;
 
   @override
   void initState() {
     super.initState();
     _channelController = TextEditingController(text: channelSlug.value);
     _telegramController = TextEditingController(text: telegramLink.value);
+    _loadNotificationPreference();
+  }
+
+  Future<void> _loadNotificationPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (mounted) setState(() => _notificationsEnabled =
+          prefs.getBool('notifications_enabled') ?? false);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleNotifications(bool enabled) async {
+    if (enabled) {
+      final granted = await NotificationService.requestPermission();
+      if (!granted) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(appText(
+            'Activa el permiso de notificaciones en Android.',
+            'Enable notification permission in Android settings.',
+            'Ative a permissão de notificações nas configurações do Android.',
+            'Activez l’autorisation des notifications dans les paramètres Android.'))));
+        return;
+      }
+    } else {
+      await NotificationService.cancelMatchReminders();
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('notifications_enabled', enabled);
+    } catch (_) {}
+    if (mounted) setState(() => _notificationsEnabled = enabled);
+  }
+
+  Future<void> _testNotification() async {
+    try {
+      await NotificationService.showTestNotification();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())));
+    }
   }
 
   @override
@@ -1762,6 +1809,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                     onChanged: _setLanguage,
                   ),
+                  const SizedBox(height: 14),
+                  Text(
+                    tr('notifications'),
+                    style: const TextStyle(
+                      color: appCyan,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    tr('notifications_description'),
+                    style: const TextStyle(
+                      color: appMuted,
+                      fontSize: 11,
+                      height: 1.4,
+                    ),
+                  ),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      tr('notifications_enabled'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    subtitle: Text(
+                      appText(
+                        'Aviso antes de los eventos que cargues en la agenda.',
+                        'Reminder before events you load in the schedule.',
+                        'Aviso antes dos eventos carregados na agenda.',
+                        'Alerte avant les événements chargés dans le calendrier.',
+                      ),
+                      style: const TextStyle(color: appMuted, fontSize: 10),
+                    ),
+                    value: _notificationsEnabled,
+                    activeThumbColor: appGreen,
+                    onChanged: _toggleNotifications,
+                  ),
+                  if (_notificationsEnabled)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: _testNotification,
+                        icon: const Icon(Icons.notifications_active_rounded),
+                        label: Text(appText(
+                          'Probar notificación',
+                          'Test notification',
+                          'Testar notificação',
+                          'Tester la notification',
+                        )),
+                      ),
+                    ),
                 ],
               ),
             ),
