@@ -95,7 +95,7 @@ class WebProtectionPolicy {
             resourceType: <ContentBlockerTriggerResourceType>[
               ContentBlockerTriggerResourceType.SCRIPT,
               ContentBlockerTriggerResourceType.IMAGE,
-              ContentBlockerTriggerResourceType.POPUP,
+              ContentBlockerTriggerResourceType.MEDIA,
               ContentBlockerTriggerResourceType.RAW,
             ],
           ),
