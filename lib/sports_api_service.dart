@@ -245,7 +245,11 @@ class SportsApiService {
     final term = search.trim();
     if (term.isEmpty) throw const SportsApiException('Escribe el nombre de una liga o competición.');
     final route = _resourceRoute(sport, 'leagues');
-    final uri = Uri.parse('$base$route').replace(queryParameters: <String, String>{'search': term});
+    // La API de NBA usa "name"; los demás catálogos usan "search".
+    final queryKey = sport == 'NBA' ? 'name' : 'search';
+    final uri = Uri.parse('$base$route').replace(
+      queryParameters: <String, String>{queryKey: term},
+    );
     return _getRows(uri);
   }
 
