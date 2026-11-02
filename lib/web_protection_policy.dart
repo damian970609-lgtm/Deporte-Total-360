@@ -13,12 +13,28 @@ class WebProtectionPolicy {
     'trafficjunky.net','adbrite.com','exponential.com','quantserve.com',
     'scorecardresearch.com','zedo.com','adsafeprotected.com','teads.tv',
     'criteo.com','smartadserver.com','serving-sys.com',
+    'juicyads.com','trafficjunky.com','plugrush.com','ero-advertising.com',
+    'adnium.com','hilltopads.com','tsyndicate.com','trafficstars.com',
+    'adsterra.com','onclicka.com','popunder.net','adxpansion.com',
+    'adtng.com','richads.com','clickadu.com','evadav.com','galaksion.com',
+    'ad-maven.com','exoclick.com','trafficstars.com','adultadworld.com',
   ];
 
   static bool isBlockedHost(String host) {
     final normalized=host.toLowerCase().trim();
     if(normalized.isEmpty) return false;
     return blockedDomains.any((domain)=>normalized==domain || normalized.endsWith('.'+domain));
+  }
+
+  static bool isBlockedUrl(WebUri uri) {
+    final host = uri.host.toLowerCase();
+    if (isBlockedHost(host)) return true;
+    // Filtra domini con nombres inequívocos de redes de anuncios adultos.
+    const adultAdMarkers = <String>[
+      'porn-ad', 'adult-ad', 'xxx-ad', 'juicyads', 'trafficjunky',
+      'adulttraffic', 'porntraffic', 'sexad', 'webcam-ad',
+    ];
+    return adultAdMarkers.any(host.contains);
   }
 
   static bool isHttpUrl(WebUri uri) {
@@ -39,7 +55,7 @@ class WebProtectionPolicy {
 
   static WebResourceResponse? intercept(WebResourceRequest request) {
     final uri=request.url;
-    if(!isBlockedHost(uri.host)) return null;
+    if(!isBlockedUrl(uri)) return null;
     return WebResourceResponse(
       contentType:'text/plain',
       contentEncoding:'utf-8',
