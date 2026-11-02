@@ -200,6 +200,12 @@ const Map<String, Map<AppLanguage, String>> _labels =
     AppLanguage.french: 'La diffusion nécessite une chaîne et un serveur actifs. Le calendrier natif nécessite encore une source autorisée qui n’est pas configurée.',
   },
 
+  'statistics': <AppLanguage, String>{
+    AppLanguage.spanish: 'Estadísticas',
+    AppLanguage.english: 'Statistics',
+    AppLanguage.portuguese: 'Estatísticas',
+    AppLanguage.french: 'Statistiques',
+  },
   'stats_title': <AppLanguage, String>{
     AppLanguage.spanish: 'ESTADÍSTICAS DEPORTIVAS',
     AppLanguage.english: 'SPORTS STATISTICS',
@@ -219,10 +225,10 @@ const Map<String, Map<AppLanguage, String>> _labels =
     AppLanguage.french: 'NOTIFICATIONS SPORTIVES',
   },
   'notifications_description': <AppLanguage, String>{
-    AppLanguage.spanish: 'Recibe un aviso local 15 minutos antes del inicio de los partidos que cargues en la agenda.',
-    AppLanguage.english: 'Get a local alert 15 minutes before matches loaded in the schedule start.',
-    AppLanguage.portuguese: 'Receba um aviso local 15 minutos antes do início das partidas carregadas na agenda.',
-    AppLanguage.french: 'Recevez une alerte locale 15 minutes avant le début des matchs chargés dans le calendrier.',
+    AppLanguage.spanish: 'Recibe avisos locales 60, 30, 15 y 5 minutos antes de los eventos cargados en la agenda.',
+    AppLanguage.english: 'Get local alerts 60, 30, 15 and 5 minutes before scheduled events start.',
+    AppLanguage.portuguese: 'Receba avisos locais 60, 30, 15 e 5 minutos antes dos eventos carregados na agenda.',
+    AppLanguage.french: 'Recevez des alertes locales 60, 30, 15 et 5 minutes avant les événements chargés dans le calendrier.',
   },
   'notifications_enabled': <AppLanguage, String>{
     AppLanguage.spanish: 'Activar recordatorios',
