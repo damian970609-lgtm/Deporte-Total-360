@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'app_i18n.dart';
 import 'package:flutter/services.dart';
@@ -46,6 +47,16 @@ String buildHlsUrl(String channel) => '$hlsBase$channel/playlist.m3u8';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Presenta Inicio antes de consultar plugins. Un servicio lento o no
+  // disponible nunca debe dejar la ventana nativa en blanco.
+  runApp(const DeporteTotal360App());
+
+  // Preferencias y avisos se preparan después del primer frame.
+  unawaited(_initializeAppServices());
+}
+
+Future<void> _initializeAppServices() async {
   try {
     final prefs = await SharedPreferences.getInstance();
     appLanguage.value = parseLanguage(prefs.getString('app_language'));
@@ -59,14 +70,14 @@ Future<void> main() async {
         SportsApiService.normalizeBaseUrl(savedApiUrl ?? '') ??
         defaultSportsApiBaseUrl;
   } catch (_) {
-    // La app puede abrirse aunque el almacenamiento local no esté disponible.
+    // El Inicio conserva valores seguros aunque no esté disponible el almacenamiento.
   }
+
   try {
     await NotificationService.initialize();
   } catch (_) {
-    // La app continúa funcionando aunque el dispositivo no admita avisos.
+    // Las notificaciones son opcionales y no bloquean el resto de la app.
   }
-  runApp(const DeporteTotal360App());
 }
 
 class DeporteTotal360App extends StatelessWidget {
@@ -139,6 +150,9 @@ class _MainShellState extends State<MainShell> {
       GlobalKey<WebAgendaScreenState>();
 
   int _selectedIndex = _homeTab;
+  final List<bool> _initializedTabs = <bool>[
+    true, false, false, false, false, false, false, false, false, false,
+  ];
   String _selectedStatisticsSport = 'Fútbol';
   bool _handlingBack = false;
 
@@ -363,46 +377,70 @@ class _MainShellState extends State<MainShell> {
     }
   }
 
+  Widget _buildTab(int index) {
+    switch (index) {
+      case 0:
+        return HomeDashboard(
+          onNavigate: _selectTab,
+          onSportSelected: _selectSport,
+          onTelegram: _openTelegram,
+          onContact: () => openExternalLink(
+            context,
+            contactUrl,
+            label: 'WhatsApp',
+          ),
+          onDonations: _openDonations,
+          onFantasy: _openFantasy,
+          onStatistics: _openStatistics,
+          onOpenAgenda: _openAgenda,
+          onChat: _openPublicChat,
+        );
+      case 1:
+        return SportsStatisticsScreen(
+          key: ValueKey<String>('statistics-$_selectedStatisticsSport'),
+          initialSport: _selectedStatisticsSport,
+          onOpenAgenda: _openAgenda,
+        );
+      case 2:
+        return LiveScreen(
+          onOpenMultiView: _openMultiMatchView,
+          onOpenChannelCatalog: _openChannelCatalog,
+        );
+      case 3:
+        return AgendaScreen(
+          initialSport: 'Todos',
+          onOpenWebAgenda: _openEmbeddedWebAgenda,
+          onOpenMultiView: _openMultiMatchView,
+          onOpenChannelCatalog: _openChannelCatalog,
+        );
+      case 4:
+        return const NewsScreen();
+      case 5:
+        return SportsSummariesScreen(isActive: _selectedIndex == 5);
+      case 6:
+        return const FantasyScreen();
+      case 7:
+        return PublicChatScreen(isActive: _selectedIndex == 7);
+      case 8:
+        return const ChannelCatalogScreen();
+      case 9:
+        return const SettingsScreen();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final pages = <Widget>[
-      HomeDashboard(
-        onNavigate: _selectTab,
-        onSportSelected: _selectSport,
-        onTelegram: _openTelegram,
-        onContact: () => openExternalLink(
-          context,
-          contactUrl,
-          label: 'WhatsApp',
-        ),
-        onDonations: _openDonations,
-        onFantasy: _openFantasy,
-        onStatistics: _openStatistics,
-        onOpenAgenda: _openAgenda,
-        onChat: _openPublicChat,
-      ),
-      SportsStatisticsScreen(
-        key: ValueKey<String>('statistics-$_selectedStatisticsSport'),
-        initialSport: _selectedStatisticsSport,
-        onOpenAgenda: _openAgenda,
-      ),
-      LiveScreen(
-        onOpenMultiView: _openMultiMatchView,
-        onOpenChannelCatalog: _openChannelCatalog,
-      ),
-      AgendaScreen(
-        initialSport: 'Todos',
-        onOpenWebAgenda: _openEmbeddedWebAgenda,
-        onOpenMultiView: _openMultiMatchView,
-        onOpenChannelCatalog: _openChannelCatalog,
-      ),
-      const NewsScreen(),
-      SportsSummariesScreen(isActive: _selectedIndex == 5),
-      const FantasyScreen(),
-      PublicChatScreen(isActive: _selectedIndex == 7),
-      const ChannelCatalogScreen(),
-      const SettingsScreen(),
-    ];
+    final pages = List<Widget>.generate(10, (index) {
+      if (index == _selectedIndex) {
+        _initializedTabs[index] = true;
+      }
+      if (!_initializedTabs[index]) {
+        return const SizedBox.shrink();
+      }
+      return _buildTab(index);
+    }, growable: false);
 
     return PopScope<void>(
       canPop: false,
