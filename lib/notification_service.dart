@@ -77,7 +77,7 @@ class NotificationService {
         '$sport : $homeTeam vs $awayTeam commence dans $minutesBefore minutes.',
       ),
       scheduledDate: tz.TZDateTime.from(reminderAt, tz.local),
-      notificationDetails: const NotificationDetails(
+      notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           'sports_match_reminders',
           channelName,
