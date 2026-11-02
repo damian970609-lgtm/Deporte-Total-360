@@ -516,7 +516,6 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         safeBrowsingEnabled: true,
                         transparentBackground: true,
                         underPageBackgroundColor: _brandBg,
-                        cacheEnabled: true,
                         allowFileAccess: false,
                         allowContentAccess: true,
                         loadsImagesAutomatically: true,
