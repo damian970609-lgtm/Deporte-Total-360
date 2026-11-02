@@ -572,6 +572,16 @@ class _SummaryPlayerScreenState extends State<_SummaryPlayerScreen> {
   bool _loading = true;
   String? _error;
   InAppWebViewController? _controller;
+  int _webViewGeneration = 0;
+
+  void _retryPlayer() {
+    setState(() {
+      _controller = null;
+      _webViewGeneration++;
+      _error = null;
+      _loading = true;
+    });
+  }
 
   static const String _playerBaseUrl =
       'https://deporte-total-360-api.damian970609.workers.dev/';
@@ -626,7 +636,7 @@ iframe{width:100%;height:100%;border:0;background:#000}
         actions: <Widget>[
           IconButton(
             tooltip: 'Recargar vídeo',
-            onPressed: () => _controller?.reload(),
+            onPressed: _retryPlayer,
             icon: const Icon(Icons.refresh_rounded, color: _summaryCyan),
           ),
         ],
@@ -658,13 +668,7 @@ iframe{width:100%;height:100%;border:0;background:#000}
                           ),
                           const SizedBox(height: 12),
                           FilledButton(
-                            onPressed: () {
-                              setState(() {
-                                _error = null;
-                                _loading = true;
-                              });
-                              _controller?.reload();
-                            },
+                            onPressed: _retryPlayer,
                             child: Text(appText('Reintentar', 'Retry',
                                 'Tentar novamente', 'Réessayer')),
                           ),
@@ -673,6 +677,7 @@ iframe{width:100%;height:100%;border:0;background:#000}
                     ),
                   )
                 : InAppWebView(
+                    key: ValueKey<int>(_webViewGeneration),
                     // baseUrl HTTPS suministra el Referer requerido por YouTube
                     // al cargar el iframe dentro de esta WebView.
                     initialData: InAppWebViewInitialData(
@@ -732,6 +737,7 @@ iframe{width:100%;height:100%;border:0;background:#000}
                       if (!(request.isForMainFrame ?? true) || !mounted) {
                         return;
                       }
+                      _controller = null;
                       setState(() {
                         _loading = false;
                         _error = appText(
@@ -740,6 +746,25 @@ iframe{width:100%;height:100%;border:0;background:#000}
                           'Não foi possível carregar o vídeo incorporado. Ele pode estar restrito pelo canal ou região.',
                           'La vidéo intégrée n’a pas pu être chargée. Elle peut être restreinte par la chaîne ou la région.',
                         );
+                      });
+                    },
+                    onReceivedHttpError: (controller, request, response) {
+                      if (!(request.isForMainFrame ?? true) || !mounted) return;
+                      final status = response.statusCode ?? 0;
+                      if (status >= 400) {
+                        _controller = null;
+                        setState(() {
+                          _loading = false;
+                          _error = 'El reproductor respondió HTTP $status.';
+                        });
+                      }
+                    },
+                    androidOnRenderProcessGone: (controller, detail) {
+                      if (!mounted) return;
+                      _controller = null;
+                      setState(() {
+                        _loading = false;
+                        _error = 'Android cerró el reproductor integrado. Pulsa Reintentar.';
                       });
                     },
                   ),

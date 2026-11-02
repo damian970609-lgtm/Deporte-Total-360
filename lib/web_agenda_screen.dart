@@ -73,6 +73,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
     _loadTimeoutTimer?.cancel();
     _loadTimeoutTimer = Timer(const Duration(seconds: 35), () {
       if (!mounted || !_loading) return;
+      _controller = null;
       setState(() {
         _loading = false;
         _errorMessage =
@@ -104,6 +105,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
       final result = visible?.toString().toLowerCase();
       if (visible == false || result == 'false' || result == '0') {
         if (!mounted) return;
+        _controller = null;
         setState(() {
           _errorMessage =
               'El sitio respondió, pero no dibujó contenido. Prueba Recargar; si persiste, desactiva la protección web o abre la página en Chrome. Puede ser un bloqueo del sitio o de la red.';
@@ -146,6 +148,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
       );
       await _refreshNavigationState();
     } catch (_) {
+      _controller = null;
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -313,6 +316,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
       await controller.reload();
     } catch (_) {
       _loadTimeoutTimer?.cancel();
+      _controller = null;
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -669,6 +673,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                           return;
                         }
                         _loadTimeoutTimer?.cancel();
+                        _controller = null;
                         setState(() {
                           _loading = false;
                           _errorMessage =
@@ -692,6 +697,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         final statusCode = response.statusCode ?? 0;
                         if (statusCode >= 400) {
                           _loadTimeoutTimer?.cancel();
+                          _controller = null;
                           setState(() {
                             _loading = false;
                             _errorMessage =
