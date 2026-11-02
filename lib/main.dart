@@ -2084,16 +2084,16 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
   Future<void> _testConnection() async {
     final url = SportsApiService.normalizeBaseUrl(_apiUrlController.text);
     if (url == null) {
-      _showMessage('Introduce una URL HTTPS válida del Worker.');
+      _showMessage(appText('Introduce una URL HTTPS válida del Worker.', 'Enter a valid HTTPS Worker URL.', 'Digite uma URL HTTPS válida do Worker.', 'Saisissez une URL HTTPS valide du Worker.'));
       return;
     }
 
     setState(() => _testing = true);
     try {
       await SportsApiService().checkHealth(url);
-      _showMessage('Conexión correcta con Deporte Total 360 API.');
+      _showMessage(appText('Conexión correcta con Deporte Total 360 API.', 'Connected to Deporte Total 360 API.', 'Conectado à API Deporte Total 360.', 'Connecté à l’API Deporte Total 360.'));
     } catch (error) {
-      _showMessage('No se pudo verificar el servidor: $error');
+      _showMessage(appText('No se pudo verificar el servidor: $error', 'Could not verify the server: $error', 'Não foi possível verificar o servidor: $error', 'Impossible de vérifier le serveur : $error'));
     } finally {
       if (mounted) setState(() => _testing = false);
     }
@@ -2112,9 +2112,9 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
       await prefs.setString('sports_api_base_url', url);
       sportsApiBaseUrl.value = url;
       _apiUrlController.text = url;
-      _showMessage('Dirección de la API guardada.');
+      _showMessage(appText('Dirección de la API guardada.', 'API address saved.', 'Endereço da API salvo.', 'Adresse de l’API enregistrée.'));
     } catch (_) {
-      _showMessage('No se pudo guardar la dirección. Inténtalo de nuevo.');
+      _showMessage(appText('No se pudo guardar la dirección. Inténtalo de nuevo.', 'Could not save the address. Try again.', 'Não foi possível salvar o endereço. Tente novamente.', 'Impossible d’enregistrer l’adresse. Réessayez.'));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -2126,9 +2126,9 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
       await prefs.remove('sports_api_base_url');
       sportsApiBaseUrl.value = '';
       _apiUrlController.clear();
-      _showMessage('Dirección de la API eliminada.');
+      _showMessage(appText('Dirección de la API eliminada.', 'API address cleared.', 'Endereço da API removido.', 'Adresse de l’API supprimée.'));
     } catch (_) {
-      _showMessage('No se pudo eliminar la dirección guardada.');
+      _showMessage(appText('No se pudo eliminar la dirección guardada.', 'Could not clear the saved address.', 'Não foi possível remover o endereço salvo.', 'Impossible d’effacer l’adresse enregistrée.'));
     }
   }
 
@@ -2138,7 +2138,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
       backgroundColor: appBg,
       appBar: AppBar(
         title: const Text(
-          'MENÚ DE DESARROLLADOR',
+          appText('MENÚ DE DESARROLLADOR', 'DEVELOPER MENU', 'MENU DO DESENVOLVEDOR', 'MENU DÉVELOPPEUR'),
           style: TextStyle(
             color: appCyan,
             fontWeight: FontWeight.w900,
@@ -2166,7 +2166,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                       SizedBox(width: 9),
                       Expanded(
                         child: Text(
-                          'CONEXIÓN DEL SERVIDOR DEPORTIVO',
+                          appText('CONEXIÓN DEL SERVIDOR DEPORTIVO', 'SPORTS SERVER CONNECTION', 'CONEXÃO DO SERVIDOR ESPORTIVO', 'CONNEXION AU SERVEUR SPORTIF'),
                           style: TextStyle(
                             color: appCyan,
                             fontWeight: FontWeight.w900,
@@ -2178,7 +2178,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'Introduce la dirección HTTPS pública del Cloudflare Worker. No pegues aquí la clave de API.',
+                    appText('Introduce la dirección HTTPS pública del Cloudflare Worker. No pegues aquí la clave de API.', 'Enter the public HTTPS URL of your Cloudflare Worker. Do not paste your API key here.', 'Digite o endereço HTTPS público do Cloudflare Worker. Não cole sua chave de API aqui.', 'Saisissez l’URL HTTPS publique de votre Cloudflare Worker. Ne collez pas votre clé API ici.'),
                     style: TextStyle(color: appMuted, height: 1.5, fontSize: 12),
                   ),
                   const SizedBox(height: 13),
@@ -2188,7 +2188,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                     autocorrect: false,
                     enableSuggestions: false,
                     decoration: const InputDecoration(
-                      labelText: 'URL del servidor API',
+                      labelText: appText('URL del servidor API', 'API server URL', 'URL do servidor API', 'URL du serveur API'),
                       hintText: 'https://tu-worker.tu-cuenta.workers.dev',
                       prefixIcon: Icon(Icons.cloud_rounded),
                     ),
@@ -2205,7 +2205,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.network_check_rounded),
-                      label: Text(_testing ? 'COMPROBANDO…' : 'PROBAR CONEXIÓN'),
+                      label: Text(_testing ? appText('COMPROBANDO…', 'CHECKING…', 'VERIFICANDO…', 'VÉRIFICATION…') : appText('PROBAR CONEXIÓN', 'TEST CONNECTION', 'TESTAR CONEXÃO', 'TESTER LA CONNEXION')),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: appCyan,
                         side: const BorderSide(color: appCyan),
@@ -2219,7 +2219,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                     child: FilledButton.icon(
                       onPressed: _saving ? null : _saveApiUrl,
                       icon: const Icon(Icons.save_rounded),
-                      label: Text(_saving ? 'GUARDANDO…' : 'GUARDAR SERVIDOR'),
+                      label: Text(_saving ? appText('GUARDANDO…', 'SAVING…', 'SALVANDO…', 'ENREGISTREMENT…') : appText('GUARDAR SERVIDOR', 'SAVE SERVER', 'SALVAR SERVIDOR', 'ENREGISTRER LE SERVEUR')),
                       style: FilledButton.styleFrom(
                         backgroundColor: appGreen,
                         foregroundColor: appBg,
@@ -2232,7 +2232,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                     child: TextButton.icon(
                       onPressed: _clearApiUrl,
                       icon: const Icon(Icons.delete_outline_rounded, size: 17),
-                      label: const Text('Borrar dirección guardada'),
+                      label: const Text(appText('Borrar dirección guardada', 'Clear saved address', 'Apagar endereço salvo', 'Effacer l’adresse enregistrée')),
                       style: TextButton.styleFrom(foregroundColor: appPink),
                     ),
                   ),
@@ -2248,7 +2248,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                 border: Border.all(color: appGreen.withAlpha(150)),
               ),
               child: const Text(
-                'SEGURIDAD: la clave APISPORTS_KEY debe permanecer como secreto del Worker en Cloudflare. La aplicación solo guarda la URL pública del servidor. Este acceso oculto por diez toques es discreto, pero no sustituye autenticación real.',
+                appText('SEGURIDAD: la clave APISPORTS_KEY debe permanecer como secreto del Worker en Cloudflare. La aplicación solo guarda la URL pública del servidor. Este acceso oculto por diez toques es discreto, pero no sustituye autenticación real.', 'SECURITY: keep APISPORTS_KEY as a Cloudflare Worker secret. The app stores only the public server URL. This hidden ten-tap entry is discreet, but it is not real authentication.', 'SEGURANÇA: mantenha APISPORTS_KEY como segredo do Worker no Cloudflare. O app salva apenas a URL pública do servidor. O acesso oculto por dez toques não substitui autenticação real.', 'SÉCURITÉ : gardez APISPORTS_KEY comme secret du Worker Cloudflare. L’application ne stocke que l’URL publique du serveur. L’accès caché par dix touches ne remplace pas une authentification réelle.'),
                 style: TextStyle(color: appMuted, fontSize: 11, height: 1.5),
               ),
             ),
@@ -2294,7 +2294,7 @@ class DonationsScreen extends StatelessWidget {
                     Icon(Icons.favorite_rounded, color: appPink, size: 56),
                     SizedBox(height: 13),
                     Text(
-                      'GRACIAS POR APOYAR',
+                      appText('GRACIAS POR APOYAR', 'THANK YOU FOR SUPPORTING US', 'OBRIGADO POR APOIAR', 'MERCI DE VOTRE SOUTIEN'),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: appCyan,
@@ -2304,7 +2304,7 @@ class DonationsScreen extends StatelessWidget {
                     ),
                     SizedBox(height: 9),
                     Text(
-                      'Tu apoyo ayuda a mantener y mejorar Deporte Total 360°. '
+                      appText('Tu apoyo ayuda a mantener y mejorar Deporte Total 360°. El cobro todavía no está conectado; no se realizará ningún pago desde esta pantalla.', 'Your support helps maintain and improve Deporte Total 360°. Payments are not connected yet; this screen will not charge you.', 'Seu apoio ajuda a manter e melhorar o Deporte Total 360°. O pagamento ainda não está conectado; nenhuma cobrança será feita nesta tela.', 'Votre soutien aide à maintenir et améliorer Deporte Total 360°. Le paiement n’est pas encore connecté ; aucun paiement ne sera effectué depuis cet écran.')
                       'El cobro todavía no está conectado; no se realizará '
                       'ningún pago desde esta pantalla.',
                       textAlign: TextAlign.center,
