@@ -564,7 +564,7 @@ class HomeDashboard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                _BrandHero()
+                _BrandHero(),
                 const SizedBox(height: 8),
                 Text(
                   tr('tagline'),
