@@ -130,4 +130,28 @@ void main() {
     expect(wrongTabSelected, -1);
   });
 
+
+  testWidgets('las pestañas inferiores siguen visibles al cambiar de sección', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    await tester.pumpWidget(const MaterialApp(home: MainShell()));
+    await tester.pump();
+
+    expect(find.text('Fútbol Libre'), findsOneWidget);
+    expect(find.text('Partidos'), findsOneWidget);
+    expect(find.text('Fantasy'), findsOneWidget);
+    expect(find.text('Chat'), findsOneWidget);
+    expect(find.text('Canales TV'), findsOneWidget);
+
+    await tester.tap(find.text('Partidos'));
+    await tester.pump();
+
+    expect(find.byType(AgendaScreen), findsOneWidget);
+    expect(find.text('Fantasy'), findsOneWidget);
+    expect(find.text('Canales TV'), findsOneWidget);
+
+    await tester.tap(find.text('Inicio'));
+    await tester.pump();
+    expect(find.text('TODOS LOS DEPORTES'), findsOneWidget);
+  });
+
 }
