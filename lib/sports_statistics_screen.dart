@@ -9,7 +9,9 @@ const Color _statsBlue=Color(0xFF087BFF);
 const Color _statsMuted=Color(0xFFA9BDD6);
 
 class SportsStatisticsScreen extends StatefulWidget {
-  const SportsStatisticsScreen({super.key});
+  const SportsStatisticsScreen({super.key, this.initialSport = 'Fútbol', this.onOpenAgenda});
+  final String initialSport;
+  final VoidCallback? onOpenAgenda;
   @override
   State<SportsStatisticsScreen> createState()=>_SportsStatisticsScreenState();
 }
@@ -19,6 +21,12 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
     'Fútbol','Básquet','NBA','Béisbol','Fútbol americano',
     'Hockey sobre hielo','Balonmano','Rugby','Vóley','Fútbol australiano',
   ];
+  static const Map<String,String> _sportIds=<String,String>{
+    'Fútbol':'football','Básquet':'basketball','NBA':'nba','Béisbol':'baseball',
+    'Fútbol americano':'american-football','Hockey sobre hielo':'hockey',
+    'Balonmano':'handball','Rugby':'rugby','Vóley':'volleyball',
+    'Fútbol australiano':'afl',
+  };
   final SportsApiService _service=SportsApiService();
   final TextEditingController _searchController=TextEditingController();
   String _sport='Fútbol';
@@ -31,6 +39,12 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
   bool _searching=false;
   bool _loadingStandings=false;
   String? _error;
+
+  @override
+  void initState(){
+    super.initState();
+    if(_sports.contains(widget.initialSport))_sport=widget.initialSport;
+  }
 
   @override
   void dispose(){_searchController.dispose();super.dispose();}
@@ -155,6 +169,30 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
     }
   }
 
+  String _rowLogo(Map<String,dynamic> row){
+    final team=_asMap(row['team']??row['competitor']??row['participant']);
+    final nested=_asMap(team['team']);
+    return (team['logo']??nested['logo']??row['logo']??'').toString().trim();
+  }
+
+  String _rowIdentifier(Map<String,dynamic> row){
+    final team=_asMap(row['team']??row['competitor']??row['participant']);
+    final nested=_asMap(team['team']);
+    final id=team['id']??nested['id']??row['id'];
+    return id==null?'':'ID $id';
+  }
+
+  Widget _badgeImage(String url, IconData fallback){
+    if(url.isEmpty){
+      return CircleAvatar(backgroundColor:_statsBlue.withAlpha(45),child:Icon(fallback,color:_statsCyan,size:20));
+    }
+    return CircleAvatar(
+      backgroundColor:_statsBlue.withAlpha(45),
+      child:ClipOval(child:Image.network(url,width:34,height:34,fit:BoxFit.contain,
+        errorBuilder:(_,__,___)=>Icon(fallback,color:_statsCyan,size:20))),
+    );
+  }
+
   String _rowName(Map<String,dynamic> row){
     final team=row['team']??row['competitor']??row['participant'];
     if(_text(team).isNotEmpty)return _text(team);
@@ -183,14 +221,24 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
       backgroundColor:_statsBg,
       appBar:AppBar(
         backgroundColor:_statsBg,
-        title:const Text('ESTADÍSTICAS Y CLASIFICACIONES',
-          style:TextStyle(color:_statsCyan,fontSize:13,fontWeight:FontWeight.w900)),
+        title:const Text('ESTADÍSTICAS',
+          style:TextStyle(color:_statsCyan,fontSize:14,fontWeight:FontWeight.w900)),
+        actions:<Widget>[
+          if(widget.onOpenAgenda!=null)IconButton(
+            tooltip:'Abrir agenda de partidos',
+            onPressed:widget.onOpenAgenda,
+            icon:const Icon(Icons.calendar_month_rounded,color:_statsCyan),
+          ),
+        ],
       ),
       body:ListView(
         padding:const EdgeInsets.fromLTRB(14,10,14,24),
         children:<Widget>[
-          const Text('Consulta ligas y tablas oficiales a través del servidor deportivo.',
+          const Text('Consulta estadísticas, competiciones y clasificaciones de varios deportes.',
             style:TextStyle(color:_statsMuted,fontSize:12,height:1.45)),
+          const SizedBox(height:5),
+          Text('IDENTIFICADOR DEL DEPORTE: ${_sportIds[_sport]??'no disponible'}',
+            style:const TextStyle(color:_statsCyan,fontSize:10,fontWeight:FontWeight.w800)),
           const SizedBox(height:12),
           DropdownButtonFormField<String>(
             value:_sport,
@@ -246,13 +294,13 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
                 ),
                 child:ListTile(
                   dense:true,
-                  leading:CircleAvatar(
-                    backgroundColor:_statsBlue.withAlpha(45),
-                    child:const Icon(Icons.emoji_events_rounded,color:_statsCyan,size:20),
+                  leading:_badgeImage(
+                    (_asMap(row['league'])['logo']??_asMap(row['country'])['flag']??row['logo']??'').toString(),
+                    Icons.emoji_events_rounded,
                   ),
                   title:Text(_leagueName(row).isEmpty?'Liga '+id:_leagueName(row),
                     style:const TextStyle(color:Colors.white,fontWeight:FontWeight.w800,fontSize:12)),
-                  subtitle:Text('ID '+id+(country==null?'':'  ·  '+country.toString()),
+                  subtitle:Text('ID '+id+(country==null?'':'  ·  '+country.toString())+'  ·  ${_sportIds[_sport]??_sport}',
                     style:const TextStyle(color:_statsMuted,fontSize:10)),
                   trailing:Icon(selected?Icons.check_circle:Icons.chevron_right,color:_statsCyan),
                   onTap:()=>_selectLeague(row),
@@ -333,6 +381,8 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
                   children:<Widget>[
                     SizedBox(width:30,child:Text(rank.toString(),textAlign:TextAlign.center,
                       style:const TextStyle(color:_statsCyan,fontWeight:FontWeight.w900,fontSize:15))),
+                    const SizedBox(width:7),
+                    _badgeImage(_rowLogo(row),Icons.shield_rounded),
                     const SizedBox(width:8),
                     Expanded(
                       child:Column(
@@ -340,9 +390,10 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
                         children:<Widget>[
                           Text(name.isEmpty?'Equipo / participante':name,maxLines:2,overflow:TextOverflow.ellipsis,
                             style:const TextStyle(color:Colors.white,fontWeight:FontWeight.w800,fontSize:12)),
-                          if(subtitle.isNotEmpty)...<Widget>[
+                          if(_rowIdentifier(row).isNotEmpty||subtitle.isNotEmpty)...<Widget>[
                             const SizedBox(height:3),
-                            Text(subtitle,style:const TextStyle(color:_statsMuted,fontSize:10)),
+                            Text(<String>[_rowIdentifier(row),subtitle].where((v)=>v.isNotEmpty).join('  ·  '),
+                              style:const TextStyle(color:_statsMuted,fontSize:10)),
                           ],
                         ],
                       ),
