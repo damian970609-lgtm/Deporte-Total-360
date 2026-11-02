@@ -167,7 +167,12 @@ void main() {
     expect(find.text('Fantasy'), findsOneWidget);
     expect(find.text('Canales TV'), findsOneWidget);
 
-    await tester.tap(find.text('Inicio'));
+    final homeBottomTab = find.byKey(
+      const ValueKey<String>('bottom-tab-0'),
+    );
+    await tester.ensureVisible(homeBottomTab);
+    await tester.pumpAndSettle();
+    await tester.tap(homeBottomTab);
     await tester.pump();
     expect(find.text('TODOS LOS DEPORTES'), findsOneWidget);
   });
