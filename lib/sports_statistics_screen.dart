@@ -527,6 +527,7 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
           const SizedBox(height: 13),
           DropdownButtonFormField<String>(
             value: _sportId,
+            isExpanded: true,
             decoration: InputDecoration(
               labelText: appText('Deporte', 'Sport', 'Esporte', 'Sport'),
               filled: true,
@@ -535,7 +536,12 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
             ),
             dropdownColor: _statsPanel,
             items: _sports.map((sport) => DropdownMenuItem<String>(
-                value: sport.id, child: Text(sport.name + '  ·  ' + sport.id)))
+                value: sport.id,
+                child: Text(
+                  sport.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                )))
                 .toList(),
             onChanged: _selectSport,
           ),
