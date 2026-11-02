@@ -1458,7 +1458,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
                             ),
                           )
                         : controller == null || !controller.value.isInitialized
-                            ? const Center(
+                            ? Center(
                                 child: Text(
                                   appText('El reproductor no está disponible.', 'The player is unavailable.', 'O player não está disponível.', 'Le lecteur n’est pas disponible.'),
                                   style: TextStyle(color: Colors.white),
