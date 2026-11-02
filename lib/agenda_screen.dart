@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import 'sports_api_service.dart';
+import 'notification_service.dart';
+import 'app_i18n.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'sports_statistics_screen.dart';
 
 const Color agendaBg = Color(0xFF030814);
@@ -43,6 +46,10 @@ class MatchEvent {
     this.awayScore,
     this.streamSources = const <MatchStreamSource>[],
     this.sourceName = '',
+    this.homeLogoUrl,
+    this.awayLogoUrl,
+    this.leagueId,
+    this.sportId = '',
   });
 
   final String id;
@@ -56,6 +63,10 @@ class MatchEvent {
   final int? awayScore;
   final List<MatchStreamSource> streamSources;
   final String sourceName;
+  final String? homeLogoUrl;
+  final String? awayLogoUrl;
+  final String? leagueId;
+  final String sportId;
 
   bool get hasValidStream =>
       streamSources.any((source) => source.validatedUri != null);
@@ -90,6 +101,8 @@ class _AgendaScreenState extends State<AgendaScreen> {
     'Rugby',
     'Vóley',
     'Fútbol australiano',
+    'Fórmula 1',
+    'MMA',
   ];
 
   static const List<String> _statuses = <String>[
@@ -172,12 +185,35 @@ class _AgendaScreenState extends State<AgendaScreen> {
         _loadingApi = false;
         _apiError = null;
       });
+      await _updateMatchNotifications(matches);
     } catch (error) {
       if (!mounted || requestVersion != _apiRequestVersion) return;
       setState(() {
         _loadingApi = false;
         _apiError = error.toString();
       });
+    }
+  }
+
+
+  Future<void> _updateMatchNotifications(List<MatchEvent> matches) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!(prefs.getBool('notifications_enabled') ?? false)) return;
+      final future = matches
+          .where((event) => event.status == MatchStatus.scheduled &&
+              event.startsAt.isAfter(DateTime.now()))
+          .map((event) => <String, Object>{
+                'id': event.id,
+                'sport': event.sport,
+                'homeTeam': event.homeTeam,
+                'awayTeam': event.awayTeam,
+                'startsAt': event.startsAt,
+              })
+          .toList(growable: false);
+      await NotificationService.scheduleMatchReminders(events: future);
+    } catch (_) {
+      // Los fallos de notificación no deben impedir la carga de la agenda.
     }
   }
 
@@ -290,6 +326,20 @@ class _AgendaScreenState extends State<AgendaScreen> {
       homeTeam: homeName,
       awayTeam: awayName,
       startsAt: kickoff.toLocal(),
+      homeLogoUrl: (home['logo'] ?? homeNested['logo']) is String
+          ? (home['logo'] ?? homeNested['logo']) as String
+          : null,
+      awayLogoUrl: (away['logo'] ?? awayNested['logo']) is String
+          ? (away['logo'] ?? awayNested['logo']) as String
+          : null,
+      leagueId: league['id']?.toString(),
+      sportId: const <String, String>{
+        'Fútbol': 'football', 'Básquet': 'basketball', 'NBA': 'nba',
+        'Béisbol': 'baseball', 'Fútbol americano': 'american-football',
+        'Hockey sobre hielo': 'hockey', 'Balonmano': 'handball',
+        'Rugby': 'rugby', 'Vóley': 'volleyball',
+        'Fútbol australiano': 'afl', 'Fórmula 1': 'formula-1', 'MMA': 'mma',
+      }[sport] ?? sport.toLowerCase(),
       status: matchStatus,
       homeScore: asScore(scores['home'] ?? home['score']),
       awayScore: asScore(scores['away'] ?? away['score']),
@@ -878,6 +928,7 @@ class _MatchCard extends StatelessWidget {
                     child: _TeamName(
                       name: event.homeTeam,
                       score: event.homeScore,
+                      logoUrl: event.homeLogoUrl,
                     ),
                   ),
                   const Padding(
@@ -896,6 +947,7 @@ class _MatchCard extends StatelessWidget {
                       name: event.awayTeam,
                       score: event.awayScore,
                       alignEnd: true,
+                      logoUrl: event.awayLogoUrl,
                     ),
                   ),
                 ],
@@ -947,11 +999,13 @@ class _TeamName extends StatelessWidget {
     required this.name,
     this.score,
     this.alignEnd = false,
+    this.logoUrl,
   });
 
   final String name;
   final int? score;
   final bool alignEnd;
+  final String? logoUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -960,6 +1014,20 @@ class _TeamName extends StatelessWidget {
       crossAxisAlignment:
           alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: <Widget>[
+        if (logoUrl != null && logoUrl!.startsWith('https://')) ...<Widget>[
+          SizedBox(
+            width: 34,
+            height: 34,
+            child: Image.network(
+              logoUrl!,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.shield_rounded, color: agendaCyan, size: 25,
+              ),
+            ),
+          ),
+          const SizedBox(height: 5),
+        ],
         Text(
           name,
           maxLines: 2,
