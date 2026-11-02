@@ -26,6 +26,24 @@ class TvGuideProgramme {
   final DateTime endsAt;
 }
 
+class ChannelMatchQuery {
+  const ChannelMatchQuery({
+    required this.id,
+    required this.sport,
+    required this.homeTeam,
+    required this.awayTeam,
+    required this.competition,
+    required this.startsAt,
+  });
+
+  final String id;
+  final String sport;
+  final String homeTeam;
+  final String awayTeam;
+  final String competition;
+  final DateTime startsAt;
+}
+
 class ChannelMatchSuggestion {
   const ChannelMatchSuggestion({required this.channelName, required this.url, required this.programmeTitle, required this.programmeStartsAt, required this.programmeEndsAt});
   final String channelName;
@@ -92,6 +110,28 @@ class ChannelCatalogService {
   Future<int> testPlaylist() async {
     final snapshot = await _loadSnapshot(await loadConfig());
     return snapshot.channels.length;
+  }
+
+  Future<Map<String, List<ChannelMatchSuggestion>>> findMatchesForEvents(
+    List<ChannelMatchQuery> events,
+  ) async {
+    final config = await loadConfig();
+    if (config.playlistUrl.isEmpty || config.epgUrl.isEmpty) {
+      return const <String, List<ChannelMatchSuggestion>>{};
+    }
+    final snapshot = await _loadSnapshot(config);
+    return <String, List<ChannelMatchSuggestion>>{
+      for (final event in events)
+        event.id: matchEvent(
+          channels: snapshot.channels,
+          programmes: snapshot.programmes,
+          sport: event.sport,
+          homeTeam: event.homeTeam,
+          awayTeam: event.awayTeam,
+          competition: event.competition,
+          startsAt: event.startsAt,
+        ),
+    };
   }
 
   Future<List<ChannelMatchSuggestion>> findMatchesForEvent({
