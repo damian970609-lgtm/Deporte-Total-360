@@ -866,7 +866,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
             IconButton(
               tooltip: appText('Abrir partidos con señal en multipantalla', 'Open available matches in multiview', 'Abrir partidas disponíveis em várias telas', 'Ouvrir les matchs disponibles en multivue'),
               onPressed: () {
-                final playable = events.where((event) => event.hasValidStream).toList(growable: false);
+                final playable = events.where((event) => event.status != MatchStatus.finished && event.hasValidStream).toList(growable: false);
                 if (playable.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('No hay señales autorizadas asociadas a los partidos visibles.')),
