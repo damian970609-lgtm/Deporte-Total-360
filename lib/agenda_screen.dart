@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import 'sports_api_service.dart';
+import 'notification_service.dart';
+import 'app_i18n.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'sports_statistics_screen.dart';
 
 const Color agendaBg = Color(0xFF030814);
@@ -43,6 +48,10 @@ class MatchEvent {
     this.awayScore,
     this.streamSources = const <MatchStreamSource>[],
     this.sourceName = '',
+    this.homeLogoUrl,
+    this.awayLogoUrl,
+    this.leagueId,
+    this.sportId = '',
   });
 
   final String id;
@@ -56,6 +65,10 @@ class MatchEvent {
   final int? awayScore;
   final List<MatchStreamSource> streamSources;
   final String sourceName;
+  final String? homeLogoUrl;
+  final String? awayLogoUrl;
+  final String? leagueId;
+  final String sportId;
 
   bool get hasValidStream =>
       streamSources.any((source) => source.validatedUri != null);
@@ -90,6 +103,8 @@ class _AgendaScreenState extends State<AgendaScreen> {
     'Rugby',
     'Vóley',
     'Fútbol australiano',
+    'Fórmula 1',
+    'MMA',
   ];
 
   static const List<String> _statuses = <String>[
@@ -98,6 +113,41 @@ class _AgendaScreenState extends State<AgendaScreen> {
     'Programados',
     'Finalizados',
   ];
+
+
+  String _localizedSport(String value) {
+    switch (value) {
+      case 'Todos': return appText('Todos', 'All sports', 'Todos', 'Tous');
+      case 'Fútbol': return appText('Fútbol', 'Football', 'Futebol', 'Football');
+      case 'Básquet': return appText('Básquet', 'Basketball', 'Basquete', 'Basket');
+      case 'Béisbol': return appText('Béisbol', 'Baseball', 'Beisebol', 'Baseball');
+      case 'Fútbol americano': return appText('Fútbol americano', 'American football', 'Futebol americano', 'Football américain');
+      case 'Hockey sobre hielo': return appText('Hockey sobre hielo', 'Ice hockey', 'Hóquei no gelo', 'Hockey sur glace');
+      case 'Balonmano': return appText('Balonmano', 'Handball', 'Handebol', 'Handball');
+      case 'Vóley': return appText('Vóley', 'Volleyball', 'Vôlei', 'Volley-ball');
+      case 'Fútbol australiano': return appText('Fútbol australiano', 'Australian rules football', 'Futebol australiano', 'Football australien');
+      case 'Fórmula 1': return 'Fórmula 1';
+      default: return value;
+    }
+  }
+
+  String _localizedDateFilter(String value) {
+    switch (value) {
+      case 'Hoy': return appText('Hoy', 'Today', 'Hoje', 'Aujourd’hui');
+      case 'Mañana': return appText('Mañana', 'Tomorrow', 'Amanhã', 'Demain');
+      default: return _localizedSport(value);
+    }
+  }
+
+  String _localizedStatus(String value) {
+    switch (value) {
+      case 'Todos': return _localizedSport(value);
+      case 'En vivo': return appText('En vivo', 'Live', 'Ao vivo', 'En direct');
+      case 'Programados': return appText('Programados', 'Scheduled', 'Programados', 'Programmés');
+      case 'Finalizados': return appText('Finalizados', 'Finished', 'Finalizados', 'Terminés');
+      default: return value;
+    }
+  }
 
   late String _sport;
   String _dateFilter = 'Hoy';
@@ -110,6 +160,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
   bool _loadingApi = false;
   String? _apiError;
   int _apiRequestVersion = 0;
+  Timer? _scorePollingTimer;
 
   @override
   void initState() {
@@ -122,10 +173,17 @@ class _AgendaScreenState extends State<AgendaScreen> {
     if (sportsApiBaseUrl.value.trim().isNotEmpty) {
       _loadRemoteMatches();
     }
+    _scorePollingTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      // No sondear el resumen de todos los deportes continuamente: las
+      // alertas de marcador se consultan para el deporte que el usuario ve.
+      if (!mounted || _sport == 'Todos' || _dateFilter != 'Hoy' || _loadingApi) return;
+      _loadRemoteMatches(announceScoreChanges: true);
+    });
   }
 
   @override
   void dispose() {
+    _scorePollingTimer?.cancel();
     sportsApiBaseUrl.removeListener(_apiConfigurationListener);
     _searchController.dispose();
     super.dispose();
@@ -146,7 +204,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
     _loadRemoteMatches();
   }
 
-  Future<void> _loadRemoteMatches() async {
+  Future<void> _loadRemoteMatches({bool announceScoreChanges = false}) async {
     if (sportsApiBaseUrl.value.trim().isEmpty) return;
     final requestVersion = ++_apiRequestVersion;
     if (mounted) {
@@ -157,27 +215,79 @@ class _AgendaScreenState extends State<AgendaScreen> {
     }
 
     try {
-      final requestedSport = _sport == 'Todos' ? 'Fútbol' : _sport;
-      final rows = await _apiService.fetchAgendaEvents(
-        sport: requestedSport,
-        dateFilter: _dateFilter,
-      );
+      final rows = _sport == 'Todos'
+          ? await _apiService.fetchAllAgendaEvents(dateFilter: _dateFilter)
+          : await _apiService.fetchAgendaEvents(
+              sport: _sport,
+              dateFilter: _dateFilter,
+            );
       final matches = rows
-          .map((row) => _matchFromApi(row, requestedSport))
+          .map((row) => _matchFromApi(
+                row,
+                (row['_sportName'] ?? _sport).toString(),
+              ))
           .whereType<MatchEvent>()
           .toList(growable: false);
       if (!mounted || requestVersion != _apiRequestVersion) return;
+      final previousById = <String, MatchEvent>{
+        for (final previous in _remoteMatches) previous.id: previous,
+      };
+      final scoreChanges = announceScoreChanges
+          ? matches.where((current) {
+              final previous = previousById[current.id];
+              return previous != null &&
+                  current.status == MatchStatus.live &&
+                  (current.homeScore != previous.homeScore ||
+                      current.awayScore != previous.awayScore) &&
+                  (current.homeScore != null || current.awayScore != null);
+            }).toList(growable: false)
+          : const <MatchEvent>[];
       setState(() {
         _remoteMatches = matches;
         _loadingApi = false;
         _apiError = null;
       });
+      for (final event in scoreChanges) {
+        await NotificationService.showLiveScoreUpdate(
+          eventId: event.id,
+          sport: event.sport,
+          homeTeam: event.homeTeam,
+          awayTeam: event.awayTeam,
+          homeScore: event.homeScore,
+          awayScore: event.awayScore,
+        );
+      }
+      if (!announceScoreChanges) {
+        await _updateMatchNotifications(matches);
+      }
     } catch (error) {
       if (!mounted || requestVersion != _apiRequestVersion) return;
       setState(() {
         _loadingApi = false;
         _apiError = error.toString();
       });
+    }
+  }
+
+
+  Future<void> _updateMatchNotifications(List<MatchEvent> matches) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!(prefs.getBool('notifications_enabled') ?? false)) return;
+      final future = matches
+          .where((event) => event.status == MatchStatus.scheduled &&
+              event.startsAt.isAfter(DateTime.now()))
+          .map((event) => <String, Object>{
+                'id': event.id,
+                'sport': event.sport,
+                'homeTeam': event.homeTeam,
+                'awayTeam': event.awayTeam,
+                'startsAt': event.startsAt,
+              })
+          .toList(growable: false);
+      await NotificationService.scheduleMatchReminders(events: future);
+    } catch (_) {
+      // Los fallos de notificación no deben impedir la carga de la agenda.
     }
   }
 
@@ -210,27 +320,39 @@ class _AgendaScreenState extends State<AgendaScreen> {
 
     final fixture = asMap(row['fixture']);
     final game = asMap(row['game']);
-    final league = asMap(row['league'] ?? game['league']);
+    final race = asMap(row['race']);
+    final fight = asMap(row['fight']);
+    final league = asMap(row['league'] ?? game['league'] ?? race['competition']);
     final teams = asMap(row['teams'] ?? game['teams']);
+    final fighters = asMap(row['fighters'] ?? fight['fighters']);
 
-    final homeRaw = teams['home'] ?? row['home'] ?? game['home'];
-    final awayRaw = teams['away'] ?? row['away'] ?? game['away'];
+    final homeRaw = teams['home'] ?? row['home'] ?? game['home'] ??
+        fighters['fighter1'] ?? fighters['red'] ?? row['fighter1'] ??
+        row['red'] ?? (sport == 'Fórmula 1' ? race['competition'] ?? row['competition'] : null) ??
+        row['driver'];
+    final awayRaw = teams['away'] ?? row['away'] ?? game['away'] ??
+        fighters['fighter2'] ?? fighters['blue'] ?? row['fighter2'] ??
+        row['blue'] ?? (sport == 'Fórmula 1' ? race['circuit'] ?? row['circuit'] : null);
 
     final home = asMap(homeRaw);
     final away = asMap(awayRaw);
     final homeNested = asMap(home['team']);
     final awayNested = asMap(away['team']);
+    final homeFighter = asMap(home['fighter']);
+    final awayFighter = asMap(away['fighter']);
 
     final homeName = '${home['name'] ??
         homeNested['name'] ??
+        homeFighter['name'] ??
         (homeRaw is String ? homeRaw : '')}'.trim();
 
     final awayName = '${away['name'] ??
         awayNested['name'] ??
+        awayFighter['name'] ??
         (awayRaw is String ? awayRaw : '')}'.trim();
 
-    final rawDate =
-        fixture['date'] ?? row['date'] ?? game['date'];
+    final rawDate = fixture['date'] ?? row['date'] ?? game['date'] ??
+        fight['date'] ?? race['date'] ?? row['start_date'];
 
     final kickoff = DateTime.tryParse('${rawDate ?? ''}');
 
@@ -286,10 +408,25 @@ class _AgendaScreenState extends State<AgendaScreen> {
     return MatchEvent(
       id: '${eventId ?? '${homeName}_$awayName'}',
       sport: sport,
-      competition: '${league['name'] ?? row['competition'] ?? sport}',
+      competition: '${league['name'] ?? row['competition'] ?? race['name'] ?? fight['name'] ?? sport}',
       homeTeam: homeName,
       awayTeam: awayName,
       startsAt: kickoff.toLocal(),
+      homeLogoUrl: (home['logo'] ?? homeNested['logo'] ?? homeFighter['photo']) is String
+          ? (home['logo'] ?? homeNested['logo'] ?? homeFighter['photo']) as String
+          : null,
+      awayLogoUrl: (away['logo'] ?? awayNested['logo'] ?? awayFighter['photo']) is String
+          ? (away['logo'] ?? awayNested['logo'] ?? awayFighter['photo']) as String
+          : null,
+      leagueId: league['id']?.toString() ?? race['id']?.toString() ??
+          fight['id']?.toString(),
+      sportId: const <String, String>{
+        'Fútbol': 'football', 'Básquet': 'basketball', 'NBA': 'nba',
+        'Béisbol': 'baseball', 'Fútbol americano': 'american-football',
+        'Hockey sobre hielo': 'hockey', 'Balonmano': 'handball',
+        'Rugby': 'rugby', 'Vóley': 'volleyball',
+        'Fútbol australiano': 'afl', 'Fórmula 1': 'formula-1', 'MMA': 'mma',
+      }[sport] ?? sport.toLowerCase(),
       status: matchStatus,
       homeScore: asScore(scores['home'] ?? home['score']),
       awayScore: asScore(scores['away'] ?? away['score']),
@@ -410,7 +547,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
       backgroundColor: agendaBg,
       appBar: AppBar(
         backgroundColor: agendaBg,
-        title: const Row(
+        title: Row(
           children: <Widget>[
             Icon(
               Icons.calendar_month_rounded,
@@ -420,7 +557,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
             SizedBox(width: 9),
             Expanded(
               child: Text(
-                'AGENDA DE PARTIDOS',
+                tr('matches'),
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 14,
@@ -432,14 +569,14 @@ class _AgendaScreenState extends State<AgendaScreen> {
         ),
         actions: <Widget>[
           IconButton(
-            tooltip: 'Estadísticas y clasificaciones',
+            tooltip: tr('stats_title'),
             onPressed: () => Navigator.of(context).push<void>(
               MaterialPageRoute<void>(builder: (_) => const SportsStatisticsScreen()),
             ),
             icon: const Icon(Icons.leaderboard_rounded, color: agendaCyan),
           ),
           IconButton(
-            tooltip: 'Limpiar búsqueda',
+            tooltip: appText('Limpiar búsqueda', 'Clear search', 'Limpar busca', 'Effacer la recherche'),
             onPressed: _clearFilters,
             icon: const Icon(Icons.refresh_rounded, color: agendaCyan),
           ),
@@ -471,7 +608,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                     fontSize: 14,
                   ),
                   decoration: InputDecoration(
-                    hintText: 'Buscar equipo, liga o deporte…',
+                    hintText: appText('Buscar equipo, liga o deporte…', 'Search team, league or sport…', 'Buscar equipe, liga ou esporte…', 'Rechercher une équipe, ligue ou sport…'),
                     prefixIcon: const Icon(
                       Icons.search_rounded,
                       color: agendaCyan,
@@ -514,7 +651,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 2),
                           child: _FilterButton(
-                            label: date,
+                            label: _localizedDateFilter(date),
                             selected: _dateFilter == date,
                             onTap: () {
                               setState(() {
@@ -544,7 +681,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                   itemBuilder: (context, index) {
                     final value = _sports[index];
                     return ChoiceChip(
-                      label: Text(value),
+                      label: Text(_localizedSport(value)),
                       selected: _sport == value,
                       onSelected: (_) {
                         setState(() {
@@ -606,7 +743,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                           borderRadius: BorderRadius.circular(9),
                         ),
                         child: Text(
-                          value,
+                          _localizedStatus(value),
                           style: TextStyle(
                             color: selected ? color : agendaMuted,
                             fontSize: 11,
@@ -622,9 +759,9 @@ class _AgendaScreenState extends State<AgendaScreen> {
                 padding: const EdgeInsets.fromLTRB(14, 13, 14, 8),
                 child: Row(
                   children: <Widget>[
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'PARTIDOS Y EVENTOS',
+                        appText('PARTIDOS Y EVENTOS', 'MATCHES AND EVENTS', 'JOGOS E EVENTOS', 'MATCHS ET ÉVÉNEMENTS'),
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w900,
@@ -634,7 +771,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                       ),
                     ),
                     Text(
-                      '${events.length} eventos',
+                      appText('${events.length} eventos', '${events.length} events', '${events.length} eventos', '${events.length} événements'),
                       style: const TextStyle(
                         color: agendaMuted,
                         fontSize: 11,
@@ -878,6 +1015,7 @@ class _MatchCard extends StatelessWidget {
                     child: _TeamName(
                       name: event.homeTeam,
                       score: event.homeScore,
+                      logoUrl: event.homeLogoUrl,
                     ),
                   ),
                   const Padding(
@@ -896,6 +1034,7 @@ class _MatchCard extends StatelessWidget {
                       name: event.awayTeam,
                       score: event.awayScore,
                       alignEnd: true,
+                      logoUrl: event.awayLogoUrl,
                     ),
                   ),
                 ],
@@ -947,11 +1086,13 @@ class _TeamName extends StatelessWidget {
     required this.name,
     this.score,
     this.alignEnd = false,
+    this.logoUrl,
   });
 
   final String name;
   final int? score;
   final bool alignEnd;
+  final String? logoUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -960,6 +1101,20 @@ class _TeamName extends StatelessWidget {
       crossAxisAlignment:
           alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: <Widget>[
+        if (logoUrl != null && logoUrl!.startsWith('https://')) ...<Widget>[
+          SizedBox(
+            width: 34,
+            height: 34,
+            child: Image.network(
+              logoUrl!,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.shield_rounded, color: agendaCyan, size: 25,
+              ),
+            ),
+          ),
+          const SizedBox(height: 5),
+        ],
         Text(
           name,
           maxLines: 2,

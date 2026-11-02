@@ -169,6 +169,15 @@ class SportsApiService {
         route = '/api/afl/games';
         break;
 
+      case 'Fórmula 1':
+        route = '/api/formula-1/races';
+        includeTimezone = false;
+        break;
+
+      case 'MMA':
+        route = '/api/mma/fights';
+        break;
+
       case 'Tenis':
       case 'Otros':
         throw SportsApiException(
@@ -183,16 +192,14 @@ class SportsApiService {
 
     // El Worker de fútbol admite rangos from/to.
     // Los otros calendarios requieren una fecha concreta.
-    if (sport != 'Fútbol' && dateFilter == 'Todos') {
-      throw const SportsApiException(
-        'Para este deporte selecciona Hoy o Mañana. '
-        'La ruta actual no admite un rango de fechas.',
-      );
-    }
+    // Los calendarios no futbolísticos consultan una fecha concreta; cuando
+    // se elige Todos se usa hoy sin fallar la carga del deporte.
 
     final query = <String, String>{};
 
-    if (sport == 'Fútbol' && dateFilter == 'Todos') {
+    if (sport == 'Fórmula 1') {
+      query['season'] = today.year.toString();
+    } else if (sport == 'Fútbol' && dateFilter == 'Todos') {
       query['from'] = _dateParam(today);
       query['to'] = _dateParam(
         today.add(const Duration(days: 6)),
@@ -212,7 +219,8 @@ class SportsApiService {
     return _getRows(uri);
   }
 
-  static const Map<String, String> _sportRouteIds = <String, String>{
+  static const Map<String, String> supportedSports = <String, String>{
+    'Fútbol': 'football',
     'Básquet': 'basketball',
     'NBA': 'nba',
     'Béisbol': 'baseball',
@@ -222,14 +230,12 @@ class SportsApiService {
     'Rugby': 'rugby',
     'Vóley': 'volleyball',
     'Fútbol australiano': 'afl',
+    'Fórmula 1': 'formula-1',
+    'MMA': 'mma',
   };
 
   String _resourceRoute(String sport, String resource) {
-    if (sport == 'Fútbol') {
-      if (resource == 'leagues') return '/api/leagues';
-      if (resource == 'standings') return '/api/standings';
-    }
-    final sportId = _sportRouteIds[sport];
+    final sportId = supportedSports[sport];
     if (sportId == null) {
       throw SportsApiException(sport + ' no tiene un recurso de ' + resource + ' disponible.');
     }
@@ -273,7 +279,77 @@ class SportsApiService {
     return _getRows(uri);
   }
 
-  /// Ordena las solicitudes para evitar ráfagas de consultas.
+
+  /// Clasificaciones específicas de Fórmula 1: pilotos o constructores.
+  Future<List<Map<String, dynamic>>> fetchFormula1Rankings({
+    required String season,
+    required String ranking,
+  }) async {
+    final year = season.trim();
+    if (year.length != 4 || int.tryParse(year) == null) {
+      throw const SportsApiException('La temporada debe tener formato YYYY.');
+    }
+    if (ranking != 'driver-rankings' && ranking != 'team-rankings') {
+      throw const SportsApiException('Clasificación de Fórmula 1 no válida.');
+    }
+    final base = normalizeBaseUrl(sportsApiBaseUrl.value);
+    if (base == null) throw const SportsApiException('Configura una URL HTTPS válida del servidor.');
+    final uri = Uri.parse(base + '/api/formula-1/' + ranking).replace(
+      queryParameters: <String, String>{'season': year},
+    );
+    return _getRows(uri);
+  }
+
+  /// Calendario de combates de MMA para una fecha concreta.
+  Future<List<Map<String, dynamic>>> fetchMmaFights({DateTime? date}) async {
+    final base = normalizeBaseUrl(sportsApiBaseUrl.value);
+    if (base == null) throw const SportsApiException('Configura una URL HTTPS válida del servidor.');
+    final selectedDate = date ?? DateTime.now();
+    final day = selectedDate.year.toString().padLeft(4, '0') + '-' +
+        selectedDate.month.toString().padLeft(2, '0') + '-' +
+        selectedDate.day.toString().padLeft(2, '0');
+    final uri = Uri.parse(base + '/api/mma/fights').replace(
+      queryParameters: <String, String>{'date': day},
+    );
+    return _getRows(uri);
+  }
+
+  /// Busca luchadores por nombre sin exponer la clave del proveedor.
+  Future<List<Map<String, dynamic>>> fetchMmaFighters({required String search}) async {
+    final term = search.trim();
+    if (term.isEmpty) throw const SportsApiException('Escribe el nombre de un luchador.');
+    final base = normalizeBaseUrl(sportsApiBaseUrl.value);
+    if (base == null) throw const SportsApiException('Configura una URL HTTPS válida del servidor.');
+    final uri = Uri.parse(base + '/api/mma/fighters').replace(
+      queryParameters: <String, String>{'search': term},
+    );
+    return _getRows(uri);
+  }
+
+
+  /// Carga los deportes por separado; un proveedor sin cobertura no impide
+  /// mostrar los eventos devueltos por las demás disciplinas.
+  Future<List<Map<String, dynamic>>> fetchAllAgendaEvents({
+    required String dateFilter,
+  }) async {
+    final sports = supportedSports.keys.toList(growable: false);
+    final results = await Future.wait(sports.map((sport) async {
+      try {
+        final rows = await fetchAgendaEvents(
+          sport: sport,
+          dateFilter: dateFilter,
+        );
+        return rows.map((row) => <String, dynamic>{
+          ...row,
+          '_sportName': sport,
+        }).toList(growable: false);
+      } catch (_) {
+        return <Map<String, dynamic>>[];
+      }
+    }));
+    return results.expand((rows) => rows).toList(growable: false);
+  }
+
   static Future<void> _reserveRequestSlot() async {
     final previous = _requestQueue;
     final release = Completer<void>();

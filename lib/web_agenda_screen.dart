@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'web_protection_policy.dart';
+import 'app_i18n.dart';
 
 const Color _brandBg = Color(0xFF030814);
 const Color _brandPanel = Color(0xFF071326);
@@ -37,8 +38,6 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
   String? _noticeMessage;
 
   List<ContentBlocker> _buildContentBlockers() => WebProtectionPolicy.buildContentBlockers();
-
-  bool _isKnownTrackerHost(String host) => WebProtectionPolicy.isBlockedHost(host);
 
   bool _isHttpUrl(WebUri uri) {
     final scheme = uri.scheme.toLowerCase();
@@ -164,7 +163,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
       return false;
     }
 
-    if (_isKnownTrackerHost(target.host)) {
+    if (WebProtectionPolicy.isBlockedUrl(target.toString())) {
       _showNotice(
         'Se bloqueó una ventana de publicidad o seguimiento conocida.',
       );
@@ -221,7 +220,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
           TextButton.icon(
             onPressed: widget.onOpenLive,
             icon: const Icon(Icons.play_circle_fill_rounded, color: _brandGreen, size: 17),
-            label: const Text('VIVO AQUÍ', style: TextStyle(color: _brandGreen, fontSize: 10, fontWeight: FontWeight.w900)),
+            label: Text(appText('VIVO AQUÍ', 'WATCH LIVE', 'AO VIVO AQUI', 'REGARDER EN DIRECT'), style: const TextStyle(color: _brandGreen, fontSize: 10, fontWeight: FontWeight.w900)),
           ),
           IconButton(
             tooltip: 'Página siguiente',
@@ -408,7 +407,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                           return NavigationActionPolicy.CANCEL;
                         }
 
-                        if (_isKnownTrackerHost(uri.host)) {
+                        if (WebProtectionPolicy.isBlockedUrl(uri.toString())) {
                           _showNotice(
                             'Se bloqueó un recurso de publicidad/seguimiento conocido.',
                           );

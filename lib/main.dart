@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_i18n.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -7,7 +8,10 @@ import 'package:video_player/video_player.dart';
 import 'agenda_screen.dart';
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
+import 'notification_service.dart';
+import 'public_chat_screen.dart';
 import 'sports_api_service.dart';
+import 'sports_statistics_screen.dart';
 import 'web_agenda_screen.dart';
 
 // Identidad visual de DEPORTE TOTAL 360°: azul noche, cian, rosa y verde neón.
@@ -34,208 +38,6 @@ const String settingsPhotoAsset =
 
 // No se inventa el enlace del canal Telegram: queda vacío hasta que el dueño
 // guarde su enlace público real desde Ajustes.
-enum AppLanguage { spanish, english, portuguese, french }
-
-final ValueNotifier<AppLanguage> appLanguage =
-    ValueNotifier<AppLanguage>(AppLanguage.spanish);
-const String defaultSsh101Channel = 'deportetotal360';
-final ValueNotifier<String> channelSlug =
-    ValueNotifier<String>(defaultSsh101Channel);
-final ValueNotifier<String> telegramLink = ValueNotifier<String>('');
-
-String languageCode(AppLanguage language) {
-  switch (language) {
-    case AppLanguage.spanish:
-      return 'es';
-    case AppLanguage.english:
-      return 'en';
-    case AppLanguage.portuguese:
-      return 'pt';
-    case AppLanguage.french:
-      return 'fr';
-  }
-}
-
-AppLanguage parseLanguage(String? code) {
-  switch (code) {
-    case 'en':
-      return AppLanguage.english;
-    case 'pt':
-      return AppLanguage.portuguese;
-    case 'fr':
-      return AppLanguage.french;
-    default:
-      return AppLanguage.spanish;
-  }
-}
-
-const Map<String, Map<AppLanguage, String>> _labels =
-    <String, Map<AppLanguage, String>>{
-  'title': <AppLanguage, String>{
-    AppLanguage.spanish: 'DEPORTE TOTAL 360°',
-    AppLanguage.english: 'TOTAL SPORTS 360°',
-    AppLanguage.portuguese: 'ESPORTE TOTAL 360°',
-    AppLanguage.french: 'SPORT TOTAL 360°',
-  },
-  'tagline': <AppLanguage, String>{
-    AppLanguage.spanish: 'TODOS LOS DEPORTES EN UN SOLO LUGAR',
-    AppLanguage.english: 'ALL SPORTS IN ONE PLACE',
-    AppLanguage.portuguese: 'TODOS OS ESPORTES EM UM SÓ LUGAR',
-    AppLanguage.french: 'TOUS LES SPORTS AU MÊME ENDROIT',
-  },
-  'home': <AppLanguage, String>{
-    AppLanguage.spanish: 'Inicio',
-    AppLanguage.english: 'Home',
-    AppLanguage.portuguese: 'Início',
-    AppLanguage.french: 'Accueil',
-  },
-  'football': <AppLanguage, String>{
-    AppLanguage.spanish: 'Fútbol',
-    AppLanguage.english: 'Football',
-    AppLanguage.portuguese: 'Futebol',
-    AppLanguage.french: 'Football',
-  },
-  'live': <AppLanguage, String>{
-    AppLanguage.spanish: 'En vivo',
-    AppLanguage.english: 'Live',
-    AppLanguage.portuguese: 'Ao vivo',
-    AppLanguage.french: 'En direct',
-  },
-  'agenda': <AppLanguage, String>{
-    AppLanguage.spanish: 'Agenda',
-    AppLanguage.english: 'Schedule',
-    AppLanguage.portuguese: 'Agenda',
-    AppLanguage.french: 'Agenda',
-  },
-  'news': <AppLanguage, String>{
-    AppLanguage.spanish: 'Noticias',
-    AppLanguage.english: 'News',
-    AppLanguage.portuguese: 'Notícias',
-    AppLanguage.french: 'Actualités',
-  },
-  'settings': <AppLanguage, String>{
-    AppLanguage.spanish: 'Ajustes',
-    AppLanguage.english: 'Settings',
-    AppLanguage.portuguese: 'Configurações',
-    AppLanguage.french: 'Réglages',
-  },
-  'streams': <AppLanguage, String>{
-    AppLanguage.spanish: 'TRANSMISIONES EN VIVO',
-    AppLanguage.english: 'LIVE STREAMS',
-    AppLanguage.portuguese: 'TRANSMISSÕES AO VIVO',
-    AppLanguage.french: 'DIFFUSIONS EN DIRECT',
-  },
-  'matches': <AppLanguage, String>{
-    AppLanguage.spanish: 'AGENDA DE PARTIDOS',
-    AppLanguage.english: 'MATCH SCHEDULE',
-    AppLanguage.portuguese: 'AGENDA DE JOGOS',
-    AppLanguage.french: 'CALENDRIER DES MATCHS',
-  },
-  'telegram': <AppLanguage, String>{
-    AppLanguage.spanish: 'TELEGRAM',
-    AppLanguage.english: 'TELEGRAM',
-    AppLanguage.portuguese: 'TELEGRAM',
-    AppLanguage.french: 'TELEGRAM',
-  },
-  'contact': <AppLanguage, String>{
-    AppLanguage.spanish: 'CONTACTAR CON EL CREADOR',
-    AppLanguage.english: 'CONTACT THE CREATOR',
-    AppLanguage.portuguese: 'CONTACTAR O CRIADOR',
-    AppLanguage.french: 'CONTACTER LE CRÉATEUR',
-  },
-  'donations': <AppLanguage, String>{
-    AppLanguage.spanish: 'DONACIONES',
-    AppLanguage.english: 'DONATIONS',
-    AppLanguage.portuguese: 'DOAÇÕES',
-    AppLanguage.french: 'DONS',
-  },
-  'language': {
-    AppLanguage.spanish: 'Idioma',
-    AppLanguage.english: 'Language',
-    AppLanguage.portuguese: 'Idioma',
-    AppLanguage.french: 'Langue',
-  },
-  'settings_description': {
-    AppLanguage.spanish: 'Ajustes de la aplicación',
-    AppLanguage.english: 'Application settings',
-    AppLanguage.portuguese: 'Configurações do aplicativo',
-    AppLanguage.french: 'Paramètres de l’application',
-  },
-  'settings_intro': {
-    AppLanguage.spanish: 'Configura tu idioma y tus enlaces oficiales.',
-    AppLanguage.english: 'Configure your language and official links.',
-    AppLanguage.portuguese: 'Configure seu idioma e links oficiais.',
-    AppLanguage.french: 'Configurez votre langue et vos liens officiels.',
-  },
-  'telegram_section': {
-    AppLanguage.spanish: 'CANAL DE TELEGRAM',
-    AppLanguage.english: 'TELEGRAM CHANNEL',
-    AppLanguage.portuguese: 'CANAL DO TELEGRAM',
-    AppLanguage.french: 'CHAÎNE TELEGRAM',
-  },
-  'telegram_description': {
-    AppLanguage.spanish: 'Este espacio queda reservado para tu canal real. No se abrirá ningún enlace genérico si lo dejas vacío.',
-    AppLanguage.english: 'This space is reserved for your real channel. No generic link will open if you leave it empty.',
-    AppLanguage.portuguese: 'Este espaço fica reservado para seu canal real. Nenhum link genérico será aberto se ficar vazio.',
-    AppLanguage.french: 'Cet espace est réservé à votre véritable chaîne. Aucun lien générique ne sera ouvert si vous le laissez vide.',
-  },
-  'public_link': {
-    AppLanguage.spanish: 'Enlace público (opcional)',
-    AppLanguage.english: 'Public link (optional)',
-    AppLanguage.portuguese: 'Link público (opcional)',
-    AppLanguage.french: 'Lien public (facultatif)',
-  },
-  'stream_config': {
-    AppLanguage.spanish: 'CONFIGURACIÓN DE TRANSMISIÓN',
-    AppLanguage.english: 'STREAMING SETTINGS',
-    AppLanguage.portuguese: 'CONFIGURAÇÃO DE TRANSMISSÃO',
-    AppLanguage.french: 'CONFIGURATION DE DIFFUSION',
-  },
-  'stream_description': {
-    AppLanguage.spanish: 'Escribe el identificador del canal que has creado en el servicio de emisión. No pegues contraseñas ni tokens aquí.',
-    AppLanguage.english: 'Enter the channel ID you created in the streaming service. Do not paste passwords or tokens here.',
-    AppLanguage.portuguese: 'Digite o identificador do canal criado no serviço de transmissão. Não cole senhas nem tokens aqui.',
-    AppLanguage.french: 'Saisissez l’identifiant de votre chaîne. Ne collez pas de mots de passe ni de jetons ici.',
-  },
-  'channel_id': {
-    AppLanguage.spanish: 'Identificador de canal',
-    AppLanguage.english: 'Channel ID',
-    AppLanguage.portuguese: 'Identificador do canal',
-    AppLanguage.french: 'Identifiant de chaîne',
-  },
-  'save_config': {
-    AppLanguage.spanish: 'GUARDAR CONFIGURACIÓN',
-    AppLanguage.english: 'SAVE SETTINGS',
-    AppLanguage.portuguese: 'SALVAR CONFIGURAÇÃO',
-    AppLanguage.french: 'ENREGISTRER',
-  },
-  'saving': {
-    AppLanguage.spanish: 'Guardando…',
-    AppLanguage.english: 'Saving…',
-    AppLanguage.portuguese: 'Salvando…',
-    AppLanguage.french: 'Enregistrement…',
-  },
-  'rtmp_server': {
-    AppLanguage.spanish: 'Servidor RTMP para emitir',
-    AppLanguage.english: 'RTMP streaming server',
-    AppLanguage.portuguese: 'Servidor RTMP para transmissão',
-    AppLanguage.french: 'Serveur RTMP de diffusion',
-  },
-  'hls_url': {
-    AppLanguage.spanish: 'URL HLS de reproducción',
-    AppLanguage.english: 'HLS playback URL',
-    AppLanguage.portuguese: 'URL HLS de reprodução',
-    AppLanguage.french: 'URL HLS de lecture',
-  },
-  'stream_notice': {
-    AppLanguage.spanish: 'Las transmisiones requieren que el canal y el servidor estén activos. La agenda nativa necesita una fuente de calendario autorizada que todavía no está configurada en este proyecto.',
-    AppLanguage.english: 'Streaming requires an active channel and server. The native schedule still needs an authorized calendar source, which is not configured in this project.',
-    AppLanguage.portuguese: 'As transmissões exigem que o canal e o servidor estejam ativos. A agenda nativa ainda precisa de uma fonte de calendário autorizada.',
-    AppLanguage.french: 'La diffusion nécessite une chaîne et un serveur actifs. Le calendrier natif nécessite encore une source autorisée qui n’est pas configurée.',
-  },
-};
-
-String tr(String key) => _labels[key]?[appLanguage.value] ?? key;
 String buildRtmpUrl(String channel) => '$rtmpBase$channel';
 String buildHlsUrl(String channel) => '$hlsBase$channel/playlist.m3u8';
 
@@ -256,6 +58,11 @@ Future<void> main() async {
   } catch (_) {
     // La app puede abrirse aunque el almacenamiento local no esté disponible.
   }
+  try {
+    await NotificationService.initialize();
+  } catch (_) {
+    // La app continúa funcionando aunque el dispositivo no admita avisos.
+  }
   runApp(const DeporteTotal360App());
 }
 
@@ -268,6 +75,10 @@ class DeporteTotal360App extends StatelessWidget {
       valueListenable: appLanguage,
       builder: (context, language, _) => MaterialApp(
         title: tr('title'),
+        locale: Locale(languageCode(language)),
+        supportedLocales: const <Locale>[
+          Locale('es'), Locale('en'), Locale('pt'), Locale('fr'),
+        ],
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,
@@ -316,7 +127,7 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   static const int _homeTab = 0;
-  static const int _footballTab = 1;
+  static const int _statisticsTab = 1;
   static const int _agendaWebTab = 3;
   static const int _settingsTab = 5;
 
@@ -324,24 +135,40 @@ class _MainShellState extends State<MainShell> {
       GlobalKey<WebAgendaScreenState>();
 
   int _selectedIndex = _homeTab;
-  String _agendaSport = 'Fútbol';
+  String _selectedStatisticsSport = 'Fútbol';
   bool _handlingBack = false;
 
   void _selectTab(int index) {
     if (index < 0 || index > _settingsTab) return;
     setState(() {
       _selectedIndex = index;
-      if (index == _footballTab) _agendaSport = 'Fútbol';
+      if (index == _statisticsTab) _selectedStatisticsSport = 'Fútbol';
     });
   }
 
   void _selectSport(String sport) {
     setState(() {
-      _agendaSport = sport;
-      // Los mosaicos abren la agenda nativa filtrada por deporte.
-      // La pestaña inferior Agenda abre la web dentro de la app.
-      _selectedIndex = _footballTab;
+      _selectedStatisticsSport = sport;
+      _selectedIndex = _statisticsTab;
     });
+  }
+
+  Future<void> _openStatistics() async {
+    _selectTab(_statisticsTab);
+  }
+
+  Future<void> _openAgenda() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => AgendaScreen(initialSport: _selectedStatisticsSport),
+      ),
+    );
+  }
+
+  Future<void> _openPublicChat() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const PublicChatScreen()),
+    );
   }
 
   Future<void> _openFantasy() async {
@@ -368,27 +195,29 @@ class _MainShellState extends State<MainShell> {
         context: context,
         builder: (dialogContext) => AlertDialog(
           backgroundColor: appPanel,
-          title: const Text(
-            'Canal de Telegram',
+          title: Text(
+            appText('Canal de Telegram', 'Telegram channel', 'Canal do Telegram', 'Canal Telegram'),
             style: TextStyle(color: appCyan, fontWeight: FontWeight.w900),
           ),
-          content: const Text(
-            'Este espacio queda reservado para tu canal. Todavía no hay un '
-            'enlace público configurado; no abriremos un canal genérico ni '
-            'uno inventado.',
+          content: Text(
+            appText(
+              'Este espacio queda reservado para tu canal. Todavía no hay un enlace público configurado; no abriremos uno genérico.',
+              'This space is reserved for your channel. No public link is configured yet; we will not open a generic or invented one.',
+              'Este espaço está reservado para seu canal. Ainda não há um link público configurado; não abriremos um link genérico ou inventado.',
+              'Cet espace est réservé à votre chaîne. Aucun lien public n’est encore configuré ; aucun lien générique ou inventé ne sera ouvert.'),
             style: TextStyle(color: appMuted, height: 1.45),
           ),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cerrar'),
+              child: Text(appText('Cerrar', 'Close', 'Fechar', 'Fermer')),
             ),
             FilledButton(
               onPressed: () {
                 Navigator.pop(dialogContext);
                 _selectTab(_settingsTab);
               },
-              child: const Text('Configurar enlace'),
+              child: Text(appText('Configurar enlace', 'Set link', 'Configurar link', 'Configurer le lien')),
             ),
           ],
         ),
@@ -425,18 +254,23 @@ class _MainShellState extends State<MainShell> {
             'Salir de Deporte Total 360°',
             style: TextStyle(color: appCyan, fontWeight: FontWeight.w900),
           ),
-          content: const Text(
-            '¿Quieres cerrar la aplicación?',
-            style: TextStyle(color: appMuted),
+          content: Text(
+            appText(
+              '¿Quieres cerrar la aplicación?',
+              'Do you want to close the app?',
+              'Deseja fechar o aplicativo?',
+              'Voulez-vous fermer l’application?',
+            ),
+            style: const TextStyle(color: appMuted),
           ),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancelar'),
+              child: Text(appText('Cancelar', 'Cancel', 'Cancelar', 'Annuler')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Salir'),
+              child: Text(appText('Salir', 'Exit', 'Sair', 'Quitter')),
             ),
           ],
         ),
@@ -461,10 +295,14 @@ class _MainShellState extends State<MainShell> {
         ),
         onDonations: _openDonations,
         onFantasy: _openFantasy,
+        onStatistics: _openStatistics,
+        onOpenAgenda: _openAgenda,
+        onChat: _openPublicChat,
       ),
-      AgendaScreen(
-        key: ValueKey<String>('football-$_agendaSport'),
-        initialSport: _agendaSport,
+      SportsStatisticsScreen(
+        key: ValueKey<String>('statistics-$_selectedStatisticsSport'),
+        initialSport: _selectedStatisticsSport,
+        onOpenAgenda: _openAgenda,
       ),
       const LiveScreen(),
       WebAgendaScreen(
@@ -518,12 +356,12 @@ class _MainShellState extends State<MainShell> {
                   label: tr('home'),
                 ),
                 NavigationDestination(
-                  icon: const Icon(Icons.sports_soccer_outlined),
+                  icon: const Icon(Icons.query_stats_outlined),
                   selectedIcon: const Icon(
-                    Icons.sports_soccer_rounded,
+                    Icons.query_stats_rounded,
                     color: appCyan,
                   ),
-                  label: tr('football'),
+                  label: tr('statistics'),
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.live_tv_outlined),
@@ -653,6 +491,9 @@ class HomeDashboard extends StatelessWidget {
     required this.onContact,
     required this.onDonations,
     required this.onFantasy,
+    required this.onStatistics,
+    required this.onOpenAgenda,
+    required this.onChat,
   });
 
   final ValueChanged<int> onNavigate;
@@ -661,6 +502,9 @@ class HomeDashboard extends StatelessWidget {
   final VoidCallback onContact;
   final VoidCallback onDonations;
   final VoidCallback onFantasy;
+  final VoidCallback onStatistics;
+  final VoidCallback onOpenAgenda;
+  final VoidCallback onChat;
 
   @override
   Widget build(BuildContext context) {
@@ -701,6 +545,11 @@ class HomeDashboard extends StatelessWidget {
         ),
         actions: <Widget>[
           IconButton(
+            tooltip: tr('stats_title'),
+            onPressed: onStatistics,
+            icon: const Icon(Icons.query_stats_rounded, color: appGreen),
+          ),
+          IconButton(
             tooltip: tr('settings'),
             onPressed: () => onNavigate(5),
             icon: const Icon(Icons.settings_rounded, color: appCyan),
@@ -730,17 +579,17 @@ class HomeDashboard extends StatelessWidget {
                 const SizedBox(height: 17),
                 Row(
                   children: <Widget>[
-                    const Expanded(
+                    Expanded(
                       child: _SectionHeading(
-                        title: 'TODOS LOS DEPORTES',
+                        title: appText('TODOS LOS DEPORTES', 'ALL SPORTS', 'TODOS OS ESPORTES', 'TOUS LES SPORTS'),
                         icon: Icons.public_rounded,
                       ),
                     ),
                     TextButton(
                       onPressed: () => onNavigate(3),
-                      child: const Text(
-                        'Explorar →',
-                        style: TextStyle(color: appCyan, fontSize: 11),
+                      child: Text(
+                        appText('Explorar →', 'Explore →', 'Explorar →', 'Explorer →'),
+                        style: const TextStyle(color: appCyan, fontSize: 11),
                       ),
                     ),
                   ],
@@ -755,42 +604,42 @@ class HomeDashboard extends StatelessWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   children: <Widget>[
                     _SportTile(
-                      title: 'FÚTBOL',
-                      subtitle: 'Ligas • Copas',
+                      title: appText('FÚTBOL', 'FOOTBALL', 'FUTEBOL', 'FOOTBALL'),
+                      subtitle: appText('Ligas • Copas', 'Leagues • Cups', 'Ligas • Copas', 'Ligues • Coupes'),
                       icon: Icons.sports_soccer_rounded,
                       color: appGreen,
                       onTap: () => onSportSelected('Fútbol'),
                     ),
                     _SportTile(
-                      title: 'BÁSQUET',
+                      title: appText('BÁSQUET', 'BASKETBALL', 'BASQUETE', 'BASKET-BALL'),
                       subtitle: 'NBA • FIBA',
                       icon: Icons.sports_basketball_rounded,
                       color: appYellow,
                       onTap: () => onSportSelected('Básquet'),
                     ),
                     _SportTile(
-                      title: 'BÉISBOL',
-                      subtitle: 'MLB • Ligas',
+                      title: appText('BÉISBOL', 'BASEBALL', 'BEISEBOL', 'BASEBALL'),
+                      subtitle: 'MLB • Leagues',
                       icon: Icons.sports_baseball_rounded,
                       color: appPink,
                       onTap: () => onSportSelected('Béisbol'),
                     ),
                     _SportTile(
                       title: 'RUGBY',
-                      subtitle: 'Ligas • Torneos',
+                      subtitle: appText('Ligas • Torneos', 'Leagues • Tournaments', 'Ligas • Torneios', 'Ligues • Tournois'),
                       icon: Icons.sports_tennis_rounded,
                       color: appGreen,
                       onTap: () => onSportSelected('Rugby'),
                     ),
                     _SportTile(
-                      title: 'VÓLEY',
+                      title: appText('VÓLEY', 'VOLLEYBALL', 'VÔLEI', 'VOLLEY-BALL'),
                       subtitle: 'Ligas • Torneos',
                       icon: Icons.sports_volleyball_rounded,
                       color: appBlue,
                       onTap: () => onSportSelected('Vóley'),
                     ),
                     _SportTile(
-                      title: 'HOCKEY',
+                      title: appText('HOCKEY', 'HOCKEY', 'HÓQUEI', 'HOCKEY'),
                       subtitle: 'NHL • Ligas',
                       icon: Icons.emoji_events_rounded,
                       color: appCyan,
@@ -799,8 +648,8 @@ class HomeDashboard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 17),
-                const _SectionHeading(
-                  title: 'ACCESO RÁPIDO',
+                _SectionHeading(
+                  title: appText('ACCESO RÁPIDO', 'QUICK ACCESS', 'ACESSO RÁPIDO', 'ACCÈS RAPIDE'),
                   icon: Icons.bolt_rounded,
                 ),
                 const SizedBox(height: 9),
@@ -814,31 +663,38 @@ class HomeDashboard extends StatelessWidget {
                   children: <Widget>[
                     _ActionTile(
                       title: tr('streams'),
-                      subtitle: 'Ver canales',
+                      subtitle: appText('Ver canales', 'Watch channels', 'Ver canais', 'Voir les chaînes'),
                       icon: Icons.live_tv_rounded,
                       color: appRed,
                       onTap: () => onNavigate(2),
                     ),
                     _ActionTile(
                       title: tr('matches'),
-                      subtitle: 'Calendario y resultados',
+                      subtitle: appText('Calendario y resultados', 'Schedule and results', 'Calendário e resultados', 'Calendrier et résultats'),
                       icon: Icons.calendar_month_rounded,
                       color: appGreen,
-                      onTap: () => onNavigate(1),
+                      onTap: onOpenAgenda,
                     ),
                     _ActionTile(
                       title: tr('telegram'),
-                      subtitle: 'Canal oficial',
+                      subtitle: appText('Canal oficial', 'Official channel', 'Canal oficial', 'Chaîne officielle'),
                       icon: Icons.send_rounded,
                       color: appBlue,
                       onTap: onTelegram,
                     ),
                     _ActionTile(
-                      title: 'FANTASY',
-                      subtitle: 'Jugar y competir',
+                      title: appText('FANTASY', 'FANTASY', 'FANTASY', 'FANTASY'),
+                      subtitle: appText('Jugar y competir', 'Play and compete', 'Jogar e competir', 'Jouer et concourir'),
                       icon: Icons.emoji_events_rounded,
                       color: appPink,
                       onTap: onFantasy,
+                    ),
+                    _ActionTile(
+                      title: tr('public_chat'),
+                      subtitle: appText('Sala para todos', 'Room for everyone', 'Sala para todos', 'Salon pour tous'),
+                      icon: Icons.forum_rounded,
+                      color: appCyan,
+                      onTap: onChat,
                     ),
                   ],
                 ),
@@ -848,7 +704,7 @@ class HomeDashboard extends StatelessWidget {
                     Expanded(
                       child: _ActionTile(
                         title: tr('contact'),
-                        subtitle: 'En caso de fallas',
+                        subtitle: appText('En caso de fallas', 'For support', 'Em caso de problemas', 'En cas de problème'),
                         icon: Icons.chat_rounded,
                         color: appGreen,
                         onTap: onContact,
@@ -858,7 +714,7 @@ class HomeDashboard extends StatelessWidget {
                     Expanded(
                       child: _ActionTile(
                         title: tr('donations'),
-                        subtitle: 'Apoya el proyecto',
+                        subtitle: appText('Apoya el proyecto', 'Support the project', 'Apoie o projeto', 'Soutenir le projet'),
                         icon: Icons.favorite_rounded,
                         color: appYellow,
                         onTap: onDonations,
@@ -886,7 +742,7 @@ class HomeDashboard extends StatelessWidget {
                       BoxShadow(color: appBlue.withAlpha(24), blurRadius: 18),
                     ],
                   ),
-                  child: const Row(
+                  child: Row(
                     children: <Widget>[
                       Icon(Icons.sports_rounded, color: appPink, size: 34),
                       SizedBox(width: 12),
@@ -895,7 +751,7 @@ class HomeDashboard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
                             Text(
-                              '¡EL DEPORTE NOS UNE!',
+                              appText('¡EL DEPORTE NOS UNE!', 'SPORT BRINGS US TOGETHER!', 'O ESPORTE NOS UNE!', 'LE SPORT NOUS UNIT !'),
                               style: TextStyle(
                                 color: appCyan,
                                 fontWeight: FontWeight.w900,
@@ -905,7 +761,7 @@ class HomeDashboard extends StatelessWidget {
                             ),
                             SizedBox(height: 4),
                             Text(
-                              'Tu pasión, en todas partes.',
+                              appText('Tu pasión, en todas partes.', 'Your passion, everywhere.', 'Sua paixão, em todos os lugares.', 'Votre passion, partout.'),
                               style: TextStyle(color: appMuted, fontSize: 12),
                             ),
                           ],
@@ -916,9 +772,8 @@ class HomeDashboard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  'La agenda mostrará eventos y enlaces de reproducción cuando '
-                  'haya una fuente real y autorizada conectada.',
+                Text(
+                  appText('La agenda mostrará eventos y enlaces de reproducción cuando haya una fuente real y autorizada conectada.', 'The schedule will show events and playback links when a real, authorized source is connected.', 'A agenda mostrará eventos e links de reprodução quando houver uma fonte real e autorizada conectada.', 'Le calendrier affichera les événements et les liens de lecture lorsqu’une source réelle et autorisée sera connectée.'),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: appMuted,
@@ -1199,12 +1054,12 @@ class LiveScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: appCyan.withAlpha(170)),
                 ),
-                child: const Column(
+                child: Column(
                   children: <Widget>[
-                    Icon(Icons.live_tv_rounded, color: appPink, size: 52),
+                    const Icon(Icons.live_tv_rounded, color: appPink, size: 52),
                     SizedBox(height: 12),
                     Text(
-                      'CANAL EN VIVO DE DEPORTE TOTAL 360°',
+                      appText('CANAL EN VIVO DE DEPORTE TOTAL 360°', 'DEPORTE TOTAL 360° LIVE CHANNEL', 'CANAL AO VIVO DEPORTE TOTAL 360°', 'CHAÎNE EN DIRECT DEPORTE TOTAL 360°'),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: appCyan,
@@ -1214,9 +1069,11 @@ class LiveScreen extends StatelessWidget {
                     ),
                     SizedBox(height: 8),
                     Text(
-                      'El reproductor necesita un canal válido y una señal '
-                      'activa. Si el servidor está fuera de línea, se '
-                      'mostrará el error y podrás reintentar.',
+                      appText(
+                        'El reproductor necesita un canal válido y una señal activa. Si el servidor está fuera de línea, podrás reintentar.',
+                        'The player needs a valid channel and active stream. If the server is offline, you can retry.',
+                        'O player precisa de um canal válido e sinal ativo. Se o servidor estiver offline, você poderá tentar novamente.',
+                        'Le lecteur nécessite une chaîne valide et un signal actif. Si le serveur est hors ligne, vous pourrez réessayer.'),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: appMuted,
@@ -1230,15 +1087,15 @@ class LiveScreen extends StatelessWidget {
               const SizedBox(height: 12),
               _LiveActionCard(
                 title: 'PRISM LIVE STUDIO',
-                subtitle: 'Configurar datos para emitir desde tu encoder.',
+                subtitle: appText('Configurar datos para emitir desde tu encoder.', 'Configure streaming details for your encoder.', 'Configure os dados de transmissão do encoder.', 'Configurez les paramètres de diffusion de votre encodeur.'),
                 icon: Icons.settings_input_antenna_rounded,
                 color: appPink,
                 onTap: () => _openEncoder(context),
               ),
               const SizedBox(height: 10),
               _LiveActionCard(
-                title: 'SSH101 • REPRODUCCIÓN',
-                subtitle: 'Abrir la señal del canal configurado en Ajustes.',
+                title: 'SSH101 • ' + appText('REPRODUCCIÓN', 'PLAYBACK', 'REPRODUÇÃO', 'LECTURE'),
+                subtitle: appText('Abrir la señal del canal configurado en Ajustes.', 'Open the channel configured in Settings.', 'Abrir o canal configurado em Configurações.', 'Ouvrir la chaîne configurée dans les paramètres.'),
                 icon: Icons.play_circle_fill_rounded,
                 color: appGreen,
                 onTap: () => _openPlayer(context),
@@ -1251,7 +1108,7 @@ class LiveScreen extends StatelessWidget {
                   ),
                 ),
                 icon: const Icon(Icons.copy_rounded),
-                label: const Text('Ver configuración de emisión'),
+                label: Text(appText('Ver configuración de emisión', 'View streaming settings', 'Ver configurações de transmissão', 'Voir les paramètres de diffusion')),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: appCyan,
                   side: const BorderSide(color: appCyan),
@@ -1352,8 +1209,8 @@ class EncoderConfigScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: appBg,
       appBar: AppBar(
-        title: const Text(
-          'CONFIGURAR TRANSMISIÓN',
+        title: Text(
+          appText('CONFIGURAR TRANSMISIÓN', 'STREAMING SETUP', 'CONFIGURAR TRANSMISSÃO', 'CONFIGURATION DU STREAM'),
           style: TextStyle(
             color: appCyan,
             fontWeight: FontWeight.w900,
@@ -1365,28 +1222,33 @@ class EncoderConfigScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: <Widget>[
-            const Text(
-              'Configura estas direcciones en tu encoder únicamente si '
-              'corresponden a tu cuenta y canal activos.',
+            Text(
+              appText(
+                'Configura estas direcciones en tu encoder únicamente si corresponden a tu cuenta y canal activos.',
+                'Use these encoder addresses only if they match your active account and channel.',
+                'Use estes endereços no encoder somente se corresponderem à sua conta e canal ativos.',
+                'Utilisez ces adresses dans votre encodeur uniquement si elles correspondent à votre compte et chaîne actifs.'),
               style: TextStyle(color: appMuted, height: 1.45),
             ),
             const SizedBox(height: 16),
             _CopyInfoCard(
-              title: 'Servidor RTMP',
+              title: appText('Servidor RTMP', 'RTMP server', 'Servidor RTMP', 'Serveur RTMP'),
               value: rtmp,
               onCopy: () => _copy(context, rtmp),
             ),
             const SizedBox(height: 10),
             _CopyInfoCard(
-              title: 'URL HLS de reproducción',
+              title: appText('URL HLS de reproducción', 'HLS playback URL', 'URL HLS de reprodução', 'URL de lecture HLS'),
               value: hls,
               onCopy: () => _copy(context, hls),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Si la señal no aparece, verifica el estado de tu canal y '
-              'consulta la documentación del servicio. Estas direcciones '
-              'por sí solas no garantizan que exista una retransmisión activa.',
+            Text(
+              appText(
+                'Si la señal no aparece, verifica el estado de tu canal y consulta la documentación. Estas direcciones no garantizan que exista una retransmisión activa.',
+                'If the stream does not appear, check your channel status and service documentation. These addresses do not guarantee an active broadcast.',
+                'Se o sinal não aparecer, verifique o status do canal e a documentação. Esses endereços não garantem uma transmissão ativa.',
+                'Si le signal n’apparaît pas, vérifiez l’état de votre chaîne et la documentation. Ces adresses ne garantissent pas une diffusion active.'),
               style: TextStyle(color: appMuted, fontSize: 12, height: 1.5),
             ),
           ],
@@ -1435,7 +1297,7 @@ class _CopyInfoCard extends StatelessWidget {
               child: TextButton.icon(
                 onPressed: onCopy,
                 icon: const Icon(Icons.copy_rounded, size: 17),
-                label: const Text('Copiar'),
+                label: Text(appText('Copiar', 'Copy', 'Copiar', 'Copier')),
                 style: TextButton.styleFrom(foregroundColor: appGreen),
               ),
             ),
@@ -1468,8 +1330,11 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
     if (slug.isEmpty || !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(slug)) {
       setState(() {
         _loading = false;
-        _error =
-            'El identificador del canal no es válido. Abre Ajustes y revísalo.';
+        _error = appText(
+            'El identificador del canal no es válido. Abre Ajustes y revísalo.',
+            'The channel ID is invalid. Open Settings and check it.',
+            'O ID do canal é inválido. Abra Configurações e verifique.',
+            'L’identifiant de la chaîne est invalide. Ouvrez les paramètres et vérifiez-le.');
       });
       return;
     }
@@ -1479,7 +1344,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
         (uri.scheme != 'https' && uri.scheme != 'http')) {
       setState(() {
         _loading = false;
-        _error = 'La dirección de reproducción no es válida.';
+        _error = appText('La dirección de reproducción no es válida.', 'The playback URL is invalid.', 'O endereço de reprodução é inválido.', 'L’adresse de lecture est invalide.');
       });
       return;
     }
@@ -1508,9 +1373,11 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
       }
       setState(() {
         _loading = false;
-        _error =
-            'No se pudo abrir el canal. Puede estar fuera de línea o no '
-            'permitir esta conexión.';
+        _error = appText(
+            'No se pudo abrir el canal. Puede estar fuera de línea o no permitir esta conexión.',
+            'The channel could not be opened. It may be offline or may not allow this connection.',
+            'Não foi possível abrir o canal. Ele pode estar offline ou não permitir esta conexão.',
+            'Impossible d’ouvrir la chaîne. Elle peut être hors ligne ou refuser cette connexion.');
       });
       await controller.dispose();
       if (identical(_controller, controller)) _controller = null;
@@ -1529,8 +1396,8 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
     return Scaffold(
       backgroundColor: appBg,
       appBar: AppBar(
-        title: const Text(
-          'CANAL EN VIVO',
+        title: Text(
+          appText('CANAL EN VIVO', 'LIVE CHANNEL', 'CANAL AO VIVO', 'CHAÎNE EN DIRECT'),
           style: TextStyle(
             color: appCyan,
             fontWeight: FontWeight.w900,
@@ -1581,7 +1448,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
                                 OutlinedButton.icon(
                                   onPressed: _initializePlayer,
                                   icon: const Icon(Icons.refresh_rounded),
-                                  label: const Text('Reintentar'),
+                                  label: Text(appText('Reintentar', 'Retry', 'Tentar novamente', 'Réessayer')),
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: appCyan,
                                     side: const BorderSide(color: appCyan),
@@ -1591,9 +1458,9 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
                             ),
                           )
                         : controller == null || !controller.value.isInitialized
-                            ? const Center(
+                            ? Center(
                                 child: Text(
-                                  'El reproductor no está disponible.',
+                                  appText('El reproductor no está disponible.', 'The player is unavailable.', 'O player não está disponível.', 'Le lecteur n’est pas disponible.'),
                                   style: TextStyle(color: Colors.white),
                                 ),
                               )
@@ -1637,7 +1504,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
                       : Icons.play_arrow_rounded,
                 ),
                 label: Text(
-                  controller.value.isPlaying ? 'Pausar' : 'Reproducir',
+                  controller.value.isPlaying ? appText('Pausar', 'Pause', 'Pausar', 'Pause') : appText('Reproducir', 'Play', 'Reproduzir', 'Lire'),
                 ),
                 style: FilledButton.styleFrom(
                   backgroundColor: appBlue,
@@ -1646,16 +1513,19 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
               ),
             const SizedBox(height: 8),
             Text(
-              'Canal configurado: ${widget.channel}',
+              appText('Canal configurado: ${widget.channel}', 'Configured channel: ${widget.channel}', 'Canal configurado: ${widget.channel}', 'Chaîne configurée : ${widget.channel}'),
               style: const TextStyle(
                 color: appCyan,
                 fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'La reproducción depende de que el servidor entregue una '
-              'señal compatible y que tengas permiso para acceder a ella.',
+            Text(
+              appText(
+                'La reproducción depende de que el servidor entregue una señal compatible y que tengas permiso para acceder a ella.',
+                'Playback depends on the server providing a compatible stream and your permission to access it.',
+                'A reprodução depende de o servidor fornecer um sinal compatível e de você ter permissão para acessá-lo.',
+                'La lecture dépend d’un signal compatible fourni par le serveur et de votre autorisation d’y accéder.'),
               style: TextStyle(color: appMuted, fontSize: 12, height: 1.45),
             ),
           ],
@@ -1676,12 +1546,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _channelController;
   late final TextEditingController _telegramController;
   bool _saving = false;
+  bool _notificationsEnabled = false;
 
   @override
   void initState() {
     super.initState();
     _channelController = TextEditingController(text: channelSlug.value);
     _telegramController = TextEditingController(text: telegramLink.value);
+    _loadNotificationPreference();
+  }
+
+  Future<void> _loadNotificationPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (mounted) setState(() => _notificationsEnabled =
+          prefs.getBool('notifications_enabled') ?? false);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleNotifications(bool enabled) async {
+    if (enabled) {
+      final granted = await NotificationService.requestPermission();
+      if (!granted) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(appText(
+            'Activa el permiso de notificaciones en Android.',
+            'Enable notification permission in Android settings.',
+            'Ative a permissão de notificações nas configurações do Android.',
+            'Activez l’autorisation des notifications dans les paramètres Android.'))));
+        return;
+      }
+    } else {
+      await NotificationService.cancelMatchReminders();
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('notifications_enabled', enabled);
+    } catch (_) {}
+    if (mounted) setState(() => _notificationsEnabled = enabled);
+  }
+
+  Future<void> _testNotification() async {
+    try {
+      await NotificationService.showTestNotification();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())));
+    }
   }
 
   @override
@@ -1963,6 +1874,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                     onChanged: _setLanguage,
                   ),
+                  const SizedBox(height: 14),
+                  Text(
+                    tr('notifications'),
+                    style: const TextStyle(
+                      color: appCyan,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    tr('notifications_description'),
+                    style: const TextStyle(
+                      color: appMuted,
+                      fontSize: 11,
+                      height: 1.4,
+                    ),
+                  ),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      tr('notifications_enabled'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    subtitle: Text(
+                      appText(
+                        'Aviso antes de los eventos que cargues en la agenda.',
+                        'Reminder before events you load in the schedule.',
+                        'Aviso antes dos eventos carregados na agenda.',
+                        'Alerte avant les événements chargés dans le calendrier.',
+                      ),
+                      style: const TextStyle(color: appMuted, fontSize: 10),
+                    ),
+                    value: _notificationsEnabled,
+                    activeThumbColor: appGreen,
+                    onChanged: _toggleNotifications,
+                  ),
+                  if (_notificationsEnabled)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: _testNotification,
+                        icon: const Icon(Icons.notifications_active_rounded),
+                        label: Text(appText(
+                          'Probar notificación',
+                          'Test notification',
+                          'Testar notificação',
+                          'Tester la notification',
+                        )),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -2120,16 +2084,16 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
   Future<void> _testConnection() async {
     final url = SportsApiService.normalizeBaseUrl(_apiUrlController.text);
     if (url == null) {
-      _showMessage('Introduce una URL HTTPS válida del Worker.');
+      _showMessage(appText('Introduce una URL HTTPS válida del Worker.', 'Enter a valid HTTPS Worker URL.', 'Digite uma URL HTTPS válida do Worker.', 'Saisissez une URL HTTPS valide du Worker.'));
       return;
     }
 
     setState(() => _testing = true);
     try {
       await SportsApiService().checkHealth(url);
-      _showMessage('Conexión correcta con Deporte Total 360 API.');
+      _showMessage(appText('Conexión correcta con Deporte Total 360 API.', 'Connected to Deporte Total 360 API.', 'Conectado à API Deporte Total 360.', 'Connecté à l’API Deporte Total 360.'));
     } catch (error) {
-      _showMessage('No se pudo verificar el servidor: $error');
+      _showMessage(appText('No se pudo verificar el servidor: $error', 'Could not verify the server: $error', 'Não foi possível verificar o servidor: $error', 'Impossible de vérifier le serveur : $error'));
     } finally {
       if (mounted) setState(() => _testing = false);
     }
@@ -2148,9 +2112,9 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
       await prefs.setString('sports_api_base_url', url);
       sportsApiBaseUrl.value = url;
       _apiUrlController.text = url;
-      _showMessage('Dirección de la API guardada.');
+      _showMessage(appText('Dirección de la API guardada.', 'API address saved.', 'Endereço da API salvo.', 'Adresse de l’API enregistrée.'));
     } catch (_) {
-      _showMessage('No se pudo guardar la dirección. Inténtalo de nuevo.');
+      _showMessage(appText('No se pudo guardar la dirección. Inténtalo de nuevo.', 'Could not save the address. Try again.', 'Não foi possível salvar o endereço. Tente novamente.', 'Impossible d’enregistrer l’adresse. Réessayez.'));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -2162,9 +2126,9 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
       await prefs.remove('sports_api_base_url');
       sportsApiBaseUrl.value = '';
       _apiUrlController.clear();
-      _showMessage('Dirección de la API eliminada.');
+      _showMessage(appText('Dirección de la API eliminada.', 'API address cleared.', 'Endereço da API removido.', 'Adresse de l’API supprimée.'));
     } catch (_) {
-      _showMessage('No se pudo eliminar la dirección guardada.');
+      _showMessage(appText('No se pudo eliminar la dirección guardada.', 'Could not clear the saved address.', 'Não foi possível remover o endereço salvo.', 'Impossible d’effacer l’adresse enregistrée.'));
     }
   }
 
@@ -2173,8 +2137,8 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
     return Scaffold(
       backgroundColor: appBg,
       appBar: AppBar(
-        title: const Text(
-          'MENÚ DE DESARROLLADOR',
+        title: Text(
+          appText('MENÚ DE DESARROLLADOR', 'DEVELOPER MENU', 'MENU DO DESENVOLVEDOR', 'MENU DÉVELOPPEUR'),
           style: TextStyle(
             color: appCyan,
             fontWeight: FontWeight.w900,
@@ -2196,13 +2160,13 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  const Row(
+                  Row(
                     children: <Widget>[
-                      Icon(Icons.developer_mode_rounded, color: appCyan),
+                      const Icon(Icons.developer_mode_rounded, color: appCyan),
                       SizedBox(width: 9),
                       Expanded(
                         child: Text(
-                          'CONEXIÓN DEL SERVIDOR DEPORTIVO',
+                          appText('CONEXIÓN DEL SERVIDOR DEPORTIVO', 'SPORTS SERVER CONNECTION', 'CONEXÃO DO SERVIDOR ESPORTIVO', 'CONNEXION AU SERVEUR SPORTIF'),
                           style: TextStyle(
                             color: appCyan,
                             fontWeight: FontWeight.w900,
@@ -2213,8 +2177,8 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'Introduce la dirección HTTPS pública del Cloudflare Worker. No pegues aquí la clave de API.',
+                  Text(
+                    appText('Introduce la dirección HTTPS pública del Cloudflare Worker. No pegues aquí la clave de API.', 'Enter the public HTTPS URL of your Cloudflare Worker. Do not paste your API key here.', 'Digite o endereço HTTPS público do Cloudflare Worker. Não cole sua chave de API aqui.', 'Saisissez l’URL HTTPS publique de votre Cloudflare Worker. Ne collez pas votre clé API ici.'),
                     style: TextStyle(color: appMuted, height: 1.5, fontSize: 12),
                   ),
                   const SizedBox(height: 13),
@@ -2223,8 +2187,8 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                     keyboardType: TextInputType.url,
                     autocorrect: false,
                     enableSuggestions: false,
-                    decoration: const InputDecoration(
-                      labelText: 'URL del servidor API',
+                    decoration: InputDecoration(
+                      labelText: appText('URL del servidor API', 'API server URL', 'URL do servidor API', 'URL du serveur API'),
                       hintText: 'https://tu-worker.tu-cuenta.workers.dev',
                       prefixIcon: Icon(Icons.cloud_rounded),
                     ),
@@ -2241,7 +2205,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.network_check_rounded),
-                      label: Text(_testing ? 'COMPROBANDO…' : 'PROBAR CONEXIÓN'),
+                      label: Text(_testing ? appText('COMPROBANDO…', 'CHECKING…', 'VERIFICANDO…', 'VÉRIFICATION…') : appText('PROBAR CONEXIÓN', 'TEST CONNECTION', 'TESTAR CONEXÃO', 'TESTER LA CONNEXION')),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: appCyan,
                         side: const BorderSide(color: appCyan),
@@ -2255,7 +2219,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                     child: FilledButton.icon(
                       onPressed: _saving ? null : _saveApiUrl,
                       icon: const Icon(Icons.save_rounded),
-                      label: Text(_saving ? 'GUARDANDO…' : 'GUARDAR SERVIDOR'),
+                      label: Text(_saving ? appText('GUARDANDO…', 'SAVING…', 'SALVANDO…', 'ENREGISTREMENT…') : appText('GUARDAR SERVIDOR', 'SAVE SERVER', 'SALVAR SERVIDOR', 'ENREGISTRER LE SERVEUR')),
                       style: FilledButton.styleFrom(
                         backgroundColor: appGreen,
                         foregroundColor: appBg,
@@ -2268,7 +2232,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                     child: TextButton.icon(
                       onPressed: _clearApiUrl,
                       icon: const Icon(Icons.delete_outline_rounded, size: 17),
-                      label: const Text('Borrar dirección guardada'),
+                      label: Text(appText('Borrar dirección guardada', 'Clear saved address', 'Apagar endereço salvo', 'Effacer l’adresse enregistrée')),
                       style: TextButton.styleFrom(foregroundColor: appPink),
                     ),
                   ),
@@ -2283,8 +2247,8 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                 borderRadius: BorderRadius.circular(13),
                 border: Border.all(color: appGreen.withAlpha(150)),
               ),
-              child: const Text(
-                'SEGURIDAD: la clave APISPORTS_KEY debe permanecer como secreto del Worker en Cloudflare. La aplicación solo guarda la URL pública del servidor. Este acceso oculto por diez toques es discreto, pero no sustituye autenticación real.',
+              child: Text(
+                appText('SEGURIDAD: la clave APISPORTS_KEY debe permanecer como secreto del Worker en Cloudflare. La aplicación solo guarda la URL pública del servidor. Este acceso oculto por diez toques es discreto, pero no sustituye autenticación real.', 'SECURITY: keep APISPORTS_KEY as a Cloudflare Worker secret. The app stores only the public server URL. This hidden ten-tap entry is discreet, but it is not real authentication.', 'SEGURANÇA: mantenha APISPORTS_KEY como segredo do Worker no Cloudflare. O app salva apenas a URL pública do servidor. O acesso oculto por dez toques não substitui autenticação real.', 'SÉCURITÉ : gardez APISPORTS_KEY comme secret du Worker Cloudflare. L’application ne stocke que l’URL publique du serveur. L’accès caché par dix touches ne remplace pas une authentification réelle.'),
                 style: TextStyle(color: appMuted, fontSize: 11, height: 1.5),
               ),
             ),
@@ -2324,13 +2288,13 @@ class DonationsScreen extends StatelessWidget {
                     BoxShadow(color: appPink.withAlpha(25), blurRadius: 22),
                   ],
                 ),
-                child: const Column(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    Icon(Icons.favorite_rounded, color: appPink, size: 56),
+                    const Icon(Icons.favorite_rounded, color: appPink, size: 56),
                     SizedBox(height: 13),
                     Text(
-                      'GRACIAS POR APOYAR',
+                      appText('GRACIAS POR APOYAR', 'THANK YOU FOR SUPPORTING US', 'OBRIGADO POR APOIAR', 'MERCI DE VOTRE SOUTIEN'),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: appCyan,
@@ -2340,9 +2304,7 @@ class DonationsScreen extends StatelessWidget {
                     ),
                     SizedBox(height: 9),
                     Text(
-                      'Tu apoyo ayuda a mantener y mejorar Deporte Total 360°. '
-                      'El cobro todavía no está conectado; no se realizará '
-                      'ningún pago desde esta pantalla.',
+                      appText('Tu apoyo ayuda a mantener y mejorar Deporte Total 360°. El cobro todavía no está conectado; no se realizará ningún pago desde esta pantalla.', 'Your support helps maintain and improve Deporte Total 360°. Payments are not connected yet; this screen will not charge you.', 'Seu apoio ajuda a manter e melhorar o Deporte Total 360°. O pagamento ainda não está conectado; nenhuma cobrança será feita nesta tela.', 'Votre soutien aide à maintenir et améliorer Deporte Total 360°. Le paiement n’est pas encore connecté ; aucun paiement ne sera effectué depuis cet écran.'),
                       textAlign: TextAlign.center,
                       style: TextStyle(color: appMuted, height: 1.5),
                     ),

@@ -3,14 +3,22 @@ import 'package:deporte_total_360/web_protection_policy.dart';
 
 void main() {
   group('WebProtectionPolicy', () {
-    test('bloquea dominios publicitarios y sus subdominios', () {
+    test('bloquea redes publicitarias y subdominios', () {
       expect(WebProtectionPolicy.isBlockedHost('doubleclick.net'), isTrue);
       expect(WebProtectionPolicy.isBlockedHost('secure.pubmatic.com'), isTrue);
+      expect(WebProtectionPolicy.isBlockedHost('pop.clickadu.com'), isTrue);
+      expect(WebProtectionPolicy.isBlockedHost('ads.hilltopads.net'), isTrue);
     });
 
-    test('no bloquea el sitio de agenda ni un host de vídeo genérico', () {
-      expect(WebProtectionPolicy.isBlockedHost('futbol-libre.cam'), isFalse);
-      expect(WebProtectionPolicy.isBlockedHost('player.example.net'), isFalse);
+    test('bloquea dominios y rutas publicitarias explícitas', () {
+      expect(WebProtectionPolicy.isBlockedUrl('https://juicyads.com/pop'), isTrue);
+      expect(WebProtectionPolicy.isBlockedUrl('https://example.test/xxx/popup'), isTrue);
+      expect(WebProtectionPolicy.isBlockedUrl('https://adultads.example.test/banner.js'), isTrue);
+    });
+
+    test('no bloquea la agenda ni reproductores HTTPS normales', () {
+      expect(WebProtectionPolicy.isBlockedUrl('https://futbol-libre.cam/'), isFalse);
+      expect(WebProtectionPolicy.isBlockedUrl('https://player.example.net/live/index.m3u8'), isFalse);
     });
   });
 }
