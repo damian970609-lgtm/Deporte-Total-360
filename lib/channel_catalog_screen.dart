@@ -329,7 +329,7 @@ class _ChannelCatalogSettingsScreenState extends State<ChannelCatalogSettingsScr
                   style: const TextStyle(color: Colors.white, fontSize: 12),
                   decoration: const InputDecoration(
                     labelText: 'URL HTTPS de guía XMLTV / EPG',
-                    hintText: 'https://proveedor-autorizado.example/epg.xml',
+                    hintText: 'https://proveedor-autorizado.example/epg.xml o epg.xml.gz',
                     prefixIcon: Icon(Icons.event_note_rounded, color: cyan),
                   ),
                 ),
