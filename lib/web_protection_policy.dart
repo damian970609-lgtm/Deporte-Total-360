@@ -92,11 +92,11 @@ class WebProtectionPolicy {
           trigger: ContentBlockerTrigger(
             urlFilter:
                 '.*(porn|porno|xxx|hentai|sexcam|camgirl|escort|adultads|nsfw|nude|sexvideo).*',
-            resourceType: <ContentBlockerResourceType>[
-              ContentBlockerResourceType.SCRIPT,
-              ContentBlockerResourceType.IMAGE,
-              ContentBlockerResourceType.POPUP,
-              ContentBlockerResourceType.RAW,
+            resourceType: <ContentBlockerTriggerResourceType>[
+              ContentBlockerTriggerResourceType.SCRIPT,
+              ContentBlockerTriggerResourceType.IMAGE,
+              ContentBlockerTriggerResourceType.POPUP,
+              ContentBlockerTriggerResourceType.RAW,
             ],
           ),
           action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
