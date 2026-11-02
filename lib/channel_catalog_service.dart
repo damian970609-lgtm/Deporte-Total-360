@@ -109,6 +109,11 @@ class ChannelCatalogService {
     _cachedProgrammes = const <TvGuideProgramme>[];
   }
 
+  Future<List<TvCatalogChannel>> loadChannels() async {
+    final snapshot = await _loadSnapshot(await loadConfig());
+    return snapshot.channels;
+  }
+
   Future<int> testPlaylist() async {
     final snapshot = await _loadSnapshot(await loadConfig());
     return snapshot.channels.length;
