@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'agenda_screen.dart';
 import 'channel_catalog_service.dart';
 
-import 'agenda_screen.dart';
-
 class ChannelCatalogScreen extends StatefulWidget {
   const ChannelCatalogScreen({super.key});
 
