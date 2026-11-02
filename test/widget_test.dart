@@ -8,7 +8,7 @@ void main() {
       const MaterialApp(home: SportsStatisticsScreen()),
     );
 
-    expect(find.text('ESTADÍSTICAS Y CLASIFICACIONES'), findsOneWidget);
+    expect(find.text('ESTADÍSTICAS'), findsOneWidget);
     expect(find.text('BUSCAR LIGAS'), findsOneWidget);
     expect(find.text('Fútbol'), findsOneWidget);
   });
