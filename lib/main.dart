@@ -2137,7 +2137,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
     return Scaffold(
       backgroundColor: appBg,
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           appText('MENÚ DE DESARROLLADOR', 'DEVELOPER MENU', 'MENU DO DESENVOLVEDOR', 'MENU DÉVELOPPEUR'),
           style: TextStyle(
             color: appCyan,
@@ -2160,9 +2160,9 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  const Row(
+                  Row(
                     children: <Widget>[
-                      Icon(Icons.developer_mode_rounded, color: appCyan),
+                      const Icon(Icons.developer_mode_rounded, color: appCyan),
                       SizedBox(width: 9),
                       Expanded(
                         child: Text(
@@ -2177,7 +2177,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const Text(
+                  Text(
                     appText('Introduce la dirección HTTPS pública del Cloudflare Worker. No pegues aquí la clave de API.', 'Enter the public HTTPS URL of your Cloudflare Worker. Do not paste your API key here.', 'Digite o endereço HTTPS público do Cloudflare Worker. Não cole sua chave de API aqui.', 'Saisissez l’URL HTTPS publique de votre Cloudflare Worker. Ne collez pas votre clé API ici.'),
                     style: TextStyle(color: appMuted, height: 1.5, fontSize: 12),
                   ),
@@ -2187,7 +2187,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                     keyboardType: TextInputType.url,
                     autocorrect: false,
                     enableSuggestions: false,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: appText('URL del servidor API', 'API server URL', 'URL do servidor API', 'URL du serveur API'),
                       hintText: 'https://tu-worker.tu-cuenta.workers.dev',
                       prefixIcon: Icon(Icons.cloud_rounded),
@@ -2232,7 +2232,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                     child: TextButton.icon(
                       onPressed: _clearApiUrl,
                       icon: const Icon(Icons.delete_outline_rounded, size: 17),
-                      label: const Text(appText('Borrar dirección guardada', 'Clear saved address', 'Apagar endereço salvo', 'Effacer l’adresse enregistrée')),
+                      label: Text(appText('Borrar dirección guardada', 'Clear saved address', 'Apagar endereço salvo', 'Effacer l’adresse enregistrée')),
                       style: TextButton.styleFrom(foregroundColor: appPink),
                     ),
                   ),
@@ -2247,7 +2247,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                 borderRadius: BorderRadius.circular(13),
                 border: Border.all(color: appGreen.withAlpha(150)),
               ),
-              child: const Text(
+              child: Text(
                 appText('SEGURIDAD: la clave APISPORTS_KEY debe permanecer como secreto del Worker en Cloudflare. La aplicación solo guarda la URL pública del servidor. Este acceso oculto por diez toques es discreto, pero no sustituye autenticación real.', 'SECURITY: keep APISPORTS_KEY as a Cloudflare Worker secret. The app stores only the public server URL. This hidden ten-tap entry is discreet, but it is not real authentication.', 'SEGURANÇA: mantenha APISPORTS_KEY como segredo do Worker no Cloudflare. O app salva apenas a URL pública do servidor. O acesso oculto por dez toques não substitui autenticação real.', 'SÉCURITÉ : gardez APISPORTS_KEY comme secret du Worker Cloudflare. L’application ne stocke que l’URL publique du serveur. L’accès caché par dix touches ne remplace pas une authentification réelle.'),
                 style: TextStyle(color: appMuted, fontSize: 11, height: 1.5),
               ),
@@ -2304,9 +2304,7 @@ class DonationsScreen extends StatelessWidget {
                     ),
                     SizedBox(height: 9),
                     Text(
-                      appText('Tu apoyo ayuda a mantener y mejorar Deporte Total 360°. El cobro todavía no está conectado; no se realizará ningún pago desde esta pantalla.', 'Your support helps maintain and improve Deporte Total 360°. Payments are not connected yet; this screen will not charge you.', 'Seu apoio ajuda a manter e melhorar o Deporte Total 360°. O pagamento ainda não está conectado; nenhuma cobrança será feita nesta tela.', 'Votre soutien aide à maintenir et améliorer Deporte Total 360°. Le paiement n’est pas encore connecté ; aucun paiement ne sera effectué depuis cet écran.')
-                      'El cobro todavía no está conectado; no se realizará '
-                      'ningún pago desde esta pantalla.',
+                      appText('Tu apoyo ayuda a mantener y mejorar Deporte Total 360°. El cobro todavía no está conectado; no se realizará ningún pago desde esta pantalla.', 'Your support helps maintain and improve Deporte Total 360°. Payments are not connected yet; this screen will not charge you.', 'Seu apoio ajuda a manter e melhorar o Deporte Total 360°. O pagamento ainda não está conectado; nenhuma cobrança será feita nesta tela.', 'Votre soutien aide à maintenir et améliorer Deporte Total 360°. Le paiement n’est pas encore connecté ; aucun paiement ne sera effectué depuis cet écran.'),
                       textAlign: TextAlign.center,
                       style: TextStyle(color: appMuted, height: 1.5),
                     ),
