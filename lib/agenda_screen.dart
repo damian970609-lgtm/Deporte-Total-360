@@ -84,6 +84,7 @@ class AgendaScreen extends StatefulWidget {
     this.matches = const <MatchEvent>[],
     this.onOpenPersonalChannel,
     this.onOpenEncoder,
+    this.onOpenWebAgenda,
   });
 
   final String initialSport;
@@ -91,6 +92,7 @@ class AgendaScreen extends StatefulWidget {
   final List<MatchEvent> matches;
   final VoidCallback? onOpenPersonalChannel;
   final VoidCallback? onOpenEncoder;
+  final VoidCallback? onOpenWebAgenda;
 
   @override
   State<AgendaScreen> createState() => _AgendaScreenState();
@@ -172,6 +174,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
   String? _apiWarning;
   String? _apiProgress;
   int _apiRequestVersion = 0;
+  DateTime? _lastRefreshAt;
   Timer? _scorePollingTimer;
 
   @override
@@ -192,18 +195,22 @@ class _AgendaScreenState extends State<AgendaScreen> {
       _loadRemoteMatches();
     }
     _scorePollingTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      // No sondear el resumen de todos los deportes continuamente: las
-      // alertas de marcador se consultan para el deporte que el usuario ve.
-      final liveAllSports =
-          _sport == 'Todos' && _statusFilter == 'En vivo';
-      final selectedSportSchedule = _sport != 'Todos' &&
-          (_dateFilter == 'Hoy' || _dateFilter == 'Todos');
+      // La lista En Vivo se refresca cada minuto. La agenda general se
+      // refresca cada cinco minutos para no consultar todas las ligas
+      // repetidamente mientras el usuario solo está revisando horarios.
+      final liveMode =
+          widget.initialStatus == 'En vivo' || _statusFilter == 'En vivo';
+      final refreshInterval = liveMode
+          ? const Duration(minutes: 1)
+          : const Duration(minutes: 5);
+      final lastRefresh = _lastRefreshAt;
       if (!mounted ||
-          (!liveAllSports && !selectedSportSchedule) ||
-          _loadingApi) {
+          _loadingApi ||
+          (lastRefresh != null &&
+              DateTime.now().difference(lastRefresh) < refreshInterval)) {
         return;
       }
-      _loadRemoteMatches(announceScoreChanges: true);
+      _loadRemoteMatches(announceScoreChanges: liveMode);
     });
   }
 
@@ -235,6 +242,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
   Future<void> _loadRemoteMatches({bool announceScoreChanges = false}) async {
     if (sportsApiBaseUrl.value.trim().isEmpty) return;
     final requestVersion = ++_apiRequestVersion;
+    _lastRefreshAt = DateTime.now();
     if (mounted) {
       setState(() {
         _loadingApi = true;
@@ -725,6 +733,17 @@ class _AgendaScreenState extends State<AgendaScreen> {
           ],
         ),
         actions: <Widget>[
+          if (widget.onOpenWebAgenda != null)
+            IconButton(
+              tooltip: appText(
+                'Abrir Fútbol Libre dentro de la app',
+                'Open Fútbol Libre inside the app',
+                'Abrir Fútbol Libre dentro do app',
+                'Ouvrir Fútbol Libre dans l’application',
+              ),
+              onPressed: widget.onOpenWebAgenda,
+              icon: const Icon(Icons.public_rounded, color: agendaGreen),
+            ),
           IconButton(
             tooltip: tr('stats_title'),
             onPressed: () => Navigator.of(context).push<void>(
@@ -897,7 +916,12 @@ class _AgendaScreenState extends State<AgendaScreen> {
                         value == 'En vivo' ? agendaRed : agendaGreen;
                     return InkWell(
                       borderRadius: BorderRadius.circular(9),
-                      onTap: () => setState(() => _statusFilter = value),
+                      onTap: () {
+                        setState(() => _statusFilter = value);
+                        if (value == 'En vivo') {
+                          _loadRemoteMatches(announceScoreChanges: true);
+                        }
+                      },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
