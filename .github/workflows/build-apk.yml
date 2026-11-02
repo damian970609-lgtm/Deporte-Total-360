@@ -61,6 +61,7 @@ jobs:
           permissions = (
               'android.permission.INTERNET',
               'android.permission.ACCESS_NETWORK_STATE',
+              'android.permission.RECEIVE_BOOT_COMPLETED',
           )
 
           for permission in permissions:
@@ -91,7 +92,73 @@ jobs:
                   count=1,
               )
 
+          receivers = '''
+              <receiver
+                  android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
+                  android:exported="false" />
+              <receiver
+                  android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+                  android:exported="false">
+                  <intent-filter>
+                      <action android:name="android.intent.action.BOOT_COMPLETED" />
+                      <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                      <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                      <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+                  </intent-filter>
+              </receiver>
+          '''
+
+          if 'ScheduledNotificationBootReceiver' not in content:
+              content = content.replace('</application>', receivers + '\n</application>', 1)
+
           manifest.write_text(content, encoding='utf-8')
+          PY
+
+      - name: Configurar desugaring para notificaciones
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          kotlin = Path('android/app/build.gradle.kts')
+          groovy = Path('android/app/build.gradle')
+
+          if kotlin.exists():
+              content = kotlin.read_text(encoding='utf-8')
+              marker = 'compileOptions {'
+              if marker not in content:
+                  raise SystemExit('No se encontró compileOptions en build.gradle.kts')
+              if 'isCoreLibraryDesugaringEnabled' not in content:
+                  content = content.replace(
+                      marker,
+                      marker + '\n        isCoreLibraryDesugaringEnabled = true',
+                      1,
+                  )
+              dependency = 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")'
+              if dependency not in content:
+                  content = content.replace(
+                      'dependencies {',
+                      'dependencies {\n    ' + dependency,
+                      1,
+                  )
+              kotlin.write_text(content, encoding='utf-8')
+          elif groovy.exists():
+              content = groovy.read_text(encoding='utf-8')
+              if 'coreLibraryDesugaringEnabled true' not in content:
+                  content = content.replace(
+                      'compileOptions {',
+                      'compileOptions {\n        coreLibraryDesugaringEnabled true',
+                      1,
+                  )
+              dependency = "coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'"
+              if dependency not in content:
+                  content = content.replace(
+                      'dependencies {',
+                      'dependencies {\n    ' + dependency,
+                      1,
+                  )
+              groovy.write_text(content, encoding='utf-8')
+          else:
+              raise SystemExit('No se encontró el archivo Gradle de la app Android')
           PY
 
       - name: Configurar compatibilidad de ProGuard
