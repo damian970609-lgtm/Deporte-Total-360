@@ -38,8 +38,6 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
 
   List<ContentBlocker> _buildContentBlockers() => WebProtectionPolicy.buildContentBlockers();
 
-  bool _isKnownTrackerHost(String host) => WebProtectionPolicy.isBlockedHost(host);
-
   bool _isBlockedTarget(WebUri uri) => WebProtectionPolicy.isBlockedUrl(uri);
 
   bool _isHttpUrl(WebUri uri) {
@@ -264,7 +262,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 const SizedBox(width: 7),
                 const Expanded(
                   child: Text(
-                    'Navegación integrada · protección de rastreadores conocidos',
+                    'Navegación integrada · bloqueo reforzado de redes publicitarias',
                     style: TextStyle(
                       color: _brandMuted,
                       fontSize: 10,
