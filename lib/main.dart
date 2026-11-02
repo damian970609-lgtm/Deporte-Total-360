@@ -640,7 +640,7 @@ class HomeDashboard extends StatelessWidget {
           ),
           IconButton(
             tooltip: tr('settings'),
-            onPressed: () => onNavigate(8),
+            onPressed: () => onNavigate(9),
             icon: const Icon(Icons.settings_rounded, color: appCyan),
           ),
         ],
