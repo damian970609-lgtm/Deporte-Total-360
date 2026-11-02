@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show gzip;
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -64,6 +65,7 @@ class ChannelCatalogService {
   static const String epgPreferenceKey = 'authorized_tv_epg_url';
   static const int maxPlaylistBytes = 5 * 1024 * 1024;
   static const int maxEpgBytes = 12 * 1024 * 1024;
+  static const int maxDecodedEpgBytes = 40 * 1024 * 1024;
   static const Duration cacheDuration = Duration(minutes: 15);
 
   final http.Client _client;
@@ -196,8 +198,18 @@ class ChannelCatalogService {
       if (epgResponse.bodyBytes.length > maxEpgBytes) {
         throw const FormatException('La guía XMLTV supera el tamaño permitido de 12 MB.');
       }
+      final contentType = (epgResponse.headers['content-type'] ?? '').toLowerCase();
+      final isCompressed = Uri.parse(config.epgUrl).path.toLowerCase().endsWith('.gz') ||
+          contentType.contains('gzip') ||
+          contentType.contains('application/x-gzip');
+      final epgBytes = isCompressed
+          ? gzip.decode(epgResponse.bodyBytes)
+          : epgResponse.bodyBytes;
+      if (epgBytes.length > maxDecodedEpgBytes) {
+        throw const FormatException('La guía XMLTV descomprimida supera el límite de 40 MB.');
+      }
       programmes = parseXmlTv(
-        utf8.decode(epgResponse.bodyBytes, allowMalformed: true),
+        utf8.decode(epgBytes, allowMalformed: true),
       );
     }
 
