@@ -377,7 +377,7 @@ class _MainShellState extends State<MainShell> {
                     Icons.calendar_month_rounded,
                     color: appGreen,
                   ),
-                  label: tr('agenda'),
+                  label: tr('web_agenda'),
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.article_outlined),
@@ -565,7 +565,7 @@ class HomeDashboard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 _BrandHero(),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 Text(
                   tr('tagline'),
                   textAlign: TextAlign.center,
@@ -576,36 +576,51 @@ class HomeDashboard extends StatelessWidget {
                     letterSpacing: .8,
                   ),
                 ),
-                const SizedBox(height: 17),
+                const SizedBox(height: 16),
                 Row(
                   children: <Widget>[
                     Expanded(
                       child: _SectionHeading(
-                        title: appText('TODOS LOS DEPORTES', 'ALL SPORTS', 'TODOS OS ESPORTES', 'TOUS LES SPORTS'),
+                        title: appText(
+                          'TODOS LOS DEPORTES',
+                          'ALL SPORTS',
+                          'TODOS OS ESPORTES',
+                          'TOUS LES SPORTS',
+                        ),
                         icon: Icons.public_rounded,
                       ),
                     ),
                     TextButton(
-                      onPressed: () => onNavigate(3),
+                      onPressed: onStatistics,
                       child: Text(
-                        appText('Explorar →', 'Explore →', 'Explorar →', 'Explorer →'),
+                        appText(
+                          'Explorar →',
+                          'Explore →',
+                          'Explorar →',
+                          'Explorer →',
+                        ),
                         style: const TextStyle(color: appCyan, fontSize: 11),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 7),
                 GridView.count(
-                  crossAxisCount: 3,
+                  crossAxisCount: 2,
                   crossAxisSpacing: 8,
                   mainAxisSpacing: 8,
-                  childAspectRatio: 1.18,
+                  childAspectRatio: 1.55,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   children: <Widget>[
                     _SportTile(
                       title: appText('FÚTBOL', 'FOOTBALL', 'FUTEBOL', 'FOOTBALL'),
-                      subtitle: appText('Ligas • Copas', 'Leagues • Cups', 'Ligas • Copas', 'Ligues • Coupes'),
+                      subtitle: appText(
+                        'Ligas • Copas',
+                        'Leagues • Cups',
+                        'Ligas • Copas',
+                        'Ligues • Coupes',
+                      ),
                       icon: Icons.sports_soccer_rounded,
                       color: appGreen,
                       onTap: () => onSportSelected('Fútbol'),
@@ -617,19 +632,23 @@ class HomeDashboard extends StatelessWidget {
                       color: appYellow,
                       onTap: () => onSportSelected('Básquet'),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                GridView.count(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 1.23,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: <Widget>[
                     _SportTile(
                       title: appText('BÉISBOL', 'BASEBALL', 'BEISEBOL', 'BASEBALL'),
-                      subtitle: 'MLB • Leagues',
+                      subtitle: 'MLB • Ligas',
                       icon: Icons.sports_baseball_rounded,
                       color: appPink,
                       onTap: () => onSportSelected('Béisbol'),
-                    ),
-                    _SportTile(
-                      title: 'RUGBY',
-                      subtitle: appText('Ligas • Torneos', 'Leagues • Tournaments', 'Ligas • Torneios', 'Ligues • Tournois'),
-                      icon: Icons.sports_tennis_rounded,
-                      color: appGreen,
-                      onTap: () => onSportSelected('Rugby'),
                     ),
                     _SportTile(
                       title: appText('VÓLEY', 'VOLLEYBALL', 'VÔLEI', 'VOLLEY-BALL'),
@@ -639,72 +658,243 @@ class HomeDashboard extends StatelessWidget {
                       onTap: () => onSportSelected('Vóley'),
                     ),
                     _SportTile(
-                      title: appText('HOCKEY', 'HOCKEY', 'HÓQUEI', 'HOCKEY'),
-                      subtitle: 'NHL • Ligas',
-                      icon: Icons.emoji_events_rounded,
-                      color: appCyan,
-                      onTap: () => onSportSelected('Hockey sobre hielo'),
+                      title: 'RUGBY',
+                      subtitle: appText(
+                        'Ligas • Torneos',
+                        'Leagues • Tournaments',
+                        'Ligas • Torneios',
+                        'Ligues • Tournois',
+                      ),
+                      icon: Icons.sports_rugby_rounded,
+                      color: appGreen,
+                      onTap: () => onSportSelected('Rugby'),
                     ),
                   ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: appPanel,
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(color: appCyan.withAlpha(135)),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(color: appBlue.withAlpha(18), blurRadius: 15),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Row(
+                        children: <Widget>[
+                          const Icon(Icons.sports_rounded, color: appPink, size: 19),
+                          const SizedBox(width: 7),
+                          Expanded(
+                            child: Text(
+                              appText(
+                                'OTROS DEPORTES',
+                                'MORE SPORTS',
+                                'OUTROS ESPORTES',
+                                'AUTRES SPORTS',
+                              ),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: .4,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            'API-Sports',
+                            style: TextStyle(color: appMuted, fontSize: 9),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 7,
+                        runSpacing: 7,
+                        children: <Widget>[
+                          _HomeSportChip(
+                            label: 'NBA',
+                            icon: Icons.sports_basketball_rounded,
+                            color: appYellow,
+                            onTap: () => onSportSelected('NBA'),
+                          ),
+                          _HomeSportChip(
+                            label: 'HOCKEY',
+                            icon: Icons.sports_hockey_rounded,
+                            color: appCyan,
+                            onTap: () => onSportSelected('Hockey sobre hielo'),
+                          ),
+                          _HomeSportChip(
+                            label: 'NFL',
+                            icon: Icons.sports_football_rounded,
+                            color: appPink,
+                            onTap: () => onSportSelected('Fútbol americano'),
+                          ),
+                          _HomeSportChip(
+                            label: appText('BALONMANO', 'HANDBALL', 'HANDEBOL', 'HANDBALL'),
+                            icon: Icons.sports_handball_rounded,
+                            color: appGreen,
+                            onTap: () => onSportSelected('Balonmano'),
+                          ),
+                          _HomeSportChip(
+                            label: 'FÚTBOL AUSTRALIANO',
+                            icon: Icons.sports_football_rounded,
+                            color: appBlue,
+                            onTap: () => onSportSelected('Fútbol australiano'),
+                          ),
+                          _HomeSportChip(
+                            label: 'FÓRMULA 1',
+                            icon: Icons.sports_motorsports_rounded,
+                            color: appYellow,
+                            onTap: () => onSportSelected('Fórmula 1'),
+                          ),
+                          _HomeSportChip(
+                            label: 'MMA',
+                            icon: Icons.sports_mma_rounded,
+                            color: appPink,
+                            onTap: () => onSportSelected('MMA'),
+                          ),
+                          _HomeSportChip(
+                            label: appText('TENIS · PRÓXIMAMENTE', 'TENNIS · COMING SOON', 'TÊNIS · EM BREVE', 'TENNIS · BIENTÔT'),
+                            icon: Icons.sports_tennis_rounded,
+                            color: appMuted,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        appText(
+                          'Los deportes disponibles abren sus datos y estadísticas. Tenis se muestra como próximamente porque el servidor actual no ofrece todavía ese endpoint.',
+                          'Available sports open their data and statistics. Tennis is marked as coming soon because the current server does not yet provide that endpoint.',
+                          'Os esportes disponíveis abrem seus dados e estatísticas. Tênis aparece como em breve porque o servidor ainda não oferece esse endpoint.',
+                          'Les sports disponibles ouvrent leurs données et statistiques. Le tennis est indiqué comme bientôt disponible car le serveur ne propose pas encore cet endpoint.',
+                        ),
+                        style: const TextStyle(
+                          color: appMuted,
+                          fontSize: 9,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 17),
                 _SectionHeading(
-                  title: appText('ACCESO RÁPIDO', 'QUICK ACCESS', 'ACESSO RÁPIDO', 'ACCÈS RAPIDE'),
+                  title: appText(
+                    'ACCESO RÁPIDO',
+                    'QUICK ACCESS',
+                    'ACESSO RÁPIDO',
+                    'ACCÈS RAPIDE',
+                  ),
                   icon: Icons.bolt_rounded,
                 ),
-                const SizedBox(height: 9),
-                GridView.count(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: .96,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: <Widget>[
-                    _ActionTile(
-                      title: tr('streams'),
-                      subtitle: appText('Ver canales', 'Watch channels', 'Ver canais', 'Voir les chaînes'),
-                      icon: Icons.live_tv_rounded,
-                      color: appRed,
-                      onTap: () => onNavigate(2),
-                    ),
-                    _ActionTile(
-                      title: tr('matches'),
-                      subtitle: appText('Calendario y resultados', 'Schedule and results', 'Calendário e resultados', 'Calendrier et résultats'),
-                      icon: Icons.calendar_month_rounded,
-                      color: appGreen,
-                      onTap: onOpenAgenda,
-                    ),
-                    _ActionTile(
-                      title: tr('telegram'),
-                      subtitle: appText('Canal oficial', 'Official channel', 'Canal oficial', 'Chaîne officielle'),
-                      icon: Icons.send_rounded,
-                      color: appBlue,
-                      onTap: onTelegram,
-                    ),
-                    _ActionTile(
-                      title: appText('FANTASY', 'FANTASY', 'FANTASY', 'FANTASY'),
-                      subtitle: appText('Jugar y competir', 'Play and compete', 'Jogar e competir', 'Jouer et concourir'),
-                      icon: Icons.emoji_events_rounded,
-                      color: appPink,
-                      onTap: onFantasy,
-                    ),
-                    _ActionTile(
-                      title: tr('public_chat'),
-                      subtitle: appText('Sala para todos', 'Room for everyone', 'Sala para todos', 'Salon pour tous'),
-                      icon: Icons.forum_rounded,
-                      color: appCyan,
-                      onTap: onChat,
-                    ),
-                  ],
+                const SizedBox(height: 8),
+                _HomeActionCard(
+                  title: tr('streams'),
+                  subtitle: appText(
+                    'Ver canales y abrir el reproductor SSH101',
+                    'Watch channels and open the SSH101 player',
+                    'Ver canais e abrir o player SSH101',
+                    'Voir les chaînes et ouvrir le lecteur SSH101',
+                  ),
+                  icon: Icons.live_tv_rounded,
+                  color: appRed,
+                  onTap: () => onNavigate(2),
                 ),
                 const SizedBox(height: 8),
+                _HomeActionCard(
+                  title: tr('matches'),
+                  subtitle: appText(
+                    'Calendario deportivo, marcadores y filtros',
+                    'Sports schedule, scores and filters',
+                    'Calendário esportivo, placares e filtros',
+                    'Calendrier sportif, scores et filtres',
+                  ),
+                  icon: Icons.calendar_month_rounded,
+                  color: appGreen,
+                  onTap: onOpenAgenda,
+                ),
+                const SizedBox(height: 8),
+                _HomeActionCard(
+                  title: tr('telegram'),
+                  subtitle: appText(
+                    'Espacio reservado para tu canal oficial',
+                    'Reserved space for your official channel',
+                    'Espaço reservado para seu canal oficial',
+                    'Espace réservé à votre chaîne officielle',
+                  ),
+                  icon: Icons.send_rounded,
+                  color: appBlue,
+                  onTap: onTelegram,
+                ),
+                const SizedBox(height: 8),
+                _HomeActionCard(
+                  title: tr('statistics'),
+                  subtitle: appText(
+                    'Ligas, clasificaciones, pilotos y luchadores',
+                    'Leagues, standings, drivers and fighters',
+                    'Ligas, classificações, pilotos e lutadores',
+                    'Ligues, classements, pilotes et combattants',
+                  ),
+                  icon: Icons.query_stats_rounded,
+                  color: appCyan,
+                  onTap: onStatistics,
+                ),
+                const SizedBox(height: 8),
+                _HomeActionCard(
+                  title: tr('news'),
+                  subtitle: appText(
+                    'Noticias deportivas de varias fuentes RSS',
+                    'Sports news from multiple RSS sources',
+                    'Notícias esportivas de várias fontes RSS',
+                    'Actualités sportives de plusieurs flux RSS',
+                  ),
+                  icon: Icons.article_rounded,
+                  color: appYellow,
+                  onTap: () => onNavigate(4),
+                ),
+                const SizedBox(height: 8),
+                _HomeActionCard(
+                  title: 'FANTASY',
+                  subtitle: appText(
+                    'Abrir Mister Fantasy',
+                    'Open Mister Fantasy',
+                    'Abrir Mister Fantasy',
+                    'Ouvrir Mister Fantasy',
+                  ),
+                  icon: Icons.emoji_events_rounded,
+                  color: appPink,
+                  onTap: onFantasy,
+                ),
+                const SizedBox(height: 8),
+                _HomeActionCard(
+                  title: tr('public_chat'),
+                  subtitle: appText(
+                    'Sala compartida para conversar con todos',
+                    'Shared room to chat with everyone',
+                    'Sala compartilhada para conversar com todos',
+                    'Salon partagé pour discuter avec tous',
+                  ),
+                  icon: Icons.forum_rounded,
+                  color: appCyan,
+                  onTap: onChat,
+                ),
+                const SizedBox(height: 10),
                 Row(
                   children: <Widget>[
                     Expanded(
                       child: _ActionTile(
                         title: tr('contact'),
-                        subtitle: appText('En caso de fallas', 'For support', 'Em caso de problemas', 'En cas de problème'),
+                        subtitle: appText(
+                          'En caso de fallas',
+                          'For support',
+                          'Em caso de problemas',
+                          'En cas de problème',
+                        ),
                         icon: Icons.chat_rounded,
                         color: appGreen,
                         onTap: onContact,
@@ -714,7 +904,12 @@ class HomeDashboard extends StatelessWidget {
                     Expanded(
                       child: _ActionTile(
                         title: tr('donations'),
-                        subtitle: appText('Apoya el proyecto', 'Support the project', 'Apoie o projeto', 'Soutenir le projet'),
+                        subtitle: appText(
+                          'Apoya el proyecto',
+                          'Support the project',
+                          'Apoie o projeto',
+                          'Soutenir le projet',
+                        ),
                         icon: Icons.favorite_rounded,
                         color: appYellow,
                         onTap: onDonations,
@@ -722,12 +917,9 @@ class HomeDashboard extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 15),
+                const SizedBox(height: 13),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 18,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
                     gradient: const LinearGradient(
@@ -744,41 +936,41 @@ class HomeDashboard extends StatelessWidget {
                   ),
                   child: Row(
                     children: <Widget>[
-                      Icon(Icons.sports_rounded, color: appPink, size: 34),
-                      SizedBox(width: 12),
+                      const Icon(Icons.sports_rounded, color: appPink, size: 32),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
                             Text(
-                              appText('¡EL DEPORTE NOS UNE!', 'SPORT BRINGS US TOGETHER!', 'O ESPORTE NOS UNE!', 'LE SPORT NOUS UNIT !'),
-                              style: TextStyle(
+                              appText(
+                                '¡EL DEPORTE NOS UNE!',
+                                'SPORT BRINGS US TOGETHER!',
+                                'O ESPORTE NOS UNE!',
+                                'LE SPORT NOUS UNIT !',
+                              ),
+                              style: const TextStyle(
                                 color: appCyan,
                                 fontWeight: FontWeight.w900,
-                                fontSize: 14,
-                                letterSpacing: .5,
+                                fontSize: 13,
+                                letterSpacing: .4,
                               ),
                             ),
-                            SizedBox(height: 4),
+                            const SizedBox(height: 4),
                             Text(
-                              appText('Tu pasión, en todas partes.', 'Your passion, everywhere.', 'Sua paixão, em todos os lugares.', 'Votre passion, partout.'),
-                              style: TextStyle(color: appMuted, fontSize: 12),
+                              appText(
+                                'Tu pasión, en todas partes.',
+                                'Your passion, everywhere.',
+                                'Sua paixão, em todos os lugares.',
+                                'Votre passion, partout.',
+                              ),
+                              style: const TextStyle(color: appMuted, fontSize: 11),
                             ),
                           ],
                         ),
                       ),
-                      Icon(Icons.bolt_rounded, color: appYellow, size: 28),
+                      const Icon(Icons.bolt_rounded, color: appYellow, size: 27),
                     ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  appText('La agenda mostrará eventos y enlaces de reproducción cuando haya una fuente real y autorizada conectada.', 'The schedule will show events and playback links when a real, authorized source is connected.', 'A agenda mostrará eventos e links de reprodução quando houver uma fonte real e autorizada conectada.', 'Le calendrier affichera les événements et les liens de lecture lorsqu’une source réelle et autorisée sera connectée.'),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: appMuted,
-                    fontSize: 10,
-                    height: 1.5,
                   ),
                 ),
               ],
@@ -790,11 +982,135 @@ class HomeDashboard extends StatelessWidget {
   }
 }
 
+class _HomeSportChip extends StatelessWidget {
+  const _HomeSportChip({
+    required this.label,
+    required this.icon,
+    required this.color,
+    this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color.withAlpha(18),
+      borderRadius: BorderRadius.circular(9),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(9),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(color: color.withAlpha(130)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(icon, color: color, size: 15),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  color: onTap == null ? appMuted : Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeActionCard extends StatelessWidget {
+  const _HomeActionCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: appPanel,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 62),
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: <Color>[color.withAlpha(34), appPanel],
+            ),
+            border: Border.all(color: color.withAlpha(190)),
+            boxShadow: <BoxShadow>[
+              BoxShadow(color: color.withAlpha(22), blurRadius: 13),
+            ],
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(icon, color: color, size: 29),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: appMuted, fontSize: 9),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: color, size: 23),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _BrandHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 178,
+      height: 148,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(17),
@@ -1355,10 +1671,13 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
     final oldController = _controller;
     _controller = null;
     await oldController?.dispose();
-    final controller = VideoPlayerController.networkUrl(uri);
+    final controller = VideoPlayerController.networkUrl(
+      uri,
+      formatHint: VideoFormat.hls,
+    );
     _controller = controller;
     try {
-      await controller.initialize();
+      await controller.initialize().timeout(const Duration(seconds: 25));
       await controller.setLooping(false);
       if (!mounted) {
         await controller.dispose();
@@ -1825,6 +2144,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 13),
             _settingsCard(
+              border: appBlue,
+              child: Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0x332D8CFF),
+                    child: Icon(Icons.cloud_sync_rounded, color: appCyan),
+                  ),
+                  title: Text(
+                    appText(
+                      'Servidor de estadísticas y agenda',
+                      'Statistics and schedule server',
+                      'Servidor de estatísticas e agenda',
+                      'Serveur des statistiques et du calendrier',
+                    ),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                    ),
+                  ),
+                  subtitle: Text(
+                    appText(
+                      'Comprobar la conexión y configurar la URL pública del Worker.',
+                      'Check the connection and configure the public Worker URL.',
+                      'Verifique a conexão e configure a URL pública do Worker.',
+                      'Vérifier la connexion et configurer l’URL publique du Worker.',
+                    ),
+                    style: const TextStyle(color: appMuted, fontSize: 11, height: 1.4),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded, color: appCyan),
+                  onTap: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const DeveloperSettingsScreen(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 13),
+            _settingsCard(
               border: appCyan,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1891,27 +2252,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       height: 1.4,
                     ),
                   ),
-                  SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      tr('notifications_enabled'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
+                  Material(
+                    color: Colors.transparent,
+                    child: SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        tr('notifications_enabled'),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                    ),
-                    subtitle: Text(
-                      appText(
-                        'Aviso antes de los eventos que cargues en la agenda.',
-                        'Reminder before events you load in the schedule.',
-                        'Aviso antes dos eventos carregados na agenda.',
-                        'Alerte avant les événements chargés dans le calendrier.',
+                      subtitle: Text(
+                        appText(
+                          'Aviso antes de los eventos que cargues en la agenda.',
+                          'Reminder before events you load in the schedule.',
+                          'Aviso antes dos eventos carregados na agenda.',
+                          'Alerte avant les événements chargés dans le calendrier.',
+                        ),
+                        style: const TextStyle(color: appMuted, fontSize: 10),
                       ),
-                      style: const TextStyle(color: appMuted, fontSize: 10),
+                      value: _notificationsEnabled,
+                      activeThumbColor: appGreen,
+                      onChanged: _toggleNotifications,
                     ),
-                    value: _notificationsEnabled,
-                    activeThumbColor: appGreen,
-                    onChanged: _toggleNotifications,
                   ),
                   if (_notificationsEnabled)
                     Align(
@@ -2090,10 +2454,31 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
 
     setState(() => _testing = true);
     try {
-      await SportsApiService().checkHealth(url);
-      _showMessage(appText('Conexión correcta con Deporte Total 360 API.', 'Connected to Deporte Total 360 API.', 'Conectado à API Deporte Total 360.', 'Connecté à l’API Deporte Total 360.'));
+      final service = SportsApiService();
+      await service.checkHealth(url);
+      final fixtureCount = await service.checkFootballFixtures(url);
+      _showMessage(
+        fixtureCount == 0
+            ? appText(
+                'Worker operativo y API-Sports configurada. La consulta respondió correctamente, pero no hay partidos en los próximos 7 días.',
+                'Worker online and API-Sports configured. The fixture request succeeded, but there are no matches in the next 7 days.',
+                'Worker online e API-Sports configurada. A consulta funcionou, mas não há jogos nos próximos 7 dias.',
+                'Worker en ligne et API-Sports configurée. La requête a réussi, mais aucun match dans les 7 prochains jours.',
+              )
+            : appText(
+                'Conexión verificada: $fixtureCount partidos recibidos en los próximos 7 días.',
+                'Connection verified: $fixtureCount matches received in the next 7 days.',
+                'Conexão verificada: $fixtureCount jogos recebidos nos próximos 7 dias.',
+                'Connexion vérifiée : $fixtureCount matchs reçus dans les 7 prochains jours.',
+              ),
+      );
     } catch (error) {
-      _showMessage(appText('No se pudo verificar el servidor: $error', 'Could not verify the server: $error', 'Não foi possível verificar o servidor: $error', 'Impossible de vérifier le serveur : $error'));
+      _showMessage(appText(
+        'La prueba del servidor o de partidos falló: $error',
+        'The server or fixtures test failed: $error',
+        'O teste do servidor ou dos jogos falhou: $error',
+        'Le test du serveur ou des matchs a échoué : $error',
+      ));
     } finally {
       if (mounted) setState(() => _testing = false);
     }
@@ -2138,7 +2523,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
       backgroundColor: appBg,
       appBar: AppBar(
         title: Text(
-          appText('MENÚ DE DESARROLLADOR', 'DEVELOPER MENU', 'MENU DO DESENVOLVEDOR', 'MENU DÉVELOPPEUR'),
+          appText('SERVIDOR Y DATOS DEPORTIVOS', 'SPORTS DATA SERVER', 'SERVIDOR E DADOS ESPORTIVOS', 'SERVEUR ET DONNÉES SPORTIVES'),
           style: TextStyle(
             color: appCyan,
             fontWeight: FontWeight.w900,
@@ -2248,7 +2633,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                 border: Border.all(color: appGreen.withAlpha(150)),
               ),
               child: Text(
-                appText('SEGURIDAD: la clave APISPORTS_KEY debe permanecer como secreto del Worker en Cloudflare. La aplicación solo guarda la URL pública del servidor. Este acceso oculto por diez toques es discreto, pero no sustituye autenticación real.', 'SECURITY: keep APISPORTS_KEY as a Cloudflare Worker secret. The app stores only the public server URL. This hidden ten-tap entry is discreet, but it is not real authentication.', 'SEGURANÇA: mantenha APISPORTS_KEY como segredo do Worker no Cloudflare. O app salva apenas a URL pública do servidor. O acesso oculto por dez toques não substitui autenticação real.', 'SÉCURITÉ : gardez APISPORTS_KEY comme secret du Worker Cloudflare. L’application ne stocke que l’URL publique du serveur. L’accès caché par dix touches ne remplace pas une authentification réelle.'),
+                appText('SEGURIDAD: la clave APISPORTS_KEY permanece como secreto del Worker en Cloudflare. La aplicación guarda solo la URL pública. El acceso directo desde Ajustes y el atajo de diez toques abren esta misma pantalla; ninguno sustituye autenticación real.', 'SECURITY: APISPORTS_KEY remains a Cloudflare Worker secret. The app stores only the public URL. The Settings shortcut and the ten-tap shortcut open this same screen; neither replaces real authentication.', 'SEGURANÇA: APISPORTS_KEY permanece como segredo do Worker no Cloudflare. O app salva apenas a URL pública. O atalho em Configurações e o atalho de dez toques abrem esta mesma tela; nenhum substitui autenticação real.', 'SÉCURITÉ : APISPORTS_KEY reste un secret du Worker Cloudflare. L’application ne conserve que l’URL publique. Le raccourci des paramètres et celui de dix pressions ouvrent le même écran ; aucun ne remplace une véritable authentification.'),
                 style: TextStyle(color: appMuted, fontSize: 11, height: 1.5),
               ),
             ),

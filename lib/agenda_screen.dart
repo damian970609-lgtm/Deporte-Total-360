@@ -135,6 +135,10 @@ class _AgendaScreenState extends State<AgendaScreen> {
     switch (value) {
       case 'Hoy': return appText('Hoy', 'Today', 'Hoje', 'Aujourd’hui');
       case 'Mañana': return appText('Mañana', 'Tomorrow', 'Amanhã', 'Demain');
+      case 'Todos':
+        return _sport == 'Fútbol'
+            ? appText('Próximos 7 días', 'Next 7 days', 'Próximos 7 dias', '7 prochains jours')
+            : _localizedSport(value);
       default: return _localizedSport(value);
     }
   }
@@ -150,7 +154,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
   }
 
   late String _sport;
-  String _dateFilter = 'Hoy';
+  String _dateFilter = 'Todos';
   String _statusFilter = 'Todos';
   String _query = '';
   final TextEditingController _searchController = TextEditingController();
@@ -159,6 +163,8 @@ class _AgendaScreenState extends State<AgendaScreen> {
   List<MatchEvent> _remoteMatches = <MatchEvent>[];
   bool _loadingApi = false;
   String? _apiError;
+  String? _apiWarning;
+  String? _apiProgress;
   int _apiRequestVersion = 0;
   Timer? _scorePollingTimer;
 
@@ -168,6 +174,9 @@ class _AgendaScreenState extends State<AgendaScreen> {
     _sport = _sports.contains(widget.initialSport)
         ? widget.initialSport
         : 'Todos';
+    if (_sport != 'Todos' && _sport != 'Fútbol') {
+      _dateFilter = 'Hoy';
+    }
     _apiConfigurationListener = _onApiConfigurationChanged;
     sportsApiBaseUrl.addListener(_apiConfigurationListener);
     if (sportsApiBaseUrl.value.trim().isNotEmpty) {
@@ -176,7 +185,12 @@ class _AgendaScreenState extends State<AgendaScreen> {
     _scorePollingTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       // No sondear el resumen de todos los deportes continuamente: las
       // alertas de marcador se consultan para el deporte que el usuario ve.
-      if (!mounted || _sport == 'Todos' || _dateFilter != 'Hoy' || _loadingApi) return;
+      if (!mounted ||
+          _sport == 'Todos' ||
+          (_dateFilter != 'Hoy' && _dateFilter != 'Todos') ||
+          _loadingApi) {
+        return;
+      }
       _loadRemoteMatches(announceScoreChanges: true);
     });
   }
@@ -197,6 +211,8 @@ class _AgendaScreenState extends State<AgendaScreen> {
           _remoteMatches = <MatchEvent>[];
           _loadingApi = false;
           _apiError = null;
+          _apiWarning = null;
+          _apiProgress = null;
         });
       }
       return;
@@ -211,15 +227,56 @@ class _AgendaScreenState extends State<AgendaScreen> {
       setState(() {
         _loadingApi = true;
         _apiError = null;
+        _apiWarning = null;
+        _apiProgress = _sport == 'Todos'
+            ? appText('Preparando la carga multideporte…', 'Preparing multi-sport data…', 'Preparando a carga multiesportiva…', 'Préparation des données multisports…')
+            : appText('Actualizando agenda…', 'Updating schedule…', 'Atualizando agenda…', 'Mise à jour du calendrier…');
       });
     }
 
     try {
+      final sportErrors = <String, String>{};
+      final partialRows = <Map<String, dynamic>>[];
+      var completedSports = 0;
       final rows = _sport == 'Todos'
-          ? await _apiService.fetchAllAgendaEvents(dateFilter: _dateFilter)
+          ? await _apiService.fetchAllAgendaEvents(
+              dateFilter: _dateFilter,
+              onSportError: (sport, error) {
+                sportErrors[sport] = error.toString();
+              },
+              onSportComplete: (sport, sportRows) {
+                completedSports++;
+                partialRows.addAll(sportRows);
+                if (!mounted || requestVersion != _apiRequestVersion) return;
+                final partialMatches = partialRows
+                    .map((row) => _matchFromApi(
+                          row,
+                          (row['_sportName'] ?? sport).toString(),
+                        ))
+                    .whereType<MatchEvent>()
+                    .toList(growable: false);
+                setState(() {
+                  _remoteMatches = partialMatches;
+                  _apiProgress = appText(
+                    'Consultando $sport ($completedSports/${SportsApiService.supportedSports.length})…',
+                    'Checking $sport ($completedSports/${SportsApiService.supportedSports.length})…',
+                    'Consultando $sport ($completedSports/${SportsApiService.supportedSports.length})…',
+                    'Consultation de $sport ($completedSports/${SportsApiService.supportedSports.length})…',
+                  );
+                });
+              },
+            )
           : await _apiService.fetchAgendaEvents(
               sport: _sport,
               dateFilter: _dateFilter,
+            );
+      final warning = sportErrors.isEmpty
+          ? null
+          : appText(
+              'Algunos deportes no respondieron: ${sportErrors.entries.take(3).map((entry) => '${entry.key}: ${entry.value}').join(' · ')}',
+              'Some sports did not respond: ${sportErrors.entries.take(3).map((entry) => '${entry.key}: ${entry.value}').join(' · ')}',
+              'Alguns esportes não responderam: ${sportErrors.entries.take(3).map((entry) => '${entry.key}: ${entry.value}').join(' · ')}',
+              'Certains sports n’ont pas répondu : ${sportErrors.entries.take(3).map((entry) => '${entry.key}: ${entry.value}').join(' · ')}',
             );
       final matches = rows
           .map((row) => _matchFromApi(
@@ -245,7 +302,9 @@ class _AgendaScreenState extends State<AgendaScreen> {
       setState(() {
         _remoteMatches = matches;
         _loadingApi = false;
-        _apiError = null;
+        _apiError = matches.isEmpty ? warning : null;
+        _apiWarning = matches.isEmpty ? null : warning;
+        _apiProgress = null;
       });
       for (final event in scoreChanges) {
         await NotificationService.showLiveScoreUpdate(
@@ -265,6 +324,8 @@ class _AgendaScreenState extends State<AgendaScreen> {
       setState(() {
         _loadingApi = false;
         _apiError = error.toString();
+        _apiWarning = null;
+        _apiProgress = null;
       });
     }
   }
@@ -351,10 +412,57 @@ class _AgendaScreenState extends State<AgendaScreen> {
         awayFighter['name'] ??
         (awayRaw is String ? awayRaw : '')}'.trim();
 
-    final rawDate = fixture['date'] ?? row['date'] ?? game['date'] ??
-        fight['date'] ?? race['date'] ?? row['start_date'];
+    DateTime? parseKickoff(dynamic value, [dynamic fallbackTime]) {
+      if (value is DateTime) return value;
+      if (value is num) {
+        final timestamp = value.toInt();
+        final milliseconds = timestamp.abs() < 10000000000
+            ? timestamp * 1000
+            : timestamp;
+        return DateTime.fromMillisecondsSinceEpoch(milliseconds, isUtc: true);
+      }
+      if (value is Map) {
+        final dateValue = value['start'] ??
+            value['date'] ??
+            value['kickoff'] ??
+            value['timestamp'] ??
+            value['time'];
+        return parseKickoff(dateValue, value['time'] ?? fallbackTime);
+      }
+      if (value == null) return null;
+      var text = value.toString().trim();
+      if (text.isEmpty) return null;
+      final numericTimestamp = int.tryParse(text);
+      if (numericTimestamp != null && text.length >= 9) {
+        final milliseconds = numericTimestamp.abs() < 10000000000
+            ? numericTimestamp * 1000
+            : numericTimestamp;
+        return DateTime.fromMillisecondsSinceEpoch(milliseconds, isUtc: true);
+      }
+      if (fallbackTime is String &&
+          fallbackTime.trim().isNotEmpty &&
+          RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(text)) {
+        text = '${text}T${fallbackTime.trim()}';
+      }
+      return DateTime.tryParse(text);
+    }
 
-    final kickoff = DateTime.tryParse('${rawDate ?? ''}');
+    final rawDate = fixture['date'] ??
+        fixture['timestamp'] ??
+        row['date'] ??
+        row['timestamp'] ??
+        game['date'] ??
+        game['timestamp'] ??
+        fight['date'] ??
+        fight['timestamp'] ??
+        race['date'] ??
+        race['timestamp'] ??
+        row['start_date'];
+
+    final kickoff = parseKickoff(
+      rawDate,
+      fixture['time'] ?? game['time'] ?? fight['time'] ?? race['time'] ?? row['time'],
+    );
 
     if (kickoff == null || homeName.isEmpty || awayName.isEmpty) {
       return null;
@@ -436,13 +544,17 @@ class _AgendaScreenState extends State<AgendaScreen> {
 
   Widget _buildEmptyAgendaContent() {
     if (_loadingApi) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            CircularProgressIndicator(color: agendaCyan),
-            SizedBox(height: 12),
-            Text('Cargando partidos…', style: TextStyle(color: agendaMuted)),
+            const CircularProgressIndicator(color: agendaCyan),
+            const SizedBox(height: 12),
+            Text(
+              _apiProgress ?? appText('Cargando partidos…', 'Loading matches…', 'Carregando partidas…', 'Chargement des matchs…'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: agendaMuted),
+            ),
           ],
         ),
       );
@@ -755,6 +867,59 @@ class _AgendaScreenState extends State<AgendaScreen> {
                   },
                 ),
               ),
+              if (_loadingApi && _apiProgress != null && events.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
+                  child: Row(
+                    children: <Widget>[
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: agendaCyan,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _apiProgress!,
+                          style: const TextStyle(
+                            color: agendaMuted,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (_apiWarning != null && events.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2A2414),
+                      border: Border.all(color: const Color(0xFFFFD166)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        const Icon(Icons.warning_amber_rounded, color: Color(0xFFFFD166), size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _apiWarning!,
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white, fontSize: 10, height: 1.35),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 13, 14, 8),
                 child: Row(
