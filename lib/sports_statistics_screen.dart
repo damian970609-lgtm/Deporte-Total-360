@@ -18,7 +18,9 @@ class _SportOption {
 }
 
 class SportsStatisticsScreen extends StatefulWidget {
-  const SportsStatisticsScreen({super.key});
+  const SportsStatisticsScreen({super.key, this.initialSport = 'Fútbol', this.onOpenAgenda});
+  final String initialSport;
+  final VoidCallback? onOpenAgenda;
   @override
   State<SportsStatisticsScreen> createState() => _SportsStatisticsScreenState();
 }
@@ -53,6 +55,15 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
   bool _loadingRows = false;
   String? _error;
   String _resultHeading = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _sportId = SportsApiService.supportedSports[widget.initialSport] ??
+        (_sports.any((item) => item.id == widget.initialSport)
+            ? widget.initialSport
+            : 'football');
+  }
 
   _SportOption get _sport => _sports.firstWhere(
         (item) => item.id == _sportId,
@@ -493,6 +504,14 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
         backgroundColor: _statsBg,
         title: Text(tr('stats_title'), style: const TextStyle(
             color: _statsCyan, fontSize: 14, fontWeight: FontWeight.w900)),
+        actions: <Widget>[
+          if (widget.onOpenAgenda != null)
+            IconButton(
+              tooltip: tr('matches'),
+              onPressed: widget.onOpenAgenda,
+              icon: const Icon(Icons.calendar_month_rounded, color: _statsCyan),
+            ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
