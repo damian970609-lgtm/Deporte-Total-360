@@ -116,51 +116,7 @@ class ChannelCatalogService {
     List<ChannelMatchQuery> events,
   ) async {
     final config = await loadConfig();
-    if (config.playlistUrl.isEmpty || config.epgUrl.isEmpty) {
-      return const <String, List<ChannelMatchSuggestion>>{};
-    }
-    final snapshot = await _loadSnapshot(config);
-    return <String, List<ChannelMatchSuggestion>>{
-      for (final event in events)
-        event.id: matchEvent(
-          channels: snapshot.channels,
-          programmes: snapshot.programmes,
-          sport: event.sport,
-          homeTeam: event.homeTeam,
-          awayTeam: event.awayTeam,
-          competition: event.competition,
-          startsAt: event.startsAt,
-        ),
-    };
-  }
-
-  Future<List<ChannelMatchSuggestion>> findMatchesForEvent({
-    required String sport,
-    required String homeTeam,
-    required String awayTeam,
-    required String competition,
-    required DateTime startsAt,
-  }) async {
-    final config = await loadConfig();
-    if (config.playlistUrl.isEmpty || config.epgUrl.isEmpty) return const <ChannelMatchSuggestion>[];
-    final snapshot = await _loadSnapshot(config);
-    return matchEvent(
-      channels: snapshot.channels,
-      programmes: snapshot.programmes,
-      sport: sport,
-      homeTeam: homeTeam,
-      awayTeam: awayTeam,
-      competition: competition,
-      startsAt: startsAt,
-    );
-  }
-
-  Future<_CatalogSnapshot> _loadSnapshot(ChannelCatalogConfig config) async {
-    final key = '${config.playlistUrl}\n${config.epgUrl}';
-    if (_cacheKey == key && _cacheExpiresAt != null && DateTime.now().isBefore(_cacheExpiresAt!)) {
-      return _CatalogSnapshot(_cachedChannels, _cachedProgrammes);
-    }
-    if (config.playlistUrl.isEmpty || config.epgUrl.isEmpty) {
+    if (config.playlistUrl.isEmpty) {
       return const _CatalogSnapshot(<TvCatalogChannel>[], <TvGuideProgramme>[]);
     }
     final playlistResponse = await _client.get(Uri.parse(config.playlistUrl)).timeout(const Duration(seconds: 20));
@@ -170,15 +126,18 @@ class ChannelCatalogService {
     if (playlistResponse.bodyBytes.length > maxPlaylistBytes) {
       throw const FormatException('La lista M3U supera el tamaño permitido de 5 MB.');
     }
-    final epgResponse = await _client.get(Uri.parse(config.epgUrl)).timeout(const Duration(seconds: 25));
-    if (epgResponse.statusCode != 200) {
-      throw FormatException('La guía XMLTV respondió HTTP ${epgResponse.statusCode}.');
-    }
-    if (epgResponse.bodyBytes.length > maxEpgBytes) {
-      throw const FormatException('La guía XMLTV supera el tamaño permitido de 12 MB.');
-    }
     final channels = parseM3u(utf8.decode(playlistResponse.bodyBytes, allowMalformed: true));
-    final programmes = parseXmlTv(utf8.decode(epgResponse.bodyBytes, allowMalformed: true));
+    var programmes = const <TvGuideProgramme>[];
+    if (config.epgUrl.isNotEmpty) {
+      final epgResponse = await _client.get(Uri.parse(config.epgUrl)).timeout(const Duration(seconds: 25));
+      if (epgResponse.statusCode != 200) {
+        throw FormatException('La guía XMLTV respondió HTTP ${epgResponse.statusCode}.');
+      }
+      if (epgResponse.bodyBytes.length > maxEpgBytes) {
+        throw const FormatException('La guía XMLTV supera el tamaño permitido de 12 MB.');
+      }
+      programmes = parseXmlTv(utf8.decode(epgResponse.bodyBytes, allowMalformed: true));
+    }
     _cachedChannels = channels;
     _cachedProgrammes = programmes;
     _cacheKey = key;
