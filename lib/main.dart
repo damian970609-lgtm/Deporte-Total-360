@@ -275,6 +275,10 @@ class DeporteTotal360App extends StatelessWidget {
       valueListenable: appLanguage,
       builder: (context, language, _) => MaterialApp(
         title: tr('title'),
+        locale: Locale(languageCode(language)),
+        supportedLocales: const <Locale>[
+          Locale('es'), Locale('en'), Locale('pt'), Locale('fr'),
+        ],
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,
@@ -331,7 +335,6 @@ class _MainShellState extends State<MainShell> {
       GlobalKey<WebAgendaScreenState>();
 
   int _selectedIndex = _homeTab;
-  String _agendaSport = 'Fútbol';
   String _selectedStatisticsSport = 'Fútbol';
   bool _handlingBack = false;
 
@@ -345,7 +348,6 @@ class _MainShellState extends State<MainShell> {
 
   void _selectSport(String sport) {
     setState(() {
-      _agendaSport = sport;
       _selectedStatisticsSport = sport;
       // Los mosaicos deportivos abren Estadísticas con el deporte elegido.
       _selectedIndex = _statisticsTab;
