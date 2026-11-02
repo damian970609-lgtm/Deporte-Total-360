@@ -783,6 +783,7 @@ class _NewsArticleReaderState extends State<NewsArticleReader> {
     CreateWindowAction action,
   ) async {
     final uri = action.request.url;
+    if (uri == null) return false;
     if (!WebProtectionPolicy.isHttpUrl(uri) ||
         WebProtectionPolicy.isBlockedHost(uri.host)) {
       return false;
@@ -881,10 +882,7 @@ class _NewsArticleReaderState extends State<NewsArticleReader> {
                 },
                 shouldOverrideUrlLoading: (controller, action) async {
                   final uri = action.request.url;
-                  if (uri == null) return NavigationActionPolicy.CANCEL;
-
-                  if (uri == null ||
-                      !WebProtectionPolicy.isHttpUrl(uri) ||
+                  if (!WebProtectionPolicy.isHttpUrl(uri) ||
                       WebProtectionPolicy.isBlockedHost(uri.host)) {
                     return NavigationActionPolicy.CANCEL;
                   }

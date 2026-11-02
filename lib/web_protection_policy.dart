@@ -21,8 +21,8 @@ class WebProtectionPolicy {
     return blockedDomains.any((domain)=>normalized==domain || normalized.endsWith('.'+domain));
   }
 
-  static bool isHttpUrl(WebUri? uri) {
-    if(uri==null || uri.host.isEmpty) return false;
+  static bool isHttpUrl(WebUri uri) {
+    if(uri.host.isEmpty) return false;
     final scheme=uri.scheme.toLowerCase();
     return scheme=='http' || scheme=='https';
   }
@@ -39,7 +39,7 @@ class WebProtectionPolicy {
 
   static WebResourceResponse? intercept(WebResourceRequest request) {
     final uri=request.url;
-    if(uri==null || !isBlockedHost(uri.host)) return null;
+    if(!isBlockedHost(uri.host)) return null;
     return WebResourceResponse(
       contentType:'text/plain',
       contentEncoding:'utf-8',

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
+import 'web_protection_policy.dart';
+
 const Color _brandBg = Color(0xFF030814);
 const Color _brandPanel = Color(0xFF071326);
 const Color _brandLine = Color(0xFF123D65);
 const Color _brandCyan = Color(0xFF00E5FF);
 const Color _brandBlue = Color(0xFF087BFF);
-const Color _brandPink = Color(0xFFFF28CF);
 const Color _brandGreen = Color(0xFF39FF9C);
 const Color _brandMuted = Color(0xFFA9BDD6);
 const Color _brandRed = Color(0xFFFF3155);
@@ -190,7 +191,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
         backgroundColor: const Color(0xFF020B19),
         titleSpacing: 8,
         leading: IconButton(
-          tooltip: 'Atrás',
+          tooltip: _canGoBack ? 'Volver a la página anterior' : 'Volver a Inicio',
           onPressed: _handleToolbarBack,
           icon: const Icon(Icons.arrow_back_rounded, color: _brandCyan),
         ),
@@ -271,7 +272,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 ),
                 Switch.adaptive(
                   value: _blockKnownTrackers,
-                  activeColor: _brandGreen,
+                  activeThumbColor: _brandGreen,
                   onChanged: _toggleTrackerProtection,
                 ),
               ],
