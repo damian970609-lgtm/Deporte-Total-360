@@ -3,6 +3,7 @@ import 'package:video_player/video_player.dart';
 
 import 'sports_api_service.dart';
 import 'notification_service.dart';
+import 'app_i18n.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'sports_statistics_screen.dart';
 
@@ -110,6 +111,41 @@ class _AgendaScreenState extends State<AgendaScreen> {
     'Programados',
     'Finalizados',
   ];
+
+
+  String _localizedSport(String value) {
+    switch (value) {
+      case 'Todos': return appText('Todos', 'All sports', 'Todos', 'Tous');
+      case 'Fútbol': return appText('Fútbol', 'Football', 'Futebol', 'Football');
+      case 'Básquet': return appText('Básquet', 'Basketball', 'Basquete', 'Basket');
+      case 'Béisbol': return appText('Béisbol', 'Baseball', 'Beisebol', 'Baseball');
+      case 'Fútbol americano': return appText('Fútbol americano', 'American football', 'Futebol americano', 'Football américain');
+      case 'Hockey sobre hielo': return appText('Hockey sobre hielo', 'Ice hockey', 'Hóquei no gelo', 'Hockey sur glace');
+      case 'Balonmano': return appText('Balonmano', 'Handball', 'Handebol', 'Handball');
+      case 'Vóley': return appText('Vóley', 'Volleyball', 'Vôlei', 'Volley-ball');
+      case 'Fútbol australiano': return appText('Fútbol australiano', 'Australian rules football', 'Futebol australiano', 'Football australien');
+      case 'Fórmula 1': return 'Fórmula 1';
+      default: return value;
+    }
+  }
+
+  String _localizedDateFilter(String value) {
+    switch (value) {
+      case 'Hoy': return appText('Hoy', 'Today', 'Hoje', 'Aujourd’hui');
+      case 'Mañana': return appText('Mañana', 'Tomorrow', 'Amanhã', 'Demain');
+      default: return _localizedSport(value);
+    }
+  }
+
+  String _localizedStatus(String value) {
+    switch (value) {
+      case 'Todos': return _localizedSport(value);
+      case 'En vivo': return appText('En vivo', 'Live', 'Ao vivo', 'En direct');
+      case 'Programados': return appText('Programados', 'Scheduled', 'Programados', 'Programmés');
+      case 'Finalizados': return appText('Finalizados', 'Finished', 'Finalizados', 'Terminés');
+      default: return value;
+    }
+  }
 
   late String _sport;
   String _dateFilter = 'Hoy';
@@ -486,7 +522,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
             SizedBox(width: 9),
             Expanded(
               child: Text(
-                'AGENDA DE PARTIDOS',
+                tr('matches'),
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 14,
@@ -498,14 +534,14 @@ class _AgendaScreenState extends State<AgendaScreen> {
         ),
         actions: <Widget>[
           IconButton(
-            tooltip: 'Estadísticas y clasificaciones',
+            tooltip: tr('stats_title'),
             onPressed: () => Navigator.of(context).push<void>(
               MaterialPageRoute<void>(builder: (_) => const SportsStatisticsScreen()),
             ),
             icon: const Icon(Icons.leaderboard_rounded, color: agendaCyan),
           ),
           IconButton(
-            tooltip: 'Limpiar búsqueda',
+            tooltip: appText('Limpiar búsqueda', 'Clear search', 'Limpar busca', 'Effacer la recherche'),
             onPressed: _clearFilters,
             icon: const Icon(Icons.refresh_rounded, color: agendaCyan),
           ),
@@ -537,7 +573,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                     fontSize: 14,
                   ),
                   decoration: InputDecoration(
-                    hintText: 'Buscar equipo, liga o deporte…',
+                    hintText: appText('Buscar equipo, liga o deporte…', 'Search team, league or sport…', 'Buscar equipe, liga ou esporte…', 'Rechercher une équipe, ligue ou sport…'),
                     prefixIcon: const Icon(
                       Icons.search_rounded,
                       color: agendaCyan,
@@ -580,7 +616,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 2),
                           child: _FilterButton(
-                            label: date,
+                            label: _localizedDateFilter(date),
                             selected: _dateFilter == date,
                             onTap: () {
                               setState(() {
@@ -610,7 +646,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                   itemBuilder: (context, index) {
                     final value = _sports[index];
                     return ChoiceChip(
-                      label: Text(value),
+                      label: Text(_localizedSport(value)),
                       selected: _sport == value,
                       onSelected: (_) {
                         setState(() {
@@ -672,7 +708,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                           borderRadius: BorderRadius.circular(9),
                         ),
                         child: Text(
-                          value,
+                          _localizedStatus(value),
                           style: TextStyle(
                             color: selected ? color : agendaMuted,
                             fontSize: 11,
@@ -690,7 +726,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                   children: <Widget>[
                     const Expanded(
                       child: Text(
-                        'PARTIDOS Y EVENTOS',
+                        appText('PARTIDOS Y EVENTOS', 'MATCHES AND EVENTS', 'JOGOS E EVENTOS', 'MATCHS ET ÉVÉNEMENTS'),
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w900,
@@ -700,7 +736,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                       ),
                     ),
                     Text(
-                      '${events.length} eventos',
+                      appText('${events.length} eventos', '${events.length} events', '${events.length} eventos', '${events.length} événements'),
                       style: const TextStyle(
                         color: agendaMuted,
                         fontSize: 11,
