@@ -249,7 +249,10 @@ Future<void> main() async {
         ? defaultSsh101Channel
         : savedChannel;
     telegramLink.value = prefs.getString('telegram_public_link') ?? '';
-    sportsApiBaseUrl.value = prefs.getString('sports_api_base_url') ?? '';
+    final savedApiUrl = prefs.getString('sports_api_base_url');
+    sportsApiBaseUrl.value =
+        SportsApiService.normalizeBaseUrl(savedApiUrl ?? '') ??
+        defaultSportsApiBaseUrl;
   } catch (_) {
     // La app puede abrirse aunque el almacenamiento local no esté disponible.
   }
@@ -467,6 +470,7 @@ class _MainShellState extends State<MainShell> {
       WebAgendaScreen(
         key: _webAgendaKey,
         onExit: () => _selectTab(_homeTab),
+        onOpenLive: () => _selectTab(2),
       ),
       const NewsScreen(),
       const SettingsScreen(),
@@ -772,11 +776,11 @@ class HomeDashboard extends StatelessWidget {
                       onTap: () => onSportSelected('Béisbol'),
                     ),
                     _SportTile(
-                      title: 'TENIS',
-                      subtitle: 'ATP • WTA',
+                      title: 'RUGBY',
+                      subtitle: 'Ligas • Torneos',
                       icon: Icons.sports_tennis_rounded,
                       color: appGreen,
-                      onTap: () => onSportSelected('Tenis'),
+                      onTap: () => onSportSelected('Rugby'),
                     ),
                     _SportTile(
                       title: 'VÓLEY',
@@ -786,11 +790,11 @@ class HomeDashboard extends StatelessWidget {
                       onTap: () => onSportSelected('Vóley'),
                     ),
                     _SportTile(
-                      title: 'OTROS',
-                      subtitle: 'Boxeo • Motor',
+                      title: 'HOCKEY',
+                      subtitle: 'NHL • Ligas',
                       icon: Icons.emoji_events_rounded,
                       color: appCyan,
-                      onTap: () => onSportSelected('Otros'),
+                      onTap: () => onSportSelected('Hockey sobre hielo'),
                     ),
                   ],
                 ),
@@ -817,10 +821,10 @@ class HomeDashboard extends StatelessWidget {
                     ),
                     _ActionTile(
                       title: tr('matches'),
-                      subtitle: 'Calendario completo',
+                      subtitle: 'Calendario y resultados',
                       icon: Icons.calendar_month_rounded,
                       color: appGreen,
-                      onTap: () => onNavigate(3),
+                      onTap: () => onNavigate(1),
                     ),
                     _ActionTile(
                       title: tr('telegram'),
@@ -959,7 +963,7 @@ class _BrandHero extends StatelessWidget {
         ],
       ),
       child: Image.asset(
-        'assets/images/logo.png',
+        'assets/images/app_icon.png',
         fit: BoxFit.contain,
         errorBuilder: (_, __, ___) => const Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1497,7 +1501,11 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
       }
       setState(() => _loading = false);
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) {
+        await controller.dispose();
+        if (identical(_controller, controller)) _controller = null;
+        return;
+      }
       setState(() {
         _loading = false;
         _error =
@@ -2276,7 +2284,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                 border: Border.all(color: appGreen.withAlpha(150)),
               ),
               child: const Text(
-                'SEGURIDAD: la clave APIFOOTBALL_KEY debe permanecer como secreto del Worker en Cloudflare. La aplicación solo guarda la URL pública del servidor. Este acceso oculto por diez toques es discreto, pero no sustituye autenticación real.',
+                'SEGURIDAD: la clave APISPORTS_KEY debe permanecer como secreto del Worker en Cloudflare. La aplicación solo guarda la URL pública del servidor. Este acceso oculto por diez toques es discreto, pero no sustituye autenticación real.',
                 style: TextStyle(color: appMuted, fontSize: 11, height: 1.5),
               ),
             ),

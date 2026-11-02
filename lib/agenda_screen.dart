@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import 'sports_api_service.dart';
+import 'sports_statistics_screen.dart';
 
 const Color agendaBg = Color(0xFF030814);
 const Color agendaPanel = Color(0xFF071326);
@@ -81,10 +82,14 @@ class _AgendaScreenState extends State<AgendaScreen> {
     'Todos',
     'Fútbol',
     'Básquet',
+    'NBA',
     'Béisbol',
-    'Tenis',
+    'Fútbol americano',
+    'Hockey sobre hielo',
+    'Balonmano',
+    'Rugby',
     'Vóley',
-    'Otros',
+    'Fútbol australiano',
   ];
 
   static const List<String> _statuses = <String>[
@@ -152,8 +157,15 @@ class _AgendaScreenState extends State<AgendaScreen> {
     }
 
     try {
-      final rows = await _apiService.fetchFixtures();
-      final matches = rows.map(_matchFromApi).whereType<MatchEvent>().toList();
+      final requestedSport = _sport == 'Todos' ? 'Fútbol' : _sport;
+      final rows = await _apiService.fetchAgendaEvents(
+        sport: requestedSport,
+        dateFilter: _dateFilter,
+      );
+      final matches = rows
+          .map((row) => _matchFromApi(row, requestedSport))
+          .whereType<MatchEvent>()
+          .toList(growable: false);
       if (!mounted || requestVersion != _apiRequestVersion) return;
       setState(() {
         _remoteMatches = matches;
@@ -169,44 +181,119 @@ class _AgendaScreenState extends State<AgendaScreen> {
     }
   }
 
-  MatchEvent? _matchFromApi(Map<String, dynamic> row) {
-    Map<String, dynamic> asMap(dynamic value) =>
-        value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
-    int? asInt(dynamic value) => value is num ? value.toInt() : int.tryParse('$value');
+  MatchEvent? _matchFromApi(
+    Map<String, dynamic> row,
+    String sport,
+  ) {
+    Map<String, dynamic> asMap(dynamic value) {
+      return value is Map
+          ? Map<String, dynamic>.from(value)
+          : <String, dynamic>{};
+    }
+
+    int? asInt(dynamic value) {
+      if (value is num) return value.toInt();
+      return int.tryParse('${value ?? ''}');
+    }
+
+    int? asScore(dynamic value) {
+      if (value is Map) {
+        final score = asMap(value);
+        value = score['total'] ??
+            score['score'] ??
+            score['goals'] ??
+            score['runs'] ??
+            score['points'];
+      }
+      return asInt(value);
+    }
 
     final fixture = asMap(row['fixture']);
-    final league = asMap(row['league']);
-    final teams = asMap(row['teams']);
-    final home = asMap(teams['home']);
-    final away = asMap(teams['away']);
-    final goals = asMap(row['goals']);
-    final status = asMap(fixture['status']);
-    final kickoff = DateTime.tryParse('${fixture['date'] ?? ''}');
-    final homeName = '${home['name'] ?? ''}'.trim();
-    final awayName = '${away['name'] ?? ''}'.trim();
+    final game = asMap(row['game']);
+    final league = asMap(row['league'] ?? game['league']);
+    final teams = asMap(row['teams'] ?? game['teams']);
 
-    if (kickoff == null || homeName.isEmpty || awayName.isEmpty) return null;
+    final homeRaw = teams['home'] ?? row['home'] ?? game['home'];
+    final awayRaw = teams['away'] ?? row['away'] ?? game['away'];
 
-    final statusCode = '${status['short'] ?? ''}'.toUpperCase();
-    const liveCodes = <String>{'1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'};
-    const finishedCodes = <String>{'FT', 'AET', 'PEN', 'AWD', 'WO', 'CANC', 'ABD'};
-    final matchStatus = liveCodes.contains(statusCode)
+    final home = asMap(homeRaw);
+    final away = asMap(awayRaw);
+    final homeNested = asMap(home['team']);
+    final awayNested = asMap(away['team']);
+
+    final homeName = '${home['name'] ??
+        homeNested['name'] ??
+        (homeRaw is String ? homeRaw : '')}'.trim();
+
+    final awayName = '${away['name'] ??
+        awayNested['name'] ??
+        (awayRaw is String ? awayRaw : '')}'.trim();
+
+    final rawDate =
+        fixture['date'] ?? row['date'] ?? game['date'];
+
+    final kickoff = DateTime.tryParse('${rawDate ?? ''}');
+
+    if (kickoff == null || homeName.isEmpty || awayName.isEmpty) {
+      return null;
+    }
+
+    final rawStatus =
+        fixture['status'] ?? row['status'] ?? game['status'];
+
+    final status = asMap(rawStatus);
+
+    final statusCode = '${status['short'] ??
+        status['code'] ??
+        (rawStatus is String ? rawStatus : '')}'.toUpperCase();
+
+    final statusText =
+        '${status['long'] ?? statusCode}'.toLowerCase();
+
+    const liveCodes = <String>{
+      '1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT',
+      'Q1', 'Q2', 'Q3', 'Q4', 'OT',
+      'IN1', 'IN2', 'IN3', 'IN4', 'IN5',
+      'IN6', 'IN7', 'IN8', 'IN9', 'INTR',
+    };
+
+    const finishedCodes = <String>{
+      'FT', 'AET', 'AOT', 'PEN', 'AWD', 'WO', 'CANC', 'ABD',
+    };
+
+    final isLive = liveCodes.contains(statusCode) ||
+        statusText.contains('in progress') ||
+        statusText.contains('in play') ||
+        statusText.contains('live');
+
+    final isFinished = finishedCodes.contains(statusCode) ||
+        statusText.contains('finished') ||
+        statusText == 'final';
+
+    final matchStatus = isLive
         ? MatchStatus.live
-        : finishedCodes.contains(statusCode)
+        : isFinished
             ? MatchStatus.finished
             : MatchStatus.scheduled;
 
+    final scores = asMap(
+      row['goals'] ?? row['scores'] ?? game['scores'],
+    );
+
+    final eventId =
+        fixture['id'] ?? game['id'] ?? row['id'];
+
     return MatchEvent(
-      id: '${fixture['id'] ?? '${homeName}_$awayName'}',
-      sport: 'Fútbol',
-      competition: '${league['name'] ?? 'Fútbol'}',
+      id: '${eventId ?? '${homeName}_$awayName'}',
+      sport: sport,
+      competition: '${league['name'] ?? row['competition'] ?? sport}',
       homeTeam: homeName,
       awayTeam: awayName,
       startsAt: kickoff.toLocal(),
       status: matchStatus,
-      homeScore: asInt(goals['home']),
-      awayScore: asInt(goals['away']),
-      sourceName: 'API-Football',
+      homeScore: asScore(scores['home'] ?? home['score']),
+      awayScore: asScore(scores['away'] ?? away['score']),
+      sourceName: 'API-Sports',
     );
   }
 
@@ -312,6 +399,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
       _statusFilter = 'Todos';
       _dateFilter = 'Todos';
     });
+    _loadRemoteMatches();
   }
 
   @override
@@ -344,11 +432,15 @@ class _AgendaScreenState extends State<AgendaScreen> {
         ),
         actions: <Widget>[
           IconButton(
+            tooltip: 'Estadísticas y clasificaciones',
+            onPressed: () => Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(builder: (_) => const SportsStatisticsScreen()),
+            ),
+            icon: const Icon(Icons.leaderboard_rounded, color: agendaCyan),
+          ),
+          IconButton(
             tooltip: 'Limpiar búsqueda',
-            onPressed: () {
-              _clearFilters();
-              _loadRemoteMatches();
-            },
+            onPressed: _clearFilters,
             icon: const Icon(Icons.refresh_rounded, color: agendaCyan),
           ),
         ],
@@ -424,7 +516,17 @@ class _AgendaScreenState extends State<AgendaScreen> {
                           child: _FilterButton(
                             label: date,
                             selected: _dateFilter == date,
-                            onTap: () => setState(() => _dateFilter = date),
+                            onTap: () {
+                              setState(() {
+                                _dateFilter = date;
+                                if (date == 'Todos' &&
+                                    _sport != 'Todos' &&
+                                    _sport != 'Fútbol') {
+                                  _dateFilter = 'Hoy';
+                                }
+                              });
+                              _loadRemoteMatches();
+                            },
                           ),
                         ),
                       ),
@@ -444,7 +546,17 @@ class _AgendaScreenState extends State<AgendaScreen> {
                     return ChoiceChip(
                       label: Text(value),
                       selected: _sport == value,
-                      onSelected: (_) => setState(() => _sport = value),
+                      onSelected: (_) {
+                        setState(() {
+                          _sport = value;
+                          if (value != 'Todos' &&
+                              value != 'Fútbol' &&
+                              _dateFilter == 'Todos') {
+                            _dateFilter = 'Hoy';
+                          }
+                        });
+                        _loadRemoteMatches();
+                      },
                       selectedColor: agendaBlue,
                       backgroundColor: agendaPanel,
                       labelStyle: TextStyle(
@@ -1126,7 +1238,11 @@ class _AgendaVideoPlayerScreenState extends State<AgendaVideoPlayerScreen> {
       }
       setState(() => _loading = false);
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) {
+        await controller.dispose();
+        if (identical(_controller, controller)) _controller = null;
+        return;
+      }
       setState(() {
         _loading = false;
         _error =

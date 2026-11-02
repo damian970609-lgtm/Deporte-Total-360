@@ -4,9 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - main
+      - '**'
     paths:
       - 'lib/**'
+      - 'test/**'
       - 'assets/**'
       - 'pubspec.yaml'
       - 'analysis_options.yaml'
@@ -150,7 +151,10 @@ jobs:
         run: dart run flutter_launcher_icons
 
       - name: Analizar código Flutter
-        run: flutter analyze lib --no-fatal-infos --no-fatal-warnings
+        run: flutter analyze lib test --no-fatal-infos --no-fatal-warnings
+
+      - name: Ejecutar pruebas automatizadas
+        run: flutter test
 
       - name: Compilar APK de producción
         run: flutter build apk --release

@@ -212,6 +212,67 @@ class SportsApiService {
     return _getRows(uri);
   }
 
+  static const Map<String, String> _sportRouteIds = <String, String>{
+    'Básquet': 'basketball',
+    'NBA': 'nba',
+    'Béisbol': 'baseball',
+    'Fútbol americano': 'american-football',
+    'Hockey sobre hielo': 'hockey',
+    'Balonmano': 'handball',
+    'Rugby': 'rugby',
+    'Vóley': 'volleyball',
+    'Fútbol australiano': 'afl',
+  };
+
+  String _resourceRoute(String sport, String resource) {
+    if (sport == 'Fútbol') {
+      if (resource == 'leagues') return '/api/leagues';
+      if (resource == 'standings') return '/api/standings';
+    }
+    final sportId = _sportRouteIds[sport];
+    if (sportId == null) {
+      throw SportsApiException(sport + ' no tiene un recurso de ' + resource + ' disponible.');
+    }
+    return '/api/' + sportId + '/' + resource;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchLeagues({
+    required String sport,
+    required String search,
+  }) async {
+    final base = normalizeBaseUrl(sportsApiBaseUrl.value);
+    if (base == null) throw const SportsApiException('Configura una URL HTTPS válida del servidor.');
+    final term = search.trim();
+    if (term.isEmpty) throw const SportsApiException('Escribe el nombre de una liga o competición.');
+    final route = _resourceRoute(sport, 'leagues');
+    // La API de NBA usa "name"; los demás catálogos usan "search".
+    final queryKey = sport == 'NBA' ? 'name' : 'search';
+    final uri = Uri.parse('$base$route').replace(
+      queryParameters: <String, String>{queryKey: term},
+    );
+    return _getRows(uri);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchStandings({
+    required String sport,
+    required String leagueId,
+    required String season,
+  }) async {
+    final base = normalizeBaseUrl(sportsApiBaseUrl.value);
+    if (base == null) throw const SportsApiException('Configura una URL HTTPS válida del servidor.');
+    final id = leagueId.trim();
+    final year = season.trim();
+    if (!RegExp(r'^\d+$').hasMatch(id) || int.tryParse(id) == null || int.parse(id) < 1) {
+      throw const SportsApiException('El identificador de liga debe ser numérico.');
+    }
+    if (!RegExp(r'^\d{4}(?:-\d{4})?$').hasMatch(year)) {
+      throw const SportsApiException('La temporada debe tener formato 2026 o 2025-2026.');
+    }
+    final route = _resourceRoute(sport, 'standings');
+    final uri = Uri.parse('$base$route').replace(queryParameters: <String, String>{'league': id, 'season': year});
+    return _getRows(uri);
+  }
+
   /// Ordena las solicitudes para evitar ráfagas de consultas.
   static Future<void> _reserveRequestSlot() async {
     final previous = _requestQueue;

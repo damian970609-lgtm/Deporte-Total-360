@@ -5,6 +5,8 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
+import 'web_protection_policy.dart';
+
 const Color _newsBg = Color(0xFF030814);
 const Color _newsPanel = Color(0xFF071326);
 const Color _newsLine = Color(0xFF123D65);
@@ -781,9 +783,9 @@ class _NewsArticleReaderState extends State<NewsArticleReader> {
     CreateWindowAction action,
   ) async {
     final uri = action.request.url;
-    if (uri == null ||
-        uri.host.isEmpty ||
-        (uri.scheme != 'https' && uri.scheme != 'http')) {
+    if (uri == null) return false;
+    if (!WebProtectionPolicy.isHttpUrl(uri) ||
+        WebProtectionPolicy.isBlockedHost(uri.host)) {
       return false;
     }
 
@@ -845,6 +847,8 @@ class _NewsArticleReaderState extends State<NewsArticleReader> {
                   thirdPartyCookiesEnabled: true,
                   supportMultipleWindows: true,
                   javaScriptCanOpenWindowsAutomatically: true,
+                  useShouldInterceptRequest: true,
+                  contentBlockers: WebProtectionPolicy.buildContentBlockers(),
                   useShouldOverrideUrlLoading: true,
                   mediaPlaybackRequiresUserGesture: true,
                   allowsInlineMediaPlayback: true,
@@ -880,12 +884,14 @@ class _NewsArticleReaderState extends State<NewsArticleReader> {
                   final uri = action.request.url;
                   if (uri == null) return NavigationActionPolicy.CANCEL;
 
-                  if (uri.scheme == 'https' || uri.scheme == 'http') {
-                    return NavigationActionPolicy.ALLOW;
+                  if (!WebProtectionPolicy.isHttpUrl(uri) ||
+                      WebProtectionPolicy.isBlockedHost(uri.host)) {
+                    return NavigationActionPolicy.CANCEL;
                   }
-                  return NavigationActionPolicy.CANCEL;
+                  return NavigationActionPolicy.ALLOW;
                 },
                 onCreateWindow: _newWindow,
+                shouldInterceptRequest: (controller, request) async => WebProtectionPolicy.intercept(request),
                 onReceivedError: (controller, request, error) {
                   if (!(request.isForMainFrame ?? true) || !mounted) return;
                   setState(() => _loading = false);
