@@ -5,7 +5,8 @@ import 'package:deporte_total_360/marca_agenda_screen.dart';
 
 void main() {
   testWidgets('muestra los eventos que publica la agenda sincronizada', (tester) async {
-    final start = DateTime.now().add(const Duration(hours: 2));
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day, 12);
     await tester.pumpWidget(
       MaterialApp(
         home: MarcaAgendaScreen(
