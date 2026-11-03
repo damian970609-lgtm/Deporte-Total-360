@@ -44,6 +44,34 @@ https://media.example/watch?id=123
       expect(channels.single.name, 'Sports HD 1080p');
     });
 
+    test('usa la segunda lista M3U si la primera está caída', () async {
+      final start = DateTime.now().toUtc().add(const Duration(hours: 1));
+      final stop = start.add(const Duration(hours: 2));
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.backup",Sports Backup HD
+https://media.example/backup.m3u8
+''';
+      final xml = '<tv><channel id="sports.backup"><display-name>Sports Backup</display-name></channel>'
+          '<programme channel="sports.backup" start="${_xmlTime(start)}" stop="${_xmlTime(stop)}">'
+          '<title>Equipo Azul vs Equipo Rojo</title></programme></tv>';
+      final client = MockClient((request) async {
+        if (request.url.host == 'offline.example') return http.Response('offline', 503);
+        if (request.url.host == 'backup.example') return http.Response(playlist, 200);
+        if (request.url.host == 'guide.example') return http.Response(xml, 200);
+        return http.Response('', 404);
+      });
+
+      final catalog = await AutomaticLiveService(client: client).loadCatalog(
+        playlistUrl: 'https://offline.example/sports.m3u\\nhttps://backup.example/sports.m3u',
+        epgUrl: 'https://guide.example/guide.xml',
+      );
+
+      expect(catalog.channels, hasLength(1));
+      expect(catalog.channels.single.tvgId, 'sports.backup');
+      expect(catalog.programmes, hasLength(1));
+    });
+
     test('asocia el ID XMLTV con el nombre publicado del canal', () {
       final start = DateTime.utc(2026, 11, 3, 14);
       final stop = start.add(const Duration(hours: 2));
