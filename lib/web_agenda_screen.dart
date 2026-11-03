@@ -140,7 +140,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
               let title = (heading && heading.textContent || anchor.textContent || '').replace(/\s+/g, ' ').trim();
               if (title.length < 5) title = rawText;
               title = title.replace(/\b(EN VIVO|VER PARTIDO|VER AHORA|DETALLES)\b/ig, '').trim();
-              const pair = title.split(/\s+(?:vs?\.?|versus|contra)\s+/i);
+              const pair = title.split(/\s+(?:vs?\.?|versus|contra|[-–—])\s+/i);
               if (pair.length < 2) continue;
               let hour = parseInt(timeMatch[1] || timeMatch[3], 10);
               const minute = parseInt(timeMatch[2] || timeMatch[4], 10);
