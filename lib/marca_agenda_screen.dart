@@ -173,6 +173,11 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
   }
 
   bool _isLive(SportsAgendaEvent event) {
+    final status = event.status.toLowerCase();
+    if (status == 'live' || status == 'inprogress') return true;
+    if (status == 'finished' || status == 'cancelled' || status == 'postponed') {
+      return false;
+    }
     final now = DateTime.now();
     final end = event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
     return !now.isBefore(event.startsAt) && now.isBefore(end);
@@ -182,6 +187,12 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
     final value = sport.toLowerCase();
     if (value.contains('fútbol') || value.contains('futbol')) return Icons.sports_soccer_rounded;
     if (value.contains('baloncesto') || value.contains('basket')) return Icons.sports_basketball_rounded;
+    if (value.contains('béisbol') || value.contains('beisbol') || value.contains('baseball')) return Icons.sports_baseball_rounded;
+    if (value.contains('hockey')) return Icons.sports_hockey_rounded;
+    if (value.contains('voleibol') || value.contains('volleyball')) return Icons.sports_volleyball_rounded;
+    if (value.contains('balonmano') || value.contains('handball')) return Icons.sports_handball_rounded;
+    if (value.contains('mma')) return Icons.sports_mma_rounded;
+    if (value.contains('fútbol sala') || value.contains('futsal')) return Icons.sports_soccer_rounded;
     if (value.contains('tenis')) return Icons.sports_tennis_rounded;
     if (value.contains('motor') || value.contains('f1')) return Icons.directions_car_rounded;
     if (value.contains('ciclismo')) return Icons.directions_bike_rounded;
@@ -361,7 +372,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
               ),
             ),
             Text(
-              'PROGRAMACIÓN DEPORTIVA · MARCA',
+              'AGENDA AUTOMÁTICA · SPORTSAPI.APP',
               style: TextStyle(
                 color: _agendaMuted,
                 fontSize: 9,
@@ -380,7 +391,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
             ),
           ),
           IconButton(
-            tooltip: 'Abrir programación web de MARCA',
+            tooltip: 'Abrir agenda web de respaldo',
             onPressed: _openMarcaWeb,
             icon: const Icon(Icons.open_in_browser_rounded, color: _agendaGreen),
           ),
@@ -404,7 +415,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                 Expanded(
                   child: Text(
                     _loading
-                        ? 'Sincronizando programación deportiva…'
+                        ? 'Sincronizando agenda de tus deportes favoritos…'
                         : '${events.length} eventos en la agenda',
                     style: const TextStyle(
                       color: Colors.white,
@@ -449,7 +460,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                         ? _emptyState(
                             icon: Icons.event_busy_rounded,
                             title: 'AÚN NO HAY EVENTOS PUBLICADOS',
-                            message: 'El calendario aparecerá aquí cuando el servidor sincronice la programación de MARCA. Puedes volver a intentarlo o consultar la página de origen.',
+                            message: 'SportsAPI mostrará aquí los partidos, carreras y competiciones de tus diez deportes favoritos cuando haya eventos programados. Actualiza para consultar el servidor.',
                           )
                         : RefreshIndicator(
                             color: _agendaCyan,
@@ -523,24 +534,33 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                                                   ],
                                                 ),
                                               ),
-                                              if (live)
-                                                const Text(
-                                                  '● EN VIVO',
-                                                  style: TextStyle(
-                                                    color: _agendaRed,
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.w900,
+                                              Column(
+                                                crossAxisAlignment: CrossAxisAlignment.end,
+                                                children: <Widget>[
+                                                  Text(
+                                                    event.homeScore.isNotEmpty || event.awayScore.isNotEmpty
+                                                        ? '${event.homeScore.isEmpty ? '-' : event.homeScore} : ${event.awayScore.isEmpty ? '-' : event.awayScore}'
+                                                        : _timeLabel(event.startsAt),
+                                                    style: TextStyle(
+                                                      color: live ? _agendaRed : _agendaGreen,
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w900,
+                                                    ),
                                                   ),
-                                                )
-                                              else
-                                                Text(
-                                                  _timeLabel(event.startsAt),
-                                                  style: const TextStyle(
-                                                    color: _agendaGreen,
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w900,
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    live ? '● EN VIVO' :
+                                                      (event.statusLabel.isNotEmpty
+                                                        ? event.statusLabel.toUpperCase()
+                                                        : 'PROGRAMADO'),
+                                                    style: TextStyle(
+                                                      color: live ? _agendaRed : _agendaMuted,
+                                                      fontSize: 8,
+                                                      fontWeight: FontWeight.w800,
+                                                    ),
                                                   ),
-                                                ),
+                                                ],
+                                              ),
                                             ],
                                           ),
                                           const SizedBox(height: 7),
