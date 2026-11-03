@@ -165,6 +165,51 @@ class AutoLiveSettings {
   }
 }
 
+class SportsAgendaParticipant {
+  const SportsAgendaParticipant({
+    required this.name,
+    this.imageUrl = '',
+    this.country = '',
+    this.role = '',
+  });
+
+  final String name;
+  final String imageUrl;
+  final String country;
+  final String role;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'name': name,
+    'imageUrl': imageUrl,
+    'country': country,
+    'role': role,
+  };
+
+  static SportsAgendaParticipant? fromJson(dynamic value) {
+    if (value is String) {
+      final name = value.trim();
+      return name.isEmpty ? null : SportsAgendaParticipant(name: name);
+    }
+    if (value is! Map) return null;
+    final row = Map<String, dynamic>.from(value);
+    final name = (row['name'] ?? row['title'] ?? '').toString().trim();
+    if (name.isEmpty) return null;
+    final imageUrl = (row['imageUrl'] ?? row['logo'] ?? row['image'] ?? '').toString().trim();
+    final safeImage = Uri.tryParse(imageUrl);
+    return SportsAgendaParticipant(
+      name: name,
+      imageUrl: safeImage != null &&
+              safeImage.scheme == 'https' &&
+              safeImage.hasAuthority &&
+              safeImage.userInfo.isEmpty
+          ? imageUrl
+          : '',
+      country: (row['country'] ?? row['nationality'] ?? '').toString().trim(),
+      role: (row['role'] ?? '').toString().trim(),
+    );
+  }
+}
+
 class SportsAgendaEvent {
   const SportsAgendaEvent({
     required this.id,
@@ -175,6 +220,12 @@ class SportsAgendaEvent {
     this.competition = '',
     this.homeTeam = '',
     this.awayTeam = '',
+    this.homeTeamLogo = '',
+    this.awayTeamLogo = '',
+    this.participants = const <SportsAgendaParticipant>[],
+    this.imageUrl = '',
+    this.venue = '',
+    this.status = 'scheduled',
     this.endsAt,
   });
   final String id;
@@ -183,15 +234,32 @@ class SportsAgendaEvent {
   final String competition;
   final String homeTeam;
   final String awayTeam;
+  final String homeTeamLogo;
+  final String awayTeamLogo;
+  final List<SportsAgendaParticipant> participants;
+  final String imageUrl;
+  final String venue;
+  final String status;
   final DateTime startsAt;
   final DateTime? endsAt;
   final String detailUrl;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-    'id': id, 'title': title, 'sport': sport, 'competition': competition,
-    'homeTeam': homeTeam, 'awayTeam': awayTeam,
+    'id': id,
+    'title': title,
+    'sport': sport,
+    'competition': competition,
+    'homeTeam': homeTeam,
+    'awayTeam': awayTeam,
+    'homeTeamLogo': homeTeamLogo,
+    'awayTeamLogo': awayTeamLogo,
+    'participants': participants.map((item) => item.toJson()).toList(),
+    'imageUrl': imageUrl,
+    'venue': venue,
+    'status': status,
     'startsAt': startsAt.toIso8601String(),
-    'endsAt': endsAt?.toIso8601String(), 'detailUrl': detailUrl,
+    'endsAt': endsAt?.toIso8601String(),
+    'detailUrl': detailUrl,
   };
 
   static SportsAgendaEvent? fromJson(dynamic value) {
@@ -204,12 +272,46 @@ class SportsAgendaEvent {
     if (id.isEmpty || title.isEmpty || startsAt == null ||
         !isSafeHttpUrl(detailUrl)) return null;
     final end = DateTime.tryParse((row['endsAt'] ?? '').toString());
+    final rawParticipants = row['participants'];
+    final participants = rawParticipants is List
+        ? rawParticipants
+            .map(SportsAgendaParticipant.fromJson)
+            .whereType<SportsAgendaParticipant>()
+            .toList(growable: false)
+        : <SportsAgendaParticipant>[];
+    final homeTeam = (row['homeTeam'] ?? '').toString();
+    final awayTeam = (row['awayTeam'] ?? '').toString();
+    String image(String value) {
+      final uri = Uri.tryParse(value.trim());
+      return uri != null &&
+              uri.scheme == 'https' &&
+              uri.hasAuthority &&
+              uri.userInfo.isEmpty
+          ? value.trim()
+          : '';
+    }
+    final homeLogo = image((row['homeTeamLogo'] ?? '').toString());
+    final awayLogo = image((row['awayTeamLogo'] ?? '').toString());
+    final eventImage = image((row['imageUrl'] ?? '').toString());
+    String participantImage(String name) => participants
+        .where((item) => item.name.toLowerCase() == name.toLowerCase())
+        .map((item) => item.imageUrl)
+        .firstWhere((url) => url.isNotEmpty, orElse: () => '');
     return SportsAgendaEvent(
-      id: id, title: title, sport: (row['sport'] ?? 'Fútbol').toString(),
+      id: id,
+      title: title,
+      sport: (row['sport'] ?? 'Deporte').toString(),
       competition: (row['competition'] ?? '').toString(),
-      homeTeam: (row['homeTeam'] ?? '').toString(),
-      awayTeam: (row['awayTeam'] ?? '').toString(),
-      startsAt: startsAt.toLocal(), endsAt: end?.toLocal(),
+      homeTeam: homeTeam,
+      awayTeam: awayTeam,
+      homeTeamLogo: homeLogo.isNotEmpty ? homeLogo : participantImage(homeTeam),
+      awayTeamLogo: awayLogo.isNotEmpty ? awayLogo : participantImage(awayTeam),
+      participants: participants,
+      imageUrl: eventImage,
+      venue: (row['venue'] ?? '').toString(),
+      status: (row['status'] ?? 'scheduled').toString(),
+      startsAt: startsAt.toLocal(),
+      endsAt: end?.toLocal(),
       detailUrl: detailUrl,
     );
   }
@@ -389,13 +491,46 @@ class AutomaticLiveService {
         final title = (eventData['title'] ?? '').toString().trim();
         if (id.isEmpty || title.isEmpty || startsAt == null) continue;
         final detailUrl = (eventData['detailUrl'] ?? '').toString().trim();
+        final rawParticipants = eventData['participants'];
+        final participants = rawParticipants is List
+            ? rawParticipants
+                .map(SportsAgendaParticipant.fromJson)
+                .whereType<SportsAgendaParticipant>()
+                .toList(growable: false)
+            : <SportsAgendaParticipant>[];
+        String safeLogo(dynamic value) {
+          final text = (value ?? '').toString().trim();
+          final parsed = Uri.tryParse(text);
+          return parsed != null &&
+                  parsed.scheme == 'https' &&
+                  parsed.hasAuthority &&
+                  parsed.userInfo.isEmpty
+              ? text
+              : '';
+        }
+        final homeTeam = (eventData['homeTeam'] ?? '').toString();
+        final awayTeam = (eventData['awayTeam'] ?? '').toString();
+        String participantLogo(String name) => participants
+            .where((item) => item.name.toLowerCase() == name.toLowerCase())
+            .map((item) => item.imageUrl)
+            .firstWhere((url) => url.isNotEmpty, orElse: () => '');
         final event = SportsAgendaEvent(
           id: id,
           title: title,
           sport: (eventData['sport'] ?? 'Deporte').toString(),
           competition: (eventData['competition'] ?? '').toString(),
-          homeTeam: (eventData['homeTeam'] ?? '').toString(),
-          awayTeam: (eventData['awayTeam'] ?? '').toString(),
+          homeTeam: homeTeam,
+          awayTeam: awayTeam,
+          homeTeamLogo: safeLogo(eventData['homeTeamLogo']).isNotEmpty
+              ? safeLogo(eventData['homeTeamLogo'])
+              : participantLogo(homeTeam),
+          awayTeamLogo: safeLogo(eventData['awayTeamLogo']).isNotEmpty
+              ? safeLogo(eventData['awayTeamLogo'])
+              : participantLogo(awayTeam),
+          participants: participants,
+          imageUrl: safeLogo(eventData['imageUrl']),
+          venue: (eventData['venue'] ?? '').toString(),
+          status: (eventData['status'] ?? 'scheduled').toString(),
           startsAt: startsAt.toLocal(),
           endsAt: endsAt?.toLocal(),
           detailUrl: isSafeHttpUrl(detailUrl)
