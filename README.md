@@ -3,7 +3,8 @@
 Aplicación Android en Flutter. El APK se compila en GitHub Actions; la carpeta Android se genera en el runner.
 
 Archivos principales:
-- lib/main.dart: navegación, inicio, reproductor SSH101 y ajustes.
+- lib/main.dart: navegación de ocho secciones, inicio y ajustes.
+- lib/live_channels_screen.dart: catálogo por deporte, agenda de eventos, señales autorizadas y reproductor multivista de hasta cuatro cuadros.
 - lib/agenda_screen.dart: agenda nativa y eventos API-Sports.
 - lib/sports_statistics_screen.dart: búsqueda de ligas y clasificaciones.
 - lib/sports_api_service.dart: conexión con el Worker sin introducir claves en la APK.
@@ -26,4 +27,4 @@ Compilación:
 El workflow configura Java y Flutter, genera Android en el runner, prepara permisos de red e icono, ejecuta flutter analyze y flutter test, compila el APK release y publica deporte-total-360-apk durante 30 días.
 
 Límites:
-La reproducción SSH101 requiere un identificador de canal activo y una emisión HLS disponible. El bloqueo web filtra dominios publicitarios conocidos, pero no puede garantizar eliminar todos los anuncios ni interceptar todas las redirecciones de terceros.
+El módulo Deportes en vivo consulta los eventos disponibles en el Worker de estadísticas y permite vincular señales directas HLS (.m3u8) o MP4 que el propietario esté autorizado a reproducir. Admite hasta cuatro cuadros simultáneos; el número real de reproducciones depende del dispositivo y de la conexión. No extrae enlaces de páginas de terceros ni elude DRM, autenticación o restricciones. La agenda web externa se conserva como alternativa integrada.
