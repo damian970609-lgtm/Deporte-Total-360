@@ -17,7 +17,7 @@ class SportsApiService {
 
   // Reduce las solicitudes repetidas desde este dispositivo.
   // El límite final también depende del uso de otros dispositivos.
-  static const Duration _defaultMinimumRequestInterval = Duration(milliseconds: 750);
+  static const Duration _defaultMinimumRequestInterval = Duration(seconds: 10);
 
   @visibleForTesting
   static Duration minimumRequestIntervalForTesting =
