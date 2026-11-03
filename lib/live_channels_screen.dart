@@ -268,6 +268,7 @@ class LiveStreamSource {
       sport: '${map['sport'] ?? 'Fútbol'}',
       name: '${map['name'] ?? ''}',
       url: '${map['url'] ?? ''}',
+      isRemote: map['isRemote'] == true,
     );
     if (source.id.isEmpty ||
         source.eventId.isEmpty ||
@@ -467,6 +468,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
         _loading = false;
         _error = error.toString();
         _fixtures.clear();
+        _remoteSources.clear();
         _selectedForMultiView.clear();
       });
     }
