@@ -76,10 +76,21 @@ void main() {
     expect(find.text('TELEGRAM'), findsOneWidget);
     expect(find.text('FACEBOOK'), findsNothing);
     expect(find.text('FANTASY'), findsOneWidget);
+    expect(find.text('RESÚMENES'), findsOneWidget);
 
     await tester.tap(find.text('Explorar →'));
     expect(statisticsOpened, 1);
     expect(wrongTabSelected, -1);
+
+    await tester.tap(find.text('RESÚMENES'));
+    expect(wrongTabSelected, 6);
+  });
+
+  testWidgets('En vivo no muestra el reproductor SSH101 retirado', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: LiveScreen()));
+
+    expect(find.text('CENTRO DE TRANSMISIONES'), findsOneWidget);
+    expect(find.textContaining('SSH101'), findsNothing);
   });
 
 }
