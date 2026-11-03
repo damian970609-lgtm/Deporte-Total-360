@@ -1850,7 +1850,8 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
       );
       _showMessage(
         'Configuración validada: ${catalog.channels.length} canales y '
-        '${catalog.programmes.length} programas EPG. Se seleccionará una sola señal por evento.',
+        '${catalog.programmes.length} programas combinados de varias guías EPG. '
+        'Se elegirá una señal comprobada por evento.',
       );
     } catch (error) {
       _showMessage('No se pudo validar la lista o la EPG: $error');
@@ -2046,32 +2047,34 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                   ]),
                   const SizedBox(height: 8),
                   const Text(
-                    'Fuentes deportivas internacionales de distintas regiones (no limitadas a Guyana). La agenda de Fútbol Libre permanece en la pestaña Agenda; esta configuración solo alimenta Transmisiones en vivo. Se elige una sola señal verificada por evento y los eventos simultáneos se abren en cuadros separados del mismo reproductor.',
+                    'Fútbol Libre se utiliza únicamente para leer hora, deporte, competición y equipos desde la pestaña Agenda: la APK no usa sus transmisiones ni sus reproductores. Con esos datos busca una señal autorizada en varias listas M3U y cruza los programas de varias guías EPG. Selecciona una señal comprobada por evento; los eventos simultáneos pueden abrirse en cuadros separados. Varias fuentes mejoran el respaldo, pero no garantizan que siempre exista una señal disponible.',
                     style: TextStyle(color: appMuted, fontSize: 11, height: 1.45),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _playlistController,
-                    keyboardType: TextInputType.url,
+                    keyboardType: TextInputType.multiline,
                     autocorrect: false,
                     enableSuggestions: false,
-                    minLines: 2,
-                    maxLines: 3,
+                    minLines: 3,
+                    maxLines: 5,
                     decoration: const InputDecoration(
                       labelText: 'URLs de listas M3U (una por línea)',
-                      hintText: 'Se cargan tres listas deportivas internacionales por defecto',
+                      hintText: 'Se cargan cinco catálogos internacionales por defecto',
                       prefixIcon: Icon(Icons.live_tv_rounded),
                     ),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: _epgController,
-                    keyboardType: TextInputType.url,
+                    keyboardType: TextInputType.multiline,
                     autocorrect: false,
                     enableSuggestions: false,
+                    minLines: 3,
+                    maxLines: 6,
                     decoration: const InputDecoration(
-                      labelText: 'URL de guía EPG XMLTV internacional',
-                      hintText: 'Se carga la guía global por defecto',
+                      labelText: 'URLs de guías EPG XMLTV (una por línea)',
+                      hintText: 'Guía global y guías regionales de respaldo',
                       prefixIcon: Icon(Icons.calendar_month_rounded),
                     ),
                   ),
