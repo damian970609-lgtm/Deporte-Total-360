@@ -1329,14 +1329,80 @@ class LivePlayerSource {
 }
 
 /// Un reproductor de 1 a 4 cuadros. Cada cuadro administra su propio player nativo.
-class LivePlayerGridScreen extends StatelessWidget {
-  const LivePlayerGridScreen({super.key, required this.sources});
+class LivePlayerGridScreen extends StatefulWidget {
+  const LivePlayerGridScreen({
+    super.key,
+    required this.sources,
+    this.refreshSources,
+    this.refreshInterval = const Duration(seconds: 30),
+  });
 
   final List<LivePlayerSource> sources;
+  final Future<List<LivePlayerSource>> Function()? refreshSources;
+  final Duration refreshInterval;
+
+  @override
+  State<LivePlayerGridScreen> createState() => _LivePlayerGridScreenState();
+}
+
+class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
+  late List<LivePlayerSource> _sources;
+  Timer? _refreshTimer;
+  bool _refreshing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _sources = List<LivePlayerSource>.of(widget.sources);
+    _startRefreshTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant LivePlayerGridScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshSources != widget.refreshSources ||
+        oldWidget.refreshInterval != widget.refreshInterval) {
+      _refreshTimer?.cancel();
+      _startRefreshTimer();
+    }
+    if (oldWidget.sources != widget.sources) {
+      _sources = List<LivePlayerSource>.of(widget.sources);
+    }
+  }
+
+  void _startRefreshTimer() {
+    if (widget.refreshSources == null) return;
+    _refreshTimer = Timer.periodic(widget.refreshInterval, (_) => _refreshSources());
+  }
+
+  Future<void> _refreshSources() async {
+    final loader = widget.refreshSources;
+    if (loader == null || _refreshing || !mounted) return;
+    _refreshing = true;
+    try {
+      final updated = await loader();
+      if (!mounted) return;
+      final next = updated
+          .where((source) => isSupportedAuthorizedMediaUrl(source.url))
+          .take(4)
+          .toList(growable: false);
+      setState(() => _sources = next);
+    } catch (_) {
+      // Se mantienen los cuadros actuales si falla una actualización puntual.
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final safeSources = sources
+    final safeSources = _sources
         .where((source) => isSupportedAuthorizedMediaUrl(source.url))
         .take(4)
         .toList(growable: false);
@@ -1348,13 +1414,21 @@ class LivePlayerGridScreen extends StatelessWidget {
         title: Text(
           safeSources.length == 1
               ? 'REPRODUCTOR EN VIVO'
-              : 'MULTIVISTA · ${safeSources.length} SEÑALES',
+              : 'MULTIVISTA · ${safeSources.length}/4 EVENTOS',
           style: const TextStyle(
             color: _liveCyan,
             fontSize: 13,
             fontWeight: FontWeight.w900,
           ),
         ),
+        actions: <Widget>[
+          if (widget.refreshSources != null)
+            IconButton(
+              tooltip: 'Actualizar eventos del reproductor',
+              onPressed: _refreshing ? null : _refreshSources,
+              icon: const Icon(Icons.sync_rounded, color: _liveCyan),
+            ),
+        ],
       ),
       body: safeSources.isEmpty
           ? const Center(
@@ -1373,7 +1447,7 @@ class LivePlayerGridScreen extends StatelessWidget {
                 childAspectRatio: safeSources.length == 1 ? 16 / 9 : 1.32,
               ),
               itemBuilder: (context, index) => _LiveVideoTile(
-                key: ValueKey<String>('${safeSources[index].url}-$index'),
+                key: ValueKey<String>(safeSources[index].url),
                 source: safeSources[index],
                 initiallyMuted: index > 0,
               ),
