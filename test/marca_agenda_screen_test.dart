@@ -36,6 +36,51 @@ void main() {
     expect(find.text('VER TRANSMISIONES'), findsOneWidget);
   });
 
+
+  testWidgets('muestra participantes y disciplina en eventos individuales', (tester) async {
+    final start = DateTime.now().add(const Duration(hours: 2));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MarcaAgendaScreen(
+          isActive: false,
+          onOpenLive: () {},
+          loadEvents: () async => <SportsAgendaEvent>[
+            SportsAgendaEvent(
+              id: 'tennis-final-1',
+              title: 'Final individual masculina',
+              sport: 'Tenis',
+              competition: 'Torneo de prueba',
+              participants: const <SportsAgendaParticipant>[
+                SportsAgendaParticipant(
+                  name: 'Carlos Alcaraz',
+                  imageUrl: 'https://img.example/alcaraz.png',
+                  country: 'España',
+                ),
+                SportsAgendaParticipant(
+                  name: 'Jannik Sinner',
+                  imageUrl: 'https://img.example/sinner.png',
+                  country: 'Italia',
+                ),
+              ],
+              startsAt: start,
+              detailUrl: 'https://www.marca.com/programacion-tv.html',
+            ),
+          ],
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('TENIS'), findsOneWidget);
+    expect(find.text('Final individual masculina'), findsOneWidget);
+    expect(find.text('Carlos Alcaraz'), findsOneWidget);
+    expect(find.text('Jannik Sinner'), findsOneWidget);
+    expect(find.text('ESPAÑA'), findsOneWidget);
+    expect(find.text('ITALIA'), findsOneWidget);
+  });
+
   testWidgets('muestra un estado visible cuando el servidor aún no publica eventos', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
