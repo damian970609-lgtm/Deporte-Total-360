@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:deporte_total_360/automatic_live_service.dart';
 import 'package:deporte_total_360/live_channels_screen.dart';
 import 'package:deporte_total_360/live_media_format.dart';
+import 'package:deporte_total_360/sports_api_service.dart';
 
 String _xmlTime(DateTime date) {
   final utc = date.toUtc();
@@ -51,6 +52,87 @@ void main() {
       expect(saved, hasLength(1));
       expect(saved.single.id, 'marca-event-1');
       expect(saved.single.detailUrl, 'https://www.marca.com/programacion-tv.html');
+    });
+  });
+
+  group('agenda y transmisiones publicadas desde Cloudflare', () {
+    test('recibe eventos y señales verificadas desde el endpoint central', () async {
+      final start = DateTime.now().add(const Duration(minutes: 5));
+      final stop = start.add(const Duration(hours: 2));
+      sportsApiBaseUrl.value = 'https://worker.example';
+      final client = MockClient((request) async {
+        expect(request.url.path, '/api/live/auto/schedule');
+        return http.Response(jsonEncode(<String, dynamic>{
+          'status': 'ok',
+          'source': 'marca',
+          'events': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'event': <String, dynamic>{
+                'id': 'cloud-event-1',
+                'title': 'Equipo Azul vs Equipo Rojo',
+                'sport': 'Fútbol',
+                'competition': 'Liga de prueba',
+                'homeTeam': 'Equipo Azul',
+                'awayTeam': 'Equipo Rojo',
+                'startsAt': start.toUtc().toIso8601String(),
+                'endsAt': stop.toUtc().toIso8601String(),
+                'detailUrl': 'https://www.marca.com/programacion-tv.html',
+              },
+              'removeAt': stop.toUtc().toIso8601String(),
+              'state': 'verified',
+              'sources': <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'channelName': 'Canal Deportes ES',
+                  'url': 'https://media.example/live.m3u8',
+                  'programmeTitle': 'Equipo Azul vs Equipo Rojo',
+                  'programmeEndsAt': stop.toUtc().toIso8601String(),
+                  'qualityScore': 400,
+                  'languagePriority': 2,
+                  'available': true,
+                },
+              ],
+            },
+          ],
+        }), 200);
+      });
+
+      final result = await AutomaticLiveService(client: client)
+          .fetchPublishedSchedule();
+
+      expect(result, hasLength(1));
+      expect(result!.single.event.id, 'cloud-event-1');
+      expect(result.single.sources.single.channelName, 'Canal Deportes ES');
+      expect(result.single.sources.single.languagePriority, 2);
+      expect(result.single.sources.single.available, isTrue);
+    });
+
+    test('una respuesta remota válida sin eventos no reutiliza la agenda local antigua', () async {
+      sportsApiBaseUrl.value = 'https://worker.example';
+      final client = MockClient((request) async => http.Response(
+        jsonEncode(<String, dynamic>{
+          'status': 'ok',
+          'source': 'marca',
+          'events': <dynamic>[],
+        }),
+        200,
+      ));
+
+      final result = await AutomaticLiveService(client: client)
+          .fetchPublishedSchedule();
+
+      expect(result, isEmpty);
+    });
+
+    test('usa la agenda local si el Worker todavía no publica el nuevo endpoint', () async {
+      sportsApiBaseUrl.value = 'https://worker.example';
+      final client = MockClient((request) async =>
+          http.Response('{"error":"not found"}', 404));
+
+      final result = await AutomaticLiveService(client: client)
+          .fetchPublishedSchedule();
+
+      expect(result, isNull);
+      sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
     });
   });
 
