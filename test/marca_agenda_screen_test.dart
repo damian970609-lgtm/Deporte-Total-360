@@ -124,9 +124,12 @@ void main() {
     expect(find.text('Evento de hoy 0'), findsOneWidget);
     expect(find.text('Evento de otra jornada 0'), findsNothing);
 
-    await tester.drag(find.byType(ListView), const Offset(0, -1800));
+    await tester.scrollUntilVisible(
+      find.text('Evento de hoy 39'),
+      500,
+      scrollable: find.byType(Scrollable),
+    );
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('Evento de hoy 39'), findsOneWidget);
     expect(find.text('Evento de otra jornada 62'), findsNothing);
