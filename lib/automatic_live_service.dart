@@ -174,12 +174,14 @@ class ScheduledLiveSource {
     required this.channelName, required this.url,
     required this.programmeTitle, required this.programmeEndsAt,
     required this.qualityScore,
+    this.available = false,
   });
   final String channelName;
   final String url;
   final String programmeTitle;
   final DateTime programmeEndsAt;
   final int qualityScore;
+  final bool available;
 }
 
 class ScheduledLiveEvent {
@@ -204,6 +206,8 @@ class AutomaticLiveService {
   DateTime? _cachedAt;
   String? _cachedPlaylist;
   String? _cachedEpg;
+  final Map<String, ({bool available, int quality, DateTime checkedAt})> _probeCache =
+      <String, ({bool available, int quality, DateTime checkedAt})>{};
 
   Future<AutoLiveCatalog> loadCatalog({
     required String playlistUrl, required String epgUrl,
@@ -383,7 +387,20 @@ class AutomaticLiveService {
       // Una sola señal por evento: primero la resolución anunciada, después
       // indicadores HD/FHD/UHD y finalmente un orden estable del proveedor.
       candidates.sort((a, b) => b.qualityScore.compareTo(a.qualityScore));
-      final sources = <ScheduledLiveSource>[candidates.first];
+      final sources = <ScheduledLiveSource>[];
+      for (final candidate in candidates.take(6)) {
+        final checked = await _probeCandidate(candidate);
+        if (checked.available) {
+          sources.add(checked);
+          break;
+        }
+      }
+      // Algunos proveedores legítimos rechazan HEAD/GET de comprobación aunque
+      // ExoPlayer pueda reproducir con sus reglas de red. En ese caso se deja
+      // una sola mejor candidata, marcada como no verificada.
+      if (sources.isEmpty) {
+        sources.add(candidates.first);
+      }
       final programmeEnd = sources.map((s) => s.programmeEndsAt).reduce(
         (a, b) => a.isAfter(b) ? a : b,
       );
@@ -412,6 +429,74 @@ class AutomaticLiveService {
         .where((t) => t.length >= 4 && !ignored.contains(t)).toSet();
     if (tokens.length < 2) return false;
     return tokens.where((token) => programme.contains(token)).length >= 2;
+  }
+
+  Future<ScheduledLiveSource> _probeCandidate(
+    ScheduledLiveSource source,
+  ) async {
+    final cached = _probeCache[source.url];
+    final now = DateTime.now();
+    if (cached != null &&
+        now.difference(cached.checkedAt) < const Duration(seconds: 75)) {
+      return ScheduledLiveSource(
+        channelName: source.channelName,
+        url: source.url,
+        programmeTitle: source.programmeTitle,
+        programmeEndsAt: source.programmeEndsAt,
+        qualityScore: source.qualityScore + cached.quality,
+        available: cached.available,
+      );
+    }
+
+    var available = false;
+    var extraQuality = 0;
+    try {
+      final uri = Uri.parse(source.url);
+      if (uri.path.toLowerCase().endsWith('.m3u8')) {
+        final response = await _client.get(uri,
+          headers: const <String, String>{'Accept': 'application/vnd.apple.mpegurl,*/*'})
+          .timeout(const Duration(seconds: 8));
+        final body = utf8.decode(
+          response.bodyBytes.take(1024 * 1024).toList(),
+          allowMalformed: true,
+        );
+        available = response.statusCode == 200 &&
+            body.trimLeft().startsWith('#EXTM3U');
+        if (available) {
+          final resolutions = RegExp(r'RESOLUTION=\d+x(\d+)')
+              .allMatches(body)
+              .map((match) => int.tryParse(match.group(1) ?? '') ?? 0);
+          final maxHeight = resolutions.isEmpty ? 0 : resolutions.reduce(
+            (a, b) => a > b ? a : b,
+          );
+          extraQuality = maxHeight >= 2160 ? 500 :
+              maxHeight >= 1080 ? 400 :
+              maxHeight >= 720 ? 300 :
+              maxHeight >= 480 ? 200 : 50;
+        }
+      } else {
+        final request = http.Request('HEAD', uri);
+        final response = await _client.send(request)
+            .timeout(const Duration(seconds: 8));
+        available = response.statusCode >= 200 && response.statusCode < 400;
+        await response.stream.drain<void>();
+      }
+    } catch (_) {
+      available = false;
+    }
+    _probeCache[source.url] = (
+      available: available,
+      quality: extraQuality,
+      checkedAt: now,
+    );
+    return ScheduledLiveSource(
+      channelName: source.channelName,
+      url: source.url,
+      programmeTitle: source.programmeTitle,
+      programmeEndsAt: source.programmeEndsAt,
+      qualityScore: source.qualityScore + extraQuality,
+      available: available,
+    );
   }
 
   static int _qualityScore(M3uChannel channel) {
