@@ -2044,6 +2044,64 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
   }
 }
 
+class DonationsScreen extends StatelessWidget {
+  const DonationsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: appBg,
+        appBar: AppBar(
+          title: Text(
+            tr('donations'),
+            style: const TextStyle(
+              color: appCyan,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        body: AppBackdrop(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Container(
+                padding: const EdgeInsets.all(22),
+                decoration: BoxDecoration(
+                  color: appPanel,
+                  borderRadius: BorderRadius.circular(19),
+                  border: Border.all(color: appPink),
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(color: appPink.withAlpha(25), blurRadius: 22),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    const Icon(Icons.favorite_rounded, color: appPink, size: 56),
+                    SizedBox(height: 13),
+                    Text(
+                      appText('GRACIAS POR APOYAR', 'THANK YOU FOR SUPPORTING US', 'OBRIGADO POR APOIAR', 'MERCI DE VOTRE SOUTIEN'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: appCyan,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                      ),
+                    ),
+                    SizedBox(height: 9),
+                    Text(
+                      appText('Tu apoyo ayuda a mantener y mejorar Deporte Total 360°. El cobro todavía no está conectado; no se realizará ningún pago desde esta pantalla.', 'Your support helps maintain and improve Deporte Total 360°. Payments are not connected yet; this screen will not charge you.', 'Seu apoio ajuda a manter e melhorar o Deporte Total 360°. O pagamento ainda não está conectado; nenhuma cobrança será feita nesta tela.', 'Votre soutien aide à maintenir et améliorer Deporte Total 360°. Le paiement n’est pas encore connecté ; aucun paiement ne sera effectué depuis cet écran.'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: appMuted, height: 1.5),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
 Future<void> openExternalLink(
   BuildContext context,
   String value, {
