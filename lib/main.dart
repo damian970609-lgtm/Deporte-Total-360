@@ -1800,7 +1800,6 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
   late final TextEditingController _epgController;
   bool _testing = false;
   bool _saving = false;
-  bool _testingAutoLive = false;
   bool _savingAutoLive = false;
   bool _autoLiveAuthorized = false;
 
