@@ -167,6 +167,118 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
     return !now.isBefore(event.startsAt) && now.isBefore(end);
   }
 
+  Widget _agendaImage(
+    String imageUrl, {
+    double size = 48,
+    required IconData fallbackIcon,
+  }) {
+    final uri = Uri.tryParse(imageUrl.trim());
+    final valid = uri != null &&
+        uri.scheme == 'https' &&
+        uri.hasAuthority &&
+        uri.userInfo.isEmpty;
+    return Container(
+      width: size,
+      height: size,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFF0B203A),
+        border: Border.all(color: _agendaLine, width: 1.2),
+      ),
+      child: ClipOval(
+        child: valid
+            ? Image.network(
+                imageUrl,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => Icon(
+                  fallbackIcon,
+                  color: _agendaCyan,
+                  size: size * .56,
+                ),
+              )
+            : Icon(
+                fallbackIcon,
+                color: _agendaCyan,
+                size: size * .56,
+              ),
+      ),
+    );
+  }
+
+  Widget _teamBlock(String name, String logo) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        _agendaImage(
+          logo,
+          size: 52,
+          fallbackIcon: Icons.shield_rounded,
+        ),
+        const SizedBox(height: 7),
+        Text(
+          name,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            height: 1.2,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _participantBlock(SportsAgendaParticipant participant) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 104, maxWidth: 145),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A1B31),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _agendaLine),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          _agendaImage(
+            participant.imageUrl,
+            size: 44,
+            fallbackIcon: Icons.person_rounded,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            participant.name,
+            maxLines: 2,
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          if (participant.country.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 3),
+            Text(
+              participant.country.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _agendaMuted,
+                fontSize: 8,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Future<void> _openMarcaWeb() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -372,22 +484,98 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                                             ],
                                           ),
                                           const SizedBox(height: 7),
-                                          Text(
-                                            teams,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w900,
+                                          if (event.homeTeam.isNotEmpty &&
+                                              event.awayTeam.isNotEmpty) ...<Widget>[
+                                            const SizedBox(height: 7),
+                                            Row(
+                                              crossAxisAlignment: CrossAxisAlignment.center,
+                                              children: <Widget>[
+                                                Expanded(
+                                                  child: _teamBlock(
+                                                    event.homeTeam,
+                                                    event.homeTeamLogo,
+                                                  ),
+                                                ),
+                                                const Padding(
+                                                  padding: EdgeInsets.symmetric(horizontal: 7),
+                                                  child: Text(
+                                                    'VS',
+                                                    style: TextStyle(
+                                                      color: _agendaPink,
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w900,
+                                                    ),
+                                                  ),
+                                                ),
+                                                Expanded(
+                                                  child: _teamBlock(
+                                                    event.awayTeam,
+                                                    event.awayTeamLogo,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
-                                          ),
+                                          ] else ...<Widget>[
+                                            const SizedBox(height: 7),
+                                            Text(
+                                              event.title,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w900,
+                                              ),
+                                            ),
+                                            if (event.participants.isNotEmpty) ...<Widget>[
+                                              const SizedBox(height: 9),
+                                              Wrap(
+                                                alignment: WrapAlignment.center,
+                                                spacing: 8,
+                                                runSpacing: 8,
+                                                children: event.participants
+                                                    .map(_participantBlock)
+                                                    .toList(growable: false),
+                                              ),
+                                            ] else if (event.imageUrl.isNotEmpty) ...<Widget>[
+                                              const SizedBox(height: 8),
+                                              Center(
+                                                child: _agendaImage(
+                                                  event.imageUrl,
+                                                  size: 58,
+                                                  fallbackIcon: Icons.sports_rounded,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
                                           if (event.competition.isNotEmpty) ...<Widget>[
-                                            const SizedBox(height: 4),
+                                            const SizedBox(height: 7),
                                             Text(
                                               event.competition,
                                               style: const TextStyle(
                                                 color: _agendaMuted,
                                                 fontSize: 10,
+                                                fontWeight: FontWeight.w700,
                                               ),
+                                            ),
+                                          ],
+                                          if (event.venue.isNotEmpty) ...<Widget>[
+                                            const SizedBox(height: 3),
+                                            Row(
+                                              children: <Widget>[
+                                                const Icon(Icons.location_on_outlined,
+                                                    color: _agendaMuted, size: 12),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                    event.venue,
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    style: const TextStyle(
+                                                      color: _agendaMuted,
+                                                      fontSize: 9,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ],
                                           const SizedBox(height: 10),
