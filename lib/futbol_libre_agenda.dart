@@ -130,7 +130,10 @@ class FutbolLibreAgenda {
       ValueNotifier<DateTime?>(null);
 
   static void publish(dynamic payload) {
-    events.value = FutbolLibreEvent.parsePayload(payload);
+    final next = FutbolLibreEvent.parsePayload(payload);
+    // Las páginas de canal no deben borrar la última programación válida.
+    if (next.isEmpty) return;
+    events.value = next;
     lastUpdated.value = DateTime.now();
   }
 }
