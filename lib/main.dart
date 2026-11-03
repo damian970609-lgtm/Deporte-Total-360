@@ -2061,7 +2061,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                     maxLines: 3,
                     decoration: const InputDecoration(
                       labelText: 'URLs de listas M3U (una por línea)',
-                      hintText: 'Se cargan dos listas deportivas internacionales por defecto',
+                      hintText: 'Se cargan tres listas deportivas internacionales por defecto',
                       prefixIcon: Icon(Icons.live_tv_rounded),
                     ),
                   ),
