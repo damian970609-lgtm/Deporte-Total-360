@@ -18,6 +18,17 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
+  group('configuración internacional', () {
+    test('precarga dos listas deportivas globales y una EPG sin autorizar automáticamente', () async {
+      final settings = await AutoLiveSettings.load();
+
+      expect(settings.playlistUrls, hasLength(2));
+      expect(settings.playlistUrls.every(isSafeHttpUrl), isTrue);
+      expect(settings.epgUrl, defaultAutoLiveEpgUrl);
+      expect(settings.isConfigured, isFalse);
+    });
+  });
+
   group('M3U y XMLTV', () {
     test('lee canales directos, tvg-id y calidad del canal', () {
       const playlist = '''
