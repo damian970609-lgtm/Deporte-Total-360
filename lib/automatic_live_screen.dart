@@ -31,7 +31,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     with WidgetsBindingObserver {
   final AutomaticLiveService _service = AutomaticLiveService();
   List<ScheduledLiveEvent> _scheduled = <ScheduledLiveEvent>[];
-  List<FutbolLibreEvent> _agendaEvents = <FutbolLibreEvent>[];
+  List<SportsAgendaEvent> _agendaEvents = <SportsAgendaEvent>[];
   final Map<String, DateTime> _knownEventEndTimes = <String, DateTime>{};
   Timer? _refreshTimer;
   Timer? _eventBoundaryTimer;
@@ -75,7 +75,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
 
     try {
       final settings = await AutoLiveSettings.load();
-      final events = await FutbolLibreAgendaStore.load();
+      final events = await SportsAgendaStore.load();
       final latest = settings.isConfigured && events.isNotEmpty
           ? await _service.schedule(
               events: events,
