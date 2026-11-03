@@ -1719,6 +1719,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       prefixIcon: Icon(Icons.send_rounded),
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _saving ? null : _save,
+                      icon: const Icon(Icons.save_rounded),
+                      label: Text(
+                        _saving
+                            ? appText('GUARDANDO…', 'SAVING…', 'SALVANDO…', 'ENREGISTREMENT…')
+                            : appText('GUARDAR ENLACE', 'SAVE LINK', 'SALVAR LINK', 'ENREGISTRER LE LIEN'),
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: appGreen,
+                        foregroundColor: appBg,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
