@@ -33,6 +33,18 @@ https://media.example/watch?id=123
       expect(channels.single.name, 'Sports HD 1080p');
     });
 
+    test('asocia el ID XMLTV con el nombre publicado del canal', () {
+      final start = DateTime.utc(2026, 11, 3, 14);
+      final stop = start.add(const Duration(hours: 2));
+      final xml = '<tv><channel id="sports.id"><display-name>Sports HD</display-name></channel>'
+          '<programme channel="sports.id" start="${_xmlTime(start)}" stop="${_xmlTime(stop)}">'
+          '<title>Equipo Azul vs Equipo Rojo</title></programme></tv>';
+      final rows = AutomaticLiveService.parseXmltv(xml);
+      expect(rows, hasLength(1));
+      expect(rows.single.channelId, 'sports.id');
+      expect(rows.single.channelName, 'Sports HD');
+    });
+
     test('lee horarios XMLTV con zona UTC', () {
       final start = DateTime.utc(2026, 11, 3, 14);
       final stop = start.add(const Duration(hours: 2));
