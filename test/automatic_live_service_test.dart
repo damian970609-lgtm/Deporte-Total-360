@@ -117,8 +117,8 @@ https://media.example/sports-hd.m3u8
       expect(prepared.single.removeAt, stop);
     });
 
-    test('mantiene partidos simultáneos en entradas separadas', () async {
-      final start = DateTime(2026, 11, 3, 10);
+    test('mantiene varios eventos simultáneos en entradas separadas', () async {
+      final start = DateTime.now().add(const Duration(minutes: 10));
       final stop = start.add(const Duration(hours: 2));
       const playlist = '''
 #EXTM3U
@@ -131,8 +131,14 @@ https://media.example/two.m3u8
           '<programme channel="football.one" start="${_xmlTime(start)}" stop="${_xmlTime(stop)}"><title>Azul vs Rojo</title></programme>'
           '<programme channel="football.two" start="${_xmlTime(start)}" stop="${_xmlTime(stop)}"><title>Verde vs Blanco</title></programme>'
           '</tv>';
-      final client = MockClient((request) async =>
-          http.Response(request.url.path.endsWith('.m3u') ? playlist : xml, 200));
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('.m3u')) return http.Response(playlist, 200);
+        if (request.url.path.endsWith('.xml')) return http.Response(xml, 200);
+        if (request.url.path.endsWith('.m3u8')) {
+          return http.Response('#EXTM3U\\n#EXT-X-TARGETDURATION:6\\n', 200);
+        }
+        return http.Response('', 404);
+      });
       final events = <FutbolLibreEvent>[
         FutbolLibreEvent(
           id: 'one', title: 'Azul vs Rojo', sport: 'Fútbol',
@@ -140,13 +146,13 @@ https://media.example/two.m3u8
         ),
         FutbolLibreEvent(
           id: 'two', title: 'Verde vs Blanco', sport: 'Fútbol',
-          startsAt: start.add(const Duration(minutes: 20)),
+          startsAt: start,
           detailUrl: 'https://futbol-libre.cam/two',
         ),
       ];
       final result = await AutomaticLiveService(client: client).schedule(
         events: events,
-        now: start.add(const Duration(minutes: 10)),
+        now: start.subtract(const Duration(minutes: 10)),
         settings: const AutoLiveSettings(
           playlistUrl: 'https://provider.example/channels.m3u',
           epgUrl: 'https://provider.example/guide.xml',
@@ -155,6 +161,7 @@ https://media.example/two.m3u8
       );
       expect(result.map((item) => item.event.id), <String>['one', 'two']);
       expect(result.every((item) => item.sources.length == 1), isTrue);
+      expect(result.every((item) => item.sources.single.available), isTrue);
     });
 
     test('no empareja un programa que pertenece a otro evento', () {
