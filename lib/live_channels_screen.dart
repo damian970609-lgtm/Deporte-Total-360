@@ -7,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
 import 'sports_api_service.dart';
+import 'futbol_libre_agenda.dart';
+import 'web_agenda_screen.dart';
 
 const Color _liveBg = Color(0xFF030814);
 const Color _livePanel = Color(0xFF071326);
@@ -38,6 +40,8 @@ class LiveFixture {
     this.awayScore,
     this.homeLogo,
     this.awayLogo,
+    this.detailUrl = '',
+    this.webChannels = const <FutbolLibreChannel>[],
   });
 
   final String id;
@@ -51,6 +55,8 @@ class LiveFixture {
   final int? awayScore;
   final String? homeLogo;
   final String? awayLogo;
+  final String detailUrl;
+  final List<FutbolLibreChannel> webChannels;
 
   String get displayTitle => '$homeTeam vs $awayTeam';
 
@@ -337,6 +343,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
     super.initState();
     _apiUrlListener = _onApiUrlChanged;
     sportsApiBaseUrl.addListener(_apiUrlListener);
+    FutbolLibreAgenda.events.addListener(_onAgendaChanged);
     _loadSavedConfiguration();
     _loadSchedule(initial: true);
     _refreshTimer = Timer.periodic(const Duration(minutes: 2), (_) {
@@ -357,11 +364,16 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
     _requestVersion++;
     _refreshTimer?.cancel();
     sportsApiBaseUrl.removeListener(_apiUrlListener);
+    FutbolLibreAgenda.events.removeListener(_onAgendaChanged);
     _searchController.dispose();
     super.dispose();
   }
 
   void _onApiUrlChanged() {
+    if (mounted) _loadSchedule();
+  }
+
+  void _onAgendaChanged() {
     if (mounted) _loadSchedule();
   }
 
@@ -422,68 +434,47 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
         setState(prepareLoading);
       }
     }
+
     try {
-      final sportErrors = <String, String>{};
-      final List<Map<String, dynamic>> rows;
-      if (_sport == 'Todos') {
-        final partialFixtures = <LiveFixture>[];
-        rows = await _api.fetchAllAgendaEvents(
-          dateFilter: _dateFilter,
-          onSportError: (sport, error) {
-            sportErrors[sport] = error.toString();
-          },
-          onSportComplete: (sport, sportRows) {
-            final additions = sportRows
-                .map((row) => LiveFixture.tryParse(
-                      row,
-                      (row['_sportName'] ?? sport).toString(),
-                    ))
-                .whereType<LiveFixture>();
-            partialFixtures.addAll(additions);
-            if (mounted && version == _requestVersion) {
-              setState(() {
-                _fixtures
-                  ..clear()
-                  ..addAll(partialFixtures);
-                _loading = true;
-              });
-            }
-          },
+      // Agenda y eventos proceden exclusivamente de la WebView de Fútbol Libre.
+      // API-Sports no se consulta desde esta pantalla.
+      final parsed = FutbolLibreAgenda.events.value.map((event) {
+        final status = event.status == FutbolLibreEventStatus.live
+            ? LiveFixtureStatus.live
+            : event.status == FutbolLibreEventStatus.finished
+                ? LiveFixtureStatus.finished
+                : LiveFixtureStatus.scheduled;
+        return LiveFixture(
+          id: event.id,
+          sport: event.sport,
+          competition: event.competition,
+          homeTeam: event.homeTeam,
+          awayTeam: event.awayTeam,
+          startsAt: event.startsAt,
+          status: status,
+          detailUrl: event.detailUrl,
+          webChannels: event.channels,
         );
-      } else {
-        rows = await _api.fetchAgendaEvents(
-          sport: _sport,
-          dateFilter: _dateFilter,
-        );
-      }
-      final parsed = rows
-          .map((row) => LiveFixture.tryParse(
-                row,
-                (row['_sportName'] ?? _sport).toString(),
-              ))
-          .whereType<LiveFixture>()
-          .toList()
+      }).toList()
         ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
 
-      // El catálogo procede del Worker del propietario. Se asocia por el ID
-      // estable del evento que devuelve la agenda, nunca por una URL capturada
-      // de una página externa. Un fallo del catálogo no bloquea la agenda.
       var catalogSources = <LiveStreamSource>[];
-      if (_sport != 'Todos') {
-        try {
-          final catalogRows = await _api.fetchAuthorizedLiveSources(
-            sport: _sport,
-            dateFilter: _dateFilter,
-          );
-          final fixtureIds = parsed.map((fixture) => fixture.id).toSet();
-          catalogSources = catalogRows
-              .map(LiveStreamSource.fromCatalogJson)
-              .whereType<LiveStreamSource>()
-              .where((source) => fixtureIds.contains(source.eventId))
-              .toList(growable: false);
-        } catch (_) {
-          catalogSources = <LiveStreamSource>[];
-        }
+      try {
+        // El Worker solo aporta fuentes directas autorizadas para el reproductor.
+        // No aporta partidos, horarios ni marcadores.
+        final catalogRows = await _api.fetchAuthorizedLiveSources(
+          sport: _sport == 'Todos' ? null : _sport,
+          dateFilter: _dateFilter,
+        );
+        final fixtureIds = parsed.map((fixture) => fixture.id).toSet();
+        catalogSources = catalogRows
+            .map(LiveStreamSource.fromCatalogJson)
+            .whereType<LiveStreamSource>()
+            .where((source) => fixtureIds.contains(source.eventId))
+            .toList(growable: false);
+      } catch (_) {
+        // Si el catálogo directo no está disponible, la programación sigue visible.
+        catalogSources = <LiveStreamSource>[];
       }
 
       if (!mounted || version != _requestVersion) return;
@@ -506,10 +497,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
       if (!mounted || version != _requestVersion) return;
       setState(() {
         _loading = false;
-        _error = error.toString();
-        _fixtures.clear();
-        _remoteSources.clear();
-        _selectedForMultiView.clear();
+        _error = 'No se pudieron leer los eventos publicados por Fútbol Libre: $error';
       });
     }
   }
@@ -746,6 +734,26 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
     );
   }
 
+  Future<void> _openFutbolLibrePage(String url) async {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null ||
+        uri.host.isEmpty ||
+        (uri.scheme != 'https' && uri.scheme != 'http')) {
+      return;
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (routeContext) => WebAgendaScreen(
+          pageUrl: uri.toString(),
+          onExit: () => Navigator.of(routeContext).maybePop(),
+          onOpenLive: () {
+            Navigator.of(routeContext).pop();
+          },
+        ),
+      ),
+    );
+  }
+
   String _statusText(LiveFixture fixture) {
     switch (fixture.status) {
       case LiveFixtureStatus.live:
@@ -946,6 +954,49 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
               ),
             ],
           ),
+          if (fixture.webChannels.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 9),
+            const Text(
+              'CANALES PUBLICADOS POR FÚTBOL LIBRE',
+              style: TextStyle(
+                color: _liveCyan,
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            for (final channel in fixture.webChannels)
+              Row(
+                children: <Widget>[
+                  const Icon(Icons.live_tv_rounded, color: _liveGreen, size: 17),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      channel.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => _openFutbolLibrePage(channel.url),
+                    child: const Text('ABRIR CANAL'),
+                  ),
+                ],
+              ),
+          ] else if (fixture.detailUrl.isNotEmpty) ...<Widget>[
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => _openFutbolLibrePage(fixture.detailUrl),
+                icon: const Icon(Icons.open_in_browser_rounded, size: 16),
+                label: const Text('VER EN FÚTBOL LIBRE'),
+              ),
+            ),
+          ],
           if (streams.isNotEmpty) ...<Widget>[
             const SizedBox(height: 9),
             for (final source in streams)
@@ -1259,7 +1310,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
                     _emptyState(
                       Icons.event_busy_rounded,
                       'NO HAY EVENTOS PARA ESTE FILTRO',
-                      'Prueba otro deporte, cambia el rango de fechas o actualiza la agenda. No se mostrarán partidos inventados.',
+                      'Abre primero la pestaña Agenda de hoy para cargar la programación publicada por Fútbol Libre. Después vuelve aquí para ver los partidos y los canales que aparezcan asociados.',
                     )
                   else ...<Widget>[
                     if (_loading)
@@ -1272,7 +1323,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
                   ],
                   const SizedBox(height: 8),
                   const Text(
-                    'Las señales no vienen incorporadas ni se extraen de páginas de terceros. Añade una URL directa autorizada para asociarla al horario del evento. La reproducción simultánea depende también de la capacidad de decodificación del teléfono y del ancho de banda.',
+                    'La programación y los canales visibles proceden de Fútbol Libre. Los enlaces de canal se abren dentro de la app; el reproductor nativo y la multivista usan únicamente señales directas HLS/MP4 autorizadas.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: _liveMuted,
