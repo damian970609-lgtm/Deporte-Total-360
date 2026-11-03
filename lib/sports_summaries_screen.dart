@@ -25,14 +25,16 @@ class SportsSummariesScreen extends StatelessWidget {
   const SportsSummariesScreen({super.key});
 
   static const List<_SummaryCategory> _categories = <_SummaryCategory>[
-    _SummaryCategory('Fútbol', 'resumenes futbol partidos oficiales', Icons.sports_soccer_rounded, _summaryCyan),
-    _SummaryCategory('NBA', 'NBA official highlights', Icons.sports_basketball_rounded, _summaryPink),
-    _SummaryCategory('Béisbol', 'MLB official highlights', Icons.sports_baseball_rounded, _summaryCyan),
-    _SummaryCategory('NFL', 'NFL official highlights', Icons.sports_football_rounded, _summaryPink),
-    _SummaryCategory('Fórmula 1', 'Formula 1 official race highlights', Icons.sports_motorsports_rounded, _summaryCyan),
-    _SummaryCategory('MMA / UFC', 'UFC official fight highlights', Icons.sports_mma_rounded, _summaryPink),
-    _SummaryCategory('Rugby', 'rugby official match highlights', Icons.sports_rugby_rounded, _summaryCyan),
-    _SummaryCategory('Vóley', 'volleyball official match highlights', Icons.sports_volleyball_rounded, _summaryPink),
+    _SummaryCategory('Fútbol', 'LaLiga Premier League Serie A Bundesliga Ligue 1 MLS Brasileirao Champions League Copa Libertadores World Cup women official highlights', Icons.sports_soccer_rounded, _summaryCyan),
+    _SummaryCategory('Baloncesto', 'NBA WNBA FIBA official basketball highlights', Icons.sports_basketball_rounded, _summaryPink),
+    _SummaryCategory('Béisbol', 'MLB World Baseball Classic WBSC official highlights', Icons.sports_baseball_rounded, _summaryCyan),
+    _SummaryCategory('Hockey sobre hielo', 'NHL PWHL IIHF official ice hockey highlights', Icons.sports_hockey_rounded, _summaryPink),
+    _SummaryCategory('Voleibol', 'Volleyball Nations League FIVB men women official highlights', Icons.sports_volleyball_rounded, _summaryCyan),
+    _SummaryCategory('MMA', 'UFC official fight highlights men women', Icons.sports_mma_rounded, _summaryPink),
+    _SummaryCategory('Fútbol sala', 'FIFA Futsal World Cup UEFA Futsal EURO Copa America futsal highlights', Icons.sports_soccer_rounded, _summaryCyan),
+    _SummaryCategory('Ciclismo', 'Tour de France Giro d Italia Vuelta a Espana women men cycling highlights', Icons.directions_bike_rounded, _summaryPink),
+    _SummaryCategory('Deportes de motor', 'Formula 1 MotoGP F1 Academy WorldWCR official highlights', Icons.sports_motorsports_rounded, _summaryCyan),
+    _SummaryCategory('Balonmano', 'IHF EHF handball world championship men women highlights', Icons.sports_handball_rounded, _summaryPink),
   ];
 
   Future<void> _openSearch(BuildContext context, _SummaryCategory category) async {
