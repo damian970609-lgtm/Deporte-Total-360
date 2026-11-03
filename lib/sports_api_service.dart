@@ -195,7 +195,7 @@ class SportsApiService {
       }
       if (decoded['provider_configured'] != true) {
         throw const SportsApiException(
-          'El Worker está disponible, pero no tiene configurada la clave APISPORTS_KEY.',
+          'El Worker está disponible, pero no tiene configurada SPORTAPI_API_KEY ni la clave heredada APISPORTS_KEY.',
         );
       }
     } on TimeoutException {
