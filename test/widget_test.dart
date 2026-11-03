@@ -86,7 +86,7 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
 
     expect(find.text('Deportes en vivo'), findsOneWidget);
-    expect(find.text('Agenda hoy'), findsOneWidget);
+    expect(find.text('Agenda de hoy'), findsOneWidget);
     expect(find.text('Noticias'), findsWidgets);
     expect(find.text('Mister Fantasy'), findsOneWidget);
     expect(find.text('Estadísticas'), findsWidgets);
