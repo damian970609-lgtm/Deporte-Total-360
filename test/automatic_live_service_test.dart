@@ -63,7 +63,7 @@ https://media.example/backup.m3u8
       });
 
       final catalog = await AutomaticLiveService(client: client).loadCatalog(
-        playlistUrl: 'https://offline.example/sports.m3u\\nhttps://backup.example/sports.m3u',
+        playlistUrl: 'https://offline.example/sports.m3u\nhttps://backup.example/sports.m3u',
         epgUrl: 'https://guide.example/guide.xml',
       );
 
