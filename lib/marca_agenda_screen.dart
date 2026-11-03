@@ -167,6 +167,22 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
     return !now.isBefore(event.startsAt) && now.isBefore(end);
   }
 
+  IconData _sportIcon(String sport) {
+    final value = sport.toLowerCase();
+    if (value.contains('fútbol') || value.contains('futbol')) return Icons.sports_soccer_rounded;
+    if (value.contains('baloncesto') || value.contains('basket')) return Icons.sports_basketball_rounded;
+    if (value.contains('tenis')) return Icons.sports_tennis_rounded;
+    if (value.contains('motor') || value.contains('f1')) return Icons.directions_car_rounded;
+    if (value.contains('ciclismo')) return Icons.directions_bike_rounded;
+    if (value.contains('atletismo') || value.contains('carrera')) return Icons.directions_run_rounded;
+    if (value.contains('natación') || value.contains('natacion')) return Icons.pool_rounded;
+    if (value.contains('boxeo') || value.contains('combate')) return Icons.sports_mma_rounded;
+    if (value.contains('golf')) return Icons.sports_golf_rounded;
+    if (value.contains('rugby')) return Icons.sports_rugby_rounded;
+    if (value.contains('voleibol')) return Icons.sports_volleyball_rounded;
+    return Icons.emoji_events_rounded;
+  }
+
   Widget _agendaImage(
     String imageUrl, {
     double size = 48,
@@ -305,7 +321,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'AGENDA DE HOY',
+              'AGENDA DEPORTIVA',
               style: TextStyle(
                 color: _agendaCyan,
                 fontSize: 14,
@@ -449,14 +465,27 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                                           Row(
                                             children: <Widget>[
                                               Expanded(
-                                                child: Text(
-                                                  event.sport.toUpperCase(),
-                                                  style: const TextStyle(
-                                                    color: _agendaMuted,
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.w900,
-                                                    letterSpacing: .8,
-                                                  ),
+                                                child: Row(
+                                                  children: <Widget>[
+                                                    Icon(
+                                                      _sportIcon(event.sport),
+                                                      color: _agendaCyan,
+                                                      size: 15,
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Flexible(
+                                                      child: Text(
+                                                        event.sport.toUpperCase(),
+                                                        overflow: TextOverflow.ellipsis,
+                                                        style: const TextStyle(
+                                                          color: _agendaMuted,
+                                                          fontSize: 9,
+                                                          fontWeight: FontWeight.w900,
+                                                          letterSpacing: .8,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
                                               if (live)
