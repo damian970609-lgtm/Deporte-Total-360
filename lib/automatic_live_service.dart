@@ -12,13 +12,13 @@ const String _authorizedKey = 'dt360_auto_live_authorized_v1';
 /// Catálogos internacionales; las listas incluyen feeds públicos de distintas
 /// regiones. El usuario debe confirmar que puede reproducirlos en su territorio.
 const String defaultAutoLivePlaylistUrls =
-    'https://dearbulut.github.io/iptv/playlists/category/sports.m3u\\n'
+    'https://dearbulut.github.io/iptv/playlists/category/sports.m3u\n'
     'https://iptv-org.github.io/iptv/categories/sports.m3u';
 const String defaultAutoLiveEpgUrl =
     'https://dearbulut.github.io/iptv/epg/guide.xml.gz';
 
 List<String> _splitPlaylistUrls(String value) => value
-    .split(RegExp(r'[\\r\\n;]+'))
+    .split(RegExp(r'[\r\n;]+'))
     .map((url) => url.trim())
     .where((url) => url.isNotEmpty)
     .toList(growable: false);
@@ -68,7 +68,7 @@ class AutoLiveSettings {
     required String epgUrl,
     required bool authorizationConfirmed,
   }) async {
-    final playlist = _splitPlaylistUrls(playlistUrl).join('\\n');
+    final playlist = _splitPlaylistUrls(playlistUrl).join('\n');
     final epg = epgUrl.trim();
     final playlistUrls = _splitPlaylistUrls(playlist);
     if (playlistUrls.isEmpty ||
@@ -255,7 +255,7 @@ class AutomaticLiveService {
         !isSafeHttpUrl(epgUrl)) {
       throw const FormatException('Configura una o más listas M3U válidas y una guía XMLTV/EPG.');
     }
-    final playlistCacheKey = playlistUrls.join('\\n');
+    final playlistCacheKey = playlistUrls.join('\n');
     final now = DateTime.now();
     final cached = _cachedCatalog;
     if (!forceRefresh && cached != null &&
