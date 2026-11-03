@@ -87,17 +87,21 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
             return 'Fútbol';
           };
           const matchLine = (text) => {
+            const pattern = /^(.{2,65}?)\s+(?:vs\.?|versus|v\.|contra|[-–—])\s+(.{2,65}?)(?=\s+(?:\d{1,2}:\d{2}|EN VIVO|LIVE|HOY|MAÑANA|FINAL|FT)\b|$)/i;
+            const parse = (line) => {
+              const found = clean(line).match(pattern);
+              if (!found) return null;
+              const home = clean(found[1]).replace(/^(?:partido|evento)\s*[:|-]\s*/i, '');
+              const away = clean(found[2]).replace(/\s+(?:EN VIVO|LIVE|HOY|MAÑANA|FINAL|FT).*$/i, '');
+              return home && away ? { home, away } : null;
+            };
             const lines = String(text || '').split(/\n+/).map(clean).filter(Boolean);
             for (const line of lines) {
               if (line.length > 150) continue;
-              const found = line.match(/^(.{2,65}?)\s+(?:vs\.?|versus|v\.|contra|[-–—])\s+(.{2,65}?)(?=\s+(?:\d{1,2}:\d{2}|EN VIVO|LIVE|HOY|MAÑANA|FINAL|FT)\b|$)/i);
-              if (found) {
-                const home = clean(found[1]).replace(/^(?:partido|evento)\s*[:|-]\s*/i, '');
-                const away = clean(found[2]).replace(/\s+(?:EN VIVO|LIVE|HOY|MAÑANA|FINAL|FT).*$/i, '');
-                if (home && away) return { home, away };
-              }
+              const parsed = parse(line);
+              if (parsed) return parsed;
             }
-            return null;
+            return parse(clean(text));
           };
           const dateFor = (element, text) => {
             const time = element.querySelector('time[datetime], [datetime]');
@@ -179,6 +183,40 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                   detailUrl: href,
                   channels
                 });
+              }
+
+              // Las fichas individuales pueden publicar la señal fuera
+              // de la tarjeta del evento. Solo leemos enlaces web visibles.
+              if (events.length === 0 && !/^\/(?:agenda)?\/?$/.test(location.pathname)) {
+                const pageText = document.body?.innerText || '';
+                const teams = matchLine(pageText);
+                const startsAt = dateFor(document.body || document.documentElement, pageText);
+                if (teams && startsAt) {
+                  const channels = [];
+                  for (const link of Array.from(document.querySelectorAll('a[href]'))) {
+                    const name = clean(link.innerText || link.textContent);
+                    if (!channelPattern.test(name)) continue;
+                    try {
+                      const url = new URL(link.getAttribute('href'), location.href);
+                      if ((url.protocol === 'https:' || url.protocol === 'http:') &&
+                          !channels.some((item) => item.url === url.href)) {
+                        channels.push({ name: name.slice(0, 80), url: url.href });
+                      }
+                    } catch (_) {}
+                  }
+                  const heading = document.querySelector('h1,h2,h3');
+                  events.push({
+                    id: location.href,
+                    sport: sportFor(pageText),
+                    competition: heading ? clean(heading.innerText || heading.textContent) : 'Fútbol Libre',
+                    homeTeam: teams.home,
+                    awayTeam: teams.away,
+                    startsAt,
+                    status: /\b(en vivo|live)\b/i.test(pageText) ? 'live' : 'programado',
+                    detailUrl: location.href,
+                    channels
+                  });
+                }
               }
 
               const unique = new Map();
