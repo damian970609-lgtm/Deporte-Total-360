@@ -87,7 +87,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
 
   String _time(DateTime date) {
     final local = date.toLocal();
-    return '\${local.hour.toString().padLeft(2, '0')}:\${local.minute.toString().padLeft(2, '0')}';
+    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }
 
   String _remaining(DateTime date) {
@@ -95,14 +95,14 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
     if (seconds <= 0) return 'En curso';
     final minutes = (seconds / 60).ceil();
     if (minutes < 60) return 'En $minutes min';
-    return 'En \${minutes ~/ 60} h \${minutes % 60} min';
+    return 'En ${minutes ~/ 60} h ${minutes % 60} min';
   }
 
   Future<void> _play(ScheduledLiveEvent event, ScheduledLiveSource source) async {
     if (!isDirectPlayableStream(source.url)) return;
     await Navigator.of(context).push<void>(MaterialPageRoute<void>(
       builder: (_) => LivePlayerGridScreen(sources: <LivePlayerSource>[
-        LivePlayerSource(title: '\${event.event.title} · \${source.channelName}', url: source.url),
+        LivePlayerSource(title: '${event.event.title} · ${source.channelName}', url: source.url),
       ]),
     ));
     if (mounted) _refresh();
@@ -116,7 +116,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
       final source = item.sources.first;
       if (!isDirectPlayableStream(source.url)) continue;
       sources.add(LivePlayerSource(
-        title: '\${item.event.title} · \${source.channelName}', url: source.url,
+        title: '${item.event.title} · ${source.channelName}', url: source.url,
       ));
     }
     if (sources.isEmpty) return;
@@ -176,7 +176,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
           const SizedBox(width: 9),
           Text(_remaining(event.startsAt), style: const TextStyle(color: _autoMuted, fontSize: 10)),
           const Spacer(),
-          Text('\${item.sources.length} señales', style: const TextStyle(color: _autoMuted, fontSize: 10)),
+          Text('${item.sources.length} señales', style: const TextStyle(color: _autoMuted, fontSize: 10)),
         ]),
         const SizedBox(height: 10),
         for (final source in item.sources)
@@ -189,7 +189,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
               leading: const Icon(Icons.live_tv_rounded, color: _autoGreen),
               title: Text(source.channelName, maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
-              subtitle: Text('EPG: \${source.programmeTitle}', maxLines: 1, overflow: TextOverflow.ellipsis,
+              subtitle: Text('EPG: ${source.programmeTitle}', maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: _autoMuted, fontSize: 9)),
               trailing: IconButton(
                 tooltip: 'Reproducir con ExoPlayer',
@@ -260,7 +260,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
                 icon: Icons.search_off_rounded),
             if (_scheduled.isNotEmpty) ...<Widget>[
               Row(children: <Widget>[
-                Expanded(child: Text('\${_scheduled.length} eventos con señal asignada',
+                Expanded(child: Text('${_scheduled.length} eventos con señal asignada',
                   style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w900))),
                 if (_scheduled.length > 1)
                   FilledButton.icon(onPressed: _openMultiView,
@@ -273,7 +273,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
               for (final item in _scheduled) _eventCard(item),
             ],
             const SizedBox(height: 10),
-            Text('Actualizado \${_time(_updatedAt)} · se revisa cada 45 segundos mientras esta sección está abierta.',
+            Text('Actualizado ${_time(_updatedAt)} · se revisa cada 45 segundos mientras esta sección está abierta.',
               textAlign: TextAlign.center, style: const TextStyle(color: _autoMuted, fontSize: 9)),
             const SizedBox(height: 10),
             const Text('La calidad depende de las señales, del proveedor, de los derechos disponibles en tu región y de la conexión. La APK no puede garantizar que una fuente externa esté siempre activa.',
