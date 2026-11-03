@@ -224,7 +224,7 @@ bool isSupportedAuthorizedMediaUrl(String value) {
     return false;
   }
   final path = uri.path.toLowerCase();
-  return path.endsWith('.m3u8') || path.endsWith('.mp4');
+  return path.endsWith('.m3u8') || path.endsWith('.mp4') || path.endsWith('.ts');
 }
 
 class LiveStreamSource {
