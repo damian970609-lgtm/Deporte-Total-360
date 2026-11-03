@@ -34,6 +34,43 @@ const String settingsPhotoAsset =
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  ErrorWidget.builder = (details) {
+    final message = details.exceptionAsString();
+    final visibleMessage = message.length > 180
+        ? '${message.substring(0, 177)}…'
+        : message;
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: ColoredBox(
+        color: appBg,
+        child: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const Icon(Icons.error_outline_rounded, color: appPink, size: 42),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'No se pudo mostrar esta sección',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    visibleMessage,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: appMuted, fontSize: 11, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  };
   try {
     final prefs = await SharedPreferences.getInstance();
     appLanguage.value = parseLanguage(prefs.getString('app_language'));
@@ -309,7 +346,7 @@ class _MainShellState extends State<MainShell> {
           ? LiveChannelsScreen(isActive: _selectedIndex == _liveTab)
           : const SizedBox.shrink(),
       _visitedTabs.contains(_agendaTab)
-          ? AgendaScreen(initialSport: _selectedStatisticsSport)
+          ? const AgendaScreen()
           : const SizedBox.shrink(),
       _visitedTabs.contains(_newsTab) ? const NewsScreen() : const SizedBox.shrink(),
       _visitedTabs.contains(_fantasyTab) ? const FantasyScreen() : const SizedBox.shrink(),
