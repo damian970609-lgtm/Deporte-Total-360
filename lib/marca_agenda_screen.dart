@@ -117,10 +117,21 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
     try {
       final loaded = await _loadEvents();
       final now = DateTime.now();
-      final visible = loaded.where((event) {
-        final end = event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
-        return end.isAfter(now.subtract(const Duration(hours: 4)));
-      }).toList()
+      // MARCA publica jornadas de varios días en una sola captura. La pestaña
+      // Agenda de hoy solo presenta eventos cuya fecha local de inicio coincide
+      // con la fecha del teléfono; el caché conserva la captura completa para
+      // que el planificador de transmisiones no pierda los próximos eventos.
+      final today = DateTime(now.year, now.month, now.day);
+      final tomorrow = today.add(const Duration(days: 1));
+      final visibleById = <String, SportsAgendaEvent>{};
+      for (final event in loaded) {
+        final localStart = event.startsAt.toLocal();
+        if (localStart.isBefore(today) || !localStart.isBefore(tomorrow)) {
+          continue;
+        }
+        visibleById.putIfAbsent(event.id, () => event);
+      }
+      final visible = visibleById.values.toList()
         ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
 
       if (!mounted) return;
@@ -187,12 +198,33 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
     String imageUrl, {
     double size = 48,
     required IconData fallbackIcon,
+    String fallbackLabel = '',
   }) {
     final uri = Uri.tryParse(imageUrl.trim());
     final valid = uri != null &&
         uri.scheme == 'https' &&
         uri.hasAuthority &&
         uri.userInfo.isEmpty;
+
+    Widget fallback() {
+      final parts = fallbackLabel.trim().split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
+      final label = parts.take(2).map((part) => part.substring(0, 1)).join().toUpperCase();
+      if (label.isNotEmpty) {
+        return Center(
+          child: Text(
+            label,
+            maxLines: 1,
+            style: TextStyle(
+              color: _agendaCyan,
+              fontSize: size * .29,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        );
+      }
+      return Icon(fallbackIcon, color: _agendaCyan, size: size * .56);
+    }
+
     return Container(
       width: size,
       height: size,
@@ -207,17 +239,15 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
             ? Image.network(
                 imageUrl,
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => Icon(
-                  fallbackIcon,
-                  color: _agendaCyan,
-                  size: size * .56,
-                ),
+                cacheWidth: (size * 2).round(),
+                cacheHeight: (size * 2).round(),
+                filterQuality: FilterQuality.low,
+                gaplessPlayback: true,
+                frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
+                    frame == null && !wasSynchronouslyLoaded ? fallback() : child,
+                errorBuilder: (_, __, ___) => fallback(),
               )
-            : Icon(
-                fallbackIcon,
-                color: _agendaCyan,
-                size: size * .56,
-              ),
+            : fallback(),
       ),
     );
   }
@@ -230,6 +260,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
           logo,
           size: 52,
           fallbackIcon: Icons.shield_rounded,
+          fallbackLabel: name,
         ),
         const SizedBox(height: 7),
         Text(
@@ -264,6 +295,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
             participant.imageUrl,
             size: 44,
             fallbackIcon: Icons.person_rounded,
+            fallbackLabel: participant.name,
           ),
           const SizedBox(height: 6),
           Text(
@@ -425,6 +457,8 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                             onRefresh: _refresh,
                             child: ListView.builder(
                               padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+                              cacheExtent: 240,
+                              addAutomaticKeepAlives: false,
                               itemCount: events.length,
                               itemBuilder: (context, index) {
                                 final event = events[index];
@@ -434,6 +468,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                                     : null;
                                 final day = _dayLabel(event.startsAt);
                                 return Column(
+                                  key: ValueKey<String>(event.id),
                                   crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: <Widget>[
                                     if (day != previousDay)
@@ -557,9 +592,23 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                                                 spacing: 8,
                                                 runSpacing: 8,
                                                 children: event.participants
+                                                    .take(6)
                                                     .map(_participantBlock)
                                                     .toList(growable: false),
                                               ),
+                                              if (event.participants.length > 6) ...<Widget>[
+                                                const SizedBox(height: 5),
+                                                Center(
+                                                  child: Text(
+                                                    '+${event.participants.length - 6} participantes',
+                                                    style: const TextStyle(
+                                                      color: _agendaMuted,
+                                                      fontSize: 9,
+                                                      fontWeight: FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
                                             ] else if (event.imageUrl.isNotEmpty) ...<Widget>[
                                               const SizedBox(height: 8),
                                               Center(
