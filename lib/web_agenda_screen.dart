@@ -3,6 +3,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'web_protection_policy.dart';
 import 'app_i18n.dart';
+import 'automatic_live_service.dart';
 
 const Color _brandBg = Color(0xFF030814);
 const Color _brandPanel = Color(0xFF071326);
@@ -111,6 +112,99 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
       ''');
     } catch (_) {
       // La WebView permanece funcional si el sitio impide la limpieza DOM.
+    }
+  }
+
+
+  Future<void> _installAgendaEventScanner(InAppWebViewController controller) async {
+    try {
+      await controller.evaluateJavascript(source: r'''
+        (() => {
+          const scan = () => {
+            const nodes = Array.from(document.querySelectorAll(
+              'article,li,[data-event],[class*="match"],[class*="fixture"],[class*="event"]'
+            ));
+            const found = [];
+            const seen = new Set();
+            const now = new Date();
+            const timePattern = /\b(2[0-3]|[01]?\d):([0-5]\d)\b|\b(1[0-2]|0?[1-9]):([0-5]\d)\s*(AM|PM)\b/i;
+            for (const node of nodes) {
+              const rawText = (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim();
+              if (rawText.length < 12 || rawText.length > 500) continue;
+              const timeMatch = rawText.match(timePattern);
+              if (!timeMatch) continue;
+              const anchor = node.matches('a[href]') ? node : node.querySelector('a[href]');
+              if (!anchor || !anchor.href || !/^https?:/i.test(anchor.href)) continue;
+              if (/\/canal\/|\/channel\//i.test(new URL(anchor.href).pathname)) continue;
+              const heading = node.querySelector('h1,h2,h3,h4,[class*="title"],[class*="team"]');
+              let title = (heading && heading.textContent || anchor.textContent || '').replace(/\s+/g, ' ').trim();
+              if (title.length < 5) title = rawText;
+              title = title.replace(/\b(EN VIVO|VER PARTIDO|VER AHORA|DETALLES)\b/ig, '').trim();
+              const pair = title.split(/\s+(?:vs?\.?|versus|contra)\s+/i);
+              if (pair.length < 2) continue;
+              let hour = parseInt(timeMatch[1] || timeMatch[3], 10);
+              const minute = parseInt(timeMatch[2] || timeMatch[4], 10);
+              if (timeMatch[5]) {
+                if (timeMatch[5].toUpperCase() === 'PM' && hour < 12) hour += 12;
+                if (timeMatch[5].toUpperCase() === 'AM' && hour === 12) hour = 0;
+              }
+              let start = null;
+              const dateValue = node.getAttribute('datetime') ||
+                node.getAttribute('data-start') ||
+                node.getAttribute('data-date') ||
+                (node.dataset && (node.dataset.start || node.dataset.datetime || node.dataset.date));
+              if (dateValue) {
+                const parsed = new Date(dateValue);
+                if (!Number.isNaN(parsed.getTime())) start = parsed;
+              }
+              if (!start) {
+                start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0);
+              }
+              const iso = start.toISOString();
+              const key = anchor.href + '|' + title + '|' + iso;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              const textLower = rawText.toLowerCase();
+              let sport = 'Fútbol';
+              if (/nba|basquet|basketball/.test(textLower)) sport = 'Básquet';
+              else if (/tenis|tennis/.test(textLower)) sport = 'Tenis';
+              else if (/formula 1|f1\b/.test(textLower)) sport = 'Fórmula 1';
+              else if (/beisbol|baseball/.test(textLower)) sport = 'Béisbol';
+              const eventId = (node.dataset && (node.dataset.eventId || node.dataset.fixtureId)) ||
+                anchor.href.split('/').filter(Boolean).pop() || key;
+              found.push({
+                id: String(eventId),
+                title: title,
+                sport: sport,
+                competition: '',
+                homeTeam: pair[0].trim(),
+                awayTeam: pair.slice(1).join(' vs ').trim(),
+                startsAt: iso,
+                endsAt: null,
+                detailUrl: anchor.href
+              });
+            }
+            if (found.length && window.flutter_inappwebview) {
+              window.flutter_inappwebview.callHandler('dt360AgendaEvents', found);
+            }
+          };
+          if (!window.__dt360AgendaScanner) {
+            window.__dt360AgendaScanner = true;
+            const run = () => { try { scan(); } catch (_) {} };
+            run();
+            window.setInterval(run, 15000);
+            if (document.documentElement) {
+              new MutationObserver(run).observe(document.documentElement, {
+                childList: true, subtree: true, characterData: true
+              });
+            }
+          } else {
+            scan();
+          }
+        })();
+      ''');
+    } catch (_) {
+      // No se interrumpe la agenda si el proveedor no permite inyección.
     }
   }
 
@@ -433,6 +527,22 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                       ),
                       onWebViewCreated: (controller) {
                         _controller = controller;
+                        controller.addJavaScriptHandler(
+                          handlerName: 'dt360AgendaEvents',
+                          callback: (arguments) async {
+                            if (arguments.isEmpty || arguments.first is! List) {
+                              return 0;
+                            }
+                            final events = (arguments.first as List)
+                                .map(FutbolLibreEvent.fromJson)
+                                .whereType<FutbolLibreEvent>()
+                                .toList(growable: false);
+                            if (events.isNotEmpty) {
+                              await FutbolLibreAgendaStore.save(events);
+                            }
+                            return events.length;
+                          },
+                        );
                       },
                       onLoadStart: (controller, url) {
                         if (!mounted) return;
@@ -457,6 +567,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                           _progress = 1;
                         });
                         await _installAdElementCleanup(controller);
+                        await _installAgendaEventScanner(controller);
                         await _refreshNavigationState();
                       },
                       onUpdateVisitedHistory:
