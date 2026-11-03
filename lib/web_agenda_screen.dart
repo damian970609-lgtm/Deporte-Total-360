@@ -359,13 +359,64 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 '[class*="competition"],[class*="league"],[data-league]'
               );
               const competition = (competitionNode && competitionNode.textContent || '').replace(/\s+/g, ' ').trim();
+              const homeTeam = pair.length > 1 ? pair[0].trim() : '';
+              const awayTeam = pair.length > 1 ? pair.slice(1).join(' vs ').trim() : '';
+              const normalizeLabel = (value) => String(value || '')
+                .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+                .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+              const imageNodes = Array.from(node.querySelectorAll('img'));
+              const resolveImage = (image) => {
+                if (!image) return '';
+                const source = image.currentSrc ||
+                  image.getAttribute('src') ||
+                  image.getAttribute('data-src') ||
+                  image.getAttribute('data-lazy-src') ||
+                  image.getAttribute('data-original') ||
+                  (image.getAttribute('srcset') || '').split(',')[0].trim().split(/\\s+/)[0];
+                if (!source || /^data:/i.test(source)) return '';
+                try {
+                  const url = new URL(source, location.href);
+                  return url.protocol === 'https:' && !url.username && !url.password
+                    ? url.href : '';
+                } catch (_) {
+                  return '';
+                }
+              };
+              const teamLogo = (teamName, fallbackIndex) => {
+                if (!teamName) return '';
+                const wanted = normalizeLabel(teamName);
+                const labelled = imageNodes.find((image) => {
+                  const label = normalizeLabel([
+                    image.alt, image.title, image.getAttribute('aria-label'),
+                    image.getAttribute('data-team'), image.getAttribute('data-name')
+                  ].filter(Boolean).join(' '));
+                  return label && (label.includes(wanted) || wanted.includes(label));
+                });
+                return resolveImage(labelled || imageNodes[fallbackIndex]);
+              };
+              const homeTeamLogo = teamLogo(homeTeam, 0);
+              const awayTeamLogo = teamLogo(awayTeam, 1);
+              const venueNode = node.querySelector(
+                '[class*="venue"],[class*="stadium"],[data-venue]'
+              );
+              const venue = (venueNode && venueNode.textContent || '')
+                .replace(/\\s+/g, ' ').trim();
+              const participants = pair.length > 1 ? [
+                { name: homeTeam, imageUrl: homeTeamLogo, country: '', role: 'home' },
+                { name: awayTeam, imageUrl: awayTeamLogo, country: '', role: 'away' }
+              ] : [];
               found.push({
                 id: String(eventId),
                 title: title,
                 sport: sport,
                 competition: competition,
-                homeTeam: pair.length > 1 ? pair[0].trim() : '',
-                awayTeam: pair.length > 1 ? pair.slice(1).join(' vs ').trim() : '',
+                homeTeam: homeTeam,
+                awayTeam: awayTeam,
+                homeTeamLogo: homeTeamLogo,
+                awayTeamLogo: awayTeamLogo,
+                participants: participants,
+                imageUrl: pair.length > 1 ? '' : resolveImage(imageNodes[0]),
+                venue: venue,
                 startsAt: iso,
                 endsAt: endIso,
                 detailUrl: eventUrl
