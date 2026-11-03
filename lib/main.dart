@@ -147,6 +147,28 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 class _MainShellState extends State<MainShell> {
+  @override
+  void initState() {
+    super.initState();
+    NotificationService.liveEventNotification.addListener(_handleLivePush);
+    if (NotificationService.liveEventNotification.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _handleLivePush());
+    }
+  }
+
+  void _handleLivePush() {
+    final eventId = NotificationService.liveEventNotification.value;
+    if (eventId == null || !mounted) return;
+    NotificationService.liveEventNotification.value = null;
+    _selectTab(_liveTab);
+  }
+
+  @override
+  void dispose() {
+    NotificationService.liveEventNotification.removeListener(_handleLivePush);
+    super.dispose();
+  }
+
   static const int _homeTab = 0;
   static const int _liveTab = 1;
   static const int _agendaTab = 2;
