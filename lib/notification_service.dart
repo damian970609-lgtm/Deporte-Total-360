@@ -1,11 +1,8 @@
-import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:http/http.dart' as http;
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,7 +11,6 @@ import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import 'app_i18n.dart';
-import 'sports_api_service.dart';
 
 class NotificationService {
   NotificationService._();
@@ -23,12 +19,12 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
   static bool _pushInitialized = false;
-  static StreamSubscription<String>? _tokenRefreshSubscription;
   static StreamSubscription<RemoteMessage>? _foregroundSubscription;
   static StreamSubscription<RemoteMessage>? _openedSubscription;
   static final ValueNotifier<String?> liveEventNotification =
       ValueNotifier<String?>(null);
 
+  static const String _liveTopic = 'deporte_total_360_live';
   static const String _firebaseApiKey =
       String.fromEnvironment('FIREBASE_API_KEY');
   static const String _firebaseAppId =
@@ -93,9 +89,6 @@ class NotificationService {
     final pushGranted =
         settings.authorizationStatus == AuthorizationStatus.authorized ||
         settings.authorizationStatus == AuthorizationStatus.provisional;
-    if (pushGranted) {
-      await _registerDeviceToken(await FirebaseMessaging.instance.getToken());
-    }
     return localGranted && pushGranted;
   }
 
@@ -116,15 +109,16 @@ class NotificationService {
         deporteTotalFirebaseMessagingBackgroundHandler,
       );
       final messaging = FirebaseMessaging.instance;
-      _tokenRefreshSubscription ??=
-          messaging.onTokenRefresh.listen(_registerDeviceToken);
       _foregroundSubscription ??=
           FirebaseMessaging.onMessage.listen(_showRemoteNotification);
       _openedSubscription ??=
           FirebaseMessaging.onMessageOpenedApp.listen(_handleRemoteOpen);
       final initialMessage = await messaging.getInitialMessage();
       if (initialMessage != null) _handleRemoteOpen(initialMessage);
-      await _registerDeviceToken(await messaging.getToken());
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('notifications_enabled') ?? false) {
+        await messaging.subscribeToTopic(_liveTopic);
+      }
       _pushInitialized = true;
     } catch (_) {
       // Sin los datos Firebase del proyecto, las notificaciones locales
@@ -132,43 +126,17 @@ class NotificationService {
     }
   }
 
-  static Future<void> _registerDeviceToken(String? token) async {
-    if (token == null || token.isEmpty) return;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      if (!(prefs.getBool('notifications_enabled') ?? false)) return;
-      final base = SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value);
-      if (base == null) return;
-      await http.post(
-        Uri.parse('$base/api/live/devices/register'),
-        headers: const {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'token': token,
-          'platform': Platform.isAndroid ? 'android' : 'ios',
-          'language': languageCode(appLanguage.value),
-        }),
-      ).timeout(const Duration(seconds: 12));
-    } catch (_) {
-      // Se vuelve a registrar al refrescarse el token o reiniciar la app.
-    }
-  }
-
   static Future<void> registerCurrentDevice() async {
     if (!_firebaseConfigured || Firebase.apps.isEmpty) return;
-    await _registerDeviceToken(await FirebaseMessaging.instance.getToken());
+    try {
+      await FirebaseMessaging.instance.subscribeToTopic(_liveTopic);
+    } catch (_) {}
   }
 
   static Future<void> unregisterCurrentDevice() async {
     if (!_firebaseConfigured || Firebase.apps.isEmpty) return;
-    final token = await FirebaseMessaging.instance.getToken();
-    if (token == null || token.isEmpty) return;
-    final base = SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value);
-    if (base == null) return;
     try {
-      await http.post(Uri.parse('$base/api/live/devices/unregister'),
-        headers: const {'Content-Type': 'application/json'},
-        body: jsonEncode({'token': token}),
-      ).timeout(const Duration(seconds: 12));
+      await FirebaseMessaging.instance.unsubscribeFromTopic(_liveTopic);
     } catch (_) {}
   }
 
