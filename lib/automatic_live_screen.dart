@@ -98,11 +98,24 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
     return 'En ${minutes ~/ 60} h ${minutes % 60} min';
   }
 
+  String _playerTitle(ScheduledLiveEvent item, ScheduledLiveSource source) {
+    final event = item.event;
+    final teams = event.homeTeam.isNotEmpty && event.awayTeam.isNotEmpty
+        ? '${event.homeTeam} vs ${event.awayTeam}'
+        : event.title;
+    return <String>[
+      event.sport,
+      if (event.competition.isNotEmpty) event.competition,
+      teams,
+      source.channelName,
+    ].join(' · ');
+  }
+
   Future<void> _play(ScheduledLiveEvent event, ScheduledLiveSource source) async {
     if (!isDirectPlayableStream(source.url)) return;
     await Navigator.of(context).push<void>(MaterialPageRoute<void>(
       builder: (_) => LivePlayerGridScreen(sources: <LivePlayerSource>[
-        LivePlayerSource(title: '${event.event.title} · ${source.channelName}', url: source.url),
+        LivePlayerSource(title: _playerTitle(event, source), url: source.url),
       ]),
     ));
     if (mounted) _refresh();
@@ -116,7 +129,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
       final source = item.sources.first;
       if (!isDirectPlayableStream(source.url)) continue;
       sources.add(LivePlayerSource(
-        title: '${item.event.title} · ${source.channelName}', url: source.url,
+        title: _playerTitle(item, source), url: source.url,
       ));
     }
     if (sources.isEmpty) return;
