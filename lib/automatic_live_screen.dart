@@ -76,16 +76,23 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     if (mounted) setState(() {});
 
     try {
+      // La nube es la fuente principal: prepara los eventos y canales
+      // aunque este dispositivo no sea el que ejecuta el planificador.
+      final published = await _service.fetchPublishedSchedule();
       final settings = await AutoLiveSettings.load();
-      final events = await SportsAgendaStore.load();
-      final latest = settings.isConfigured && events.isNotEmpty
-          ? await _service.schedule(
-              events: events,
-              now: DateTime.now(),
-              settings: settings,
-              forceRefresh: force,
-            )
-          : <ScheduledLiveEvent>[];
+      final localEvents = await SportsAgendaStore.load();
+      final events = published != null
+          ? published.map((item) => item.event).toList(growable: false)
+          : localEvents;
+      final latest = published ??
+          (settings.isConfigured && localEvents.isNotEmpty
+              ? await _service.schedule(
+                  events: localEvents,
+                  now: DateTime.now(),
+                  settings: settings,
+                  forceRefresh: force,
+                )
+              : <ScheduledLiveEvent>[]);
 
       final refreshTime = DateTime.now();
       for (final item in latest) {
