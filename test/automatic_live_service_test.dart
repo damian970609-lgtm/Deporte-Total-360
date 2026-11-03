@@ -83,7 +83,7 @@ void main() {
 
       expect(find.text('DEPORTE TOTAL 360° CANAL 1'), findsOneWidget);
       expect(find.text('Fútbol · Liga · Tigres vs Atlas'), findsOneWidget);
-      expect(find.byTooltip('Reproducir transmisión'), findsOneWidget);
+      expect(find.byTooltip('Reproducir en pantalla completa'), findsOneWidget);
       expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(3));
     });
   });
