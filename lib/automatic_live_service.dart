@@ -265,17 +265,28 @@ class AutomaticLiveService {
         _cachedAt != null && now.difference(_cachedAt!) < const Duration(minutes: 5)) {
       return cached;
     }
-    final playlistBodies = await Future.wait<String>(
-      playlistUrls.map((url) => _downloadText(url, maxBytes: 12 * 1024 * 1024)),
+    // Una lista caída no debe bloquear las demás: cada fuente se descarga
+    // de forma independiente y se conservan todas las que respondan bien.
+    final playlistBodies = await Future.wait<String?>(
+      playlistUrls.map((url) async {
+        try {
+          return await _downloadText(url, maxBytes: 12 * 1024 * 1024);
+        } catch (_) {
+          return null;
+        }
+      }),
     );
     final epgBody = await _downloadText(epgUrl, maxBytes: 96 * 1024 * 1024);
     final channelsByUrl = <String, M3uChannel>{};
-    for (final body in playlistBodies) {
+    for (final body in playlistBodies.whereType<String>()) {
       for (final channel in parseM3u(body)) {
         channelsByUrl.putIfAbsent(channel.url, () => channel);
       }
     }
     final channels = channelsByUrl.values.toList(growable: false);
+    if (channels.isEmpty) {
+      throw const FormatException('Ninguna de las listas deportivas respondió con canales HLS/MP4 compatibles.');
+    }
     final programmes = parseXmltv(epgBody);
     if (channels.isEmpty) {
       throw const FormatException('La lista M3U no contiene canales HLS o MP4 compatibles.');
