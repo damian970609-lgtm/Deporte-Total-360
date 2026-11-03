@@ -1357,12 +1357,12 @@ class LivePlayerWaitingEvent {
 /// Formato de resolución legible para el selector de calidad.
 String videoTrackResolutionLabel(VideoTrack track) {
   final height = track.height;
-  if (height != null && height > 0) return '\${height}p';
+  if (height != null && height > 0) return '${height}p';
   final label = track.label?.trim();
   if (label != null && label.isNotEmpty) return label;
   final bitrate = track.bitrate;
   if (bitrate != null && bitrate > 0) {
-    return '\${(bitrate / 1000).round()} kbps';
+    return '${(bitrate / 1000).round()} kbps';
   }
   return 'Calidad disponible';
 }
@@ -1421,7 +1421,7 @@ class LivePlayerBoard extends StatelessWidget {
                               aspectRatio: 16 / 9,
                               child: _LiveVideoTile(
                                 key: ValueKey<String>(
-                                  'board-$channelNumber-\${source.url}',
+                                  'board-$channelNumber-${source.url}',
                                 ),
                                 source: source,
                                 initiallyMuted: index > 0,
@@ -2171,7 +2171,7 @@ class _VideoQualityPickerButton extends StatelessWidget {
     final parts = <String>[];
     final bitrate = track.bitrate;
     if (bitrate != null && bitrate > 0) {
-      parts.add('\${(bitrate / 1000).round()} kb/s');
+      parts.add('${(bitrate / 1000).round()} kb/s');
     }
     if (track.codec != null && track.codec!.isNotEmpty) {
       parts.add(track.codec!);
@@ -2475,218 +2475,6 @@ class _LiveFullscreenPlayerState extends State<_LiveFullscreenPlayer> {
                   ],
                 ),
               ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LiveFullscreenPlayer extends StatefulWidget {
-  const _LiveFullscreenPlayer({
-    required this.title,
-    required this.url,
-  });
-
-  final String title;
-  final String url;
-
-  @override
-  State<_LiveFullscreenPlayer> createState() => _LiveFullscreenPlayerState();
-}
-
-class _LiveFullscreenPlayerState extends State<_LiveFullscreenPlayer> {
-  VideoPlayerController? _controller;
-  String? _error;
-  bool _loading = true;
-  bool _muted = false;
-  bool _showControls = true;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(SystemChrome.setPreferredOrientations(
-      const <DeviceOrientation>[
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ],
-    ));
-    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky));
-    _initialize();
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    unawaited(SystemChrome.setPreferredOrientations(const <DeviceOrientation>[]));
-    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
-    super.dispose();
-  }
-
-  Future<void> _initialize() async {
-    final old = _controller;
-    _controller = null;
-    await old?.dispose();
-    if (!mounted) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    final uri = Uri.tryParse(widget.url);
-    if (uri == null || !isSupportedAuthorizedMediaUrl(uri.toString())) {
-      setState(() {
-        _loading = false;
-        _error = 'La URL multimedia no es válida.';
-      });
-      return;
-    }
-    final controller = VideoPlayerController.networkUrl(
-      uri,
-      formatHint: _videoFormatHintFor(uri),
-      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-    );
-    _controller = controller;
-    try {
-      await controller.initialize();
-      await controller.setVolume(_muted ? 0 : 1);
-      await controller.play();
-      if (mounted) setState(() => _loading = false);
-    } catch (error) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = 'No se pudo abrir la señal: $error';
-        });
-      }
-    }
-  }
-
-  Future<void> _togglePlayback() async {
-    final controller = _controller;
-    if (controller == null || !controller.value.isInitialized) return;
-    if (controller.value.isPlaying) {
-      await controller.pause();
-    } else {
-      await controller.play();
-    }
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _toggleMute() async {
-    final controller = _controller;
-    if (controller == null || !controller.value.isInitialized) return;
-    _muted = !_muted;
-    await controller.setVolume(_muted ? 0 : 1);
-    if (mounted) setState(() {});
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = _controller;
-    final initialized = controller?.value.isInitialized ?? false;
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-              if (initialized)
-                Center(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _showControls = !_showControls),
-                    child: AspectRatio(
-                      aspectRatio: controller!.value.aspectRatio > 0
-                          ? controller.value.aspectRatio
-                          : 16 / 9,
-                      child: VideoPlayer(controller),
-                    ),
-                  ),
-                ),
-              if (_loading)
-                const Center(
-                  child: CircularProgressIndicator(color: _liveCyan),
-                ),
-              if (_error != null)
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        const Icon(Icons.error_outline_rounded,
-                            color: _liveRed, size: 36),
-                        const SizedBox(height: 9),
-                        Text(
-                          _error!,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        TextButton.icon(
-                          onPressed: _initialize,
-                          icon: const Icon(Icons.refresh_rounded),
-                          label: const Text('REINTENTAR'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              if (initialized && controller!.value.isBuffering)
-                const Center(
-                  child: CircularProgressIndicator(color: _liveCyan),
-                ),
-              if (_showControls)
-                Positioned(
-                  top: 8,
-                  left: 8,
-                  right: 8,
-                  child: Row(
-                    children: <Widget>[
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close_rounded, color: Colors.white),
-                      ),
-                      Expanded(
-                        child: Text(
-                          widget.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              if (initialized && _showControls)
-                Positioned(
-                  bottom: 15,
-                  left: 0,
-                  right: 0,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: <Widget>[
-                      IconButton.filledTonal(
-                        onPressed: _togglePlayback,
-                        icon: Icon(
-                          controller!.value.isPlaying
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      IconButton.filledTonal(
-                        onPressed: _toggleMute,
-                        icon: Icon(
-                          _muted
-                              ? Icons.volume_off_rounded
-                              : Icons.volume_up_rounded,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
           ],
         ),
       ),
