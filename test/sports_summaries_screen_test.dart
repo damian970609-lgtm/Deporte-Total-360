@@ -10,7 +10,10 @@ void main() {
 
     expect(find.text('RESÚMENES DEPORTIVOS'), findsOneWidget);
     expect(find.text('Fútbol'), findsOneWidget);
-    expect(find.text('NBA'), findsOneWidget);
-    expect(find.text('Fórmula 1'), findsOneWidget);
+    expect(find.text('Baloncesto'), findsOneWidget);
+    expect(find.text('Deportes de motor'), findsOneWidget);
+    expect(find.text('Hockey sobre hielo'), findsOneWidget);
+    expect(find.text('Ciclismo'), findsOneWidget);
+    expect(find.text('Balonmano'), findsOneWidget);
   });
 }
