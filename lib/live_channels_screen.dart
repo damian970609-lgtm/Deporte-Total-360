@@ -1376,6 +1376,16 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
               fontSize: 11,
             ),
           ),
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            onPressed: () => _openFutbolLibrePage(WebAgendaScreen.initialUrl),
+            icon: const Icon(Icons.calendar_month_rounded, size: 17),
+            label: const Text('ABRIR AGENDA DE FÚTBOL LIBRE'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _liveCyan,
+              side: const BorderSide(color: _liveCyan),
+            ),
+          ),
         ],
       ),
     );
