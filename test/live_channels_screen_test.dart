@@ -46,17 +46,21 @@ void main() {
       );
     });
 
-    test('rechaza páginas web, RTMP, DASH y URLs con credenciales', () {
+    test('admite DASH y rechaza páginas web, RTMP y URLs con credenciales', () {
+      expect(
+        isSupportedAuthorizedMediaUrl('https://example.com/manifest.mpd'),
+        isTrue,
+      );
       expect(
         isSupportedAuthorizedMediaUrl('https://example.com/watch?v=123'),
         isFalse,
       );
       expect(
-        isSupportedAuthorizedMediaUrl('rtmp://example.com/live/stream'),
+        isSupportedAuthorizedMediaUrl('https://example.com/channels.m3u'),
         isFalse,
       );
       expect(
-        isSupportedAuthorizedMediaUrl('https://example.com/manifest.mpd'),
+        isSupportedAuthorizedMediaUrl('rtmp://example.com/live/stream'),
         isFalse,
       );
       expect(
