@@ -99,7 +99,7 @@ https://media.example/backup.m3u8
 
   group('programación automática', () {
     test('espera hasta diez minutos antes y elige una sola señal de mayor calidad', () async {
-      final start = DateTime(2026, 11, 3, 10, 10);
+      final start = DateTime.now().add(const Duration(minutes: 10));
       final stop = start.add(const Duration(hours: 2));
       final playlist = '''
 #EXTM3U
