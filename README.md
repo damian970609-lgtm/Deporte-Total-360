@@ -2,9 +2,13 @@
 
 Aplicación Android en Flutter. El APK se compila en GitHub Actions; la carpeta Android se genera en el runner.
 
+Navegación principal: Inicio, Deportes en vivo, Agenda de hoy, Noticias, Mister Fantasy, Estadísticas, Resúmenes y Ajustes. Chat, Telegram, contacto y donaciones permanecen como accesos auxiliares.
+
 Archivos principales:
 - lib/main.dart: navegación de ocho secciones, inicio y ajustes.
 - lib/live_channels_screen.dart: catálogo por deporte, agenda de eventos, señales autorizadas y reproductor multivista de hasta cuatro cuadros.
+- lib/sports_summaries_screen.dart: categorías deportivas y reproducción de YouTube dentro de la app mediante WebView.
+- lib/public_chat_screen.dart: sala pública de chat compartida.
 - lib/agenda_screen.dart: agenda nativa y eventos API-Sports.
 - lib/sports_statistics_screen.dart: búsqueda de ligas y clasificaciones.
 - lib/sports_api_service.dart: conexión con el Worker sin introducir claves en la APK.
@@ -16,7 +20,7 @@ Archivos principales:
 
 Recursos:
 - assets/images/app_icon.png: icono y recurso gráfico reutilizado en Inicio.
-- assets/images/home_reference.png: referencia visual conservada en GitHub; no se incluye en la APK porque Inicio se construye con widgets Flutter.
+- assets/images/home_reference.png: referencia visual declarada como asset; Inicio se construye con widgets Flutter, no como captura estática.
 - assets/images/file_000000006048820e9e0720f1adf548f1.png: fondo de ajustes.
 
 API deportiva:
@@ -27,4 +31,4 @@ Compilación:
 El workflow configura Java y Flutter, genera Android en el runner, prepara permisos de red e icono, ejecuta flutter analyze y flutter test, compila el APK release y publica deporte-total-360-apk durante 30 días.
 
 Límites:
-El módulo Deportes en vivo consulta los eventos disponibles en el Worker de estadísticas y permite vincular señales directas HLS (.m3u8) o MP4 que el propietario esté autorizado a reproducir. Admite hasta cuatro cuadros simultáneos; el número real de reproducciones depende del dispositivo y de la conexión. No extrae enlaces de páginas de terceros ni elude DRM, autenticación o restricciones. La agenda web externa se conserva como alternativa integrada.
+El módulo Deportes en vivo consulta los eventos disponibles en el Worker de estadísticas y permite vincular señales directas HLS (.m3u8) o MP4 que el propietario esté autorizado a reproducir. Admite hasta cuatro cuadros simultáneos; el número real de reproducciones depende del dispositivo y de la conexión. No extrae enlaces de páginas de terceros ni elude DRM, autenticación o restricciones. La agenda nativa usa API-Sports y Fútbol Libre permanece como agenda web integrada accesible desde Inicio. Los resúmenes de YouTube se reproducen en WebView y respetan las restricciones de la plataforma.
