@@ -1322,10 +1322,165 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
 }
 
 class LivePlayerSource {
-  const LivePlayerSource({required this.title, required this.url});
+  const LivePlayerSource({
+    required this.title,
+    required this.url,
+    this.subtitle,
+  });
 
   final String title;
   final String url;
+  final String? subtitle;
+}
+
+/// Cuatro espacios fijos para ver eventos simultáneos sin desplazarse.
+class LivePlayerBoard extends StatelessWidget {
+  const LivePlayerBoard({
+    super.key,
+    required this.sources,
+    this.isActive = true,
+  });
+
+  final List<LivePlayerSource> sources;
+  final bool isActive;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth > constraints.maxHeight ? 4 : 2;
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 960),
+            child: GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(8),
+              itemCount: 4,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 1.08,
+              ),
+              itemBuilder: (context, index) {
+                final channelNumber = index + 1;
+                if (index >= sources.length) {
+                  return _WaitingLivePlayerTile(channelNumber: channelNumber);
+                }
+                final source = sources[index];
+                return Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: _livePanel,
+                    borderRadius: BorderRadius.circular(11),
+                    border: Border.all(color: _liveLine),
+                  ),
+                  child: Column(
+                    children: <Widget>[
+                      Expanded(
+                        child: Center(
+                          child: AspectRatio(
+                            aspectRatio: 16 / 9,
+                            child: _LiveVideoTile(
+                              key: ValueKey<String>(
+                                'board-$channelNumber-${source.url}',
+                              ),
+                              source: source,
+                              initiallyMuted: index > 0,
+                              autoStart: false,
+                              isActive: isActive,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      SizedBox(
+                        height: 29,
+                        child: Text(
+                          source.subtitle ?? 'Transmisión detectada',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: _liveMuted,
+                            fontSize: 9,
+                            height: 1.25,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _WaitingLivePlayerTile extends StatelessWidget {
+  const _WaitingLivePlayerTile({required this.channelNumber});
+
+  final int channelNumber;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF050A13),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: _liveLine),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: <Widget>[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
+            color: _livePanel,
+            child: Text(
+              'DEPORTE TOTAL 360° CANAL $channelNumber',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: _liveCyan,
+                fontSize: 8,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const Expanded(
+            child: Center(
+              child: Icon(
+                Icons.play_circle_outline_rounded,
+                color: _liveMuted,
+                size: 42,
+              ),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.only(bottom: 7, left: 4, right: 4),
+            child: Text(
+              'ESPERANDO TRANSMISIÓN',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: _liveMuted,
+                fontSize: 8,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Un reproductor de 1 a 4 cuadros. Cada cuadro administra su propio player nativo.
@@ -1461,10 +1616,14 @@ class _LiveVideoTile extends StatefulWidget {
     super.key,
     required this.source,
     required this.initiallyMuted,
+    this.autoStart = true,
+    this.isActive = true,
   });
 
   final LivePlayerSource source;
   final bool initiallyMuted;
+  final bool autoStart;
+  final bool isActive;
 
   @override
   State<_LiveVideoTile> createState() => _LiveVideoTileState();
@@ -1473,7 +1632,7 @@ class _LiveVideoTile extends StatefulWidget {
 class _LiveVideoTileState extends State<_LiveVideoTile> {
   VideoPlayerController? _controller;
   String? _error;
-  bool _loading = true;
+  bool _loading = false;
   bool _showControls = true;
   bool _muted = false;
 
@@ -1481,7 +1640,18 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
   void initState() {
     super.initState();
     _muted = widget.initiallyMuted;
-    _initialize();
+    if (widget.autoStart) _initialize();
+  }
+
+  @override
+  void didUpdateWidget(covariant _LiveVideoTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive && !widget.isActive) {
+      final controller = _controller;
+      if (controller?.value.isPlaying == true) {
+        unawaited(controller!.pause());
+      }
+    }
   }
 
   @override
@@ -1491,6 +1661,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
   }
 
   Future<void> _initialize() async {
+    if (!widget.isActive) return;
     final old = _controller;
     _controller = null;
     await old?.dispose();
@@ -1517,7 +1688,10 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
       await controller.setLooping(false);
       await controller.setVolume(_muted ? 0 : 1);
       await controller.play();
-      if (!mounted) return;
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
       setState(() => _loading = false);
     } catch (error) {
       if (!mounted) return;
@@ -1529,8 +1703,12 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
   }
 
   Future<void> _togglePlayback() async {
+    if (!widget.isActive) return;
     final controller = _controller;
-    if (controller == null || !controller.value.isInitialized) return;
+    if (controller == null || !controller.value.isInitialized) {
+      await _initialize();
+      return;
+    }
     if (controller.value.isPlaying) {
       await controller.pause();
     } else {
@@ -1601,6 +1779,21 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
                   size: 34,
                   color: _liveMuted,
                 ),
+              ),
+            ),
+          if (!_loading &&
+              _error == null &&
+              (!initialized || controller?.value.isPlaying == false))
+            Center(
+              child: IconButton.filled(
+                onPressed: _togglePlayback,
+                iconSize: 39,
+                icon: const Icon(Icons.play_arrow_rounded),
+                style: IconButton.styleFrom(
+                  backgroundColor: _liveCyan,
+                  foregroundColor: Colors.black,
+                ),
+                tooltip: 'Reproducir transmisión',
               ),
             ),
           if (_loading)
