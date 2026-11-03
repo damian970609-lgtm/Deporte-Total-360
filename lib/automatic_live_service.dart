@@ -509,10 +509,16 @@ class AutomaticLiveService {
           final maxHeight = resolutions.isEmpty ? 0 : resolutions.reduce(
             (a, b) => a > b ? a : b,
           );
-          extraQuality = maxHeight >= 2160 ? 500 :
-              maxHeight >= 1080 ? 400 :
-              maxHeight >= 720 ? 300 :
-              maxHeight >= 480 ? 200 : 50;
+          final bandwidths = RegExp(r'BANDWIDTH=(\\d+)')
+              .allMatches(body)
+              .map((match) => int.tryParse(match.group(1) ?? '') ?? 0);
+          final maxBandwidth = bandwidths.isEmpty ? 0 : bandwidths.reduce(
+            (a, b) => a > b ? a : b,
+          );
+          extraQuality = maxHeight >= 2160 || maxBandwidth >= 12000000 ? 500 :
+              maxHeight >= 1080 || maxBandwidth >= 6000000 ? 400 :
+              maxHeight >= 720 || maxBandwidth >= 3000000 ? 300 :
+              maxHeight >= 480 || maxBandwidth >= 1200000 ? 200 : 50;
         }
       } else {
         final request = http.Request('HEAD', uri);
