@@ -222,25 +222,30 @@ class SportsApiService {
   /// Lee el catálogo de señales autorizado del Worker.
   /// Es independiente de API-Sports y no rastrea ni extrae páginas web.
   Future<List<Map<String, dynamic>>> fetchAuthorizedLiveSources({
-    required String sport,
+    String? sport,
     required String dateFilter,
   }) async {
     final base = normalizeBaseUrl(sportsApiBaseUrl.value);
-    final sportId = supportedSports[sport];
-    if (base == null || sportId == null) return <Map<String, dynamic>>[];
+    final sportId = sport == null || sport == 'Todos'
+        ? null
+        : supportedSports[sport];
+    if (base == null || (sport != null && sport != 'Todos' && sportId == null)) {
+      return <Map<String, dynamic>>[];
+    }
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final end = dateFilter == 'Todos'
         ? today.add(const Duration(days: 6))
         : today;
+    final query = <String, String>{
+      'from': _dateParam(today),
+      'to': _dateParam(end),
+      'timezone': 'America/Guyana',
+    };
+    if (sportId != null) query['sport'] = sportId;
     final uri = Uri.parse('$base/api/live/sources').replace(
-      queryParameters: <String, String>{
-        'sport': sportId,
-        'from': _dateParam(today),
-        'to': _dateParam(end),
-        'timezone': 'America/Guyana',
-      },
+      queryParameters: query,
     );
 
     try {
