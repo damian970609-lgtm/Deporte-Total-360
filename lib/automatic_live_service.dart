@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show gzip;
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,7 +20,7 @@ bool isDirectPlayableStream(String value) {
   final uri = Uri.tryParse(value.trim());
   if (uri == null || !isSafeHttpUrl(value)) return false;
   final path = uri.path.toLowerCase();
-  return path.endsWith('.m3u8') || path.endsWith('.mp4');
+  return path.endsWith('.m3u8') || path.endsWith('.mp4') || path.endsWith('.ts');
 }
 
 class AutoLiveSettings {
@@ -250,10 +251,18 @@ class AutomaticLiveService {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw HttpException('La fuente respondió HTTP ' + response.statusCode.toString() + '.');
     }
-    if (response.bodyBytes.length > maxBytes) {
+    var bytes = response.bodyBytes;
+    if (bytes.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b) {
+      try {
+        bytes = gzip.decode(bytes);
+      } catch (_) {
+        throw const FormatException('No se pudo descomprimir la fuente GZIP.');
+      }
+    }
+    if (bytes.length > maxBytes) {
       throw const FormatException('El archivo supera el tamaño máximo permitido.');
     }
-    final body = utf8.decode(response.bodyBytes, allowMalformed: true);
+    final body = utf8.decode(bytes, allowMalformed: true);
     if (body.trim().isEmpty) throw const FormatException('La fuente está vacía.');
     return body;
   }
