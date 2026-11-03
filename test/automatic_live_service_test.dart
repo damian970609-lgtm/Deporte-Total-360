@@ -76,6 +76,9 @@ https://media.example/sports-hd.m3u8
       final client = MockClient((request) async {
         if (request.url.path.endsWith('.m3u')) return http.Response(playlist, 200);
         if (request.url.path.endsWith('.xml')) return http.Response(xml, 200);
+        if (request.url.path.endsWith('.m3u8')) {
+          return http.Response('#EXTM3U\n#EXT-X-TARGETDURATION:6\n', 200);
+        }
         return http.Response('', 404);
       });
       final service = AutomaticLiveService(client: client);
@@ -110,6 +113,7 @@ https://media.example/sports-hd.m3u8
       expect(prepared.single.sources, hasLength(1));
       expect(prepared.single.sources.single.channelName, 'Sports HD 1080p');
       expect(prepared.single.sources.single.url, 'https://media.example/sports-hd.m3u8');
+      expect(prepared.single.sources.single.available, isTrue);
       expect(prepared.single.removeAt, stop);
     });
 
