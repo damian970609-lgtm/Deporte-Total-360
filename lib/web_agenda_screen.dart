@@ -16,10 +16,18 @@ const Color _brandRed = Color(0xFFFF3155);
 /// Web de agenda dentro de la identidad visual de Deporte Total 360°.
 /// El contenido de la web y sus reproductores siguen perteneciendo al proveedor.
 class WebAgendaScreen extends StatefulWidget {
-  const WebAgendaScreen({super.key, required this.onExit, required this.onOpenLive});
+  const WebAgendaScreen({
+    super.key,
+    required this.onExit,
+    required this.onOpenLive,
+    this.pageTitle = 'AGENDA DEPORTIVA',
+    this.showLiveButton = true,
+  });
 
   final VoidCallback onExit;
   final VoidCallback onOpenLive;
+  final String pageTitle;
+  final bool showLiveButton;
 
   static const String initialUrl = 'https://futbol-libre.cam/';
 
@@ -255,7 +263,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'AGENDA DEPORTIVA',
+              widget.pageTitle,
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w900,
@@ -274,11 +282,12 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
           ],
         ),
         actions: <Widget>[
-          TextButton.icon(
-            onPressed: widget.onOpenLive,
-            icon: const Icon(Icons.play_circle_fill_rounded, color: _brandGreen, size: 17),
-            label: Text(appText('VIVO AQUÍ', 'WATCH LIVE', 'AO VIVO AQUI', 'REGARDER EN DIRECT'), style: const TextStyle(color: _brandGreen, fontSize: 10, fontWeight: FontWeight.w900)),
-          ),
+          if (widget.showLiveButton)
+            TextButton.icon(
+              onPressed: widget.onOpenLive,
+              icon: const Icon(Icons.play_circle_fill_rounded, color: _brandGreen, size: 17),
+              label: Text(appText('VIVO AQUÍ', 'WATCH LIVE', 'AO VIVO AQUI', 'REGARDER EN DIRECT'), style: const TextStyle(color: _brandGreen, fontSize: 10, fontWeight: FontWeight.w900)),
+            ),
           IconButton(
             tooltip: 'Página siguiente',
             onPressed: _canGoForward ? _goForward : null,
