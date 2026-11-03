@@ -87,9 +87,11 @@ class AutoLiveSettings {
 
   static Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_playlistUrlKey);
-    await prefs.remove(_epgUrlKey);
-    await prefs.remove(_authorizedKey);
+    // Valores vacíos evitan que los valores predeterminados vuelvan a aparecer
+    // inmediatamente después de que el usuario pulse Borrar.
+    await prefs.setString(_playlistUrlKey, '');
+    await prefs.setString(_epgUrlKey, '');
+    await prefs.setBool(_authorizedKey, false);
   }
 }
 
