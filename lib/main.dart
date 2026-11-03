@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'automatic_live_screen.dart';
+import 'automatic_live_service.dart';
 
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
@@ -1795,18 +1796,33 @@ class DeveloperSettingsScreen extends StatefulWidget {
 
 class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
   late final TextEditingController _apiUrlController;
+  late final TextEditingController _playlistController;
+  late final TextEditingController _epgController;
   bool _testing = false;
   bool _saving = false;
+  bool _testingAutoLive = false;
+  bool _savingAutoLive = false;
+  bool _autoLiveAuthorized = false;
 
   @override
   void initState() {
     super.initState();
     _apiUrlController = TextEditingController(text: sportsApiBaseUrl.value);
+    _playlistController = TextEditingController();
+    _epgController = TextEditingController();
+    AutoLiveSettings.load().then((settings) {
+      if (!mounted) return;
+      _playlistController.text = settings.playlistUrl;
+      _epgController.text = settings.epgUrl;
+      setState(() => _autoLiveAuthorized = settings.authorizationConfirmed);
+    });
   }
 
   @override
   void dispose() {
     _apiUrlController.dispose();
+    _playlistController.dispose();
+    _epgController.dispose();
     super.dispose();
   }
 
@@ -1817,40 +1833,58 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
     );
   }
 
+  Future<void> _saveAutomaticLiveSources() async {
+    if (!_autoLiveAuthorized) {
+      _showMessage('Confirma que tienes autorización para usar la lista M3U y la EPG.');
+      return;
+    }
+    setState(() => _savingAutoLive = true);
+    try {
+      final service = AutomaticLiveService();
+      final catalog = await service.loadCatalog(
+        playlistUrl: _playlistController.text.trim(),
+        epgUrl: _epgController.text.trim(),
+        forceRefresh: true,
+      );
+      await AutoLiveSettings.save(
+        playlistUrl: _playlistController.text.trim(),
+        epgUrl: _epgController.text.trim(),
+        authorizationConfirmed: true,
+      );
+      _showMessage(
+        'Configuración validada: ${catalog.channels.length} canales y '
+        '${catalog.programmes.length} programas EPG. Se seleccionará una sola señal por evento.',
+      );
+    } catch (error) {
+      _showMessage('No se pudo validar la lista o la EPG: $error');
+    } finally {
+      if (mounted) setState(() => _savingAutoLive = false);
+    }
+  }
+
+  Future<void> _clearAutomaticLiveSources() async {
+    await AutoLiveSettings.clear();
+    if (!mounted) return;
+    setState(() {
+      _playlistController.clear();
+      _epgController.clear();
+      _autoLiveAuthorized = false;
+    });
+    _showMessage('Lista M3U y EPG eliminadas de este dispositivo.');
+  }
+
   Future<void> _testConnection() async {
     final url = SportsApiService.normalizeBaseUrl(_apiUrlController.text);
     if (url == null) {
       _showMessage(appText('Introduce una URL HTTPS válida del Worker.', 'Enter a valid HTTPS Worker URL.', 'Digite uma URL HTTPS válida do Worker.', 'Saisissez une URL HTTPS valide du Worker.'));
       return;
     }
-
     setState(() => _testing = true);
     try {
-      final service = SportsApiService();
-      await service.checkHealth(url);
-      final fixtureCount = await service.checkFootballFixtures(url);
-      _showMessage(
-        fixtureCount == 0
-            ? appText(
-                'Worker operativo y API-Sports configurada. La consulta respondió correctamente, pero no hay partidos en los próximos 7 días.',
-                'Worker online and API-Sports configured. The fixture request succeeded, but there are no matches in the next 7 days.',
-                'Worker online e API-Sports configurada. A consulta funcionou, mas não há jogos nos próximos 7 dias.',
-                'Worker en ligne et API-Sports configurée. La requête a réussi, mais aucun match dans les 7 prochains jours.',
-              )
-            : appText(
-                'Conexión verificada: $fixtureCount partidos recibidos en los próximos 7 días.',
-                'Connection verified: $fixtureCount matches received in the next 7 days.',
-                'Conexão verificada: $fixtureCount jogos recebidos nos próximos 7 dias.',
-                'Connexion vérifiée : $fixtureCount matchs reçus dans les 7 prochains jours.',
-              ),
-      );
+      await SportsApiService().checkHealth(url);
+      _showMessage('Worker operativo. API-Sports queda disponible únicamente para Estadísticas.');
     } catch (error) {
-      _showMessage(appText(
-        'La prueba del servidor o de partidos falló: $error',
-        'The server or fixtures test failed: $error',
-        'O teste do servidor ou dos jogos falhou: $error',
-        'Le test du serveur ou des matchs a échoué : $error',
-      ));
+      _showMessage('La prueba del servicio de estadísticas falló: $error');
     } finally {
       if (mounted) setState(() => _testing = false);
     }
@@ -1990,6 +2024,93 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                       onPressed: _clearApiUrl,
                       icon: const Icon(Icons.delete_outline_rounded, size: 17),
                       label: Text(appText('Borrar dirección guardada', 'Clear saved address', 'Apagar endereço salvo', 'Effacer l’adresse enregistrée')),
+                      style: TextButton.styleFrom(foregroundColor: appPink),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: appPanel,
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: appPink.withAlpha(180)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Row(children: <Widget>[
+                    Icon(Icons.playlist_play_rounded, color: appPink),
+                    SizedBox(width: 9),
+                    Expanded(child: Text('PROGRAMACIÓN AUTOMÁTICA · M3U + EPG',
+                      style: TextStyle(color: appPink, fontWeight: FontWeight.w900, fontSize: 12))),
+                  ]),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'La lista y la guía se usan para buscar una señal por partido. La agenda continúa llegando de Fútbol Libre. Se preparan los eventos 10 minutos antes y se muestran partidos simultáneos en cuadros separados.',
+                    style: TextStyle(color: appMuted, fontSize: 11, height: 1.45),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _playlistController,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    decoration: const InputDecoration(
+                      labelText: 'URL de lista M3U/M3U8',
+                      hintText: 'https://proveedor-autorizado/lista.m3u',
+                      prefixIcon: Icon(Icons.live_tv_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _epgController,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    decoration: const InputDecoration(
+                      labelText: 'URL de guía EPG XMLTV',
+                      hintText: 'https://proveedor-autorizado/guide.xml',
+                      prefixIcon: Icon(Icons.calendar_month_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: _autoLiveAuthorized,
+                    activeColor: appGreen,
+                    onChanged: (value) => setState(() => _autoLiveAuthorized = value ?? false),
+                    title: const Text(
+                      'Confirmo que tengo autorización para utilizar y reproducir estas señales.',
+                      style: TextStyle(color: Colors.white, fontSize: 11),
+                    ),
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                  const SizedBox(height: 7),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _savingAutoLive ? null : _saveAutomaticLiveSources,
+                      icon: _savingAutoLive
+                          ? const SizedBox(width: 16, height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.verified_rounded),
+                      label: Text(_savingAutoLive ? 'VALIDANDO LISTA Y EPG…' : 'VALIDAR Y GUARDAR'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: appPink,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: _clearAutomaticLiveSources,
+                      icon: const Icon(Icons.delete_outline_rounded, size: 17),
+                      label: const Text('Borrar M3U y EPG guardadas'),
                       style: TextButton.styleFrom(foregroundColor: appPink),
                     ),
                   ),
