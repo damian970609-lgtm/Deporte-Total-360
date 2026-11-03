@@ -1165,7 +1165,7 @@ class _MatchCard extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      event.competition,
+                      '${event.sport} · ${event.competition}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
