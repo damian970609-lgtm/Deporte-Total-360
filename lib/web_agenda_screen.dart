@@ -3,6 +3,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'web_protection_policy.dart';
 import 'app_i18n.dart';
+import 'futbol_libre_agenda.dart';
 
 const Color _brandBg = Color(0xFF030814);
 const Color _brandPanel = Color(0xFF071326);
@@ -16,10 +17,16 @@ const Color _brandRed = Color(0xFFFF3155);
 /// Web de agenda dentro de la identidad visual de Deporte Total 360°.
 /// El contenido de la web y sus reproductores siguen perteneciendo al proveedor.
 class WebAgendaScreen extends StatefulWidget {
-  const WebAgendaScreen({super.key, required this.onExit, required this.onOpenLive});
+  const WebAgendaScreen({
+    super.key,
+    required this.onExit,
+    required this.onOpenLive,
+    this.pageUrl = initialUrl,
+  });
 
   final VoidCallback onExit;
   final VoidCallback onOpenLive;
+  final String pageUrl;
 
   static const String initialUrl = 'https://futbol-libre.cam/';
 
@@ -47,6 +54,163 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
   void _showNotice(String message) {
     if (!mounted) return;
     setState(() => _noticeMessage = message);
+  }
+
+  Future<void> _installAgendaExtraction(InAppWebViewController controller) async {
+    // Lee únicamente los datos que Fútbol Libre ya muestra en su propia agenda.
+    // No busca URLs internas de vídeo ni intenta abrir reproductores ocultos.
+    try {
+      await controller.evaluateJavascript(source: r'''
+        (() => {
+          if (window.__dt360AgendaInstalled) {
+            window.__dt360ExtractAgenda?.();
+            return;
+          }
+          window.__dt360AgendaInstalled = true;
+
+          const clean = (value) => String(value || '')
+            .replace(/\u00a0/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          const channelPattern = /\b(ESPN(?:\s*\d+)?|DSports(?:\s*\d+)?|TyC Sports|FOX Sports(?:\s*\d+)?|Liga 1 MAX|TNT Sports|GolTV|Win Sports|TUDN|Claro Sports|DAZN)\b/i;
+          const eventPattern = /\b(vs\.?|versus|v\.|contra)\b|(?:\s[-–—]\s)/i;
+          const sportFor = (text) => {
+            const value = text.toLowerCase();
+            if (/\bnba\b|basketball|básquet|baloncesto/.test(value)) return 'NBA';
+            if (/baseball|béisbol/.test(value)) return 'Béisbol';
+            if (/tennis|tenis/.test(value)) return 'Tenis';
+            if (/hockey/.test(value)) return 'Hockey';
+            if (/volleyball|voleibol|vóley/.test(value)) return 'Vóley';
+            if (/formula\s*1|fórmula\s*1|\bf1\b/.test(value)) return 'Fórmula 1';
+            if (/rugby/.test(value)) return 'Rugby';
+            if (/ufc|mma|artes marciales/.test(value)) return 'MMA';
+            return 'Fútbol';
+          };
+          const matchLine = (text) => {
+            const lines = String(text || '').split(/\n+/).map(clean).filter(Boolean);
+            for (const line of lines) {
+              if (line.length > 150) continue;
+              const found = line.match(/^(.{2,65}?)\s+(?:vs\.?|versus|v\.|contra|[-–—])\s+(.{2,65}?)(?=\s+(?:\d{1,2}:\d{2}|EN VIVO|LIVE|HOY|MAÑANA|FINAL|FT)\b|$)/i);
+              if (found) {
+                const home = clean(found[1]).replace(/^(?:partido|evento)\s*[:|-]\s*/i, '');
+                const away = clean(found[2]).replace(/\s+(?:EN VIVO|LIVE|HOY|MAÑANA|FINAL|FT).*$/i, '');
+                if (home && away) return { home, away };
+              }
+            }
+            return null;
+          };
+          const dateFor = (element, text) => {
+            const time = element.querySelector('time[datetime], [datetime]');
+            const raw = time?.getAttribute('datetime') ||
+              element.getAttribute('data-start') ||
+              element.getAttribute('data-date') ||
+              element.getAttribute('datetime');
+            if (raw) {
+              const parsed = new Date(raw);
+              if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+            }
+            const clock = clean(text).match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
+            if (!clock) return null;
+            const date = new Date();
+            date.setHours(Number(clock[1]), Number(clock[2]), 0, 0);
+            return date.toISOString();
+          };
+          const getCandidates = () => {
+            const selector = 'article, li, [data-event-id], [class*="match"], [class*="event"], [class*="fixture"], [class*="game"], [class*="partido"]';
+            const elements = Array.from(document.querySelectorAll(selector));
+            return elements.filter((element) => {
+              const text = clean(element.innerText || element.textContent);
+              if (text.length < 12 || text.length > 1000 || !eventPattern.test(text)) return false;
+              return !Array.from(element.children).some((child) => {
+                const childText = clean(child.innerText || child.textContent);
+                return childText.length >= 12 && childText.length < text.length && eventPattern.test(childText);
+              });
+            });
+          };
+
+          window.__dt360ExtractAgenda = () => {
+            try {
+              const events = [];
+              for (const element of getCandidates()) {
+                const text = clean(element.innerText || element.textContent);
+                const teams = matchLine(element.innerText || element.textContent);
+                const startsAt = dateFor(element, text);
+                if (!teams || !startsAt) continue;
+
+                const channels = [];
+                for (const link of Array.from(element.querySelectorAll('a[href]'))) {
+                  const name = clean(link.innerText || link.textContent);
+                  if (!channelPattern.test(name)) continue;
+                  try {
+                    const url = new URL(link.getAttribute('href'), location.href);
+                    if (url.protocol !== 'https:' && url.protocol !== 'http:') continue;
+                    if (!channels.some((item) => item.url === url.href)) {
+                      channels.push({ name: name.slice(0, 80), url: url.href });
+                    }
+                  } catch (_) {}
+                }
+
+                const eventLink = Array.from(element.querySelectorAll('a[href]')).find((link) =>
+                  /ver partido|ver evento|abrir partido|ver juego|partido completo/i.test(clean(link.innerText || link.textContent))
+                );
+                const fallbackLink = element.querySelector('a[href]');
+                const detail = eventLink || fallbackLink;
+                let competition = '';
+                const heading = element.querySelector('h1,h2,h3,h4,[class*="league"],[class*="competition"]');
+                if (heading) competition = clean(heading.innerText || heading.textContent);
+                if (!competition) competition = 'Programación de Fútbol Libre';
+
+                const statusText = text.match(/\b(en vivo|live|finalizado|final|finished|ft)\b/i);
+                const sport = sportFor(text);
+                const explicitId = element.getAttribute('data-event-id') ||
+                  element.getAttribute('data-id') || element.id;
+                const href = detail ? new URL(detail.getAttribute('href'), location.href).href : '';
+                const id = explicitId || href || (
+                  teams.home.toLowerCase() + '-' + teams.away.toLowerCase() + '-' + startsAt
+                );
+                events.push({
+                  id: String(id).slice(0, 180),
+                  sport,
+                  competition,
+                  homeTeam: teams.home,
+                  awayTeam: teams.away,
+                  startsAt,
+                  status: statusText ? statusText[1] : 'programado',
+                  detailUrl: href,
+                  channels
+                });
+              }
+
+              const unique = new Map();
+              for (const event of events) unique.set(event.id, event);
+              const result = Array.from(unique.values())
+                .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+              window.flutter_inappwebview?.callHandler('dt360AgendaEvents', result);
+              return result.length;
+            } catch (_) {
+              return 0;
+            }
+          };
+
+          window.__dt360ExtractAgenda();
+          if (document.documentElement && window.MutationObserver) {
+            window.__dt360AgendaObserver = new MutationObserver(() => {
+              window.clearTimeout(window.__dt360AgendaDebounce);
+              window.__dt360AgendaDebounce = window.setTimeout(
+                () => window.__dt360ExtractAgenda?.(), 700
+              );
+            });
+            window.__dt360AgendaObserver.observe(document.documentElement, {
+              childList: true,
+              subtree: true,
+              characterData: true
+            });
+          }
+        })();
+      ''');
+    } catch (_) {
+      // La página sigue siendo navegable aunque cambie la estructura del sitio.
+    }
   }
 
   Future<void> _installAdElementCleanup(InAppWebViewController controller) async {
@@ -394,7 +558,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                   ? _errorPanel()
                   : InAppWebView(
                       initialUrlRequest: URLRequest(
-                        url: WebUri(WebAgendaScreen.initialUrl),
+                        url: WebUri(widget.pageUrl),
                       ),
                       initialSettings: InAppWebViewSettings(
                         javaScriptEnabled: true,
@@ -424,6 +588,15 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                       ),
                       onWebViewCreated: (controller) {
                         _controller = controller;
+                        controller.addJavaScriptHandler(
+                          handlerName: 'dt360AgendaEvents',
+                          callback: (args) {
+                            if (args.isNotEmpty) {
+                              FutbolLibreAgenda.publish(args.first);
+                            }
+                            return true;
+                          },
+                        );
                       },
                       onLoadStart: (controller, url) {
                         if (!mounted) return;
@@ -447,6 +620,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                           _loading = false;
                           _progress = 1;
                         });
+                        await _installAgendaExtraction(controller);
                         await _installAdElementCleanup(controller);
                         await _refreshNavigationState();
                       },
