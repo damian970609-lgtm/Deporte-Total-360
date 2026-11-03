@@ -1,9 +1,11 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:deporte_total_360/automatic_live_service.dart';
+import 'package:deporte_total_360/live_channels_screen.dart';
 
 String _xmlTime(DateTime date) {
   final utc = date.toUtc();
@@ -16,6 +18,49 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
+
+  group('tablero fijo de transmisiones', () {
+    testWidgets('mantiene cuatro cuadros visibles sin desplazamiento', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: LivePlayerBoard(sources: <LivePlayerSource>[]),
+          ),
+        ),
+      );
+
+      for (var channel = 1; channel <= 4; channel++) {
+        expect(
+          find.text('DEPORTE TOTAL 360° CANAL $channel'),
+          findsOneWidget,
+        );
+      }
+      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(4));
+      final grid = tester.widget<GridView>(find.byType(GridView));
+      expect(grid.physics, isA<NeverScrollableScrollPhysics>());
+    });
+
+    testWidgets('muestra el evento asignado y espera en los otros tres canales', (tester) async {
+      const source = LivePlayerSource(
+        title: 'DEPORTE TOTAL 360° CANAL 1',
+        url: 'https://media.example/evento.m3u8',
+        subtitle: 'Fútbol · Liga · Tigres vs Atlas',
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: LivePlayerBoard(sources: <LivePlayerSource>[source]),
+          ),
+        ),
+      );
+
+      expect(find.text('DEPORTE TOTAL 360° CANAL 1'), findsOneWidget);
+      expect(find.text('Fútbol · Liga · Tigres vs Atlas'), findsOneWidget);
+      expect(find.byTooltip('Reproducir transmisión'), findsOneWidget);
+      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(3));
+    });
   });
 
   group('configuración internacional', () {
