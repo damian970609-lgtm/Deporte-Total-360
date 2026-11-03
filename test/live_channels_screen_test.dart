@@ -106,6 +106,22 @@ void main() {
       expect(source.validatedUri!.path, '/live.m3u8');
     });
 
+    test('identifica una señal llegada del catálogo remoto', () {
+      final source = LiveStreamSource.fromCatalogJson(<String, dynamic>{
+        'id': 'football-123-main',
+        'eventId': '123',
+        'eventTitle': 'Equipo Azul vs Equipo Rojo',
+        'sport': 'football',
+        'name': 'Señal oficial',
+        'url': 'https://media.example/live.m3u8',
+      });
+
+      expect(source, isNotNull);
+      expect(source!.isRemote, isTrue);
+      expect(source.eventId, '123');
+      expect(source.validatedUri!.scheme, 'https');
+    });
+
     test('descarta un player web guardado como si fuera una señal', () {
       final source = LiveStreamSource.fromJson(<String, dynamic>{
         'id': 'bad-channel',
