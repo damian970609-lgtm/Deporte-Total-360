@@ -171,6 +171,8 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         .toSet();
     final upcoming = _agendaEvents.where((event) {
       if (activeEventIds.contains(event.id)) return false;
+      if (const <String>{'finished', 'cancelled', 'postponed'}
+          .contains(event.status.toLowerCase())) return false;
       final end = _knownEventEndTimes[event.id] ??
           event.endsAt ??
           event.startsAt.add(const Duration(hours: 3));
