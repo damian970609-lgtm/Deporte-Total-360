@@ -1,0 +1,122 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:deporte_total_360/live_channels_screen.dart';
+
+void main() {
+  group('Validación de señales autorizadas', () {
+    test('acepta HLS y MP4 directos por HTTP(S)', () {
+      expect(
+        isSupportedAuthorizedMediaUrl('https://media.example/live.m3u8'),
+        isTrue,
+      );
+      expect(
+        isSupportedAuthorizedMediaUrl('https://media.example/archive.mp4?token=abc'),
+        isTrue,
+      );
+      expect(
+        isSupportedAuthorizedMediaUrl('http://media.example/live.m3u8'),
+        isTrue,
+      );
+    });
+
+    test('rechaza páginas web, RTMP, DASH y URLs con credenciales', () {
+      expect(
+        isSupportedAuthorizedMediaUrl('https://example.com/watch?v=123'),
+        isFalse,
+      );
+      expect(
+        isSupportedAuthorizedMediaUrl('rtmp://example.com/live/stream'),
+        isFalse,
+      );
+      expect(
+        isSupportedAuthorizedMediaUrl('https://example.com/manifest.mpd'),
+        isFalse,
+      );
+      expect(
+        isSupportedAuthorizedMediaUrl('https://user:pass@example.com/live.m3u8'),
+        isFalse,
+      );
+    });
+  });
+
+  group('LiveFixture', () {
+    test('lee identidad, hora, estado, marcadores y equipos del Worker', () {
+      final fixture = LiveFixture.tryParse(
+        <String, dynamic>{
+          'fixture': <String, dynamic>{
+            'id': 12345,
+            'date': '2026-11-02T19:30:00Z',
+            'status': <String, dynamic>{
+              'short': '1H',
+              'long': 'First Half',
+            },
+          },
+          'league': <String, dynamic>{'name': 'Liga de prueba'},
+          'teams': <String, dynamic>{
+            'home': <String, dynamic>{
+              'name': 'Equipo Azul',
+              'logo': 'https://cdn.example/blue.png',
+            },
+            'away': <String, dynamic>{
+              'name': 'Equipo Rojo',
+              'logo': 'https://cdn.example/red.png',
+            },
+          },
+          'goals': <String, dynamic>{'home': 2, 'away': 1},
+        },
+        'Fútbol',
+      );
+
+      expect(fixture, isNotNull);
+      expect(fixture!.id, '12345');
+      expect(fixture.competition, 'Liga de prueba');
+      expect(fixture.homeTeam, 'Equipo Azul');
+      expect(fixture.awayTeam, 'Equipo Rojo');
+      expect(fixture.status, LiveFixtureStatus.live);
+      expect(fixture.homeScore, 2);
+      expect(fixture.awayScore, 1);
+      expect(fixture.homeLogo, 'https://cdn.example/blue.png');
+    });
+
+    test('no inventa un evento cuando falta el horario o los equipos', () {
+      expect(
+        LiveFixture.tryParse(
+          <String, dynamic>{
+            'fixture': <String, dynamic>{'id': 1},
+          },
+          'Fútbol',
+        ),
+        isNull,
+      );
+    });
+  });
+
+  group('LiveStreamSource', () {
+    test('persiste solo las señales directas válidas', () {
+      final source = LiveStreamSource.fromJson(<String, dynamic>{
+        'id': 'channel-1',
+        'eventId': 'match-123',
+        'eventTitle': 'Equipo Azul vs Equipo Rojo',
+        'sport': 'Fútbol',
+        'name': 'Señal oficial',
+        'url': 'https://media.example/live.m3u8',
+      });
+
+      expect(source, isNotNull);
+      expect(source!.eventId, 'match-123');
+      expect(source.validatedUri!.path, '/live.m3u8');
+    });
+
+    test('descarta un player web guardado como si fuera una señal', () {
+      final source = LiveStreamSource.fromJson(<String, dynamic>{
+        'id': 'bad-channel',
+        'eventId': 'match-123',
+        'eventTitle': 'Partido',
+        'sport': 'Fútbol',
+        'name': 'Página',
+        'url': 'https://example.com/player?id=123',
+      });
+
+      expect(source, isNull);
+    });
+  });
+}
