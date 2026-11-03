@@ -111,32 +111,79 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
     ].join(' · ');
   }
 
-  Future<void> _play(ScheduledLiveEvent event, ScheduledLiveSource source) async {
-    if (!isDirectPlayableStream(source.url)) return;
-    await Navigator.of(context).push<void>(MaterialPageRoute<void>(
-      builder: (_) => LivePlayerGridScreen(sources: <LivePlayerSource>[
-        LivePlayerSource(title: _playerTitle(event, source), url: source.url),
-      ]),
-    ));
-    if (mounted) _refresh();
-  }
-
-  Future<void> _openMultiView() async {
+  List<LivePlayerSource> _playerSources(
+    List<ScheduledLiveEvent> events, {
+    String? preferredEventId,
+  }) {
+    final ordered = List<ScheduledLiveEvent>.of(events);
+    if (preferredEventId != null) {
+      ordered.sort((a, b) {
+        if (a.event.id == preferredEventId) return -1;
+        if (b.event.id == preferredEventId) return 1;
+        return a.event.startsAt.compareTo(b.event.startsAt);
+      });
+    }
     final sources = <LivePlayerSource>[];
-    for (final item in _scheduled) {
-      if (sources.length >= 4) break;
-      if (item.sources.isEmpty) continue;
+    for (final item in ordered) {
+      if (sources.length >= 4 || item.sources.isEmpty) break;
       final source = item.sources.first;
       if (!isDirectPlayableStream(source.url)) continue;
       sources.add(LivePlayerSource(
-        title: _playerTitle(item, source), url: source.url,
+        title: _playerTitle(item, source),
+        url: source.url,
       ));
     }
+    return sources;
+  }
+
+  Future<List<LivePlayerSource>> _loadPlayerSources() async {
+    try {
+      final settings = await AutoLiveSettings.load();
+      final events = await FutbolLibreAgendaStore.load();
+      final latest = settings.isConfigured && events.isNotEmpty
+          ? await _service.schedule(
+              events: events,
+              now: DateTime.now(),
+              settings: settings,
+            )
+          : <ScheduledLiveEvent>[];
+      if (mounted) {
+        setState(() {
+          _settings = settings;
+          _agendaEvents = events;
+          _scheduled = latest;
+          _updatedAt = DateTime.now();
+        });
+      }
+      return _playerSources(latest);
+    } catch (_) {
+      return _playerSources(_scheduled);
+    }
+  }
+
+  Future<void> _play(ScheduledLiveEvent event, ScheduledLiveSource source) async {
+    if (!isDirectPlayableStream(source.url)) return;
+    final current = _playerSources(_scheduled, preferredEventId: event.event.id);
+    if (current.isEmpty) return;
+    await Navigator.of(context).push<void>(MaterialPageRoute<void>(
+      builder: (_) => LivePlayerGridScreen(
+        sources: current,
+        refreshSources: _loadPlayerSources,
+      ),
+    ));
+    if (mounted) _refresh(force: true);
+  }
+
+  Future<void> _openMultiView() async {
+    final sources = _playerSources(_scheduled);
     if (sources.isEmpty) return;
     await Navigator.of(context).push<void>(MaterialPageRoute<void>(
-      builder: (_) => LivePlayerGridScreen(sources: sources),
+      builder: (_) => LivePlayerGridScreen(
+        sources: sources,
+        refreshSources: _loadPlayerSources,
+      ),
     ));
-    if (mounted) _refresh();
+    if (mounted) _refresh(force: true);
   }
 
   Widget _notice(String title, String body, {IconData icon = Icons.info_outline_rounded}) {
@@ -288,12 +335,13 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
               Row(children: <Widget>[
                 Expanded(child: Text('${_scheduled.length} eventos con señal asignada',
                   style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w900))),
-                if (_scheduled.length > 1)
-                  FilledButton.icon(onPressed: _openMultiView,
-                    icon: const Icon(Icons.grid_view_rounded, size: 16),
-                    label: Text(_scheduled.length > 4 ? 'MULTIVISTA · 4' : 'MULTIVISTA'),
-                    style: FilledButton.styleFrom(backgroundColor: _autoPink,
-                      foregroundColor: Colors.white, visualDensity: VisualDensity.compact)),
+                FilledButton.icon(onPressed: _openMultiView,
+                  icon: const Icon(Icons.grid_view_rounded, size: 16),
+                  label: Text(_scheduled.length > 1
+                      ? 'REPRODUCTOR AUTOMÁTICO · ${_scheduled.length > 4 ? 4 : _scheduled.length}'
+                      : 'ABRIR REPRODUCTOR AUTOMÁTICO'),
+                  style: FilledButton.styleFrom(backgroundColor: _autoPink,
+                    foregroundColor: Colors.white, visualDensity: VisualDensity.compact)),
               ]),
               const SizedBox(height: 9),
               for (final item in _scheduled) _eventCard(item),
