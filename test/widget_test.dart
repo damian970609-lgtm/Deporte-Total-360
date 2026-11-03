@@ -46,7 +46,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Servidor de estadísticas y agenda'), findsOneWidget);
+    expect(find.text('Servidor de estadísticas'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
