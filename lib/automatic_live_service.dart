@@ -163,8 +163,10 @@ class XmltvProgramme {
   const XmltvProgramme({
     required this.channelId, required this.title,
     required this.startsAt, required this.endsAt,
+    this.channelName = '',
   });
   final String channelId;
+  final String channelName;
   final String title;
   final DateTime startsAt;
   final DateTime endsAt;
