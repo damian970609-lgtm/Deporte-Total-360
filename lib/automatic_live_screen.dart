@@ -176,7 +176,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
           const SizedBox(width: 9),
           Text(_remaining(event.startsAt), style: const TextStyle(color: _autoMuted, fontSize: 10)),
           const Spacer(),
-          Text('${item.sources.length} señales', style: const TextStyle(color: _autoMuted, fontSize: 10)),
+          Text('1 canal seleccionado', style: const TextStyle(color: _autoMuted, fontSize: 10)),
         ]),
         const SizedBox(height: 10),
         for (final source in item.sources)
@@ -189,7 +189,11 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
               leading: const Icon(Icons.live_tv_rounded, color: _autoGreen),
               title: Text(source.channelName, maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
-              subtitle: Text('EPG: ${source.programmeTitle}', maxLines: 1, overflow: TextOverflow.ellipsis,
+              subtitle: Text(
+                source.available
+                    ? 'Señal comprobada · EPG: ${source.programmeTitle}'
+                    : 'Fuente seleccionada · disponibilidad no confirmada · EPG: ${source.programmeTitle}',
+                maxLines: 2, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: _autoMuted, fontSize: 9)),
               trailing: IconButton(
                 tooltip: 'Reproducir con ExoPlayer',
@@ -250,10 +254,19 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
               _notice('Falta configurar M3U y EPG',
                 'Abre Ajustes de desarrollador y añade las direcciones de tu lista M3U y guía XMLTV de un proveedor autorizado. Las direcciones se guardan localmente en este teléfono.',
                 icon: Icons.settings_suggest_rounded),
-            if (configured && _agendaEvents.isEmpty && !_loading)
+            if (_agendaEvents.isEmpty && !_loading) ...<Widget>[
               _notice('Agenda de Fútbol Libre pendiente',
-                'Abre primero Agenda de hoy para que la APK lea los eventos visibles publicados por Fútbol Libre.',
+                'Abre Agenda de hoy para que la APK lea los eventos visibles publicados por Fútbol Libre.',
                 icon: Icons.event_busy_rounded),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: widget.onOpenAgenda,
+                icon: const Icon(Icons.calendar_month_rounded),
+                label: const Text('ABRIR AGENDA DE FÚTBOL LIBRE'),
+                style: OutlinedButton.styleFrom(foregroundColor: _autoCyan,
+                  side: const BorderSide(color: _autoCyan)),
+              ),
+            ],
             if (configured && _agendaEvents.isNotEmpty && _scheduled.isEmpty && !_loading && _error == null)
               _notice('Todavía no hay señales asociadas',
                 'No se encontró una coincidencia suficiente entre el título del evento, la hora de la EPG y un canal de la lista. No se asignan canales al azar.',
@@ -265,7 +278,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
                 if (_scheduled.length > 1)
                   FilledButton.icon(onPressed: _openMultiView,
                     icon: const Icon(Icons.grid_view_rounded, size: 16),
-                    label: const Text('MULTIVISTA'),
+                    label: Text(_scheduled.length > 4 ? 'MULTIVISTA · 4' : 'MULTIVISTA'),
                     style: FilledButton.styleFrom(backgroundColor: _autoPink,
                       foregroundColor: Colors.white, visualDensity: VisualDensity.compact)),
               ]),
