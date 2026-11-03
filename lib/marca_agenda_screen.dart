@@ -413,10 +413,6 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                               itemBuilder: (context, index) {
                                 final event = events[index];
                                 final live = _isLive(event);
-                                final teams = event.homeTeam.isNotEmpty &&
-                                        event.awayTeam.isNotEmpty
-                                    ? '${event.homeTeam} vs ${event.awayTeam}'
-                                    : event.title;
                                 final previousDay = index > 0
                                     ? _dayLabel(events[index - 1].startsAt)
                                     : null;
