@@ -22,8 +22,10 @@ void main() {
     test('precarga tres listas deportivas globales y una EPG sin autorizar automáticamente', () async {
       final settings = await AutoLiveSettings.load();
 
-      expect(settings.playlistUrls, hasLength(3));
+      expect(settings.playlistUrls, hasLength(5));
       expect(settings.playlistUrls.every(isSafeHttpUrl), isTrue);
+      expect(settings.epgUrls, hasLength(6));
+      expect(settings.epgUrls.every(isSafeHttpUrl), isTrue);
       expect(settings.epgUrl, defaultAutoLiveEpgUrl);
       expect(settings.isConfigured, isFalse);
     });
@@ -56,7 +58,10 @@ https://media.example/backup.m3u8
           '<programme channel="sports.backup" start="${_xmlTime(start)}" stop="${_xmlTime(stop)}">'
           '<title>Equipo Azul vs Equipo Rojo</title></programme></tv>';
       final client = MockClient((request) async {
-        if (request.url.host == 'offline.example') return http.Response('offline', 503);
+        if (request.url.host == 'offline.example' ||
+            request.url.host == 'offline-guide.example') {
+          return http.Response('offline', 503);
+        }
         if (request.url.host == 'backup.example') return http.Response(playlist, 200);
         if (request.url.host == 'guide.example') return http.Response(xml, 200);
         return http.Response('', 404);
@@ -64,12 +69,54 @@ https://media.example/backup.m3u8
 
       final catalog = await AutomaticLiveService(client: client).loadCatalog(
         playlistUrl: 'https://offline.example/sports.m3u\nhttps://backup.example/sports.m3u',
-        epgUrl: 'https://guide.example/guide.xml',
+        epgUrl: 'https://offline-guide.example/guide.xml\nhttps://guide.example/guide.xml',
       );
 
       expect(catalog.channels, hasLength(1));
       expect(catalog.channels.single.tvgId, 'sports.backup');
       expect(catalog.programmes, hasLength(1));
+    });
+
+    test('combina programas de varias guías EPG y sigue si una falla', () async {
+      final start = DateTime.now().toUtc().add(const Duration(hours: 1));
+      final stop = start.add(const Duration(hours: 2));
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.backup" group-title="Deportes",Sports Backup HD
+https://media.example/backup.m3u8
+''';
+      final guideOne = '<tv><programme channel="sports.backup" '
+          'start="${_xmlTime(start)}" stop="${_xmlTime(stop)}">'
+          '<title>Equipo Azul vs Equipo Rojo</title></programme></tv>';
+      final guideTwo = '<tv><programme channel="sports.backup" '
+          'start="${_xmlTime(start)}" stop="${_xmlTime(stop)}">'
+          '<title>Equipo Verde vs Equipo Blanco</title></programme></tv>';
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('.m3u')) return http.Response(playlist, 200);
+        if (request.url.host == 'epg-offline.example') {
+          return http.Response('unavailable', 503);
+        }
+        if (request.url.host == 'epg-one.example') return http.Response(guideOne, 200);
+        if (request.url.host == 'epg-two.example') return http.Response(guideTwo, 200);
+        return http.Response('', 404);
+      });
+
+      final catalog = await AutomaticLiveService(client: client).loadCatalog(
+        playlistUrl: 'https://playlist.example/sports.m3u',
+        epgUrl: 'https://epg-offline.example/guide.xml\\n'
+            'https://epg-one.example/guide.xml\\n'
+            'https://epg-two.example/guide.xml',
+      );
+
+      expect(catalog.channels, hasLength(1));
+      expect(catalog.programmes, hasLength(2));
+      expect(
+        catalog.programmes.map((programme) => programme.title).toSet(),
+        containsAll(<String>[
+          'Equipo Azul vs Equipo Rojo',
+          'Equipo Verde vs Equipo Blanco',
+        ]),
+      );
     });
 
     test('asocia el ID XMLTV con el nombre publicado del canal', () {
