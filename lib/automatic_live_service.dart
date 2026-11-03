@@ -13,6 +13,45 @@ const String _playlistUrlKey = 'dt360_auto_live_playlist_url_v1';
 const String _epgUrlKey = 'dt360_auto_live_epg_url_v1';
 const String _authorizedKey = 'dt360_auto_live_authorized_v1';
 
+/// Normaliza imágenes de MARCA: admite URL HTTPS absolutas, protocol-relative
+/// y rutas relativas del mismo sitio. Nunca permite esquemas no HTTPS ni
+/// URLs con credenciales.
+String _marcaImageUrl(dynamic value) {
+  if (value is List) {
+    for (final item in value) {
+      final candidate = _marcaImageUrl(item);
+      if (candidate.isNotEmpty) return candidate;
+    }
+    return '';
+  }
+  if (value is Map) {
+    for (final key in <String>[
+      'url', 'contentUrl', 'thumbnailUrl', 'src', 'image',
+      'logo', 'crest', 'badge', 'photo', 'picture', 'avatar', 'href',
+    ]) {
+      final candidate = _marcaImageUrl(value[key]);
+      if (candidate.isNotEmpty) return candidate;
+    }
+    return '';
+  }
+  if (value is! String) return '';
+  final raw = value.trim();
+  if (raw.isEmpty || raw.toLowerCase().startsWith('data:')) return '';
+  try {
+    var uri = Uri.parse(raw.startsWith('//') ? 'https:$raw' : raw);
+    if (!uri.hasScheme) {
+      uri = Uri.parse('https://www.marca.com/').resolveUri(uri);
+    } else if (uri.scheme == 'http') {
+      uri = uri.replace(scheme: 'https');
+    }
+    if (uri.scheme != 'https' || !uri.hasAuthority ||
+        uri.userInfo.isNotEmpty) return '';
+    return uri.toString();
+  } catch (_) {
+    return '';
+  }
+}
+
 /// Catálogos globales y una lista adicional de emisoras deportivas públicas.
 /// La presencia en un índice no sustituye la comprobación de derechos del emisor.
 const String legacyDefaultAutoLivePlaylistUrls =
@@ -194,16 +233,13 @@ class SportsAgendaParticipant {
     final row = Map<String, dynamic>.from(value);
     final name = (row['name'] ?? row['title'] ?? '').toString().trim();
     if (name.isEmpty) return null;
-    final imageUrl = (row['imageUrl'] ?? row['logo'] ?? row['image'] ?? '').toString().trim();
-    final safeImage = Uri.tryParse(imageUrl);
+    final imageUrl = _marcaImageUrl(
+      row['imageUrl'] ?? row['logo'] ?? row['image'] ??
+      row['thumbnailUrl'] ?? row['photo'] ?? row['picture'] ?? row['avatar'],
+    );
     return SportsAgendaParticipant(
       name: name,
-      imageUrl: safeImage != null &&
-              safeImage.scheme == 'https' &&
-              safeImage.hasAuthority &&
-              safeImage.userInfo.isEmpty
-          ? imageUrl
-          : '',
+      imageUrl: imageUrl,
       country: (row['country'] ?? row['nationality'] ?? '').toString().trim(),
       role: (row['role'] ?? '').toString().trim(),
     );
@@ -281,18 +317,15 @@ class SportsAgendaEvent {
         : <SportsAgendaParticipant>[];
     final homeTeam = (row['homeTeam'] ?? '').toString();
     final awayTeam = (row['awayTeam'] ?? '').toString();
-    String image(String value) {
-      final uri = Uri.tryParse(value.trim());
-      return uri != null &&
-              uri.scheme == 'https' &&
-              uri.hasAuthority &&
-              uri.userInfo.isEmpty
-          ? value.trim()
-          : '';
-    }
-    final homeLogo = image((row['homeTeamLogo'] ?? '').toString());
-    final awayLogo = image((row['awayTeamLogo'] ?? '').toString());
-    final eventImage = image((row['imageUrl'] ?? '').toString());
+    final homeLogo = _marcaImageUrl(
+      row['homeTeamLogo'] ?? row['homeTeamLogoUrl'] ?? row['homeLogo'],
+    );
+    final awayLogo = _marcaImageUrl(
+      row['awayTeamLogo'] ?? row['awayTeamLogoUrl'] ?? row['awayLogo'],
+    );
+    final eventImage = _marcaImageUrl(
+      row['imageUrl'] ?? row['image'] ?? row['thumbnailUrl'] ?? row['photo'],
+    );
     String participantImage(String name) => participants
         .where((item) => item.name.toLowerCase() == name.toLowerCase())
         .map((item) => item.imageUrl)
