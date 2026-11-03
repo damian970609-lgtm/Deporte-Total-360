@@ -3,6 +3,7 @@ import 'app_i18n.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'automatic_live_screen.dart';
 
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
@@ -155,8 +156,6 @@ class _MainShellState extends State<MainShell> {
   static const int _summariesTab = 6;
   static const int _settingsTab = 7;
 
-  final GlobalKey<WebAgendaScreenState> _liveAgendaKey =
-      GlobalKey<WebAgendaScreenState>();
   final GlobalKey<WebAgendaScreenState> _agendaWebKey =
       GlobalKey<WebAgendaScreenState>();
   int _selectedIndex = _homeTab;
@@ -242,11 +241,6 @@ class _MainShellState extends State<MainShell> {
     if (_handlingBack) return;
     _handlingBack = true;
     try {
-      if (_selectedIndex == _liveTab) {
-        final handled =
-            await _liveAgendaKey.currentState?.handleSystemBack() ?? false;
-        if (handled) return;
-      }
       if (_selectedIndex == _agendaTab) {
         final handled =
             await _agendaWebKey.currentState?.handleSystemBack() ?? false;
@@ -340,12 +334,9 @@ class _MainShellState extends State<MainShell> {
         onChat: _openPublicChat,
       ),
       _visitedTabs.contains(_liveTab)
-          ? WebAgendaScreen(
-              key: _liveAgendaKey,
-              pageTitle: 'TRANSMISIONES EN VIVO',
-              showLiveButton: false,
-              onExit: () => _selectTab(_homeTab),
-              onOpenLive: () => _selectTab(_liveTab),
+          ? AutomaticLiveScreen(
+              onOpenAgenda: () => _selectTab(_agendaTab),
+              isActive: _selectedIndex == _liveTab,
             )
           : const SizedBox.shrink(),
       _visitedTabs.contains(_agendaTab)
