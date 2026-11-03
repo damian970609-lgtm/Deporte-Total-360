@@ -146,6 +146,31 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
   }
 
+  List<MapEntry<String, String>> _flatten(dynamic value, [String prefix = '']) {
+    final output = <MapEntry<String, String>>[];
+    if (value is Map) {
+      for (final entry in value.entries) {
+        final key = entry.key.toString();
+        if (key == 'id' || key == 'image' || key == 'logo' || key == 'url') {
+          continue;
+        }
+        output.addAll(
+          _flatten(entry.value, prefix.isEmpty ? key : '$prefix · $key'),
+        );
+      }
+    } else if (value is List) {
+      for (var index = 0; index < value.length; index++) {
+        output.addAll(_flatten(value[index], '$prefix ${index + 1}'));
+      }
+    } else if (value != null && value.toString().trim().isNotEmpty) {
+      output.add(MapEntry<String, String>(
+        prefix.isEmpty ? 'Dato' : prefix,
+        value.toString(),
+      ));
+    }
+    return output;
+  }
+
   List<MapEntry<String, String>> _formatStatistics(dynamic value) {
     if (value is Map && value['periods'] is List) {
       final output = <MapEntry<String, String>>[];
