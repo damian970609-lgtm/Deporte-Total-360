@@ -17,7 +17,11 @@ class SportsApiService {
 
   // Reduce las solicitudes repetidas desde este dispositivo.
   // El límite final también depende del uso de otros dispositivos.
-  static const Duration _minimumRequestInterval = Duration(seconds: 10);
+  static const Duration _defaultMinimumRequestInterval = Duration(milliseconds: 750);
+
+  @visibleForTesting
+  static Duration minimumRequestIntervalForTesting =
+      _defaultMinimumRequestInterval;
 
   static final http.Client _defaultHttpClient = http.Client();
   @visibleForTesting
@@ -29,6 +33,7 @@ class SportsApiService {
     _cache.clear();
     _inFlight.clear();
     _lastRequestAt = null;
+    minimumRequestIntervalForTesting = _defaultMinimumRequestInterval;
     _requestQueue = Future<void>.value();
   }
 
@@ -536,9 +541,9 @@ class SportsApiService {
       if (last != null) {
         final elapsed = DateTime.now().difference(last);
 
-        if (elapsed < _minimumRequestInterval) {
+        if (elapsed < minimumRequestIntervalForTesting) {
           await Future<void>.delayed(
-            _minimumRequestInterval - elapsed,
+            minimumRequestIntervalForTesting - elapsed,
           );
         }
       }
