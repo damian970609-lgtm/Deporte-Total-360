@@ -170,7 +170,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 if (!Number.isNaN(parsedEnd.getTime())) end = parsedEnd;
               }
               const textLower = rawText.toLowerCase();
-              if (/finalizado|terminado|finished|final\\b/.test(textLower)) end = now;
+              if (/finalizado|terminado|finished|final\b/.test(textLower)) end = now;
               const iso = start.toISOString();
               const endIso = end ? end.toISOString() : null;
               const key = anchor.href + '|' + title + '|' + iso;
@@ -186,7 +186,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
               const competitionNode = node.querySelector(
                 '[class*="competition"],[class*="league"],[data-league]'
               );
-              const competition = (competitionNode && competitionNode.textContent || '').replace(/\\s+/g, ' ').trim();
+              const competition = (competitionNode && competitionNode.textContent || '').replace(/\s+/g, ' ').trim();
               found.push({
                 id: String(eventId),
                 title: title,
