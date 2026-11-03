@@ -509,8 +509,18 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
 
   List<LiveFixture> get _filteredFixtures {
     final query = _query.trim().toLowerCase();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
     return _fixtures.where((fixture) {
       if (_sport != 'Todos' && fixture.sport != _sport) return false;
+      final eventDay = DateTime(
+        fixture.startsAt.year,
+        fixture.startsAt.month,
+        fixture.startsAt.day,
+      );
+      if (_dateFilter == 'Hoy' && eventDay != today) return false;
+      if (_dateFilter == 'Mañana' && eventDay != tomorrow) return false;
       if (_statusFilter == 'En vivo' &&
           fixture.status != LiveFixtureStatus.live) {
         return false;
