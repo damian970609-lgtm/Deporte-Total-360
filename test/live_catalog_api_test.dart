@@ -26,8 +26,8 @@ void main() {
       expect(request.url.path, '/api/live/sources');
       expect(request.url.queryParameters['sport'], 'football');
       expect(request.url.queryParameters['timezone'], 'America/Guyana');
-      expect(request.url.queryParameters['from'], matches(r'^\\d{4}-\\d{2}-\\d{2}$'));
-      expect(request.url.queryParameters['to'], matches(r'^\\d{4}-\\d{2}-\\d{2}$'));
+      expect(request.url.queryParameters['from'], matches(r'^\d{4}-\d{2}-\d{2}$'));
+      expect(request.url.queryParameters['to'], matches(r'^\d{4}-\d{2}-\d{2}$'));
       return http.Response(
         jsonEncode(<String, Object>{
           'configured': true,
