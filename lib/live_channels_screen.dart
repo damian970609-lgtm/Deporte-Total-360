@@ -422,7 +422,9 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
         _loading = false;
         _error = null;
         _selectedForMultiView.removeWhere((id) =>
-            !_fixtures.any((fixture) => fixture.id == id) ||
+            !_fixtures.any((fixture) =>
+                fixture.id == id &&
+                fixture.status == LiveFixtureStatus.live) ||
             _sourcesFor(id).isEmpty);
       });
     } catch (error) {
@@ -641,6 +643,14 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
     LiveFixture fixture,
     LiveStreamSource source,
   ) async {
+    if (fixture.status != LiveFixtureStatus.live) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('La señal solo se abre cuando el evento está en vivo.')),
+        );
+      }
+      return;
+    }
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => LivePlayerGridScreen(
@@ -878,7 +888,9 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
                       ),
                     ),
                     TextButton(
-                      onPressed: () => _openSource(fixture, source),
+                      onPressed: fixture.status == LiveFixtureStatus.live
+                          ? () => _openSource(fixture, source)
+                          : null,
                       child: const Text('VER'),
                     ),
                     IconButton(
@@ -1412,11 +1424,14 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
         children: <Widget>[
           if (initialized)
             Center(
-              child: AspectRatio(
-                aspectRatio: controller!.value.aspectRatio > 0
-                    ? controller.value.aspectRatio
-                    : 16 / 9,
-                child: VideoPlayer(controller),
+              child: GestureDetector(
+                onTap: () => setState(() => _showControls = !_showControls),
+                child: AspectRatio(
+                  aspectRatio: controller!.value.aspectRatio > 0
+                      ? controller.value.aspectRatio
+                      : 16 / 9,
+                  child: VideoPlayer(controller),
+                ),
               ),
             )
           else
@@ -1555,13 +1570,6 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
                 ),
               ),
             ),
-          if (initialized)
-            Positioned.fill(
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTap: () => setState(() => _showControls = !_showControls),
-              ),
-            ),
         ],
       ),
     );
@@ -1672,18 +1680,19 @@ class _LiveFullscreenPlayerState extends State<_LiveFullscreenPlayer> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: GestureDetector(
-          onTap: () => setState(() => _showControls = !_showControls),
-          child: Stack(
-            fit: StackFit.expand,
-            children: <Widget>[
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
               if (initialized)
                 Center(
-                  child: AspectRatio(
-                    aspectRatio: controller!.value.aspectRatio > 0
-                        ? controller.value.aspectRatio
-                        : 16 / 9,
-                    child: VideoPlayer(controller),
+                  child: GestureDetector(
+                    onTap: () => setState(() => _showControls = !_showControls),
+                    child: AspectRatio(
+                      aspectRatio: controller!.value.aspectRatio > 0
+                          ? controller.value.aspectRatio
+                          : 16 / 9,
+                      child: VideoPlayer(controller),
+                    ),
                   ),
                 ),
               if (_loading)
@@ -1771,8 +1780,7 @@ class _LiveFullscreenPlayerState extends State<_LiveFullscreenPlayer> {
                     ],
                   ),
                 ),
-            ],
-          ),
+          ],
         ),
       ),
     );
