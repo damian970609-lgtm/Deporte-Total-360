@@ -21,6 +21,39 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
+  group('agenda deportiva MARCA', () {
+    test('no reutiliza eventos persistidos por la agenda anterior', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'dt360_futbol_libre_events_v1':
+            '[{"id":"legacy","title":"Evento antiguo","sport":"Fútbol",'
+            '"startsAt":"2026-11-03T18:00:00.000",'
+            '"detailUrl":"https://futbol-libre.cam/legacy"}]',
+      });
+
+      expect(await SportsAgendaStore.load(), isEmpty);
+    });
+
+    test('guarda y recupera eventos de la agenda nueva', () async {
+      final event = SportsAgendaEvent(
+        id: 'marca-event-1',
+        title: 'Equipo Azul vs Equipo Rojo',
+        sport: 'Fútbol',
+        competition: 'Liga de prueba',
+        homeTeam: 'Equipo Azul',
+        awayTeam: 'Equipo Rojo',
+        startsAt: DateTime.now().add(const Duration(hours: 1)),
+        detailUrl: 'https://www.marca.com/programacion-tv.html',
+      );
+
+      await SportsAgendaStore.save(<SportsAgendaEvent>[event]);
+      final saved = await SportsAgendaStore.load();
+
+      expect(saved, hasLength(1));
+      expect(saved.single.id, 'marca-event-1');
+      expect(saved.single.detailUrl, 'https://www.marca.com/programacion-tv.html');
+    });
+  });
+
   group('tablero fijo de transmisiones', () {
     testWidgets('mantiene cuatro cuadros visibles sin desplazamiento', (tester) async {
       await tester.pumpWidget(
@@ -137,22 +170,22 @@ void main() {
   group('captura de agenda', () {
     test('reemplaza los eventos anteriores y borra los que ya no aparecen', () async {
       final now = DateTime.now();
-      FutbolLibreEvent event(String id) => FutbolLibreEvent(
+      SportsAgendaEvent event(String id) => SportsAgendaEvent(
         id: id,
         title: 'Equipo $id vs Rival $id',
         sport: 'Fútbol',
         startsAt: now.add(const Duration(hours: 1)),
-        detailUrl: 'https://futbol-libre.cam/$id',
+        detailUrl: 'https://www.marca.com/programacion-tv.html$id',
       );
 
-      await FutbolLibreAgendaStore.save(<FutbolLibreEvent>[event('anterior')]);
-      expect((await FutbolLibreAgendaStore.load()).single.id, 'anterior');
+      await SportsAgendaStore.save(<SportsAgendaEvent>[event('anterior')]);
+      expect((await SportsAgendaStore.load()).single.id, 'anterior');
 
-      await FutbolLibreAgendaStore.save(<FutbolLibreEvent>[event('actual')]);
-      expect((await FutbolLibreAgendaStore.load()).map((row) => row.id), <String>['actual']);
+      await SportsAgendaStore.save(<SportsAgendaEvent>[event('actual')]);
+      expect((await SportsAgendaStore.load()).map((row) => row.id), <String>['actual']);
 
-      await FutbolLibreAgendaStore.save(const <FutbolLibreEvent>[]);
-      expect(await FutbolLibreAgendaStore.load(), isEmpty);
+      await SportsAgendaStore.save(const <SportsAgendaEvent>[]);
+      expect(await SportsAgendaStore.load(), isEmpty);
     });
   });
 
@@ -373,25 +406,25 @@ https://media.example/sports-hd.m3u8
         epgUrl: 'https://provider.example/guide.xml',
         authorizationConfirmed: true,
       );
-      final event = FutbolLibreEvent(
+      final event = SportsAgendaEvent(
         id: 'match-1',
         title: 'Equipo Azul vs Equipo Rojo',
         sport: 'Fútbol',
         homeTeam: 'Equipo Azul',
         awayTeam: 'Equipo Rojo',
         startsAt: start,
-        detailUrl: 'https://futbol-libre.cam/partido/match-1',
+        detailUrl: 'https://www.marca.com/programacion-tv.html',
       );
 
       final tooEarly = await service.schedule(
-        events: <FutbolLibreEvent>[event],
+        events: <SportsAgendaEvent>[event],
         now: start.subtract(const Duration(minutes: 11)),
         settings: settings,
       );
       expect(tooEarly, isEmpty);
 
       final prepared = await service.schedule(
-        events: <FutbolLibreEvent>[event],
+        events: <SportsAgendaEvent>[event],
         now: start.subtract(const Duration(minutes: 10)),
         settings: settings,
       );
@@ -433,18 +466,18 @@ https://media.example/sports.mpd
         if (request.url.path.endsWith('.mpd')) return http.Response(mpd, 200);
         return http.Response('', 404);
       });
-      final event = FutbolLibreEvent(
+      final event = SportsAgendaEvent(
         id: 'dash-event',
         title: 'Equipo Azul vs Equipo Rojo',
         sport: 'Fútbol',
         homeTeam: 'Equipo Azul',
         awayTeam: 'Equipo Rojo',
         startsAt: start,
-        detailUrl: 'https://futbol-libre.cam/dash-event',
+        detailUrl: 'https://www.marca.com/programacion-tv.html',
       );
 
       final result = await AutomaticLiveService(client: client).schedule(
-        events: <FutbolLibreEvent>[event],
+        events: <SportsAgendaEvent>[event],
         now: start.subtract(const Duration(minutes: 10)),
         settings: const AutoLiveSettings(
           playlistUrl: 'https://provider.example/channels.m3u',
@@ -481,17 +514,17 @@ https://media.example/spanish.m3u8
         }
         return http.Response('', 404);
       });
-      final event = FutbolLibreEvent(
+      final event = SportsAgendaEvent(
         id: 'spanish-priority',
         title: 'Equipo Azul vs Equipo Rojo',
         sport: 'Fútbol',
         homeTeam: 'Equipo Azul',
         awayTeam: 'Equipo Rojo',
         startsAt: start,
-        detailUrl: 'https://futbol-libre.cam/spanish-priority',
+        detailUrl: 'https://www.marca.com/programacion-tv.html',
       );
       final result = await AutomaticLiveService(client: client).schedule(
-        events: <FutbolLibreEvent>[event],
+        events: <SportsAgendaEvent>[event],
         now: start.subtract(const Duration(minutes: 10)),
         settings: const AutoLiveSettings(
           playlistUrl: 'https://provider.example/channels.m3u',
@@ -529,17 +562,17 @@ https://media.example/international.m3u8
         }
         return http.Response('', 404);
       });
-      final event = FutbolLibreEvent(
+      final event = SportsAgendaEvent(
         id: 'language-fallback',
         title: 'Equipo Azul vs Equipo Rojo',
         sport: 'Fútbol',
         homeTeam: 'Equipo Azul',
         awayTeam: 'Equipo Rojo',
         startsAt: start,
-        detailUrl: 'https://futbol-libre.cam/language-fallback',
+        detailUrl: 'https://www.marca.com/programacion-tv.html',
       );
       final result = await AutomaticLiveService(client: client).schedule(
-        events: <FutbolLibreEvent>[event],
+        events: <SportsAgendaEvent>[event],
         now: start.subtract(const Duration(minutes: 10)),
         settings: const AutoLiveSettings(
           playlistUrl: 'https://provider.example/channels.m3u',
@@ -553,14 +586,14 @@ https://media.example/international.m3u8
     });
 
     test('reconoce abreviaturas de equipos al cruzar el EPG', () {
-      final event = FutbolLibreEvent(
+      final event = SportsAgendaEvent(
         id: 'alias-match',
         title: 'Manchester United vs Paris Saint-Germain',
         sport: 'Fútbol',
         homeTeam: 'Manchester United',
         awayTeam: 'Paris Saint-Germain',
         startsAt: DateTime.now().add(const Duration(hours: 1)),
-        detailUrl: 'https://futbol-libre.cam/alias-match',
+        detailUrl: 'https://www.marca.com/programacion-tv.html',
       );
 
       expect(
@@ -592,15 +625,15 @@ https://media.example/two.m3u8
         }
         return http.Response('', 404);
       });
-      final events = <FutbolLibreEvent>[
-        FutbolLibreEvent(
+      final events = <SportsAgendaEvent>[
+        SportsAgendaEvent(
           id: 'one', title: 'Azul vs Rojo', sport: 'Fútbol',
-          startsAt: start, detailUrl: 'https://futbol-libre.cam/one',
+          startsAt: start, detailUrl: 'https://www.marca.com/programacion-tv.html',
         ),
-        FutbolLibreEvent(
+        SportsAgendaEvent(
           id: 'two', title: 'Verde vs Blanco', sport: 'Fútbol',
           startsAt: start,
-          detailUrl: 'https://futbol-libre.cam/two',
+          detailUrl: 'https://www.marca.com/programacion-tv.html',
         ),
       ];
       final result = await AutomaticLiveService(client: client).schedule(
@@ -634,15 +667,15 @@ https://media.example/offline.m3u8
         if (request.url.path.endsWith('.m3u8')) return http.Response('offline', 503);
         return http.Response('', 404);
       });
-      final event = FutbolLibreEvent(
+      final event = SportsAgendaEvent(
         id: 'offline',
         title: 'Azul vs Rojo',
         sport: 'Fútbol',
         startsAt: start,
-        detailUrl: 'https://futbol-libre.cam/offline',
+        detailUrl: 'https://www.marca.com/programacion-tv.html',
       );
       final result = await AutomaticLiveService(client: client).schedule(
-        events: <FutbolLibreEvent>[event],
+        events: <SportsAgendaEvent>[event],
         now: start.subtract(const Duration(minutes: 10)),
         settings: const AutoLiveSettings(
           playlistUrl: 'https://provider.example/channels.m3u',
@@ -655,12 +688,12 @@ https://media.example/offline.m3u8
     });
 
     test('no empareja un programa que pertenece a otro evento', () {
-      final event = FutbolLibreEvent(
+      final event = SportsAgendaEvent(
         id: 'match',
         title: 'Equipo Azul vs Equipo Rojo',
         sport: 'Fútbol',
         startsAt: DateTime.now().add(const Duration(hours: 1)),
-        detailUrl: 'https://futbol-libre.cam/match',
+        detailUrl: 'https://www.marca.com/programacion-tv.html',
       );
       expect(
         AutomaticLiveService.programmeMatchesEvent(
