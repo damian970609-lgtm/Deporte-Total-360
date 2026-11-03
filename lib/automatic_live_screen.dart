@@ -41,9 +41,11 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    if (widget.isActive) _refresh(force: true);
+    // La búsqueda previa al evento continúa aunque el usuario esté en otra
+    // pestaña. El tablero de vídeo sigue respetando widget.isActive.
+    _refresh(force: true);
     _refreshTimer = Timer.periodic(const Duration(seconds: 45), (_) {
-      if (mounted && widget.isActive) _refresh();
+      if (mounted) _refresh();
     });
   }
 
@@ -55,7 +57,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && widget.isActive) {
+    if (state == AppLifecycleState.resumed) {
       _refresh(force: true);
     }
   }
@@ -69,7 +71,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
   }
 
   Future<void> _refresh({bool force = false}) async {
-    if (_refreshing || (!widget.isActive && !force)) return;
+    if (_refreshing) return;
     _refreshing = true;
     if (mounted) setState(() {});
 
