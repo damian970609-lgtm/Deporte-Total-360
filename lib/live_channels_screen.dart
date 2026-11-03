@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
+import 'live_media_format.dart';
+
 import 'sports_api_service.dart';
 
 const Color _liveBg = Color(0xFF030814);
@@ -212,19 +214,24 @@ class LiveFixture {
   }
 }
 
-/// Solo admite enlaces multimedia directos por HTTP(S); no páginas web,
-/// reproductores incrustados, RTMP, DASH ni enlaces con autenticación embebida.
-bool isSupportedAuthorizedMediaUrl(String value) {
-  final uri = Uri.tryParse(value.trim());
-  if (uri == null ||
-      !uri.hasAuthority ||
-      uri.host.isEmpty ||
-      uri.userInfo.isNotEmpty ||
-      (uri.scheme != 'https' && uri.scheme != 'http')) {
-    return false;
+/// Solo admite señales multimedia directas por HTTP(S): HLS, DASH,
+/// Smooth Streaming y contenedores progresivos compatibles. No abre páginas,
+/// iframes, RTMP ni enlaces con credenciales embebidas.
+bool isSupportedAuthorizedMediaUrl(String value) =>
+    liveMediaFormatForUrl(value) != null;
+
+VideoFormat _videoFormatHintFor(Uri uri) {
+  switch (liveMediaFormatForUrl(uri.toString())) {
+    case LiveMediaFormat.hls:
+      return VideoFormat.hls;
+    case LiveMediaFormat.dash:
+      return VideoFormat.dash;
+    case LiveMediaFormat.smoothStreaming:
+      return VideoFormat.ss;
+    case LiveMediaFormat.progressive:
+    case null:
+      return VideoFormat.other;
   }
-  final path = uri.path.toLowerCase();
-  return path.endsWith('.m3u8') || path.endsWith('.mp4') || path.endsWith('.ts');
 }
 
 class LiveStreamSource {
@@ -1680,6 +1687,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
     }
     final controller = VideoPlayerController.networkUrl(
       uri,
+      formatHint: _videoFormatHintFor(uri),
       videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
     );
     _controller = controller;
@@ -2004,6 +2012,7 @@ class _LiveFullscreenPlayerState extends State<_LiveFullscreenPlayer> {
     }
     final controller = VideoPlayerController.networkUrl(
       uri,
+      formatHint: _videoFormatHintFor(uri),
       videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
     );
     _controller = controller;

@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xml/xml.dart';
 
+import 'live_media_format.dart';
+
 const String _playlistUrlKey = 'dt360_auto_live_playlist_url_v1';
 const String _epgUrlKey = 'dt360_auto_live_epg_url_v1';
 const String _authorizedKey = 'dt360_auto_live_authorized_v1';
@@ -72,12 +74,8 @@ bool isSafeHttpUrl(String value) {
       uri.userInfo.isEmpty;
 }
 
-bool isDirectPlayableStream(String value) {
-  final uri = Uri.tryParse(value.trim());
-  if (uri == null || !isSafeHttpUrl(value)) return false;
-  final path = uri.path.toLowerCase();
-  return path.endsWith('.m3u8') || path.endsWith('.mp4') || path.endsWith('.ts');
-}
+bool isDirectPlayableStream(String value) =>
+    liveMediaFormatForUrl(value) != null;
 
 class AutoLiveSettings {
   const AutoLiveSettings({
@@ -387,15 +385,20 @@ class AutomaticLiveService {
           }
         }),
       );
-      for (final body in playlistBodies.whereType<String>()) {
-        for (final channel in parseM3u(body)) {
+      for (var index = 0; index < playlistBodies.length; index++) {
+        final body = playlistBodies[index];
+        if (body == null) continue;
+        // Algunas M3U contienen rutas relativas; se resuelven contra la
+        // dirección de la propia lista antes de pasar la URL al reproductor.
+        final baseUri = Uri.tryParse(batch[index]);
+        for (final channel in parseM3u(body, baseUri: baseUri)) {
           channelsByUrl.putIfAbsent(channel.url, () => channel);
         }
       }
     }
     final channels = channelsByUrl.values.toList(growable: false);
     if (channels.isEmpty) {
-      throw const FormatException('Ninguna lista M3U respondió con canales HLS/MP4/TS compatibles.');
+      throw const FormatException('Ninguna lista M3U respondió con señales HLS, DASH o vídeo directo compatibles.');
     }
 
     // Se fusionan varias guías. Si una EPG no responde o publica XML inválido,
@@ -503,7 +506,7 @@ class AutomaticLiveService {
     return body;
   }
 
-  static List<M3uChannel> parseM3u(String body) {
+  static List<M3uChannel> parseM3u(String body, {Uri? baseUri}) {
     final lines = body.replaceAll('\r', '').split('\n');
     final result = <M3uChannel>[];
     Map<String, String>? pending;
@@ -523,7 +526,14 @@ class AutomaticLiveService {
         continue;
       }
       if (line.startsWith('#') || pending == null) continue;
-      if (!isDirectPlayableStream(line)) {
+      final parsedUri = Uri.tryParse(line);
+      final streamUri = parsedUri == null
+          ? null
+          : parsedUri.hasScheme
+              ? parsedUri
+              : baseUri?.resolveUri(parsedUri);
+      if (streamUri == null ||
+          !isDirectPlayableStream(streamUri.toString())) {
         pending = null;
         pendingName = '';
         continue;
@@ -532,7 +542,7 @@ class AutomaticLiveService {
       result.add(M3uChannel(
         name: pendingName.isNotEmpty ? pendingName :
             (data['tvg-name'] ?? data['tvg-id'] ?? 'Canal').trim(),
-        url: line, tvgId: data['tvg-id'] ?? '',
+        url: streamUri.toString(), tvgId: data['tvg-id'] ?? '',
         tvgName: data['tvg-name'] ?? '',
         group: data['group-title'] ?? '',
         logo: data['tvg-logo'] ?? '',
@@ -900,6 +910,55 @@ class AutomaticLiveService {
     }
   }
 
+
+  Future<bool> _probeDashManifest(Uri uri) async {
+    try {
+      final response = await _client.get(
+        uri,
+        headers: const <String, String>{
+          'Accept': 'application/dash+xml,application/xml,text/xml,*/*',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return false;
+      }
+      final bytes = response.bodyBytes.take(1024 * 1024).toList();
+      final body = utf8.decode(bytes, allowMalformed: true);
+      final document = XmlDocument.parse(body);
+      if (document.rootElement.name.local.toLowerCase() != 'mpd') {
+        return false;
+      }
+      return document.findAllElements('Period').any(
+        (period) => period.findElements('AdaptationSet').isNotEmpty,
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _probeSmoothStreamingManifest(Uri uri) async {
+    try {
+      final response = await _client.get(
+        uri,
+        headers: const <String, String>{
+          'Accept': 'application/vnd.ms-sstr+xml,application/xml,*/*',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return false;
+      }
+      final body = utf8.decode(
+        response.bodyBytes.take(1024 * 1024).toList(),
+        allowMalformed: true,
+      );
+      final document = XmlDocument.parse(body);
+      return document.rootElement.name.local.toLowerCase() ==
+          'smoothstreamingmedia';
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<ScheduledLiveSource> _probeCandidate(
     ScheduledLiveSource source,
   ) async {
@@ -922,13 +981,21 @@ class AutomaticLiveService {
     var extraQuality = 0;
     try {
       final uri = Uri.parse(source.url);
-      if (uri.path.toLowerCase().endsWith('.m3u8')) {
-        final probe = await _probeHls(uri);
-        available = probe.available;
-        extraQuality = probe.quality;
-      } else {
-        // GET con Range es más compatible que HEAD con servidores de vídeo.
-        available = await _probeMediaBytes(uri);
+      switch (liveMediaFormatForUrl(source.url)) {
+        case LiveMediaFormat.hls:
+          final probe = await _probeHls(uri);
+          available = probe.available;
+          extraQuality = probe.quality;
+        case LiveMediaFormat.dash:
+          available = await _probeDashManifest(uri);
+        case LiveMediaFormat.smoothStreaming:
+          available = await _probeSmoothStreamingManifest(uri);
+        case LiveMediaFormat.progressive:
+          // Incluye MP4 y MPEG-TS directo. En HLS, los segmentos .ts
+          // se entregan al motor a través del manifiesto .m3u8.
+          available = await _probeMediaBytes(uri);
+        case null:
+          available = false;
       }
     } catch (_) {
       available = false;

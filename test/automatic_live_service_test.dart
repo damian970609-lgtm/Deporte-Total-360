@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:deporte_total_360/automatic_live_service.dart';
 import 'package:deporte_total_360/live_channels_screen.dart';
+import 'package:deporte_total_360/live_media_format.dart';
 
 String _xmlTime(DateTime date) {
   final utc = date.toUtc();
@@ -128,6 +129,67 @@ void main() {
 
       await FutbolLibreAgendaStore.save(const <FutbolLibreEvent>[]);
       expect(await FutbolLibreAgendaStore.load(), isEmpty);
+    });
+  });
+
+  group('formatos multimedia de las listas M3U', () {
+    test('clasifica HLS, DASH, Smooth Streaming y contenedores directos', () {
+      expect(
+        liveMediaFormatForUrl('https://cdn.example/live/master.m3u8?token=abc'),
+        LiveMediaFormat.hls,
+      );
+      expect(
+        liveMediaFormatForUrl('https://cdn.example/live/manifest.mpd?sig=123'),
+        LiveMediaFormat.dash,
+      );
+      expect(
+        liveMediaFormatForUrl('https://cdn.example/channel.ism/Manifest'),
+        LiveMediaFormat.smoothStreaming,
+      );
+      expect(
+        liveMediaFormatForUrl('https://cdn.example/channel.ts'),
+        LiveMediaFormat.progressive,
+      );
+      expect(
+        liveMediaFormatForUrl('https://cdn.example/channel.mp4'),
+        LiveMediaFormat.progressive,
+      );
+      expect(
+        liveMediaFormatForUrl('https://cdn.example/channel.webm'),
+        LiveMediaFormat.progressive,
+      );
+    });
+
+    test('no confunde una lista M3U o una página HTML con una señal de vídeo', () {
+      expect(liveMediaFormatForUrl('https://cdn.example/channels.m3u'), isNull);
+      expect(liveMediaFormatForUrl('https://cdn.example/watch?id=22'), isNull);
+      expect(liveMediaFormatForUrl('https://cdn.example/live.m3u8'), LiveMediaFormat.hls);
+      expect(liveMediaFormatForUrl('rtmp://cdn.example/live/channel'), isNull);
+      expect(liveMediaFormatForUrl('https://user:pass@cdn.example/live.m3u8'), isNull);
+    });
+
+    test('resuelve enlaces relativos de una playlist M3U contra su URL', () {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="dash.event",Canal DASH
+../streams/event.mpd?token=ok
+#EXTINF:-1 tvg-id="raw.ts",Canal TS
+https://cdn.example/live/event.ts
+''';
+
+      final channels = AutomaticLiveService.parseM3u(
+        playlist,
+        baseUri: Uri.parse('https://catalog.example/lists/today/sports.m3u'),
+      );
+
+      expect(channels, hasLength(2));
+      expect(
+        channels.map((channel) => channel.url).toList(),
+        <String>[
+          'https://catalog.example/lists/streams/event.mpd?token=ok',
+          'https://cdn.example/live/event.ts',
+        ],
+      );
     });
   });
 
@@ -315,6 +377,61 @@ https://media.example/sports-hd.m3u8
       expect(prepared.single.sources.single.url, 'https://media.example/sports-hd.m3u8');
       expect(prepared.single.sources.single.available, isTrue);
       expect(prepared.single.removeAt, stop);
+    });
+
+
+    test('verifica un manifiesto DASH antes de asignarlo al evento', () async {
+      final start = DateTime.now().add(const Duration(minutes: 10));
+      final stop = start.add(const Duration(hours: 2));
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="dash.sports",Sports DASH HD
+https://media.example/sports.mpd
+''';
+      final xml = '<tv><channel id="dash.sports">'
+          '<display-name>Sports DASH</display-name></channel>'
+          '<programme channel="dash.sports" start="' + _xmlTime(start) + '" '
+          'stop="' + _xmlTime(stop) + '"><title>Equipo Azul vs Equipo Rojo</title>'
+          '</programme></tv>';
+      const mpd = '''<?xml version="1.0"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="dynamic">
+  <Period>
+    <AdaptationSet mimeType="video/mp4">
+      <Representation id="video-1" bandwidth="1200000">
+        <BaseURL>video.mp4</BaseURL>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>''';
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('.m3u')) return http.Response(playlist, 200);
+        if (request.url.path.endsWith('.xml')) return http.Response(xml, 200);
+        if (request.url.path.endsWith('.mpd')) return http.Response(mpd, 200);
+        return http.Response('', 404);
+      });
+      final event = FutbolLibreEvent(
+        id: 'dash-event',
+        title: 'Equipo Azul vs Equipo Rojo',
+        sport: 'Fútbol',
+        homeTeam: 'Equipo Azul',
+        awayTeam: 'Equipo Rojo',
+        startsAt: start,
+        detailUrl: 'https://futbol-libre.cam/dash-event',
+      );
+
+      final result = await AutomaticLiveService(client: client).schedule(
+        events: <FutbolLibreEvent>[event],
+        now: start.subtract(const Duration(minutes: 10)),
+        settings: const AutoLiveSettings(
+          playlistUrl: 'https://provider.example/channels.m3u',
+          epgUrl: 'https://provider.example/guide.xml',
+          authorizationConfirmed: true,
+        ),
+      );
+
+      expect(result, hasLength(1));
+      expect(result.single.sources.single.url, 'https://media.example/sports.mpd');
+      expect(result.single.sources.single.available, isTrue);
     });
 
     test('prioriza un canal en español antes que una señal extranjera de mayor resolución', () async {
