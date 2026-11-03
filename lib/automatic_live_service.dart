@@ -424,20 +424,22 @@ class AutomaticLiveService {
       // Una sola señal por evento: primero la resolución anunciada, después
       // indicadores HD/FHD/UHD y finalmente un orden estable del proveedor.
       candidates.sort((a, b) => b.qualityScore.compareTo(a.qualityScore));
-      final sources = <ScheduledLiveSource>[];
+      final verifiedCandidates = <ScheduledLiveSource>[];
       for (final candidate in candidates.take(6)) {
         final checked = await _probeCandidate(candidate);
-        if (checked.available) {
-          sources.add(checked);
-          break;
-        }
+        if (checked.available) verifiedCandidates.add(checked);
       }
-      // Algunos proveedores legítimos rechazan HEAD/GET de comprobación aunque
-      // ExoPlayer pueda reproducir con sus reglas de red. En ese caso se deja
-      // una sola mejor candidata, marcada como no verificada.
-      if (sources.isEmpty) {
-        sources.add(candidates.first);
-      }
+      // Compara la resolución de las listas HLS maestras y prioriza la de
+      // mayor calidad entre las señales que respondieron a la comprobación.
+      verifiedCandidates.sort((a, b) => b.qualityScore.compareTo(a.qualityScore));
+      final sources = <ScheduledLiveSource>[
+        if (verifiedCandidates.isNotEmpty)
+          verifiedCandidates.first
+        else
+          // Algunos proveedores legítimos rechazan HEAD/GET de comprobación
+          // aunque ExoPlayer pueda reproducir con sus reglas de red.
+          candidates.first,
+      ];
       final programmeEnd = sources.map((s) => s.programmeEndsAt).reduce(
         (a, b) => a.isAfter(b) ? a : b,
       );
