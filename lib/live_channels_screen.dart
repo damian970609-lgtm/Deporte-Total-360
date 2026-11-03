@@ -1881,20 +1881,10 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _applyQuality(VideoTrack? track) async {
-    final controller = _controller;
-    if (controller == null || !controller.value.isInitialized) return;
-    try {
-      // null elimina el límite manual y devuelve ExoPlayer al modo ABR.
-      await controller.selectVideoTrack(track);
-      if (!mounted) return;
-      setState(() => _manualQualityTrackId = track?.id);
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo cambiar la resolución: $error')),
-      );
-    }
+  void _applyQuality(VideoTrack? track) {
+    // El selector ya aplicó la pista en ExoPlayer; aquí solo se actualiza
+    // la etiqueta del canal sin duplicar la orden nativa.
+    if (mounted) setState(() => _manualQualityTrackId = track?.id);
   }
 
   Future<void> _openFullscreen(VideoPlayerController controller) async {
@@ -2289,13 +2279,19 @@ class _VideoQualityPickerButton extends StatelessWidget {
     );
   }
 
+  String _buttonLabel() {
+    if (selectedTrackId == null) return 'AUTO';
+    for (final track in tracks) {
+      if (track.id == selectedTrackId) {
+        return videoTrackResolutionLabel(track);
+      }
+    }
+    return 'CALIDAD';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final label = selectedTrackId == null
-        ? 'AUTO'
-        : (tracks.where((track) => track.id == selectedTrackId).firstOrNull
-                ?.let((track) => videoTrackResolutionLabel(track)) ??
-            'CALIDAD');
+    final label = _buttonLabel();
     return TextButton.icon(
       onPressed: () => _openPicker(context),
       icon: const Icon(Icons.high_quality_rounded, size: 17),
