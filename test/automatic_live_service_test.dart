@@ -31,6 +31,20 @@ void main() {
     });
   });
 
+    test('migra las listas predeterminadas antiguas sin cambiar la autorización', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'dt360_auto_live_playlist_url_v1': legacyDefaultAutoLivePlaylistUrls,
+        'dt360_auto_live_epg_url_v1': legacyDefaultAutoLiveEpgUrl,
+        'dt360_auto_live_authorized_v1': true,
+      });
+
+      final settings = await AutoLiveSettings.load();
+
+      expect(settings.playlistUrls, hasLength(5));
+      expect(settings.epgUrls, hasLength(11));
+      expect(settings.authorizationConfirmed, isTrue);
+    });
+
   group('M3U y XMLTV', () {
     test('lee canales directos, tvg-id y calidad del canal', () {
       const playlist = '''
