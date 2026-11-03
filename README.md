@@ -2,7 +2,7 @@
 
 Aplicación Android en Flutter. El APK se compila en GitHub Actions; la carpeta Android se genera en el runner.
 
-Navegación principal: Inicio, Deportes en vivo, Agenda de hoy, Noticias, Mister Fantasy, Estadísticas, Resúmenes y Ajustes. Chat, Telegram, contacto y donaciones permanecen como accesos auxiliares.
+Navegación principal: Inicio, Deportes en vivo, Agenda de hoy, Noticias, Mister Fantasy, Estadísticas, Resúmenes y Ajustes. Deportes en vivo y Agenda de hoy cargan Fútbol Libre dentro de la APK. Chat, Telegram, contacto y donaciones permanecen como accesos auxiliares.
 
 Archivos principales:
 - lib/main.dart: navegación de ocho secciones, inicio y ajustes.
@@ -31,4 +31,4 @@ Compilación:
 El workflow configura Java y Flutter, genera Android en el runner, prepara permisos de red e icono, ejecuta flutter analyze y flutter test, compila el APK release y publica deporte-total-360-apk durante 30 días.
 
 Límites:
-El módulo Deportes en vivo consulta los eventos disponibles en el Worker de estadísticas y permite vincular señales directas HLS (.m3u8) o MP4 que el propietario esté autorizado a reproducir. Admite hasta cuatro cuadros simultáneos; el número real de reproducciones depende del dispositivo y de la conexión. No extrae enlaces de páginas de terceros ni elude DRM, autenticación o restricciones. La agenda nativa usa API-Sports y Fútbol Libre permanece como agenda web integrada accesible desde Inicio. Los resúmenes de YouTube se reproducen en WebView y respetan las restricciones de la plataforma.
+API-Sports queda para el módulo Estadísticas. Agenda de hoy y Deportes en vivo muestran los eventos, fichas y enlaces de canal publicados por Fútbol Libre dentro de WebView. La app no convierte por sí sola enlaces de páginas externas en direcciones de vídeo para el reproductor nativo. El reproductor nativo conserva la compatibilidad con fuentes directas HLS/MP4 autorizadas. Los resúmenes de YouTube se reproducen dentro de WebView.
