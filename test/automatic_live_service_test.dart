@@ -29,7 +29,6 @@ void main() {
       expect(settings.epgUrl, defaultAutoLiveEpgUrl);
       expect(settings.isConfigured, isFalse);
     });
-  });
 
     test('migra las listas predeterminadas antiguas sin cambiar la autorización', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
@@ -44,6 +43,7 @@ void main() {
       expect(settings.epgUrls, hasLength(11));
       expect(settings.authorizationConfirmed, isTrue);
     });
+  });
 
   group('M3U y XMLTV', () {
     test('lee canales directos, tvg-id y calidad del canal', () {
