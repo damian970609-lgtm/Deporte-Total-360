@@ -1383,11 +1383,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } else {
       await NotificationService.cancelMatchReminders();
+      await NotificationService.unregisterCurrentDevice();
     }
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('notifications_enabled', enabled);
     } catch (_) {}
+    if (enabled) await NotificationService.registerCurrentDevice();
     if (mounted) setState(() => _notificationsEnabled = enabled);
   }
 
