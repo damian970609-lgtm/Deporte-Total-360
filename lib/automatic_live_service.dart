@@ -164,8 +164,8 @@ class AutoLiveSettings {
   }
 }
 
-class FutbolLibreEvent {
-  const FutbolLibreEvent({
+class SportsAgendaEvent {
+  const SportsAgendaEvent({
     required this.id,
     required this.title,
     required this.sport,
@@ -193,7 +193,7 @@ class FutbolLibreEvent {
     'endsAt': endsAt?.toIso8601String(), 'detailUrl': detailUrl,
   };
 
-  static FutbolLibreEvent? fromJson(dynamic value) {
+  static SportsAgendaEvent? fromJson(dynamic value) {
     if (value is! Map) return null;
     final row = Map<String, dynamic>.from(value);
     final id = (row['id'] ?? '').toString().trim();
@@ -203,7 +203,7 @@ class FutbolLibreEvent {
     if (id.isEmpty || title.isEmpty || startsAt == null ||
         !isSafeHttpUrl(detailUrl)) return null;
     final end = DateTime.tryParse((row['endsAt'] ?? '').toString());
-    return FutbolLibreEvent(
+    return SportsAgendaEvent(
       id: id, title: title, sport: (row['sport'] ?? 'Fútbol').toString(),
       competition: (row['competition'] ?? '').toString(),
       homeTeam: (row['homeTeam'] ?? '').toString(),
@@ -214,14 +214,14 @@ class FutbolLibreEvent {
   }
 }
 
-class FutbolLibreAgendaStore {
-  static const String _key = 'dt360_futbol_libre_events_v1';
+class SportsAgendaStore {
+  static const String _key = 'dt360_sports_agenda_events_v2';
 
   /// Sustituye la captura anterior por el contenido visible más reciente.
   /// Así los eventos retirados de la agenda no quedan programados.
-  static Future<void> save(List<FutbolLibreEvent> events) async {
+  static Future<void> save(List<SportsAgendaEvent> events) async {
     final prefs = await SharedPreferences.getInstance();
-    final unique = <String, FutbolLibreEvent>{
+    final unique = <String, SportsAgendaEvent>{
       for (final event in events) event.id: event,
     };
     final cutoff = DateTime.now().subtract(const Duration(hours: 4));
@@ -235,16 +235,16 @@ class FutbolLibreAgendaStore {
     );
   }
 
-  static Future<List<FutbolLibreEvent>> load() async {
+  static Future<List<SportsAgendaEvent>> load() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);
-    if (raw == null || raw.isEmpty) return <FutbolLibreEvent>[];
+    if (raw == null || raw.isEmpty) return <SportsAgendaEvent>[];
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is! List) return <FutbolLibreEvent>[];
-      return decoded.map(FutbolLibreEvent.fromJson)
-          .whereType<FutbolLibreEvent>().toList(growable: false);
-    } catch (_) { return <FutbolLibreEvent>[]; }
+      if (decoded is! List) return <SportsAgendaEvent>[];
+      return decoded.map(SportsAgendaEvent.fromJson)
+          .whereType<SportsAgendaEvent>().toList(growable: false);
+    } catch (_) { return <SportsAgendaEvent>[]; }
   }
 }
 
@@ -324,7 +324,7 @@ class ScheduledLiveEvent {
   const ScheduledLiveEvent({
     required this.event, required this.sources, required this.removeAt,
   });
-  final FutbolLibreEvent event;
+  final SportsAgendaEvent event;
   final List<ScheduledLiveSource> sources;
   final DateTime removeAt;
 }
@@ -603,7 +603,7 @@ class AutomaticLiveService {
   }
 
   Future<List<ScheduledLiveEvent>> schedule({
-    required List<FutbolLibreEvent> events,
+    required List<SportsAgendaEvent> events,
     required DateTime now, required AutoLiveSettings settings,
     bool forceRefresh = false,
   }) async {
@@ -779,7 +779,7 @@ class AutomaticLiveService {
     return matched >= required;
   }
 
-  static bool programmeMatchesEvent(String programmeTitle, FutbolLibreEvent event) {
+  static bool programmeMatchesEvent(String programmeTitle, SportsAgendaEvent event) {
     final programme = normalizeText(programmeTitle);
     if (programme.isEmpty) return false;
     final home = normalizeText(event.homeTeam);
