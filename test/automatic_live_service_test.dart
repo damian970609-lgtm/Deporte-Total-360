@@ -158,7 +158,7 @@ https://media.example/two.m3u8
     });
 
     test('no empareja un programa que pertenece a otro evento', () {
-      const event = FutbolLibreEvent(
+      final event = FutbolLibreEvent(
         id: 'match',
         title: 'Equipo Azul vs Equipo Rojo',
         sport: 'Fútbol',
