@@ -170,6 +170,58 @@ void main() {
           SportsApiService.supportedSports.keys.toSet());
     });
 
+    test('mapea las etiquetas de estadísticas a las rutas correctas del Worker', () async {
+      sportsApiBaseUrl.value = 'https://worker.example';
+      SportsApiService.minimumRequestIntervalForTesting = Duration.zero;
+      final requestedPaths = <String>[];
+      SportsApiService.clientOverride = MockClient((request) async {
+        requestedPaths.add(request.url.path);
+        return http.Response(
+          jsonEncode(<String, dynamic>{
+            'response': <dynamic>[],
+            'errors': <String, dynamic>{},
+          }),
+          200,
+        );
+      });
+
+      await SportsApiService().fetchLeagues(
+        sport: 'Fútbol americano',
+        search: 'NFL',
+      );
+      await SportsApiService().fetchLeagues(
+        sport: 'Vóley',
+        search: 'Champions League',
+      );
+
+      expect(requestedPaths, <String>[
+        '/api/american-football/leagues',
+        '/api/volleyball/leagues',
+      ]);
+    });
+
+    test('permite cargar el catálogo completo de señales sin filtrar deporte', () async {
+      sportsApiBaseUrl.value = 'https://worker.example';
+      SportsApiService.clientOverride = MockClient((request) async {
+        expect(request.url.path, '/api/live/sources');
+        expect(request.url.queryParameters.containsKey('sport'), isFalse);
+        return http.Response(
+          jsonEncode(<String, dynamic>{
+            'configured': true,
+            'sources': <dynamic>[],
+          }),
+          200,
+        );
+      });
+
+      expect(
+        await SportsApiService().fetchAuthorizedLiveSources(
+          dateFilter: 'Todos',
+        ),
+        isEmpty,
+      );
+    });
+
     test('consulta partidos y devuelve el número de eventos recibidos', () async {
       sportsApiBaseUrl.value = 'https://worker.example';
       SportsApiService.clientOverride = MockClient((request) async {
