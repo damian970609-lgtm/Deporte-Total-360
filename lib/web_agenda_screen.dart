@@ -224,6 +224,45 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
               const result = Array.from(unique.values())
                 .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
               window.flutter_inappwebview?.callHandler('dt360AgendaEvents', result);
+
+              // Enriquecer la ficha de cada evento con los canales que la propia
+              // página de detalle publique. Solo se consultan enlaces del mismo
+              // dominio; se mantiene la tarjeta visible aunque una ficha falle.
+              const enrichChannels = async () => {
+                const targets = result.filter((event) =>
+                  event.channels.length === 0 && event.detailUrl
+                ).slice(0, 12);
+                let changed = false;
+                await Promise.all(targets.map(async (event) => {
+                  try {
+                    const url = new URL(event.detailUrl, location.href);
+                    if (url.origin !== location.origin) return;
+                    const response = await fetch(url.href, { credentials: 'same-origin' });
+                    if (!response.ok) return;
+                    const html = await response.text();
+                    const doc = new DOMParser().parseFromString(html, 'text/html');
+                    for (const link of Array.from(doc.querySelectorAll('a[href]'))) {
+                      const surrounding = link.closest('article,li,section,div') || link.parentElement;
+                      const label = clean(link.innerText || link.textContent);
+                      const context = clean(surrounding?.innerText || surrounding?.textContent);
+                      const matched = (label + ' ' + context).match(channelPattern);
+                      if (!matched) continue;
+                      const channelUrl = new URL(link.getAttribute('href'), url.href);
+                      if (channelUrl.protocol !== 'https:' && channelUrl.protocol !== 'http:') continue;
+                      if (event.channels.some((item) => item.url === channelUrl.href)) continue;
+                      event.channels.push({
+                        name: clean(matched[1] || matched[0]).slice(0, 80),
+                        url: channelUrl.href
+                      });
+                      changed = true;
+                    }
+                  } catch (_) {}
+                }));
+                if (changed) {
+                  window.flutter_inappwebview?.callHandler('dt360AgendaEvents', result);
+                }
+              };
+              enrichChannels();
               return result.length;
             } catch (_) {
               return 0;
