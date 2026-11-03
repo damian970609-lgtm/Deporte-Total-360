@@ -122,7 +122,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
         (() => {
           const scan = () => {
             const nodes = Array.from(document.querySelectorAll(
-              'article,li,[data-event],[class*="match"],[class*="fixture"],[class*="event"],a[href]'
+              'article,li,tr,[data-event],[class*="match"],[class*="fixture"],[class*="event"],[class*="program"],[class*="guide"],[class*="schedule"],[class*="tv-item"],a[href]'
             ));
             const found = [];
             const seen = new Set();
@@ -163,11 +163,31 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
               return candidate;
             };
             const timePattern = /\b(2[0-3]|[01]?\d):([0-5]\d)\b|\b(1[0-2]|0?[1-9]):([0-5]\d)\s*(AM|PM)\b/i;
-            for (const node of nodes) {
+            for (const sourceNode of nodes) {
+              let node = sourceNode;
+              // Algunos listados colocan la hora fuera del enlace del evento.
+              // En ese caso se inspeccionan hasta cuatro contenedores padres.
+              if (sourceNode.matches('a[href]')) {
+                let parent = sourceNode.parentElement;
+                for (let depth = 0; parent && depth < 4; depth++, parent = parent.parentElement) {
+                  const parentText = (parent.innerText || parent.textContent || '')
+                    .replace(/\s+/g, ' ').trim();
+                  const hasTimeElement = !!(parent.querySelector &&
+                    parent.querySelector('time[datetime],time'));
+                  if (parentText.length >= 12 && parentText.length <= 500 &&
+                      (timePattern.test(parentText) || hasTimeElement)) {
+                    node = parent;
+                    break;
+                  }
+                }
+              }
               const rawText = (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim();
               if (rawText.length < 12 || rawText.length > 500) continue;
               const timeNode = node.querySelector('time');
-              const timeText = timeNode ? (timeNode.textContent || '') : '';
+              const timeText = timeNode
+                ? [timeNode.textContent, timeNode.getAttribute('datetime')]
+                    .filter(Boolean).join(' ')
+                : '';
               const timeMatch = (rawText + ' ' + timeText).match(timePattern);
               if (!timeMatch) continue;
               const anchor = node.matches('a[href]') ? node : node.querySelector('a[href]');
