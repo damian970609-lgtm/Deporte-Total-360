@@ -177,7 +177,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
               const eventUrl = anchor && anchor.href ? anchor.href : location.href;
               if (!eventContainer && !anchor) continue;
               if (!/^https?:/i.test(eventUrl)) continue;
-              if (anchor && /\\/canal\\/|\\/channel\\//i.test(new URL(eventUrl).pathname)) continue;
+              if (anchor && /\/canal\/|\/channel\//i.test(new URL(eventUrl).pathname)) continue;
               const heading = node.querySelector('h1,h2,h3,h4,[class*="title"],[class*="team"]');
               let title = (heading && heading.textContent || rawText).replace(/\s+/g, ' ').trim();
               if (title.length < 5) title = rawText;
@@ -275,7 +275,11 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 const parsed = new Date(dateValue);
                 if (!Number.isNaN(parsed.getTime())) {
                   if (/T|\d{1,2}:\d{2}/i.test(dateValue)) {
-                    start = parsed;
+                    const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(dateValue);
+                    start = hasZone ? parsed : madridDate(
+                      parsed.getFullYear(), parsed.getMonth(), parsed.getDate(),
+                      parsed.getHours(), parsed.getMinutes()
+                    );
                   } else {
                     const explicit = parseDateHint(dateValue) || dateHint;
                     if (explicit) start = madridDate(explicit.year, explicit.month, explicit.day, hour, minute);
@@ -295,7 +299,13 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 (node.dataset && (node.dataset.end || node.dataset.endTime));
               if (endValue) {
                 const parsedEnd = new Date(endValue);
-                if (!Number.isNaN(parsedEnd.getTime())) end = parsedEnd;
+                if (!Number.isNaN(parsedEnd.getTime())) {
+                  const hasEndZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(endValue);
+                  end = hasEndZone ? parsedEnd : madridDate(
+                    parsedEnd.getFullYear(), parsedEnd.getMonth(), parsedEnd.getDate(),
+                    parsedEnd.getHours(), parsedEnd.getMinutes()
+                  );
+                }
               }
               const statusNode = node.querySelector(
                 '[data-status],[class*="status"],[class*="state"]'
