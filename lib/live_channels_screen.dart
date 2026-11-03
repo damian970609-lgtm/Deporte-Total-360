@@ -1687,18 +1687,30 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
       await controller.initialize();
       await controller.setLooping(false);
       await controller.setVolume(_muted ? 0 : 1);
+      if (!mounted || !widget.isActive) {
+        await controller.dispose();
+        if (identical(_controller, controller)) _controller = null;
+        return;
+      }
       await controller.play();
       if (!mounted) {
         await controller.dispose();
+        if (identical(_controller, controller)) _controller = null;
         return;
       }
       setState(() => _loading = false);
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) {
+        await controller.dispose();
+        if (identical(_controller, controller)) _controller = null;
+        return;
+      }
       setState(() {
         _loading = false;
         _error = 'No se pudo iniciar esta señal: $error';
       });
+      await controller.dispose();
+      if (identical(_controller, controller)) _controller = null;
     }
   }
 
@@ -1718,6 +1730,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
   }
 
   Future<void> _toggleMute() async {
+    if (!widget.isActive) return;
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
     _muted = !_muted;
@@ -1726,6 +1739,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
   }
 
   Future<void> _openFullscreen() async {
+    if (!widget.isActive) return;
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
     final resumeAfter = controller.value.isPlaying;
