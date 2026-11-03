@@ -122,7 +122,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
         (() => {
           const scan = () => {
             const nodes = Array.from(document.querySelectorAll(
-              'article,li,[data-event],[class*="match"],[class*="fixture"],[class*="event"]'
+              'article,li,[data-event],[class*="match"],[class*="fixture"],[class*="event"],a[href]'
             ));
             const found = [];
             const seen = new Set();
@@ -139,7 +139,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
               const heading = node.querySelector('h1,h2,h3,h4,[class*="title"],[class*="team"]');
               let title = (heading && heading.textContent || anchor.textContent || '').replace(/\s+/g, ' ').trim();
               if (title.length < 5) title = rawText;
-              title = title.replace(/\b(EN VIVO|VER PARTIDO|VER AHORA|DETALLES)\b/ig, '').trim();
+              title = title.replace(/\b(EN VIVO|VER PARTIDO|VER AHORA|DETALLES)\b/ig, '').replace(timePattern, '').trim();
               const pair = title.split(/\s+(?:vs?\.?|versus|contra|[-–—])\s+/i);
               if (pair.length < 2) continue;
               let hour = parseInt(timeMatch[1] || timeMatch[3], 10);
