@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'app_i18n.dart';
 
 const Color _fantasyBg = Color(0xFF030814);
@@ -14,7 +18,9 @@ const Color _fantasyMuted = Color(0xFFA9BDD6);
 /// Mister Fantasy. No copia ni modifica el código, marca o interfaz interna
 /// del servicio: el contenido se carga desde el dominio de su propietario.
 class FantasyScreen extends StatefulWidget {
-  const FantasyScreen({super.key});
+  const FantasyScreen({super.key, this.onExit});
+
+  final VoidCallback? onExit;
 
   static const String officialUrl =
       'https://mister.mundodeportivo.com/new-onboarding/';
@@ -30,6 +36,7 @@ class _FantasyScreenState extends State<FantasyScreen> {
   bool _handlingBack = false;
   double _progress = 0;
   String? _error;
+  int _webViewGeneration = 0;
 
   Future<void> _handleBackRequest() async {
     if (_handlingBack) return;
@@ -49,6 +56,10 @@ class _FantasyScreenState extends State<FantasyScreen> {
       }
 
       if (!mounted) return;
+      if (widget.onExit != null) {
+        widget.onExit!();
+        return;
+      }
       setState(() => _allowPop = true);
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -88,9 +99,23 @@ class _FantasyScreenState extends State<FantasyScreen> {
     return false;
   }
 
+  Future<void> _retry() async {
+    if (!mounted) return;
+    setState(() {
+      _controller = null;
+      _webViewGeneration++;
+      _loading = true;
+      _progress = 0;
+      _error = null;
+    });
+  }
+
   Future<void> _reload() async {
     final controller = _controller;
-    if (controller == null) return;
+    if (controller == null) {
+      await _retry();
+      return;
+    }
 
     setState(() {
       _loading = true;
@@ -109,12 +134,72 @@ class _FantasyScreenState extends State<FantasyScreen> {
     }
   }
 
+  Future<void> _checkForBlankPage(InAppWebViewController controller) async {
+    await Future<void>.delayed(const Duration(seconds: 7));
+    if (!mounted || !identical(_controller, controller) || _loading || _error != null) {
+      return;
+    }
+
+    try {
+      final visible = await controller.evaluateJavascript(source: r'''
+        (() => {
+          const body = document.body;
+          if (!body) return false;
+          const text = (body.innerText || '').trim();
+          const content = body.querySelector(
+            'main,[role="main"],iframe,video,canvas,img,svg,#root > *,#app > *'
+          );
+          return text.length > 20 || content !== null;
+        })()
+      ''');
+      final value = visible?.toString().toLowerCase();
+      if (visible == false || value == 'false' || value == '0' || value == 'null') {
+        if (!mounted) return;
+        setState(() {
+          _error = appText(
+            'El sitio oficial abrió, pero no mostró contenido dentro del navegador integrado. Puede ser una limitación de WebView, conexión o disponibilidad regional.',
+            'The official site opened but did not render content in the in-app browser. This may be a WebView, network, or regional availability limitation.',
+            'O site oficial abriu, mas não mostrou conteúdo no navegador integrado. Pode ser uma limitação do WebView, da conexão ou da disponibilidade regional.',
+            'Le site officiel s’est ouvert, mais n’a affiché aucun contenu dans le navigateur intégré. Cela peut venir du WebView, du réseau ou de la disponibilité régionale.',
+          );
+        });
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = appText(
+          'No se pudo comprobar si Mister Fantasy terminó de dibujar la página. Puedes reintentar o abrir el sitio oficial en Chrome.',
+          'Could not verify whether Mister Fantasy finished rendering. Retry or open the official site in Chrome.',
+          'Não foi possível verificar se o Mister Fantasy terminou de renderizar a página. Tente novamente ou abra o site oficial no Chrome.',
+          'Impossible de vérifier si Mister Fantasy a terminé le rendu. Réessayez ou ouvrez le site officiel dans Chrome.',
+        );
+      });
+    }
+  }
+
+  Future<void> _openInBrowser() async {
+    final opened = await launchUrl(
+      Uri.parse(FantasyScreen.officialUrl),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(appText(
+          'No se pudo abrir el navegador externo.',
+          'Could not open the external browser.',
+          'Não foi possível abrir o navegador externo.',
+          'Impossible d’ouvrir le navigateur externe.',
+        ))),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope<void>(
       canPop: _allowPop,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) _handleBackRequest();
+        if (!didPop && widget.onExit == null) _handleBackRequest();
       },
       child: Scaffold(
         backgroundColor: _fantasyBg,
@@ -208,6 +293,7 @@ class _FantasyScreenState extends State<FantasyScreen> {
               child: _error != null
                   ? _errorPanel()
                   : InAppWebView(
+                      key: ValueKey<int>(_webViewGeneration),
                       initialUrlRequest: URLRequest(
                         url: WebUri(FantasyScreen.officialUrl),
                       ),
@@ -225,6 +311,10 @@ class _FantasyScreenState extends State<FantasyScreen> {
                         mediaPlaybackRequiresUserGesture: true,
                         allowsInlineMediaPlayback: true,
                         iframeAllowFullscreen: true,
+                        transparentBackground: true,
+                        underPageBackgroundColor: _fantasyBg,
+                        cacheEnabled: true,
+                        useOnRenderProcessGone: true,
                       ),
                       onWebViewCreated: (controller) {
                         _controller = controller;
@@ -250,6 +340,7 @@ class _FantasyScreenState extends State<FantasyScreen> {
                           _loading = false;
                           _progress = 1;
                         });
+                        unawaited(_checkForBlankPage(controller));
                       },
                       shouldOverrideUrlLoading: (controller, action) async {
                         final uri = action.request.url;
@@ -291,6 +382,19 @@ class _FantasyScreenState extends State<FantasyScreen> {
                                 'Mister Fantasy devolvió un error HTTP $status.';
                           });
                         }
+                      },
+                      androidOnRenderProcessGone: (controller, detail) {
+                        if (!mounted) return;
+                        _controller = null;
+                        setState(() {
+                          _loading = false;
+                          _error = appText(
+                            'Android cerró el proceso gráfico de la página. Pulsa Reintentar para crear un navegador nuevo.',
+                            'Android closed the page renderer. Tap Retry to create a new browser.',
+                            'O Android encerrou o processo gráfico da página. Toque em Tentar novamente para criar um novo navegador.',
+                            'Android a fermé le processus graphique de la page. Appuyez sur Réessayer pour créer un nouveau navigateur.',
+                          );
+                        });
                       },
                     ),
             ),
@@ -347,12 +451,27 @@ class _FantasyScreenState extends State<FantasyScreen> {
             ),
             const SizedBox(height: 14),
             FilledButton.icon(
-              onPressed: _reload,
+              onPressed: _retry,
               icon: const Icon(Icons.refresh_rounded),
               label: Text(appText('REINTENTAR', 'RETRY', 'TENTAR NOVAMENTE', 'RÉESSAYER')),
               style: FilledButton.styleFrom(
                 backgroundColor: _fantasyBlue,
                 foregroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _openInBrowser,
+              icon: const Icon(Icons.open_in_browser_rounded),
+              label: Text(appText(
+                'ABRIR MISTER EN CHROME',
+                'OPEN MISTER IN BROWSER',
+                'ABRIR MISTER NO NAVEGADOR',
+                'OUVRIR MISTER DANS LE NAVIGATEUR',
+              )),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _fantasyCyan,
+                side: const BorderSide(color: _fantasyCyan),
               ),
             ),
           ],

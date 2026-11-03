@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'web_protection_policy.dart';
 import 'app_i18n.dart';
@@ -116,6 +117,62 @@ class NewsRepository {
       url:
           'https://news.google.com/rss/search?q=futbol&hl=es-419&gl=US&ceid=US:es-419',
     ),
+    NewsSource(
+      name: 'Google News • Baloncesto',
+      category: 'Baloncesto',
+      url:
+          'https://news.google.com/rss/search?q=baloncesto+NBA&hl=es-419&gl=US&ceid=US:es-419',
+    ),
+    NewsSource(
+      name: 'Google News • Tenis',
+      category: 'Tenis',
+      url:
+          'https://news.google.com/rss/search?q=tenis+ATP+WTA&hl=es-419&gl=US&ceid=US:es-419',
+    ),
+    NewsSource(
+      name: 'Google News • Motor',
+      category: 'Motor',
+      url:
+          'https://news.google.com/rss/search?q=Formula+1+F1&hl=es-419&gl=US&ceid=US:es-419',
+    ),
+    NewsSource(
+      name: 'Google News • Béisbol',
+      category: 'Otros',
+      url:
+          'https://news.google.com/rss/search?q=beisbol+MLB&hl=es-419&gl=US&ceid=US:es-419',
+    ),
+    NewsSource(
+      name: 'Yahoo Sports',
+      category: 'Otros',
+      url: 'https://sports.yahoo.com/rss/',
+    ),
+    NewsSource(
+      name: 'The Athletic',
+      category: 'Otros',
+      url: 'https://www.nytimes.com/athletic/rss/news/',
+    ),
+    NewsSource(
+      name: 'CBS Sports',
+      category: 'Otros',
+      url: 'https://www.cbssports.com/rss/headlines/',
+    ),
+    NewsSource(
+      name: 'Fórmula 1 • Oficial',
+      category: 'Motor',
+      url: 'https://www.formula1.com/en/latest/all.xml',
+    ),
+    NewsSource(
+      name: 'Google News • ESPN Fútbol',
+      category: 'Fútbol',
+      url:
+          'https://news.google.com/rss/search?q=when:7d+site:espn.com/soccer&hl=es-419&gl=US&ceid=US:es-419',
+    ),
+    NewsSource(
+      name: 'Google News • ESPN NBA',
+      category: 'Baloncesto',
+      url:
+          'https://news.google.com/rss/search?q=when:7d+site:espn.com/nba&hl=es-419&gl=US&ceid=US:es-419',
+    ),
   ];
 
   static Future<List<NewsStory>> load() async {
@@ -166,7 +223,7 @@ class NewsRepository {
             'Accept': 'application/rss+xml, application/xml, text/xml, */*',
           },
         )
-        .timeout(const Duration(seconds: 15));
+        .timeout(const Duration(seconds: 10));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('HTTP ${response.statusCode}');
@@ -394,6 +451,105 @@ class _NewsScreenState extends State<NewsScreen> {
       ),
       body: Column(
         children: <Widget>[
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 10, 12, 5),
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: <Color>[
+                  Color(0xFF073B70),
+                  Color(0xFF111A42),
+                  Color(0xFF35134B),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _newsCyan.withAlpha(135)),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: _newsBlue.withAlpha(55),
+                  blurRadius: 18,
+                  offset: const Offset(0, 7),
+                ),
+                BoxShadow(
+                  color: _newsPink.withAlpha(24),
+                  blurRadius: 12,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: <Widget>[
+                Container(
+                  width: 43,
+                  height: 43,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(15),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(color: _newsCyan.withAlpha(150)),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: _newsCyan.withAlpha(45),
+                        blurRadius: 12,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.sports_soccer_rounded,
+                    color: _newsCyan,
+                    size: 27,
+                  ),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        appText(
+                          'EL DEPORTE EN PRIMER PLANO',
+                          'SPORTS IN THE SPOTLIGHT',
+                          'O ESPORTE EM DESTAQUE',
+                          'LE SPORT À LA UNE',
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 11,
+                          letterSpacing: .35,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        appText(
+                          'Noticias de fútbol, NBA, tenis, motor y más',
+                          'Football, NBA, tennis, motorsport and more',
+                          'Futebol, NBA, tênis, automobilismo e mais',
+                          'Football, NBA, tennis, sport automobile et plus',
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: _newsMuted,
+                          fontSize: 10,
+                          height: 1.25,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Icon(
+                  Icons.bolt_rounded,
+                  color: _newsPink,
+                  size: 26,
+                ),
+              ],
+            ),
+          ),
           SizedBox(
             height: 46,
             child: ListView.separated(
@@ -634,6 +790,8 @@ class _NewsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       color: _newsPanel,
+      elevation: 9,
+      shadowColor: _newsCyan.withAlpha(48),
       margin: const EdgeInsets.only(bottom: 15),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
@@ -651,6 +809,10 @@ class _NewsCard extends StatelessWidget {
                 child: Image.network(
                   story.imageUrl!,
                   fit: BoxFit.cover,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return _imagePlaceholder();
+                  },
                   errorBuilder: (_, __, ___) => _imagePlaceholder(),
                 ),
               )
@@ -774,6 +936,72 @@ class _NewsArticleReaderState extends State<NewsArticleReader> {
   bool _allowPop = false;
   bool _handlingBack = false;
   double _progress = 0;
+  String? _loadError;
+  int _webViewGeneration = 0;
+
+  void _retryArticle() {
+    setState(() {
+      _webViewGeneration++;
+      _loading = true;
+      _progress = 0;
+      _loadError = null;
+      _controller = null;
+    });
+  }
+
+  Future<void> _openOriginalArticle() async {
+    final uri = Uri.tryParse(widget.story.link);
+    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return;
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir el artículo en el navegador.')),
+      );
+    }
+  }
+
+  Widget _articleErrorPanel() {
+    return ColoredBox(
+      color: _newsBg,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Icon(Icons.article_outlined, color: _newsPink, size: 46),
+              const SizedBox(height: 12),
+              const Text('NO SE PUDO MOSTRAR EL ARTÍCULO',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              Text(_loadError ?? 'La página no respondió dentro del navegador integrado.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: _newsMuted, fontSize: 12, height: 1.4)),
+              const SizedBox(height: 14),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  OutlinedButton.icon(
+                    onPressed: _retryArticle,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Reintentar'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: _openOriginalArticle,
+                    icon: const Icon(Icons.open_in_browser_rounded),
+                    label: const Text('Abrir en navegador'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _back() async {
     if (_handlingBack) return;
@@ -858,7 +1086,11 @@ class _NewsArticleReaderState extends State<NewsArticleReader> {
                 color: _newsCyan,
               ),
             Expanded(
-              child: InAppWebView(
+              child: Stack(
+                fit: StackFit.expand,
+                children: <Widget>[
+                  InAppWebView(
+                key: ValueKey<int>(_webViewGeneration),
                 initialUrlRequest: URLRequest(
                   url: WebUri(widget.story.link),
                 ),
@@ -886,6 +1118,7 @@ class _NewsArticleReaderState extends State<NewsArticleReader> {
                   setState(() {
                     _loading = true;
                     _progress = 0;
+                    _loadError = null;
                   });
                 },
                 onProgressChanged: (controller, progress) {
@@ -916,8 +1149,35 @@ class _NewsArticleReaderState extends State<NewsArticleReader> {
                 shouldInterceptRequest: (controller, request) async => WebProtectionPolicy.intercept(request),
                 onReceivedError: (controller, request, error) {
                   if (!(request.isForMainFrame ?? true) || !mounted) return;
-                  setState(() => _loading = false);
+                  setState(() {
+                    _loading = false;
+                    _loadError =
+                        'El medio no pudo cargar esta página (código ${error.type}).';
+                  });
                 },
+                onReceivedHttpError: (controller, request, response) {
+                  if (!(request.isForMainFrame ?? true) || !mounted) return;
+                  final status = response.statusCode ?? 0;
+                  if (status >= 400) {
+                    setState(() {
+                      _loading = false;
+                      _loadError = 'El sitio del medio respondió HTTP $status.';
+                    });
+                  }
+                },
+                androidOnRenderProcessGone: (controller, detail) {
+                  if (!mounted) return;
+                  _controller = null;
+                  setState(() {
+                    _loading = false;
+                    _loadError =
+                        'Android cerró el navegador de esta página. Reintenta para abrirlo de nuevo.';
+                  });
+                },
+                  ),
+                  if (_loadError != null)
+                    Positioned.fill(child: _articleErrorPanel()),
+                ],
               ),
             ),
           ],

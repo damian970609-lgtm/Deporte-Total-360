@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import 'sports_api_service.dart';
+import 'channel_catalog_service.dart';
 import 'notification_service.dart';
 import 'app_i18n.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,15 +23,16 @@ const Color agendaMuted = Color(0xFFA9BDD6);
 enum MatchStatus { live, scheduled, finished }
 
 class MatchStreamSource {
-  const MatchStreamSource({required this.name, required this.url});
+  const MatchStreamSource({required this.name, required this.url, this.httpHeaders = const <String, String>{}});
 
   final String name;
   final String url;
+  final Map<String, String> httpHeaders;
 
   Uri? get validatedUri {
     final uri = Uri.tryParse(url.trim());
     if (uri == null || !uri.hasAuthority || uri.host.isEmpty) return null;
-    if (uri.scheme != 'https' && uri.scheme != 'http') return null;
+    if ((uri.scheme != 'https' && uri.scheme != 'http') || uri.userInfo.isNotEmpty) return null;
     return uri;
   }
 }
@@ -72,6 +74,24 @@ class MatchEvent {
 
   bool get hasValidStream =>
       streamSources.any((source) => source.validatedUri != null);
+
+  MatchEvent copyWith({List<MatchStreamSource>? streamSources}) => MatchEvent(
+        id: id,
+        sport: sport,
+        competition: competition,
+        homeTeam: homeTeam,
+        awayTeam: awayTeam,
+        startsAt: startsAt,
+        status: status,
+        homeScore: homeScore,
+        awayScore: awayScore,
+        streamSources: streamSources ?? this.streamSources,
+        sourceName: sourceName,
+        homeLogoUrl: homeLogoUrl,
+        awayLogoUrl: awayLogoUrl,
+        leagueId: leagueId,
+        sportId: sportId,
+      );
 }
 
 /// Agenda nativa para la sección Fútbol y los mosaicos deportivos.
@@ -80,11 +100,23 @@ class AgendaScreen extends StatefulWidget {
   const AgendaScreen({
     super.key,
     this.initialSport = 'Todos',
+    this.initialStatus = 'Todos',
     this.matches = const <MatchEvent>[],
+    this.onOpenPersonalChannel,
+    this.onOpenEncoder,
+    this.onOpenWebAgenda,
+    this.onOpenMultiView,
+    this.onOpenChannelCatalog,
   });
 
   final String initialSport;
+  final String initialStatus;
   final List<MatchEvent> matches;
+  final VoidCallback? onOpenPersonalChannel;
+  final VoidCallback? onOpenEncoder;
+  final VoidCallback? onOpenWebAgenda;
+  final ValueChanged<List<MatchEvent>>? onOpenMultiView;
+  final VoidCallback? onOpenChannelCatalog;
 
   @override
   State<AgendaScreen> createState() => _AgendaScreenState();
@@ -166,6 +198,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
   String? _apiWarning;
   String? _apiProgress;
   int _apiRequestVersion = 0;
+  DateTime? _lastRefreshAt;
   Timer? _scorePollingTimer;
 
   @override
@@ -177,21 +210,31 @@ class _AgendaScreenState extends State<AgendaScreen> {
     if (_sport != 'Todos' && _sport != 'Fútbol') {
       _dateFilter = 'Hoy';
     }
+    _statusFilter = _statuses.contains(widget.initialStatus)
+        ? widget.initialStatus
+        : 'Todos';
     _apiConfigurationListener = _onApiConfigurationChanged;
     sportsApiBaseUrl.addListener(_apiConfigurationListener);
     if (sportsApiBaseUrl.value.trim().isNotEmpty) {
       _loadRemoteMatches();
     }
     _scorePollingTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      // No sondear el resumen de todos los deportes continuamente: las
-      // alertas de marcador se consultan para el deporte que el usuario ve.
+      // La lista En Vivo se refresca cada minuto. La agenda general se
+      // refresca cada cinco minutos para no consultar todas las ligas
+      // repetidamente mientras el usuario solo está revisando horarios.
+      final liveMode =
+          widget.initialStatus == 'En vivo' || _statusFilter == 'En vivo';
+      final refreshInterval = liveMode
+          ? const Duration(minutes: 1)
+          : const Duration(minutes: 5);
+      final lastRefresh = _lastRefreshAt;
       if (!mounted ||
-          _sport == 'Todos' ||
-          (_dateFilter != 'Hoy' && _dateFilter != 'Todos') ||
-          _loadingApi) {
+          _loadingApi ||
+          (lastRefresh != null &&
+              DateTime.now().difference(lastRefresh) < refreshInterval)) {
         return;
       }
-      _loadRemoteMatches(announceScoreChanges: true);
+      _loadRemoteMatches(announceScoreChanges: liveMode);
     });
   }
 
@@ -223,6 +266,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
   Future<void> _loadRemoteMatches({bool announceScoreChanges = false}) async {
     if (sportsApiBaseUrl.value.trim().isEmpty) return;
     final requestVersion = ++_apiRequestVersion;
+    _lastRefreshAt = DateTime.now();
     if (mounted) {
       setState(() {
         _loadingApi = true;
@@ -285,12 +329,46 @@ class _AgendaScreenState extends State<AgendaScreen> {
               ))
           .whereType<MatchEvent>()
           .toList(growable: false);
+
+      // Optional catalogue failures must never hide valid sports fixtures.
+      var catalogueMatches = const <String, List<ChannelMatchSuggestion>>{};
+      try {
+        catalogueMatches = await ChannelCatalogService.instance.findMatchesForEvents(
+          matches.map((event) => ChannelMatchQuery(
+            id: event.id,
+            sport: event.sport,
+            homeTeam: event.homeTeam,
+            awayTeam: event.awayTeam,
+            competition: event.competition,
+            startsAt: event.startsAt,
+          )).toList(growable: false),
+        );
+      } catch (_) {
+        catalogueMatches = const <String, List<ChannelMatchSuggestion>>{};
+      }
+      final enrichedMatches = matches.map((event) {
+        final merged = <MatchStreamSource>[
+          ...event.streamSources,
+          ...(catalogueMatches[event.id] ?? const <ChannelMatchSuggestion>[])
+              .map((suggestion) => MatchStreamSource(
+                    name: suggestion.channelName,
+                    url: suggestion.url,
+                    httpHeaders: suggestion.httpHeaders,
+                  )),
+        ];
+        final seen = <String>{};
+        return event.copyWith(
+          streamSources: merged.where((source) =>
+              source.validatedUri != null && seen.add(source.url)).toList(growable: false),
+        );
+      }).toList(growable: false);
+
       if (!mounted || requestVersion != _apiRequestVersion) return;
       final previousById = <String, MatchEvent>{
         for (final previous in _remoteMatches) previous.id: previous,
       };
       final scoreChanges = announceScoreChanges
-          ? matches.where((current) {
+          ? enrichedMatches.where((current) {
               final previous = previousById[current.id];
               return previous != null &&
                   current.status == MatchStatus.live &&
@@ -300,7 +378,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
             }).toList(growable: false)
           : const <MatchEvent>[];
       setState(() {
-        _remoteMatches = matches;
+        _remoteMatches = enrichedMatches;
         _loadingApi = false;
         _apiError = matches.isEmpty ? warning : null;
         _apiWarning = matches.isEmpty ? null : warning;
@@ -317,7 +395,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
         );
       }
       if (!announceScoreChanges) {
-        await _updateMatchNotifications(matches);
+        await _updateMatchNotifications(enrichedMatches);
       }
     } catch (error) {
       if (!mounted || requestVersion != _apiRequestVersion) return;
@@ -510,8 +588,67 @@ class _AgendaScreenState extends State<AgendaScreen> {
       row['goals'] ?? row['scores'] ?? game['scores'],
     );
 
-    final eventId =
-        fixture['id'] ?? game['id'] ?? row['id'];
+    final eventId = fixture['id'] ?? game['id'] ?? row['id'];
+    final rawSources = row['streamSources'] ??
+        row['stream_sources'] ??
+        row['streams'] ??
+        row['broadcasts'];
+    final sourceRows = rawSources is List
+        ? rawSources
+        : rawSources is Map
+            ? <dynamic>[rawSources]
+            : const <dynamic>[];
+    final streamSources = <MatchStreamSource>[];
+    for (var index = 0; index < sourceRows.length; index++) {
+      final value = sourceRows[index];
+      if (value is String) {
+        streamSources.add(MatchStreamSource(name: 'Fuente ${index + 1}', url: value));
+      } else if (value is Map) {
+        final source = Map<String, dynamic>.from(value);
+        final url = source['url'] ??
+            source['stream_url'] ??
+            source['video_url'] ??
+            source['src'];
+        if (url is String && url.trim().isNotEmpty) {
+          final headers = <String, String>{};
+          final rawHeaders = source['headers'];
+          if (rawHeaders is Map) {
+            for (final entry in rawHeaders.entries) {
+              final key = entry.key.toString().toLowerCase().trim();
+              final value = entry.value.toString().trim();
+              if (value.isEmpty || value.contains('\r') || value.contains('\n')) continue;
+              if (key == 'user-agent' && value.length <= 256) {
+                headers['User-Agent'] = value;
+              } else if (key == 'referer' && value.length <= 2048) {
+                final referer = Uri.tryParse(value);
+                if (referer != null && referer.scheme == 'https' &&
+                    referer.host.isNotEmpty && referer.userInfo.isEmpty) {
+                  headers['Referer'] = referer.toString();
+                }
+              }
+            }
+          }
+          final userAgent = source['user_agent']?.toString().trim() ?? '';
+          if (userAgent.isNotEmpty && userAgent.length <= 256 &&
+              !userAgent.contains('\r') && !userAgent.contains('\n')) {
+            headers['User-Agent'] = userAgent;
+          }
+          final refererText = source['referer']?.toString().trim() ?? '';
+          if (refererText.isNotEmpty && refererText.length <= 2048) {
+            final referer = Uri.tryParse(refererText);
+            if (referer != null && referer.scheme == 'https' &&
+                referer.host.isNotEmpty && referer.userInfo.isEmpty) {
+              headers['Referer'] = referer.toString();
+            }
+          }
+          streamSources.add(MatchStreamSource(
+            name: (source['name'] ?? source['label'] ?? 'Fuente ${index + 1}').toString(),
+            url: url.trim(),
+            httpHeaders: Map<String, String>.unmodifiable(headers),
+          ));
+        }
+      }
+    }
 
     return MatchEvent(
       id: '${eventId ?? '${homeName}_$awayName'}',
@@ -536,6 +673,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
         'Fútbol australiano': 'afl', 'Fórmula 1': 'formula-1', 'MMA': 'mma',
       }[sport] ?? sport.toLowerCase(),
       status: matchStatus,
+      streamSources: streamSources,
       homeScore: asScore(scores['home'] ?? home['score']),
       awayScore: asScore(scores['away'] ?? away['score']),
       sourceName: 'API-Sports',
@@ -587,6 +725,37 @@ class _AgendaScreenState extends State<AgendaScreen> {
                   foregroundColor: agendaCyan,
                   side: const BorderSide(color: agendaCyan),
                 ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (widget.initialStatus == 'En vivo') {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(26),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Icon(Icons.sports_score_rounded, color: agendaGreen, size: 48),
+              const SizedBox(height: 12),
+              Text(
+                appText('No hay partidos en vivo ahora mismo', 'No matches are live right now', 'Não há partidas ao vivo neste momento', 'Aucun match en direct pour le moment'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                appText('Seguimos revisando los marcadores y retiraremos cada evento cuando termine.', 'We keep checking scores and remove each event when it ends.', 'Continuamos verificando os placares e retiraremos cada evento quando terminar.', 'Nous continuons de vérifier les scores et retirerons chaque événement à sa fin.'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: agendaMuted, fontSize: 11, height: 1.45),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _loadRemoteMatches,
+                icon: const Icon(Icons.refresh_rounded),
+                label: Text(appText('Comprobar ahora', 'Check now', 'Verificar agora', 'Vérifier maintenant')),
               ),
             ],
           ),
@@ -669,7 +838,9 @@ class _AgendaScreenState extends State<AgendaScreen> {
             SizedBox(width: 9),
             Expanded(
               child: Text(
-                tr('matches'),
+                widget.initialStatus == 'En vivo'
+                    ? appText('PARTIDOS EN VIVO', 'LIVE MATCHES', 'JOGOS AO VIVO', 'MATCHS EN DIRECT')
+                    : tr('matches'),
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 14,
@@ -680,6 +851,38 @@ class _AgendaScreenState extends State<AgendaScreen> {
           ],
         ),
         actions: <Widget>[
+          if (widget.onOpenWebAgenda != null)
+            IconButton(
+              tooltip: appText(
+                'Abrir Fútbol Libre dentro de la app',
+                'Open Fútbol Libre inside the app',
+                'Abrir Fútbol Libre dentro do app',
+                'Ouvrir Fútbol Libre dans l’application',
+              ),
+              onPressed: widget.onOpenWebAgenda,
+              icon: const Icon(Icons.public_rounded, color: agendaGreen),
+            ),
+          if (widget.onOpenMultiView != null)
+            IconButton(
+              tooltip: appText('Abrir partidos con señal en multipantalla', 'Open available matches in multiview', 'Abrir partidas disponíveis em várias telas', 'Ouvrir les matchs disponibles en multivue'),
+              onPressed: () {
+                final playable = events.where((event) => event.status != MatchStatus.finished && event.hasValidStream).toList(growable: false);
+                if (playable.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('No hay señales autorizadas asociadas a los partidos visibles.')),
+                  );
+                  return;
+                }
+                widget.onOpenMultiView!(playable);
+              },
+              icon: const Icon(Icons.grid_view_rounded, color: agendaPink),
+            ),
+          if (widget.onOpenChannelCatalog != null)
+            IconButton(
+              tooltip: 'Configurar lista M3U y guía EPG',
+              onPressed: widget.onOpenChannelCatalog,
+              icon: const Icon(Icons.playlist_add_check_rounded, color: agendaCyan),
+            ),
           IconButton(
             tooltip: tr('stats_title'),
             onPressed: () => Navigator.of(context).push<void>(
@@ -687,9 +890,21 @@ class _AgendaScreenState extends State<AgendaScreen> {
             ),
             icon: const Icon(Icons.leaderboard_rounded, color: agendaCyan),
           ),
+          if (widget.onOpenPersonalChannel != null)
+            IconButton(
+              tooltip: appText('Abrir mi canal SSH101', 'Open my SSH101 channel', 'Abrir meu canal SSH101', 'Ouvrir ma chaîne SSH101'),
+              onPressed: widget.onOpenPersonalChannel,
+              icon: const Icon(Icons.play_circle_fill_rounded, color: agendaGreen),
+            ),
+          if (widget.onOpenEncoder != null)
+            IconButton(
+              tooltip: appText('Configurar mi transmisión', 'Configure my stream', 'Configurar minha transmissão', 'Configurer ma diffusion'),
+              onPressed: widget.onOpenEncoder,
+              icon: const Icon(Icons.settings_input_antenna_rounded, color: agendaPink),
+            ),
           IconButton(
-            tooltip: appText('Limpiar búsqueda', 'Clear search', 'Limpar busca', 'Effacer la recherche'),
-            onPressed: _clearFilters,
+            tooltip: appText('Actualizar partidos', 'Refresh matches', 'Atualizar partidas', 'Actualiser les matchs'),
+            onPressed: _loadRemoteMatches,
             icon: const Icon(Icons.refresh_rounded, color: agendaCyan),
           ),
         ],
@@ -840,7 +1055,12 @@ class _AgendaScreenState extends State<AgendaScreen> {
                         value == 'En vivo' ? agendaRed : agendaGreen;
                     return InkWell(
                       borderRadius: BorderRadius.circular(9),
-                      onTap: () => setState(() => _statusFilter = value),
+                      onTap: () {
+                        setState(() => _statusFilter = value);
+                        if (value == 'En vivo') {
+                          _loadRemoteMatches(announceScoreChanges: true);
+                        }
+                      },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -918,6 +1138,27 @@ class _AgendaScreenState extends State<AgendaScreen> {
                         ),
                       ],
                     ),
+                  ),
+                ),
+              if (widget.initialStatus == 'En vivo')
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+                  child: Row(
+                    children: <Widget>[
+                      const Icon(Icons.autorenew_rounded, color: agendaGreen, size: 15),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          appText(
+                            'Actualización automática cada minuto · los partidos finalizados se retiran.',
+                            'Auto-refresh every minute · finished matches are removed.',
+                            'Atualização automática a cada minuto · partidas finalizadas são removidas.',
+                            'Actualisation automatique chaque minute · les matchs terminés sont retirés.',
+                          ),
+                          style: const TextStyle(color: agendaMuted, fontSize: 9),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               Padding(
@@ -1547,7 +1788,7 @@ class _AgendaVideoPlayerScreenState extends State<AgendaVideoPlayerScreen> {
     _controller = null;
     await oldController?.dispose();
 
-    final controller = VideoPlayerController.networkUrl(uri);
+    final controller = VideoPlayerController.networkUrl(uri, httpHeaders: widget.source.httpHeaders);
     _controller = controller;
     try {
       await controller.initialize();

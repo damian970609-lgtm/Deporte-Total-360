@@ -112,6 +112,28 @@ void main() {
       );
     });
 
+    test('normaliza Voleibol y NFL a rutas canónicas del Worker', () async {
+      sportsApiBaseUrl.value = 'https://worker.example';
+      final paths = <String>[];
+      SportsApiService.clientOverride = MockClient((request) async {
+        paths.add(request.url.path);
+        return http.Response(jsonEncode(<String, dynamic>{
+          'response': <dynamic>[],
+          'errors': <String, dynamic>{},
+        }), 200);
+      });
+      await SportsApiService().fetchLeagues(sport: 'Voleibol', search: 'liga');
+      SportsApiService.resetForTesting();
+      await SportsApiService().fetchLeagues(
+        sport: 'Fútbol americano / NFL',
+        search: 'NFL',
+      );
+      expect(paths, <String>[
+        '/api/volleyball/leagues',
+        '/api/american-football/leagues',
+      ]);
+    });
+
     test('normaliza HTTPS y elimina barras finales', () {
       expect(
         SportsApiService.normalizeBaseUrl('  https://example.com/api///  '),

@@ -345,7 +345,12 @@ class SportsApiService {
   };
 
   String _resourceRoute(String sport, String resource) {
-    final sportId = supportedSports[sport];
+    final normalizedSport = sport == 'Voleibol'
+        ? 'Vóley'
+        : sport == 'Fútbol americano / NFL'
+            ? 'Fútbol americano'
+            : sport;
+    final sportId = supportedSports[normalizedSport];
     if (sportId == null) {
       throw SportsApiException(sport + ' no tiene un recurso de ' + resource + ' disponible.');
     }

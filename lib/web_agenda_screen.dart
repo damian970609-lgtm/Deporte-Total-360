@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
@@ -13,6 +15,25 @@ const Color _brandGreen = Color(0xFF39FF9C);
 const Color _brandMuted = Color(0xFFA9BDD6);
 const Color _brandRed = Color(0xFFFF3155);
 
+class _FutbolLibreChannel {
+  const _FutbolLibreChannel(this.name, this.slug);
+
+  final String name;
+  final String slug;
+}
+
+// Son las páginas de canal anunciadas públicamente en la portada de Fútbol Libre.
+// Se abre la página publicada por el sitio; no se extraen ni se sustituyen sus señales.
+const List<_FutbolLibreChannel> _futbolLibreChannels = <_FutbolLibreChannel>[
+  _FutbolLibreChannel('ESPN', 'espn'),
+  _FutbolLibreChannel('ESPN 2', 'espn-2'),
+  _FutbolLibreChannel('DSports', 'dsports'),
+  _FutbolLibreChannel('DSports 2', 'dsports-2'),
+  _FutbolLibreChannel('TyC Sports', 'tyc-sports'),
+  _FutbolLibreChannel('FOX Sports', 'fox-sports'),
+  _FutbolLibreChannel('Liga 1 MAX', 'liga-1-max'),
+];
+
 /// Web de agenda dentro de la identidad visual de Deporte Total 360°.
 /// El contenido de la web y sus reproductores siguen perteneciendo al proveedor.
 class WebAgendaScreen extends StatefulWidget {
@@ -22,6 +43,15 @@ class WebAgendaScreen extends StatefulWidget {
   final VoidCallback onOpenLive;
 
   static const String initialUrl = 'https://futbol-libre.cam/';
+
+  static bool isAgendaPageUrl(String value) {
+    final uri = Uri.tryParse(value);
+    if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) {
+      return false;
+    }
+    final host = uri.host.toLowerCase();
+    return host == 'futbol-libre.cam' || host == 'www.futbol-libre.cam';
+  }
 
   @override
   State<WebAgendaScreen> createState() => WebAgendaScreenState();
@@ -36,12 +66,113 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
   bool _blockKnownTrackers = true;
   String? _errorMessage;
   String? _noticeMessage;
+  int _webViewGeneration = 0;
+  Timer? _loadTimeoutTimer;
+
+  void _armLoadTimeout() {
+    _loadTimeoutTimer?.cancel();
+    _loadTimeoutTimer = Timer(const Duration(seconds: 35), () {
+      if (!mounted || !_loading) return;
+      _controller = null;
+      setState(() {
+        _loading = false;
+        _errorMessage =
+            'La página tardó más de 35 segundos en responder. Puedes reintentar o desactivar temporalmente la protección web y recargar.';
+      });
+    });
+  }
+
+  Future<void> _checkForBlankPage(InAppWebViewController controller) async {
+    await Future<void>.delayed(const Duration(seconds: 7));
+    if (!mounted ||
+        !identical(_controller, controller) ||
+        _loading ||
+        _errorMessage != null) {
+      return;
+    }
+    try {
+      final visible = await controller.evaluateJavascript(source: r'''
+        (() => {
+          const body = document.body;
+          if (!body) return false;
+          const text = (body.innerText || '').trim();
+          const media = body.querySelector(
+            'main,iframe,video,audio,canvas,img,svg,[role="main"],#root > *,#app > *'
+          );
+          return text.length > 12 || media !== null;
+        })()
+      ''');
+      final result = visible?.toString().toLowerCase();
+      if (visible == false || result == 'false' || result == '0') {
+        if (!mounted) return;
+        _controller = null;
+        setState(() {
+          _errorMessage =
+              'El sitio respondió, pero no dibujó contenido. Prueba Recargar; si persiste, desactiva la protección web o abre la página en Chrome. Puede ser un bloqueo del sitio o de la red.';
+        });
+      }
+    } catch (_) {
+      // Algunas páginas aíslan el DOM; no se declara un fallo por esto.
+    }
+  }
+
+  @override
+  void dispose() {
+    _loadTimeoutTimer?.cancel();
+    super.dispose();
+  }
 
   List<ContentBlocker> _buildContentBlockers() => WebProtectionPolicy.buildContentBlockers();
 
   bool _isHttpUrl(WebUri uri) {
     final scheme = uri.scheme.toLowerCase();
     return (scheme == 'https' || scheme == 'http') && uri.host.isNotEmpty;
+  }
+
+  Future<void> _openFutbolLibrePage(String path) async {
+    final controller = _controller;
+    if (controller == null) return;
+
+    final target = Uri.parse(WebAgendaScreen.initialUrl).resolve(path);
+    setState(() {
+      _loading = true;
+      _progress = 0;
+      _errorMessage = null;
+      _noticeMessage = null;
+    });
+    _armLoadTimeout();
+
+    try {
+      await controller.loadUrl(
+        urlRequest: URLRequest(url: WebUri(target.toString())),
+      );
+      await _refreshNavigationState();
+    } catch (_) {
+      _controller = null;
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _errorMessage = 'No se pudo abrir la página solicitada de Fútbol Libre.';
+      });
+    }
+  }
+
+  Widget _quickChannelButton(String label, String path) {
+    return OutlinedButton(
+      onPressed: () => _openFutbolLibrePage(path),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: _brandCyan,
+        side: BorderSide(color: _brandCyan.withAlpha(130)),
+        backgroundColor: const Color(0xFF071326),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        minimumSize: const Size(0, 34),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
+      ),
+    );
   }
 
   void _showNotice(String message) {
@@ -163,7 +294,15 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
 
   Future<void> _reload() async {
     final controller = _controller;
-    if (controller == null) return;
+    if (controller == null) {
+      setState(() {
+        _webViewGeneration++;
+        _loading = true;
+        _progress = 0;
+        _errorMessage = null;
+      });
+      return;
+    }
 
     setState(() {
       _loading = true;
@@ -172,9 +311,12 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
       _noticeMessage = null;
     });
 
+    _armLoadTimeout();
     try {
       await controller.reload();
     } catch (_) {
+      _loadTimeoutTimer?.cancel();
+      _controller = null;
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -216,7 +358,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
     final target = action.request.url;
 
     if (target == null || !_isHttpUrl(target)) {
-      _showNotice('Se bloqueó una ventana con una dirección no compatible.');
+      _showNotice('Se bloqueó una ventana que no usa una dirección web segura.');
       return false;
     }
 
@@ -227,9 +369,17 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
       return false;
     }
 
-    // Algunos reproductores usan target="_blank" o window.open.
-    // Cargamos el destino HTTP/HTTPS en ESTA vista, no en otra ventana.
-    // Así el usuario conserva el marco de la app y puede retroceder.
+    // Los enlaces de canales pueden abrir una página del proveedor de vídeo.
+    // Se aceptan solo cuando nacen de una interacción del usuario o de una
+    // redirección de esa navegación; los pop-ups automáticos siguen bloqueados.
+    if (!WebAgendaScreen.isAgendaPageUrl(target.toString()) &&
+        action.hasGesture != true &&
+        action.isRedirect != true) {
+      _showNotice('Se bloqueó una ventana externa que no procede de un toque del usuario.');
+      return false;
+    }
+
+    // Carga la página dentro de este WebView, sin abrir ventanas adicionales.
     try {
       await controller.loadUrl(urlRequest: action.request);
       return false;
@@ -368,6 +518,26 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 ),
               ),
             ),
+          SizedBox(
+            height: 46,
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              scrollDirection: Axis.horizontal,
+              children: <Widget>[
+                _quickChannelButton('AGENDA', '/'),
+                const SizedBox(width: 7),
+                ..._futbolLibreChannels.map(
+                  (channel) => Padding(
+                    padding: const EdgeInsets.only(right: 7),
+                    child: _quickChannelButton(
+                      channel.name,
+                      '/canal/${channel.slug}',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           if (_loading)
             LinearProgressIndicator(
               value: _progress == 0 ? null : _progress,
@@ -393,6 +563,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
               child: _errorMessage != null
                   ? _errorPanel()
                   : InAppWebView(
+                      key: ValueKey<int>(_webViewGeneration),
                       initialUrlRequest: URLRequest(
                         url: WebUri(WebAgendaScreen.initialUrl),
                       ),
@@ -402,8 +573,11 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         databaseEnabled: true,
                         thirdPartyCookiesEnabled: true,
                         useShouldOverrideUrlLoading: true,
+                        // Se mantiene el evento de ventanas nuevas para
+                        // interceptar enlaces del sitio, pero no se permiten
+                        // pop-ups automáticos disparados por scripts.
                         supportMultipleWindows: true,
-                        javaScriptCanOpenWindowsAutomatically: true,
+                        javaScriptCanOpenWindowsAutomatically: false,
                         useShouldInterceptRequest: true,
                         mediaPlaybackRequiresUserGesture: true,
                         allowsInlineMediaPlayback: true,
@@ -411,6 +585,8 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         isElementFullscreenEnabled: true,
                         hardwareAcceleration: true,
                         safeBrowsingEnabled: true,
+                        transparentBackground: true,
+                        underPageBackgroundColor: _brandBg,
                         allowFileAccess: false,
                         allowContentAccess: true,
                         loadsImagesAutomatically: true,
@@ -432,6 +608,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                           _progress = 0;
                           _errorMessage = null;
                         });
+                        _armLoadTimeout();
                         _refreshNavigationState();
                       },
                       onProgressChanged: (controller, progress) {
@@ -442,6 +619,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         });
                       },
                       onLoadStop: (controller, url) async {
+                        _loadTimeoutTimer?.cancel();
                         if (!mounted) return;
                         setState(() {
                           _loading = false;
@@ -449,6 +627,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         });
                         await _installAdElementCleanup(controller);
                         await _refreshNavigationState();
+                        unawaited(_checkForBlankPage(controller));
                       },
                       onUpdateVisitedHistory:
                           (controller, url, androidIsReload) {
@@ -472,8 +651,17 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                           return NavigationActionPolicy.CANCEL;
                         }
 
-                        // Los dominios del reproductor pueden ser distintos
-                        // del dominio principal. Se permiten dentro de WebView.
+                        // La navegación interna de Fútbol Libre queda abierta.
+                        // Una página de reproductor externa solo se admite cuando
+                        // el usuario la abrió con un toque o continúa una redirección.
+                        if ((action.isForMainFrame ?? true) &&
+                            !WebAgendaScreen.isAgendaPageUrl(uri.toString()) &&
+                            action.hasGesture != true &&
+                            action.isRedirect != true) {
+                          _showNotice('Se bloqueó una navegación externa automática.');
+                          return NavigationActionPolicy.CANCEL;
+                        }
+
                         return NavigationActionPolicy.ALLOW;
                       },
                       onCreateWindow: _handleNewWindow,
@@ -484,10 +672,22 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         if (!(request.isForMainFrame ?? true) || !mounted) {
                           return;
                         }
+                        _loadTimeoutTimer?.cancel();
+                        _controller = null;
                         setState(() {
                           _loading = false;
                           _errorMessage =
                               'No se pudo cargar esta página. Comprueba la conexión y pulsa Recargar. Código: ${error.type}';
+                        });
+                      },
+                      androidOnRenderProcessGone: (controller, detail) {
+                        if (!mounted) return;
+                        _loadTimeoutTimer?.cancel();
+                        _controller = null;
+                        setState(() {
+                          _loading = false;
+                          _errorMessage =
+                              'Android cerró el navegador integrado. Pulsa Recargar para crear un WebView nuevo.';
                         });
                       },
                       onReceivedHttpError: (controller, request, response) {
@@ -496,6 +696,8 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         }
                         final statusCode = response.statusCode ?? 0;
                         if (statusCode >= 400) {
+                          _loadTimeoutTimer?.cancel();
+                          _controller = null;
                           setState(() {
                             _loading = false;
                             _errorMessage =

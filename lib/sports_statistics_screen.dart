@@ -56,6 +56,22 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
   String? _error;
   String _resultHeading = '';
 
+  String _defaultSearchForSport(String sportId) {
+    switch (sportId) {
+      case 'football': return 'Premier League';
+      case 'basketball': return 'EuroLeague';
+      case 'nba': return 'NBA';
+      case 'baseball': return 'MLB';
+      case 'american-football': return 'NFL';
+      case 'hockey': return 'NHL';
+      case 'handball': return 'Champions League';
+      case 'rugby': return 'Rugby';
+      case 'volleyball': return 'Volleyball';
+      case 'afl': return 'AFL';
+      default: return '';
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -63,6 +79,10 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
         (_sports.any((item) => item.id == widget.initialSport)
             ? widget.initialSport
             : 'football');
+    _searchController.text = _defaultSearchForSport(_sportId);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _search();
+    });
   }
 
   _SportOption get _sport => _sports.firstWhere(
@@ -144,7 +164,10 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
     setState(() {
       _sportId = value;
       _resetResults();
-      _searchController.clear();
+      _searchController.text = _defaultSearchForSport(value);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _search();
     });
   }
 
@@ -184,6 +207,7 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
               'Aucune ligue trouvée pour ce nom.');
         }
       });
+      if (rows.isNotEmpty && mounted) _selectLeague(rows.first);
     } catch (error) {
       if (!mounted) return;
       setState(() {
