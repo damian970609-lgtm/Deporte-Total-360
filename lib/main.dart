@@ -2048,7 +2048,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                   ]),
                   const SizedBox(height: 8),
                   const Text(
-                    'La lista y la guía se usan para buscar una señal por partido. La agenda continúa llegando de Fútbol Libre. Se preparan los eventos 10 minutos antes y se muestran partidos simultáneos en cuadros separados.',
+                    'Fuentes deportivas internacionales de distintas regiones (no limitadas a Guyana). La agenda de Fútbol Libre permanece en la pestaña Agenda; esta configuración solo alimenta Transmisiones en vivo. Se elige una sola señal verificada por evento y los eventos simultáneos se abren en cuadros separados del mismo reproductor.',
                     style: TextStyle(color: appMuted, fontSize: 11, height: 1.45),
                   ),
                   const SizedBox(height: 12),
@@ -2058,8 +2058,8 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                     autocorrect: false,
                     enableSuggestions: false,
                     decoration: const InputDecoration(
-                      labelText: 'URL de lista M3U/M3U8',
-                      hintText: 'https://proveedor-autorizado/lista.m3u',
+                      labelText: 'URLs de listas M3U (una por línea)',
+                      hintText: 'Se cargan dos listas deportivas internacionales por defecto',
                       prefixIcon: Icon(Icons.live_tv_rounded),
                     ),
                   ),
@@ -2070,8 +2070,8 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                     autocorrect: false,
                     enableSuggestions: false,
                     decoration: const InputDecoration(
-                      labelText: 'URL de guía EPG XMLTV',
-                      hintText: 'https://proveedor-autorizado/guide.xml',
+                      labelText: 'URL de guía EPG XMLTV internacional',
+                      hintText: 'Se carga la guía global por defecto',
                       prefixIcon: Icon(Icons.calendar_month_rounded),
                     ),
                   ),
