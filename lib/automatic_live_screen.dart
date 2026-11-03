@@ -350,7 +350,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
               for (final item in _scheduled) _eventCard(item),
             ],
             const SizedBox(height: 10),
-            Text('Actualizado ${_time(_updatedAt)} · se revisa cada 45 segundos mientras esta sección está abierta.',
+            Text('Actualizado ${_time(_updatedAt)} · se revisa cada 45 segundos mientras la APK permanece abierta.',
               textAlign: TextAlign.center, style: const TextStyle(color: _autoMuted, fontSize: 9)),
             const SizedBox(height: 10),
             const Text('La pestaña Agenda de Fútbol Libre se usa solo como calendario. Las señales se buscan en fuentes M3U independientes y se contrastan con varias EPG; una comprobación HTTP no garantiza reproducción continua ni derechos en todas las regiones. Ningún catálogo externo puede garantizar una transmisión permanente.',
