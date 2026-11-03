@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'agenda_screen.dart';
 import 'fantasy_screen.dart';
 import 'live_channels_screen.dart';
 import 'news_screen.dart';
@@ -183,18 +182,7 @@ class _MainShellState extends State<MainShell> {
   void _openStatistics() => _selectTab(_statisticsTab);
 
   void _openWebAgenda() {
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (routeContext) => WebAgendaScreen(
-          key: _webAgendaKey,
-          onExit: () => Navigator.of(routeContext).maybePop(),
-          onOpenLive: () {
-            Navigator.of(routeContext).pop();
-            _selectTab(_liveTab);
-          },
-        ),
-      ),
-    );
+    _selectTab(_agendaTab);
   }
 
   Future<void> _openPublicChat() async {
@@ -346,7 +334,11 @@ class _MainShellState extends State<MainShell> {
           ? LiveChannelsScreen(isActive: _selectedIndex == _liveTab)
           : const SizedBox.shrink(),
       _visitedTabs.contains(_agendaTab)
-          ? const AgendaScreen()
+          ? WebAgendaScreen(
+              key: _webAgendaKey,
+              onExit: () => _selectTab(_homeTab),
+              onOpenLive: () => _selectTab(_liveTab),
+            )
           : const SizedBox.shrink(),
       _visitedTabs.contains(_newsTab) ? const NewsScreen() : const SizedBox.shrink(),
       _visitedTabs.contains(_fantasyTab) ? const FantasyScreen() : const SizedBox.shrink(),
