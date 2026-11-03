@@ -154,55 +154,6 @@ const Map<String, Map<AppLanguage, String>> _labels =
     AppLanguage.portuguese: 'Link público (opcional)',
     AppLanguage.french: 'Lien public (facultatif)',
   },
-  'stream_config': {
-    AppLanguage.spanish: 'CONFIGURACIÓN DE TRANSMISIÓN',
-    AppLanguage.english: 'STREAMING SETTINGS',
-    AppLanguage.portuguese: 'CONFIGURAÇÃO DE TRANSMISSÃO',
-    AppLanguage.french: 'CONFIGURATION DE DIFFUSION',
-  },
-  'stream_description': {
-    AppLanguage.spanish: 'Escribe el identificador del canal que has creado en el servicio de emisión. No pegues contraseñas ni tokens aquí.',
-    AppLanguage.english: 'Enter the channel ID you created in the streaming service. Do not paste passwords or tokens here.',
-    AppLanguage.portuguese: 'Digite o identificador do canal criado no serviço de transmissão. Não cole senhas nem tokens aqui.',
-    AppLanguage.french: 'Saisissez l’identifiant de votre chaîne. Ne collez pas de mots de passe ni de jetons ici.',
-  },
-  'channel_id': {
-    AppLanguage.spanish: 'Identificador de canal',
-    AppLanguage.english: 'Channel ID',
-    AppLanguage.portuguese: 'Identificador do canal',
-    AppLanguage.french: 'Identifiant de chaîne',
-  },
-  'save_config': {
-    AppLanguage.spanish: 'GUARDAR CONFIGURACIÓN',
-    AppLanguage.english: 'SAVE SETTINGS',
-    AppLanguage.portuguese: 'SALVAR CONFIGURAÇÃO',
-    AppLanguage.french: 'ENREGISTRER',
-  },
-  'saving': {
-    AppLanguage.spanish: 'Guardando…',
-    AppLanguage.english: 'Saving…',
-    AppLanguage.portuguese: 'Salvando…',
-    AppLanguage.french: 'Enregistrement…',
-  },
-  'rtmp_server': {
-    AppLanguage.spanish: 'Servidor RTMP para emitir',
-    AppLanguage.english: 'RTMP streaming server',
-    AppLanguage.portuguese: 'Servidor RTMP para transmissão',
-    AppLanguage.french: 'Serveur RTMP de diffusion',
-  },
-  'hls_url': {
-    AppLanguage.spanish: 'URL HLS de reproducción',
-    AppLanguage.english: 'HLS playback URL',
-    AppLanguage.portuguese: 'URL HLS de reprodução',
-    AppLanguage.french: 'URL HLS de lecture',
-  },
-  'stream_notice': {
-    AppLanguage.spanish: 'Las transmisiones requieren que el canal y el servidor estén activos. La agenda nativa necesita una fuente de calendario autorizada que todavía no está configurada en este proyecto.',
-    AppLanguage.english: 'Streaming requires an active channel and server. The native schedule still needs an authorized calendar source, which is not configured in this project.',
-    AppLanguage.portuguese: 'As transmissões exigem que o canal e o servidor estejam ativos. A agenda nativa ainda precisa de uma fonte de calendário autorizada.',
-    AppLanguage.french: 'La diffusion nécessite une chaîne et un serveur actifs. Le calendrier natif nécessite encore une source autorisée qui n’est pas configurée.',
-  },
-
   'statistics': <AppLanguage, String>{
     AppLanguage.spanish: 'Estadísticas',
     AppLanguage.english: 'Statistics',
