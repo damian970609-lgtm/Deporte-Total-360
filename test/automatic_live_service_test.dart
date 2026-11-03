@@ -20,6 +20,7 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
+    sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
   });
 
   group('agenda deportiva MARCA', () {
