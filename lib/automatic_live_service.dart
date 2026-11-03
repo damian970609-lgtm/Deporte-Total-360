@@ -310,6 +310,13 @@ class AutomaticLiveService {
 
   static List<XmltvProgramme> parseXmltv(String body) {
     final document = XmlDocument.parse(body);
+    final channelNames = <String, String>{};
+    for (final channel in document.findAllElements('channel')) {
+      final id = (channel.getAttribute('id') ?? '').trim();
+      final displayNames = channel.findElements('display-name');
+      final display = displayNames.isEmpty ? '' : displayNames.first.innerText.trim();
+      if (id.isNotEmpty && display.isNotEmpty) channelNames[id] = display;
+    }
     final result = <XmltvProgramme>[];
     for (final element in document.findAllElements('programme')) {
       final channel = (element.getAttribute('channel') ?? '').trim();
@@ -320,7 +327,11 @@ class AutomaticLiveService {
       if (channel.isEmpty || title.isEmpty || start == null ||
           stop == null || !stop.isAfter(start)) continue;
       result.add(XmltvProgramme(
-        channelId: channel, title: title, startsAt: start, endsAt: stop,
+        channelId: channel,
+        channelName: channelNames[channel] ?? '',
+        title: title,
+        startsAt: start,
+        endsAt: stop,
       ));
     }
     return result;
@@ -381,6 +392,9 @@ class AutomaticLiveService {
       for (final programme in programmes) {
         final mapped = <M3uChannel>[
           ...(byId[programme.channelId] ?? <M3uChannel>[]),
+          ...(programme.channelName.isEmpty
+              ? <M3uChannel>[]
+              : byName[normalizeText(programme.channelName)] ?? <M3uChannel>[]),
           ...(byName[normalizeText(programme.channelId)] ?? <M3uChannel>[]),
         ];
         for (final channel in mapped) {
