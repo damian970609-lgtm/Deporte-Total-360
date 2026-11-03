@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 
 import 'agenda_screen.dart';
 import 'fantasy_screen.dart';
+import 'highlights_screen.dart';
 import 'news_screen.dart';
 import 'notification_service.dart';
 import 'public_chat_screen.dart';
@@ -127,9 +128,13 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   static const int _homeTab = 0;
-  static const int _statisticsTab = 1;
-  static const int _agendaWebTab = 3;
-  static const int _settingsTab = 5;
+  static const int _liveTab = 1;
+  static const int _agendaWebTab = 2;
+  static const int _newsTab = 3;
+  static const int _fantasyTab = 4;
+  static const int _statisticsTab = 5;
+  static const int _highlightsTab = 6;
+  static const int _settingsTab = 7;
 
   final GlobalKey<WebAgendaScreenState> _webAgendaKey =
       GlobalKey<WebAgendaScreenState>();
@@ -299,18 +304,20 @@ class _MainShellState extends State<MainShell> {
         onOpenAgenda: _openAgenda,
         onChat: _openPublicChat,
       ),
+      const LiveScreen(),
+      WebAgendaScreen(
+        key: _webAgendaKey,
+        onExit: () => _selectTab(_homeTab),
+        onOpenLive: () => _selectTab(_liveTab),
+      ),
+      const NewsScreen(),
+      const FantasyScreen(),
       SportsStatisticsScreen(
         key: ValueKey<String>('statistics-$_selectedStatisticsSport'),
         initialSport: _selectedStatisticsSport,
         onOpenAgenda: _openAgenda,
       ),
-      const LiveScreen(),
-      WebAgendaScreen(
-        key: _webAgendaKey,
-        onExit: () => _selectTab(_homeTab),
-        onOpenLive: () => _selectTab(2),
-      ),
-      const NewsScreen(),
+      const HighlightsScreen(),
       const SettingsScreen(),
     ];
 
@@ -349,53 +356,45 @@ class _MainShellState extends State<MainShell> {
               destinations: <NavigationDestination>[
                 NavigationDestination(
                   icon: const Icon(Icons.home_outlined),
-                  selectedIcon: const Icon(
-                    Icons.home_rounded,
-                    color: appCyan,
-                  ),
-                  label: tr('home'),
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.query_stats_outlined),
-                  selectedIcon: const Icon(
-                    Icons.query_stats_rounded,
-                    color: appCyan,
-                  ),
-                  label: tr('statistics'),
+                  selectedIcon: const Icon(Icons.home_rounded, color: appCyan),
+                  label: 'Inicio',
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.live_tv_outlined),
-                  selectedIcon: const Icon(
-                    Icons.live_tv_rounded,
-                    color: appPink,
-                  ),
-                  label: tr('live'),
+                  selectedIcon: const Icon(Icons.live_tv_rounded, color: appPink),
+                  label: 'En vivo',
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.calendar_month_outlined),
-                  selectedIcon: const Icon(
-                    Icons.calendar_month_rounded,
-                    color: appGreen,
-                  ),
-                  label: tr('web_agenda'),
+                  selectedIcon: const Icon(Icons.calendar_month_rounded, color: appGreen),
+                  label: 'Agenda',
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.article_outlined),
-                  selectedIcon: const Icon(
-                    Icons.article_rounded,
-                    color: appGreen,
-                  ),
-                  label: tr('news'),
+                  selectedIcon: const Icon(Icons.article_rounded, color: appYellow),
+                  label: 'Noticias',
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.emoji_events_outlined),
+                  selectedIcon: const Icon(Icons.emoji_events_rounded, color: appPink),
+                  label: 'Mister Fantasy',
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.query_stats_outlined),
+                  selectedIcon: const Icon(Icons.query_stats_rounded, color: appCyan),
+                  label: 'Estadísticas',
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.play_circle_outline_rounded),
+                  selectedIcon: const Icon(Icons.play_circle_fill_rounded, color: appGreen),
+                  label: 'Resúmenes',
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.settings_outlined),
-                  selectedIcon: const Icon(
-                    Icons.settings_rounded,
-                    color: appCyan,
-                  ),
-                  label: tr('settings'),
+                  selectedIcon: const Icon(Icons.settings_rounded, color: appCyan),
+                  label: 'Ajustes',
                 ),
-              ],
+              ],,
             ),
           ),
         ),
@@ -551,7 +550,7 @@ class HomeDashboard extends StatelessWidget {
           ),
           IconButton(
             tooltip: tr('settings'),
-            onPressed: () => onNavigate(5),
+            onPressed: () => onNavigate(7),
             icon: const Icon(Icons.settings_rounded, color: appCyan),
           ),
         ],
@@ -803,7 +802,7 @@ class HomeDashboard extends StatelessWidget {
                   ),
                   icon: Icons.live_tv_rounded,
                   color: appRed,
-                  onTap: () => onNavigate(2),
+                  onTap: () => onNavigate(1),
                 ),
                 const SizedBox(height: 8),
                 _HomeActionCard(
@@ -855,7 +854,7 @@ class HomeDashboard extends StatelessWidget {
                   ),
                   icon: Icons.article_rounded,
                   color: appYellow,
-                  onTap: () => onNavigate(4),
+                  onTap: () => onNavigate(3),
                 ),
                 const SizedBox(height: 8),
                 _HomeActionCard(
@@ -1311,128 +1310,72 @@ class _ActionTile extends StatelessWidget {
 class LiveScreen extends StatelessWidget {
   const LiveScreen({super.key});
 
-  Future<void> _openPlayer(BuildContext context) async {
-    final slug = channelSlug.value.trim();
-    if (slug.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Primero configura tu identificador de canal en Ajustes.',
-          ),
-        ),
-      );
-      Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
-          builder: (_) => const SettingsScreen(),
-        ),
-      );
-      return;
-    }
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => LivePlayerScreen(channel: slug),
-      ),
-    );
-  }
-
-  Future<void> _openEncoder(BuildContext context) async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => const EncoderConfigScreen(),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: appBg,
       appBar: AppBar(
-        title: Text(
-          tr('streams'),
-          style: const TextStyle(
-            color: appCyan,
-            fontWeight: FontWeight.w900,
-            fontSize: 14,
-          ),
+        title: const Text(
+          'DEPORTES EN VIVO',
+          style: TextStyle(color: appCyan, fontWeight: FontWeight.w900, fontSize: 14),
         ),
       ),
       body: AppBackdrop(
-        child: SafeArea(
-          top: false,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
-            children: <Widget>[
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: appPanel,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: appCyan.withAlpha(170)),
-                ),
-                child: Column(
-                  children: <Widget>[
-                    const Icon(Icons.live_tv_rounded, color: appPink, size: 52),
-                    SizedBox(height: 12),
-                    Text(
-                      appText('CANAL EN VIVO DE DEPORTE TOTAL 360°', 'DEPORTE TOTAL 360° LIVE CHANNEL', 'CANAL AO VIVO DEPORTE TOTAL 360°', 'CHAÎNE EN DIRECT DEPORTE TOTAL 360°'),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: appCyan,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      appText(
-                        'El reproductor necesita un canal válido y una señal activa. Si el servidor está fuera de línea, podrás reintentar.',
-                        'The player needs a valid channel and active stream. If the server is offline, you can retry.',
-                        'O player precisa de um canal válido e sinal ativo. Se o servidor estiver offline, você poderá tentar novamente.',
-                        'Le lecteur nécessite une chaîne valide et un signal actif. Si le serveur est hors ligne, vous pourrez réessayer.'),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: appMuted,
-                        fontSize: 12,
-                        height: 1.45,
-                      ),
-                    ),
-                  ],
-                ),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: <Widget>[
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: appPanel,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: appCyan.withAlpha(170)),
               ),
-              const SizedBox(height: 12),
-              _LiveActionCard(
-                title: 'PRISM LIVE STUDIO',
-                subtitle: appText('Configurar datos para emitir desde tu encoder.', 'Configure streaming details for your encoder.', 'Configure os dados de transmissão do encoder.', 'Configurez les paramètres de diffusion de votre encodeur.'),
-                icon: Icons.settings_input_antenna_rounded,
-                color: appPink,
-                onTap: () => _openEncoder(context),
-              ),
-              const SizedBox(height: 10),
-              _LiveActionCard(
-                title: 'SSH101 • ' + appText('REPRODUCCIÓN', 'PLAYBACK', 'REPRODUÇÃO', 'LECTURE'),
-                subtitle: appText('Abrir la señal del canal configurado en Ajustes.', 'Open the channel configured in Settings.', 'Abrir o canal configurado em Configurações.', 'Ouvrir la chaîne configurée dans les paramètres.'),
-                icon: Icons.play_circle_fill_rounded,
-                color: appGreen,
-                onTap: () => _openPlayer(context),
-              ),
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).push<void>(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const EncoderConfigScreen(),
+              child: const Column(
+                children: <Widget>[
+                  Icon(Icons.live_tv_rounded, color: appPink, size: 48),
+                  SizedBox(height: 12),
+                  Text(
+                    'CENTRO DE TRANSMISIONES',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: appCyan, fontWeight: FontWeight.w900, fontSize: 16),
                   ),
-                ),
-                icon: const Icon(Icons.copy_rounded),
-                label: Text(appText('Ver configuración de emisión', 'View streaming settings', 'Ver configurações de transmissão', 'Voir les paramètres de diffusion')),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: appCyan,
-                  side: const BorderSide(color: appCyan),
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                ),
+                  SizedBox(height: 8),
+                  Text(
+                    'El reproductor está preparado para señales HLS autorizadas. El catálogo de canales todavía no está configurado; no se mostrarán enlaces inventados ni se usará SSH101.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: appMuted, fontSize: 12, height: 1.5),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                color: appPanel2,
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(color: appLine),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Icon(Icons.playlist_play_rounded, color: appGreen, size: 28),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text('MULTICANAL / MULTIJUGADOR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+                        SizedBox(height: 5),
+                        Text('La selección de señales y reproductores se habilitará al incorporar un catálogo de fuentes verificadas y autorizadas.', style: TextStyle(color: appMuted, height: 1.4, fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
