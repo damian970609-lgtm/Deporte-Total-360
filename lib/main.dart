@@ -350,7 +350,7 @@ class _MainShellState extends State<MainShell> {
                 children: <Widget>[
                   _buildBottomTab(_homeTab, Icons.home_rounded, tr('home'), appCyan),
                   _buildBottomTab(_liveTab, Icons.live_tv_rounded, 'Deportes en vivo', appPink),
-                  _buildBottomTab(_agendaTab, Icons.calendar_month_rounded, 'Agenda hoy', appGreen),
+                  _buildBottomTab(_agendaTab, Icons.calendar_month_rounded, 'Agenda de hoy', appGreen),
                   _buildBottomTab(_newsTab, Icons.article_rounded, tr('news'), appGreen),
                   _buildBottomTab(_fantasyTab, Icons.emoji_events_rounded, 'Mister Fantasy', appYellow),
                   _buildBottomTab(_statisticsTab, Icons.query_stats_rounded, tr('statistics'), appCyan),
