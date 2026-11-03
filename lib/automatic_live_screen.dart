@@ -14,8 +14,16 @@ const Color _autoPink = Color(0xFFFF28CF);
 const Color _autoMuted = Color(0xFFA9BDD6);
 
 class AutomaticLiveScreen extends StatefulWidget {
-  const AutomaticLiveScreen({super.key, required this.onOpenAgenda, this.isActive = true});
+  const AutomaticLiveScreen({
+    super.key,
+    required this.onOpenAgenda,
+    required this.onOpenSsh101,
+    required this.onOpenSsh101Encoder,
+    this.isActive = true,
+  });
   final VoidCallback onOpenAgenda;
+  final VoidCallback onOpenSsh101;
+  final VoidCallback onOpenSsh101Encoder;
   final bool isActive;
   @override
   State<AutomaticLiveScreen> createState() => _AutomaticLiveScreenState();
@@ -28,6 +36,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
   AutoLiveSettings? _settings;
   Timer? _timer;
   bool _loading = true;
+  bool _refreshing = false;
   String? _error;
   DateTime _updatedAt = DateTime.now();
 
@@ -35,11 +44,10 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _refresh(force: true);
+    if (widget.isActive) _refresh(force: true);
     _timer = Timer.periodic(const Duration(seconds: 45), (_) {
-      // La preparación sigue activa aunque el usuario esté en otra pestaña,
-      // mientras la aplicación permanezca abierta en primer plano.
-      if (mounted) _refresh();
+      // No consumir red ni batería mientras esta pestaña está cerrada.
+      if (mounted && widget.isActive) _refresh();
     });
   }
 
@@ -51,7 +59,9 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _refresh(force: true);
+    if (state == AppLifecycleState.resumed && widget.isActive) {
+      _refresh(force: true);
+    }
   }
 
   @override
@@ -62,8 +72,14 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
   }
 
   Future<void> _refresh({bool force = false}) async {
-    if (_loading && !force) return;
-    if (mounted) setState(() { _loading = true; _error = null; });
+    if (_refreshing || (!widget.isActive && !force)) return;
+    _refreshing = true;
+    if (mounted) {
+      setState(() {
+        if (_scheduled.isEmpty) _loading = true;
+        _error = null;
+      });
+    }
     try {
       final settings = await AutoLiveSettings.load();
       final events = await FutbolLibreAgendaStore.load();
@@ -84,6 +100,8 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
     } catch (error) {
       if (!mounted) return;
       setState(() { _loading = false; _error = error.toString(); _updatedAt = DateTime.now(); });
+    } finally {
+      _refreshing = false;
     }
   }
 
@@ -308,15 +326,43 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
               ]),
             ),
             const SizedBox(height: 11),
+            Row(children: <Widget>[
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: widget.onOpenSsh101,
+                  icon: const Icon(Icons.live_tv_rounded, size: 16),
+                  label: const Text('MI CANAL SSH101'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _autoGreen,
+                    side: const BorderSide(color: _autoGreen),
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 5),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: widget.onOpenSsh101Encoder,
+                  icon: const Icon(Icons.settings_input_antenna_rounded, size: 16),
+                  label: const Text('CONFIGURAR EMISIÓN'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _autoCyan,
+                    side: const BorderSide(color: _autoCyan),
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 5),
+                  ),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 11),
             if (_loading && _scheduled.isEmpty)
               const Padding(padding: EdgeInsets.all(22),
                 child: Center(child: CircularProgressIndicator(color: _autoCyan))),
             if (_error != null)
               _notice('No se pudo actualizar el catálogo', _error!, icon: Icons.cloud_off_rounded),
             if (!configured && !_loading)
-              _notice('Fuentes internacionales pendientes de activar',
-                'Ya hay tres listas deportivas globales y una EPG precargadas en Ajustes de desarrollador. Revisa las fuentes, confirma que tienes derecho a reproducirlas en tu región y pulsa VALIDAR Y GUARDAR. La agenda de Fútbol Libre se consulta en la pestaña Agenda.',
-                icon: Icons.settings_suggest_rounded),
+              _notice('Fuentes automáticas no disponibles',
+                'La aplicación volverá a intentar cargar sus fuentes públicas y guías de programación. Abre Agenda de hoy para actualizar los eventos; no tienes que introducir ni validar listas.',
+                icon: Icons.cloud_off_rounded),
             if (_agendaEvents.isEmpty && !_loading) ...<Widget>[
               _notice('Agenda de Fútbol Libre pendiente',
                 'Abre Agenda de hoy. La APK leerá solamente horarios, deporte, competición y equipos; no abrirá enlaces ni reproductores de transmisiones de Fútbol Libre.',
@@ -350,7 +396,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
               for (final item in _scheduled) _eventCard(item),
             ],
             const SizedBox(height: 10),
-            Text('Actualizado ${_time(_updatedAt)} · se revisa cada 45 segundos mientras la APK permanece abierta.',
+            Text('Actualizado ${_time(_updatedAt)} · se revisa cada 45 segundos mientras esta pestaña está activa.',
               textAlign: TextAlign.center, style: const TextStyle(color: _autoMuted, fontSize: 9)),
             const SizedBox(height: 10),
             const Text('La pestaña Agenda de Fútbol Libre se usa solo como calendario. Las señales se buscan en fuentes M3U independientes y se contrastan con varias EPG; una comprobación HTTP no garantiza reproducción continua ni derechos en todas las regiones. Ningún catálogo externo puede garantizar una transmisión permanente.',

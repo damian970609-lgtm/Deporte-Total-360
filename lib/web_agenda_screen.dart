@@ -188,6 +188,54 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 if (timeMatch[5].toUpperCase() === 'PM' && hour < 12) hour += 12;
                 if (timeMatch[5].toUpperCase() === 'AM' && hour === 12) hour = 0;
               }
+              const parseDateHint = (raw) => {
+                const value = (raw || '').toLowerCase().replace(/\s+/g, ' ').trim();
+                if (!value) return null;
+                if (/\b(mañana|tomorrow)\b/.test(value)) {
+                  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+                  return { year: next.getFullYear(), month: next.getMonth(), day: next.getDate() };
+                }
+                if (/\b(hoy|today)\b/.test(value)) {
+                  return { year: now.getFullYear(), month: now.getMonth(), day: now.getDate() };
+                }
+                let match = value.match(/\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/);
+                if (match) return { year: Number(match[1]), month: Number(match[2]) - 1, day: Number(match[3]) };
+                match = value.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/);
+                if (match) {
+                  let year = Number(match[3] || now.getFullYear());
+                  if (year < 100) year += 2000;
+                  return { year, month: Number(match[2]) - 1, day: Number(match[1]) };
+                }
+                const months = {
+                  enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5,
+                  julio: 6, agosto: 7, septiembre: 8, setiembre: 8,
+                  octubre: 9, noviembre: 10, diciembre: 11
+                };
+                match = value.match(/\b(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\s+de\s+(20\d{2}))?\b/);
+                if (match) {
+                  let year = Number(match[3] || now.getFullYear());
+                  const month = months[match[2]];
+                  if (!match[3] && month < now.getMonth() - 5) year++;
+                  return { year, month, day: Number(match[1]) };
+                }
+                return null;
+              };
+              let dateHint = null;
+              let contextNode = node;
+              for (let depth = 0; depth < 5 && contextNode && !dateHint; depth++) {
+                const heading = contextNode.querySelector
+                  ? contextNode.querySelector('h1,h2,h3,h4,[class*="date"],[class*="day"]')
+                  : null;
+                const contextText = [
+                  contextNode.getAttribute && contextNode.getAttribute('data-date'),
+                  contextNode.getAttribute && contextNode.getAttribute('data-day'),
+                  contextNode.getAttribute && contextNode.getAttribute('datetime'),
+                  heading && heading.textContent,
+                  depth === 0 ? contextNode.innerText : null
+                ].filter(Boolean).join(' ');
+                dateHint = parseDateHint(contextText);
+                contextNode = contextNode.parentElement;
+              }
               let start = null;
               const timeNode = node.querySelector('time[datetime]');
               const dateValue = (timeNode && timeNode.getAttribute('datetime')) ||
@@ -197,10 +245,22 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 (node.dataset && (node.dataset.start || node.dataset.datetime || node.dataset.date));
               if (dateValue) {
                 const parsed = new Date(dateValue);
-                if (!Number.isNaN(parsed.getTime())) start = parsed;
+                if (!Number.isNaN(parsed.getTime())) {
+                  if (/T|\d{1,2}:\d{2}/i.test(dateValue)) {
+                    start = parsed;
+                  } else {
+                    const explicit = parseDateHint(dateValue) || dateHint;
+                    if (explicit) start = new Date(explicit.year, explicit.month, explicit.day, hour, minute, 0);
+                  }
+                }
+              }
+              if (!start && dateHint) {
+                start = new Date(dateHint.year, dateHint.month, dateHint.day, hour, minute, 0);
               }
               if (!start) {
                 start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0);
+                // Sin fecha explícita no se reutilizan horarios claramente caducados.
+                if (start.getTime() < now.getTime() - 6 * 60 * 60 * 1000) continue;
               }
               let end = null;
               const endValue = node.getAttribute('data-end') ||
@@ -233,7 +293,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 detailUrl: anchor.href
               });
             }
-            if (found.length && window.flutter_inappwebview) {
+            if (window.flutter_inappwebview) {
               window.flutter_inappwebview.callHandler('dt360AgendaEvents', found);
             }
           };
@@ -664,9 +724,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                                 .map(FutbolLibreEvent.fromJson)
                                 .whereType<FutbolLibreEvent>()
                                 .toList(growable: false);
-                            if (events.isNotEmpty) {
-                              await FutbolLibreAgendaStore.save(events);
-                            }
+                            await FutbolLibreAgendaStore.save(events);
                             return events.length;
                           },
                         );

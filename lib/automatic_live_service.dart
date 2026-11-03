@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io' show gzip;
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,25 +19,45 @@ const String legacyDefaultAutoLivePlaylistUrls =
 const String legacyDefaultAutoLiveEpgUrl =
     'https://dearbulut.github.io/iptv/epg/guide.xml.gz';
 
+// Fuentes automáticas: primero catálogos en español y emisoras públicas;
+// después directorios deportivos internacionales como respaldo.
 const String defaultAutoLivePlaylistUrls =
-    'https://dearbulut.github.io/iptv/playlists/category/sports.m3u\n'
-    'https://dearbulut.github.io/iptv/playlists/online.m3u\n'
+    'https://teleonline.github.io/listas/tv.m3u8\n'
+    'https://iptv-org.github.io/iptv/languages/spa.m3u\n'
+    'https://iptv-org.github.io/iptv/countries/es.m3u\n'
+    'https://iptv-org.github.io/iptv/countries/mx.m3u\n'
+    'https://iptv-org.github.io/iptv/countries/ar.m3u\n'
+    'https://iptv-org.github.io/iptv/regions/hispam.m3u\n'
+    'https://iptv-org.github.io/iptv/regions/lac.m3u\n'
     'https://iptv-org.github.io/iptv/categories/sports.m3u\n'
     'https://raw.githubusercontent.com/freecasthub/public-iptv/main/sports.m3u\n'
+    'https://dearbulut.github.io/iptv/playlists/category/sports.m3u\n'
+    'https://dearbulut.github.io/iptv/playlists/online.m3u\n'
     'https://dearbulut.github.io/iptv/playlists/best.m3u';
 
+// Guías priorizadas en español (España y Latinoamérica/Caribe), con una
+// guía global al final como último respaldo.
 const String defaultAutoLiveEpgUrl =
-    'https://dearbulut.github.io/iptv/epg/guide.xml.gz\n'
-    'https://iptv-epg.org/files/epg-cw.xml\n'
-    'https://iptv-epg.org/files/epg-jm.xml\n'
-    'https://iptv-epg.org/files/epg-co.xml\n'
-    'https://iptv-epg.org/files/epg-ve.xml\n'
-    'https://iptv-epg.org/files/epg-pa.xml\n'
-    'https://iptv-epg.org/files/epg-br.xml\n'
+    'https://iptv-epg.org/files/epg-es.xml\n'
     'https://iptv-epg.org/files/epg-ar.xml\n'
     'https://iptv-epg.org/files/epg-mx.xml\n'
+    'https://iptv-epg.org/files/epg-co.xml\n'
+    'https://iptv-epg.org/files/epg-ve.xml\n'
     'https://iptv-epg.org/files/epg-cl.xml\n'
-    'https://iptv-epg.org/files/epg-es.xml';
+    'https://iptv-epg.org/files/epg-pe.xml\n'
+    'https://iptv-epg.org/files/epg-uy.xml\n'
+    'https://iptv-epg.org/files/epg-py.xml\n'
+    'https://iptv-epg.org/files/epg-bo.xml\n'
+    'https://iptv-epg.org/files/epg-cr.xml\n'
+    'https://iptv-epg.org/files/epg-gt.xml\n'
+    'https://iptv-epg.org/files/epg-hn.xml\n'
+    'https://iptv-epg.org/files/epg-ni.xml\n'
+    'https://iptv-epg.org/files/epg-pa.xml\n'
+    'https://iptv-epg.org/files/epg-cw.xml\n'
+    'https://iptv-epg.org/files/epg-jm.xml\n'
+    'https://iptv-epg.org/files/epg-br.xml\n'
+    'https://raw.githubusercontent.com/teleonline/listas/main/epg.xml.gz\n'
+    'https://dearbulut.github.io/iptv/epg/guide.xml.gz';
 
 List<String> _splitPlaylistUrls(String value) => value
     .split(RegExp(r'[\r\n;]+'))
@@ -71,7 +92,8 @@ class AutoLiveSettings {
   List<String> get playlistUrls => _splitPlaylistUrls(playlistUrl);
   List<String> get epgUrls => _splitPlaylistUrls(epgUrl);
 
-  bool get isConfigured => authorizationConfirmed &&
+  // Las fuentes públicas incluidas se cargan automáticamente.
+  bool get isConfigured =>
       playlistUrls.isNotEmpty &&
       playlistUrls.every(isSafeHttpUrl) &&
       epgUrls.isNotEmpty &&
@@ -93,10 +115,23 @@ class AutoLiveSettings {
       await prefs.setString(_epgUrlKey, epg);
     }
 
+    // Recupera automáticamente la configuración integrada si una versión
+    // anterior dejó valores vacíos, incompletos o con URLs inválidas.
+    if (playlist.trim().isEmpty ||
+        !_splitPlaylistUrls(playlist).every(isSafeHttpUrl)) {
+      playlist = defaultAutoLivePlaylistUrls;
+      await prefs.setString(_playlistUrlKey, playlist);
+    }
+    if (epg.trim().isEmpty ||
+        !_splitPlaylistUrls(epg).every(isSafeHttpUrl)) {
+      epg = defaultAutoLiveEpgUrl;
+      await prefs.setString(_epgUrlKey, epg);
+    }
+
     return AutoLiveSettings(
       playlistUrl: playlist,
       epgUrl: epg,
-      authorizationConfirmed: prefs.getBool(_authorizedKey) ?? false,
+      authorizationConfirmed: true,
     );
   }
 
@@ -114,9 +149,6 @@ class AutoLiveSettings {
         epgUrls.isEmpty ||
         !epgUrls.every(isSafeHttpUrl)) {
       throw const FormatException('Cada lista M3U y cada guía EPG deben tener una dirección HTTP o HTTPS válida.');
-    }
-    if (!authorizationConfirmed) {
-      throw const FormatException('Confirma que tienes derecho a reproducir las señales de la lista.');
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_playlistUrlKey, playlist);
@@ -187,15 +219,13 @@ class FutbolLibreEvent {
 class FutbolLibreAgendaStore {
   static const String _key = 'dt360_futbol_libre_events_v1';
 
+  /// Sustituye la captura anterior por el contenido visible más reciente.
+  /// Así los eventos retirados de la agenda no quedan programados.
   static Future<void> save(List<FutbolLibreEvent> events) async {
     final prefs = await SharedPreferences.getInstance();
-    final previous = await load();
     final unique = <String, FutbolLibreEvent>{
-      for (final event in previous) event.id: event,
+      for (final event in events) event.id: event,
     };
-    for (final event in events) {
-      unique[event.id] = event;
-    }
     final cutoff = DateTime.now().subtract(const Duration(hours: 4));
     unique.removeWhere((id, event) {
       final end = event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
@@ -222,8 +252,14 @@ class FutbolLibreAgendaStore {
 
 class M3uChannel {
   const M3uChannel({
-    required this.name, required this.url, this.tvgId = '',
-    this.tvgName = '', this.group = '', this.logo = '',
+    required this.name,
+    required this.url,
+    this.tvgId = '',
+    this.tvgName = '',
+    this.group = '',
+    this.logo = '',
+    this.language = '',
+    this.country = '',
   });
   final String name;
   final String url;
@@ -231,6 +267,29 @@ class M3uChannel {
   final String tvgName;
   final String group;
   final String logo;
+  final String language;
+  final String country;
+
+  /// 2 = español; 0 = cualquier idioma como respaldo.
+  int get languagePriority {
+    final metadata = AutomaticLiveService.normalizeText(
+      '$language $country $group $name $tvgName',
+    );
+    const spanishMarkers = <String>[
+      'spanish', 'espanol', 'castellano', 'espana', 'spain',
+      'mexico', 'argentina', 'colombia', 'venezuela', 'chile',
+      'peru', 'uruguay', 'paraguay', 'bolivia', 'ecuador',
+      'costa rica', 'guatemala', 'honduras', 'nicaragua',
+      'panama', 'dominicana', 'puerto rico',
+      'teledeporte', 'esport 3', 'etb deportes',
+      'real madrid tv', 'betis tv',
+    ];
+    if (spanishMarkers.any(metadata.contains) ||
+        RegExp(r'(^| )(es|spa)( |$)').hasMatch(metadata)) {
+      return 2;
+    }
+    return 0;
+  }
 }
 
 class XmltvProgramme {
@@ -251,6 +310,7 @@ class ScheduledLiveSource {
     required this.channelName, required this.url,
     required this.programmeTitle, required this.programmeEndsAt,
     required this.qualityScore,
+    this.languagePriority = 0,
     this.available = false,
   });
   final String channelName;
@@ -258,6 +318,7 @@ class ScheduledLiveSource {
   final String programmeTitle;
   final DateTime programmeEndsAt;
   final int qualityScore;
+  final int languagePriority;
   final bool available;
 }
 
@@ -308,20 +369,28 @@ class AutomaticLiveService {
       return cached;
     }
 
-    // Cada M3U es independiente: una caída no bloquea las listas de respaldo.
-    final playlistBodies = await Future.wait<String?>(
-      playlistUrls.map((url) async {
-        try {
-          return await _downloadText(url, maxBytes: 12 * 1024 * 1024);
-        } catch (_) {
-          return null;
-        }
-      }),
-    );
+    // Se descargan tres listas a la vez para limitar memoria y conexiones.
+    // Una lista caída no bloquea el resto del catálogo.
     final channelsByUrl = <String, M3uChannel>{};
-    for (final body in playlistBodies.whereType<String>()) {
-      for (final channel in parseM3u(body)) {
-        channelsByUrl.putIfAbsent(channel.url, () => channel);
+    for (var batchStart = 0; batchStart < playlistUrls.length; batchStart += 3) {
+      final batch = playlistUrls.skip(batchStart).take(3).toList(growable: false);
+      final playlistBodies = await Future.wait<String?>(
+        batch.map((url) async {
+          try {
+            return await _downloadText(
+              url,
+              maxBytes: 8 * 1024 * 1024,
+              timeout: const Duration(seconds: 12),
+            );
+          } catch (_) {
+            return null;
+          }
+        }),
+      );
+      for (final body in playlistBodies.whereType<String>()) {
+        for (final channel in parseM3u(body)) {
+          channelsByUrl.putIfAbsent(channel.url, () => channel);
+        }
       }
     }
     final channels = channelsByUrl.values.toList(growable: false);
@@ -333,24 +402,37 @@ class AutomaticLiveService {
     // las demás siguen aportando programas. Las guías regionales tienen un
     // límite menor para cuidar la memoria del teléfono.
     final programmesByKey = <String, XmltvProgramme>{};
-    for (var index = 0; index < epgUrls.length; index++) {
-      try {
-        final epgBody = await _downloadText(
-          epgUrls[index],
-          maxBytes: index == 0 ? 128 * 1024 * 1024 : 24 * 1024 * 1024,
-          timeout: const Duration(seconds: 12),
-        );
-        for (final programme in parseXmltv(epgBody)) {
-          final key = <String>[
-            programme.channelId.toLowerCase(),
-            programme.title.toLowerCase().trim(),
-            programme.startsAt.toUtc().toIso8601String(),
-            programme.endsAt.toUtc().toIso8601String(),
-          ].join('|');
-          programmesByKey.putIfAbsent(key, () => programme);
+    // Descarga por lotes pequeños: varias guías pueden responder a la vez, pero
+    // nunca se abren todas las descargas grandes simultáneamente.
+    for (var batchStart = 0; batchStart < epgUrls.length; batchStart += 3) {
+      final batch = epgUrls.skip(batchStart).take(3).toList(growable: false);
+      final bodies = await Future.wait<String?>(
+        batch.map((url) async {
+          try {
+            return await _downloadText(
+              url,
+              maxBytes: 20 * 1024 * 1024,
+              timeout: const Duration(seconds: 12),
+            );
+          } catch (_) {
+            return null;
+          }
+        }),
+      );
+      for (final epgBody in bodies.whereType<String>()) {
+        try {
+          for (final programme in parseXmltv(epgBody)) {
+            final key = <String>[
+              programme.channelId.toLowerCase(),
+              programme.title.toLowerCase().trim(),
+              programme.startsAt.toUtc().toIso8601String(),
+              programme.endsAt.toUtc().toIso8601String(),
+            ].join('|');
+            programmesByKey.putIfAbsent(key, () => programme);
+          }
+        } catch (_) {
+          // Una guía inválida no interrumpe las siguientes fuentes.
         }
-      } catch (_) {
-        // Fallback: continuar con la siguiente guía regional/global.
       }
     }
     final programmes = programmesByKey.values.toList(growable: false);
@@ -371,22 +453,50 @@ class AutomaticLiveService {
     required int maxBytes,
     Duration timeout = const Duration(seconds: 25),
   }) async {
-    final response = await _client.get(Uri.parse(value.trim()),
-      headers: const <String, String>{'Accept': '*/*'})
-      .timeout(timeout);
+    final request = http.Request('GET', Uri.parse(value.trim()))
+      ..headers['Accept'] = '*/*';
+    final response = await _client.send(request).timeout(timeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      await response.stream.drain<void>();
       throw HttpException('La fuente respondió HTTP ' + response.statusCode.toString() + '.');
     }
-    List<int> bytes = response.bodyBytes;
+    final declaredLength = int.tryParse(
+      response.headers['content-length'] ?? '',
+    );
+    if (declaredLength != null && declaredLength > maxBytes) {
+      await response.stream.drain<void>();
+      throw const FormatException('El archivo supera el tamaño máximo permitido.');
+    }
+
+    // Se limita el flujo mientras llega, sin descargar primero un XML gigante.
+    final compressed = BytesBuilder(copy: false);
+    var received = 0;
+    await for (final chunk in response.stream.timeout(timeout)) {
+      received += chunk.length;
+      if (received > maxBytes) {
+        throw const FormatException('La descarga supera el tamaño máximo permitido.');
+      }
+      compressed.add(chunk);
+    }
+    var bytes = compressed.takeBytes();
     if (bytes.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b) {
       try {
-        bytes = gzip.decode(bytes);
-      } catch (_) {
+        final expanded = BytesBuilder(copy: false);
+        var expandedLength = 0;
+        await for (final chunk in gzip.decoder
+            .bind(Stream<List<int>>.value(bytes))
+            .timeout(timeout)) {
+          expandedLength += chunk.length;
+          if (expandedLength > maxBytes) {
+            throw const FormatException('El XML descomprimido supera el límite permitido.');
+          }
+          expanded.add(chunk);
+        }
+        bytes = expanded.takeBytes();
+      } catch (error) {
+        if (error is FormatException) rethrow;
         throw const FormatException('No se pudo descomprimir la fuente GZIP.');
       }
-    }
-    if (bytes.length > maxBytes) {
-      throw const FormatException('El archivo supera el tamaño máximo permitido.');
     }
     final body = utf8.decode(bytes, allowMalformed: true);
     if (body.trim().isEmpty) throw const FormatException('La fuente está vacía.');
@@ -424,7 +534,10 @@ class AutomaticLiveService {
             (data['tvg-name'] ?? data['tvg-id'] ?? 'Canal').trim(),
         url: line, tvgId: data['tvg-id'] ?? '',
         tvgName: data['tvg-name'] ?? '',
-        group: data['group-title'] ?? '', logo: data['tvg-logo'] ?? '',
+        group: data['group-title'] ?? '',
+        logo: data['tvg-logo'] ?? '',
+        language: data['tvg-language'] ?? data['language'] ?? '',
+        country: data['tvg-country'] ?? data['country'] ?? '',
       ));
       pending = null;
       pendingName = '';
@@ -542,25 +655,58 @@ class AutomaticLiveService {
             programmeTitle: programme.title,
             programmeEndsAt: programme.endsAt,
             qualityScore: _qualityScore(channel),
+            languagePriority: channel.languagePriority,
           ));
         }
       }
       if (candidates.isEmpty) continue;
       // Una sola señal por evento: primero la resolución anunciada, después
       // indicadores HD/FHD/UHD y finalmente un orden estable del proveedor.
-      candidates.sort((a, b) => b.qualityScore.compareTo(a.qualityScore));
-      final checkedCandidates = await Future.wait<ScheduledLiveSource>(
-        candidates.take(12).map(_probeCandidate),
+      candidates.sort((a, b) {
+        final language = b.languagePriority.compareTo(a.languagePriority);
+        return language != 0
+            ? language
+            : b.qualityScore.compareTo(a.qualityScore);
+      });
+      final spanishCandidates = candidates
+          .where((candidate) => candidate.languagePriority > 0)
+          .take(12)
+          .toList(growable: false);
+      final otherLanguageCandidates = candidates
+          .where((candidate) => candidate.languagePriority == 0)
+          .take(12)
+          .toList(growable: false);
+
+      // Primero se intentan señales en español. Solo si ninguna responde se
+      // consulta el grupo internacional, sin mezclar idiomas en la prioridad.
+      var checkedCandidates = await Future.wait<ScheduledLiveSource>(
+        (spanishCandidates.isNotEmpty
+                ? spanishCandidates
+                : otherLanguageCandidates)
+            .map(_probeCandidate),
       );
-      final verifiedCandidates = checkedCandidates
+      var verifiedCandidates = checkedCandidates
           .where((candidate) => candidate.available)
           .toList(growable: true);
+      if (verifiedCandidates.isEmpty && spanishCandidates.isNotEmpty) {
+        checkedCandidates = await Future.wait<ScheduledLiveSource>(
+          otherLanguageCandidates.map(_probeCandidate),
+        );
+        verifiedCandidates = checkedCandidates
+            .where((candidate) => candidate.available)
+            .toList(growable: true);
+      }
       // Solo se programa una fuente cuya lista de reproducción respondió
       // correctamente a la comprobación. No se asignan señales no verificadas.
       if (verifiedCandidates.isEmpty) continue;
       // Entre las señales disponibles, se conserva una sola: la de mayor
       // calidad anunciada y confirmada por la lista HLS.
-      verifiedCandidates.sort((a, b) => b.qualityScore.compareTo(a.qualityScore));
+      verifiedCandidates.sort((a, b) {
+        final language = b.languagePriority.compareTo(a.languagePriority);
+        return language != 0
+            ? language
+            : b.qualityScore.compareTo(a.qualityScore);
+      });
       final sources = <ScheduledLiveSource>[verifiedCandidates.first];
       final programmeEnd = sources.map((s) => s.programmeEndsAt).reduce(
         (a, b) => a.isAfter(b) ? a : b,
@@ -574,22 +720,184 @@ class AutomaticLiveService {
     return output;
   }
 
+  static const Map<String, List<String>> _teamAliases = <String, List<String>>{
+    'manchester united': <String>['man utd', 'man united', 'manchester utd'],
+    'manchester city': <String>['man city'],
+    'paris saint germain': <String>['psg', 'paris sg'],
+    'atletico madrid': <String>['atleti', 'atletico de madrid'],
+    'fc barcelona': <String>['barcelona', 'barca'],
+    'barcelona': <String>['barca'],
+    'internazionale': <String>['inter milan', 'inter'],
+    'inter milan': <String>['internazionale', 'inter'],
+    'bayern munich': <String>['bayern'],
+    'borussia dortmund': <String>['dortmund', 'bvb'],
+    'tottenham hotspur': <String>['tottenham', 'spurs'],
+    'new york knicks': <String>['ny knicks'],
+    'golden state warriors': <String>['gs warriors'],
+    'los angeles lakers': <String>['la lakers'],
+  };
+
+  static bool _teamMatchesProgramme(String team, String programme) {
+    final normalizedTeam = normalizeText(team);
+    if (normalizedTeam.isEmpty) return false;
+    if (programme.contains(normalizedTeam)) return true;
+
+    final aliases = _teamAliases.entries
+        .where((entry) =>
+            normalizedTeam == entry.key ||
+            entry.value.any((alias) => normalizeText(alias) == normalizedTeam))
+        .expand((entry) => <String>[entry.key, ...entry.value])
+        .map(normalizeText);
+    if (aliases.any((alias) => alias.isNotEmpty && programme.contains(alias))) {
+      return true;
+    }
+
+    const ignored = <String>{
+      'fc', 'cf', 'afc', 'club', 'de', 'the', 'united', 'city',
+      'team', 'basket', 'basketball', 'futbol', 'football',
+    };
+    final teamTokens = normalizedTeam
+        .split(' ')
+        .where((token) => token.length >= 3 && !ignored.contains(token))
+        .toSet();
+    if (teamTokens.isEmpty) return false;
+    final programmeTokens = programme.split(' ').toSet();
+    final matched = teamTokens.where((token) => programmeTokens.contains(token)).length;
+    final required = teamTokens.length == 1
+        ? 1
+        : (teamTokens.length * 0.67).ceil();
+    return matched >= required;
+  }
+
   static bool programmeMatchesEvent(String programmeTitle, FutbolLibreEvent event) {
     final programme = normalizeText(programmeTitle);
     if (programme.isEmpty) return false;
     final home = normalizeText(event.homeTeam);
     final away = normalizeText(event.awayTeam);
     if (home.isNotEmpty && away.isNotEmpty) {
-      return programme.contains(home) && programme.contains(away);
+      return _teamMatchesProgramme(home, programme) &&
+          _teamMatchesProgramme(away, programme);
     }
     const ignored = <String>{
-      'contra','versus','partido','futbol','football','basket','liga',
-      'copa','final','directo','vivo','match','evento','hoy',
+      'contra', 'versus', 'partido', 'futbol', 'football', 'basket',
+      'liga', 'copa', 'final', 'directo', 'vivo', 'match', 'evento',
+      'hoy', 'club', 'the',
     };
-    final tokens = normalizeText(event.title).split(' ')
-        .where((t) => t.length >= 4 && !ignored.contains(t)).toSet();
+    final tokens = normalizeText(event.title)
+        .split(' ')
+        .where((token) => token.length >= 4 && !ignored.contains(token))
+        .toSet();
     if (tokens.length < 2) return false;
     return tokens.where((token) => programme.contains(token)).length >= 2;
+  }
+
+  Future<bool> _probeMediaBytes(Uri uri) async {
+    try {
+      final request = http.Request('GET', uri)
+        ..headers['Range'] = 'bytes=0-2047'
+        ..headers['Accept'] = '*/*';
+      final response = await _client.send(request)
+          .timeout(const Duration(seconds: 7));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        await response.stream.drain<void>();
+        return false;
+      }
+      var received = 0;
+      await for (final chunk in response.stream.timeout(const Duration(seconds: 7))) {
+        received += chunk.length;
+        if (received >= 2048) break;
+      }
+      return received > 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<({bool available, int quality})> _probeHls(
+    Uri uri, {
+    int depth = 0,
+  }) async {
+    if (depth > 2) return (available: false, quality: 0);
+    try {
+      final response = await _client.get(
+        uri,
+        headers: const <String, String>{
+          'Accept': 'application/vnd.apple.mpegurl,*/*',
+          'Range': 'bytes=0-1048575',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200 && response.statusCode != 206) {
+        return (available: false, quality: 0);
+      }
+      final body = utf8.decode(
+        response.bodyBytes.take(1024 * 1024).toList(),
+        allowMalformed: true,
+      );
+      if (!body.trimLeft().startsWith('#EXTM3U')) {
+        return (available: false, quality: 0);
+      }
+
+      final resolutions = RegExp(r'RESOLUTION=\d+x(\d+)')
+          .allMatches(body)
+          .map((match) => int.tryParse(match.group(1) ?? '') ?? 0);
+      final maxHeight = resolutions.isEmpty ? 0 : resolutions.reduce(
+        (a, b) => a > b ? a : b,
+      );
+      final bandwidths = RegExp(r'BANDWIDTH=(\d+)')
+          .allMatches(body)
+          .map((match) => int.tryParse(match.group(1) ?? '') ?? 0);
+      final maxBandwidth = bandwidths.isEmpty ? 0 : bandwidths.reduce(
+        (a, b) => a > b ? a : b,
+      );
+      final quality = maxHeight >= 2160 || maxBandwidth >= 12000000 ? 500 :
+          maxHeight >= 1080 || maxBandwidth >= 6000000 ? 400 :
+          maxHeight >= 720 || maxBandwidth >= 3000000 ? 300 :
+          maxHeight >= 480 || maxBandwidth >= 1200000 ? 200 : 50;
+
+      final lines = body.replaceAll('\r', '').split('\n');
+      final variants = <({int bandwidth, String url})>[];
+      for (var index = 0; index < lines.length - 1; index++) {
+        final line = lines[index].trim();
+        if (!line.startsWith('#EXT-X-STREAM-INF:')) continue;
+        var next = index + 1;
+        while (next < lines.length && lines[next].trim().isEmpty) {
+          next++;
+        }
+        if (next >= lines.length || lines[next].trim().startsWith('#')) continue;
+        final match = RegExp(r'BANDWIDTH=(\d+)').firstMatch(line);
+        variants.add((
+          bandwidth: int.tryParse(match?.group(1) ?? '') ?? 0,
+          url: lines[next].trim(),
+        ));
+      }
+      if (variants.isNotEmpty) {
+        variants.sort((a, b) => b.bandwidth.compareTo(a.bandwidth));
+        for (final variant in variants.take(3)) {
+          final nested = await _probeHls(uri.resolve(variant.url), depth: depth + 1);
+          if (nested.available) {
+            return (available: true, quality: quality > nested.quality ? quality : nested.quality);
+          }
+        }
+        return (available: false, quality: quality);
+      }
+
+      String? segment;
+      for (final raw in lines) {
+        final line = raw.trim();
+        if (line.isEmpty || line.startsWith('#')) continue;
+        segment = line;
+        break;
+      }
+      segment ??= RegExp(r'URI="([^"]+)"')
+          .firstMatch(body)
+          ?.group(1);
+      if (segment == null) return (available: false, quality: quality);
+
+      final segmentAvailable = await _probeMediaBytes(uri.resolve(segment));
+      return (available: segmentAvailable, quality: quality);
+    } catch (_) {
+      return (available: false, quality: 0);
+    }
   }
 
   Future<ScheduledLiveSource> _probeCandidate(
@@ -605,6 +913,7 @@ class AutomaticLiveService {
         programmeTitle: source.programmeTitle,
         programmeEndsAt: source.programmeEndsAt,
         qualityScore: source.qualityScore + cached.quality,
+        languagePriority: source.languagePriority,
         available: cached.available,
       );
     }
@@ -614,39 +923,12 @@ class AutomaticLiveService {
     try {
       final uri = Uri.parse(source.url);
       if (uri.path.toLowerCase().endsWith('.m3u8')) {
-        final response = await _client.get(uri,
-          headers: const <String, String>{'Accept': 'application/vnd.apple.mpegurl,*/*'})
-          .timeout(const Duration(seconds: 8));
-        final body = utf8.decode(
-          response.bodyBytes.take(1024 * 1024).toList(),
-          allowMalformed: true,
-        );
-        available = response.statusCode == 200 &&
-            body.trimLeft().startsWith('#EXTM3U');
-        if (available) {
-          final resolutions = RegExp(r'RESOLUTION=\d+x(\d+)')
-              .allMatches(body)
-              .map((match) => int.tryParse(match.group(1) ?? '') ?? 0);
-          final maxHeight = resolutions.isEmpty ? 0 : resolutions.reduce(
-            (a, b) => a > b ? a : b,
-          );
-          final bandwidths = RegExp(r'BANDWIDTH=(\d+)')
-              .allMatches(body)
-              .map((match) => int.tryParse(match.group(1) ?? '') ?? 0);
-          final maxBandwidth = bandwidths.isEmpty ? 0 : bandwidths.reduce(
-            (a, b) => a > b ? a : b,
-          );
-          extraQuality = maxHeight >= 2160 || maxBandwidth >= 12000000 ? 500 :
-              maxHeight >= 1080 || maxBandwidth >= 6000000 ? 400 :
-              maxHeight >= 720 || maxBandwidth >= 3000000 ? 300 :
-              maxHeight >= 480 || maxBandwidth >= 1200000 ? 200 : 50;
-        }
+        final probe = await _probeHls(uri);
+        available = probe.available;
+        extraQuality = probe.quality;
       } else {
-        final request = http.Request('HEAD', uri);
-        final response = await _client.send(request)
-            .timeout(const Duration(seconds: 8));
-        available = response.statusCode >= 200 && response.statusCode < 400;
-        await response.stream.drain<void>();
+        // GET con Range es más compatible que HEAD con servidores de vídeo.
+        available = await _probeMediaBytes(uri);
       }
     } catch (_) {
       available = false;
@@ -662,6 +944,7 @@ class AutomaticLiveService {
       programmeTitle: source.programmeTitle,
       programmeEndsAt: source.programmeEndsAt,
       qualityScore: source.qualityScore + extraQuality,
+      languagePriority: source.languagePriority,
       available: available,
     );
   }

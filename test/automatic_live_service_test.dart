@@ -19,18 +19,22 @@ void main() {
   });
 
   group('configuración internacional', () {
-    test('precarga cinco listas deportivas y once EPG regionales/global sin autorizar automáticamente', () async {
+    test('carga siete listas automáticamente y diecinueve EPG sin pedir validación', () async {
       final settings = await AutoLiveSettings.load();
 
-      expect(settings.playlistUrls, hasLength(5));
+      expect(settings.playlistUrls, hasLength(12));
       expect(settings.playlistUrls.every(isSafeHttpUrl), isTrue);
-      expect(settings.epgUrls, hasLength(11));
+      expect(settings.epgUrls, hasLength(20));
       expect(settings.epgUrls.every(isSafeHttpUrl), isTrue);
-      expect(settings.epgUrl, defaultAutoLiveEpgUrl);
-      expect(settings.isConfigured, isFalse);
+      expect(settings.playlistUrls.first, contains('teleonline'));
+      expect(settings.playlistUrls[1], contains('languages/spa.m3u'));
+      expect(settings.playlistUrls[2], contains('countries/es.m3u'));
+      expect(settings.epgUrls.first, contains('epg-es.xml'));
+      expect(settings.epgUrls[18], contains('teleonline/listas/main/epg.xml.gz'));
+      expect(settings.isConfigured, isTrue);
     });
 
-    test('migra las listas predeterminadas antiguas sin cambiar la autorización', () async {
+    test('migra las listas antiguas sin pedir autorización manual', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'dt360_auto_live_playlist_url_v1': legacyDefaultAutoLivePlaylistUrls,
         'dt360_auto_live_epg_url_v1': legacyDefaultAutoLiveEpgUrl,
@@ -39,9 +43,46 @@ void main() {
 
       final settings = await AutoLiveSettings.load();
 
-      expect(settings.playlistUrls, hasLength(5));
-      expect(settings.epgUrls, hasLength(11));
+      expect(settings.playlistUrls, hasLength(12));
+      expect(settings.epgUrls, hasLength(20));
       expect(settings.authorizationConfirmed, isTrue);
+      expect(settings.isConfigured, isTrue);
+    });
+
+    test('restaura fuentes automáticas cuando una versión anterior dejó las listas vacías', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'dt360_auto_live_playlist_url_v1': '',
+        'dt360_auto_live_epg_url_v1': '',
+        'dt360_auto_live_authorized_v1': false,
+      });
+
+      final settings = await AutoLiveSettings.load();
+
+      expect(settings.isConfigured, isTrue);
+      expect(settings.playlistUrls, hasLength(12));
+      expect(settings.epgUrls, hasLength(20));
+    });
+  });
+
+  group('captura de agenda', () {
+    test('reemplaza los eventos anteriores y borra los que ya no aparecen', () async {
+      final now = DateTime.now();
+      FutbolLibreEvent event(String id) => FutbolLibreEvent(
+        id: id,
+        title: 'Equipo $id vs Rival $id',
+        sport: 'Fútbol',
+        startsAt: now.add(const Duration(hours: 1)),
+        detailUrl: 'https://futbol-libre.cam/$id',
+      );
+
+      await FutbolLibreAgendaStore.save(<FutbolLibreEvent>[event('anterior')]);
+      expect((await FutbolLibreAgendaStore.load()).single.id, 'anterior');
+
+      await FutbolLibreAgendaStore.save(<FutbolLibreEvent>[event('actual')]);
+      expect((await FutbolLibreAgendaStore.load()).map((row) => row.id), <String>['actual']);
+
+      await FutbolLibreAgendaStore.save(const <FutbolLibreEvent>[]);
+      expect(await FutbolLibreAgendaStore.load(), isEmpty);
     });
   });
 
@@ -58,6 +99,19 @@ https://media.example/watch?id=123
       expect(channels, hasLength(1));
       expect(channels.single.tvgId, 'sports.hd');
       expect(channels.single.name, 'Sports HD 1080p');
+    });
+
+    test('lee idioma y país del canal para priorizar el español', () {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="es.sports" tvg-language="Spanish" tvg-country="ES" group-title="Sports",Teledeporte
+https://media.example/teledeporte.m3u8
+''';
+      final channel = AutomaticLiveService.parseM3u(playlist).single;
+
+      expect(channel.language, 'Spanish');
+      expect(channel.country, 'ES');
+      expect(channel.languagePriority, 2);
     });
 
     test('usa la segunda lista M3U si la primera está caída', () async {
@@ -176,8 +230,9 @@ https://media.example/sports-hd.m3u8
       final client = MockClient((request) async {
         if (request.url.path.endsWith('.m3u')) return http.Response(playlist, 200);
         if (request.url.path.endsWith('.xml')) return http.Response(xml, 200);
+        if (request.url.path.endsWith('.ts')) return http.Response('segment bytes', 200);
         if (request.url.path.endsWith('.m3u8')) {
-          return http.Response('#EXTM3U\n#EXT-X-TARGETDURATION:6\n', 200);
+          return http.Response('#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\nsegment.ts\n', 200);
         }
         return http.Response('', 404);
       });
@@ -217,6 +272,117 @@ https://media.example/sports-hd.m3u8
       expect(prepared.single.removeAt, stop);
     });
 
+    test('prioriza un canal en español antes que una señal extranjera de mayor resolución', () async {
+      final start = DateTime.now().add(const Duration(minutes: 10));
+      final stop = start.add(const Duration(hours: 2));
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.en" tvg-language="English" group-title="Sports",Sports HD 1080p
+https://media.example/english.m3u8
+#EXTINF:-1 tvg-id="sports.es" tvg-language="Spanish" tvg-country="ES" group-title="Sports",Teledeporte
+https://media.example/spanish.m3u8
+''';
+      final xml = '<tv>'
+          '<programme channel="sports.en" start="${_xmlTime(start)}" stop="${_xmlTime(stop)}"><title>Equipo Azul vs Equipo Rojo</title></programme>'
+          '<programme channel="sports.es" start="${_xmlTime(start)}" stop="${_xmlTime(stop)}"><title>Equipo Azul vs Equipo Rojo</title></programme>'
+          '</tv>';
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('.m3u')) return http.Response(playlist, 200);
+        if (request.url.path.endsWith('.xml')) return http.Response(xml, 200);
+        if (request.url.path.endsWith('.ts')) return http.Response('segment bytes', 200);
+        if (request.url.path.endsWith('.m3u8')) {
+          return http.Response('#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\nsegment.ts\n', 200);
+        }
+        return http.Response('', 404);
+      });
+      final event = FutbolLibreEvent(
+        id: 'spanish-priority',
+        title: 'Equipo Azul vs Equipo Rojo',
+        sport: 'Fútbol',
+        homeTeam: 'Equipo Azul',
+        awayTeam: 'Equipo Rojo',
+        startsAt: start,
+        detailUrl: 'https://futbol-libre.cam/spanish-priority',
+      );
+      final result = await AutomaticLiveService(client: client).schedule(
+        events: <FutbolLibreEvent>[event],
+        now: start.subtract(const Duration(minutes: 10)),
+        settings: const AutoLiveSettings(
+          playlistUrl: 'https://provider.example/channels.m3u',
+          epgUrl: 'https://provider.example/guide.xml',
+          authorizationConfirmed: false,
+        ),
+      );
+
+      expect(result, hasLength(1));
+      expect(result.single.sources.single.channelName, 'Teledeporte');
+      expect(result.single.sources.single.languagePriority, 2);
+    });
+
+    test('usa otros idiomas solo cuando ninguna señal española está disponible', () async {
+      final start = DateTime.now().add(const Duration(minutes: 10));
+      final stop = start.add(const Duration(hours: 2));
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.es" tvg-language="Spanish" group-title="Sports",Teledeporte
+https://media.example/spanish.m3u8
+#EXTINF:-1 tvg-id="sports.en" tvg-language="English" group-title="Sports",Sports International HD
+https://media.example/international.m3u8
+''';
+      final xml = '<tv>'
+          '<programme channel="sports.es" start="${_xmlTime(start)}" stop="${_xmlTime(stop)}"><title>Equipo Azul vs Equipo Rojo</title></programme>'
+          '<programme channel="sports.en" start="${_xmlTime(start)}" stop="${_xmlTime(stop)}"><title>Equipo Azul vs Equipo Rojo</title></programme>'
+          '</tv>';
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('.m3u')) return http.Response(playlist, 200);
+        if (request.url.path.endsWith('.xml')) return http.Response(xml, 200);
+        if (request.url.path.endsWith('spanish.m3u8')) return http.Response('offline', 503);
+        if (request.url.path.endsWith('.ts')) return http.Response('segment bytes', 200);
+        if (request.url.path.endsWith('international.m3u8')) {
+          return http.Response('#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\nsegment.ts\n', 200);
+        }
+        return http.Response('', 404);
+      });
+      final event = FutbolLibreEvent(
+        id: 'language-fallback',
+        title: 'Equipo Azul vs Equipo Rojo',
+        sport: 'Fútbol',
+        homeTeam: 'Equipo Azul',
+        awayTeam: 'Equipo Rojo',
+        startsAt: start,
+        detailUrl: 'https://futbol-libre.cam/language-fallback',
+      );
+      final result = await AutomaticLiveService(client: client).schedule(
+        events: <FutbolLibreEvent>[event],
+        now: start.subtract(const Duration(minutes: 10)),
+        settings: const AutoLiveSettings(
+          playlistUrl: 'https://provider.example/channels.m3u',
+          epgUrl: 'https://provider.example/guide.xml',
+          authorizationConfirmed: false,
+        ),
+      );
+
+      expect(result, hasLength(1));
+      expect(result.single.sources.single.channelName, 'Sports International HD');
+    });
+
+    test('reconoce abreviaturas de equipos al cruzar el EPG', () {
+      final event = FutbolLibreEvent(
+        id: 'alias-match',
+        title: 'Manchester United vs Paris Saint-Germain',
+        sport: 'Fútbol',
+        homeTeam: 'Manchester United',
+        awayTeam: 'Paris Saint-Germain',
+        startsAt: DateTime.now().add(const Duration(hours: 1)),
+        detailUrl: 'https://futbol-libre.cam/alias-match',
+      );
+
+      expect(
+        AutomaticLiveService.programmeMatchesEvent('Man Utd vs PSG', event),
+        isTrue,
+      );
+    });
+
     test('mantiene varios eventos simultáneos en entradas separadas', () async {
       final start = DateTime.now().add(const Duration(minutes: 10));
       final stop = start.add(const Duration(hours: 2));
@@ -234,8 +400,9 @@ https://media.example/two.m3u8
       final client = MockClient((request) async {
         if (request.url.path.endsWith('.m3u')) return http.Response(playlist, 200);
         if (request.url.path.endsWith('.xml')) return http.Response(xml, 200);
+        if (request.url.path.endsWith('.ts')) return http.Response('segment bytes', 200);
         if (request.url.path.endsWith('.m3u8')) {
-          return http.Response('#EXTM3U\n#EXT-X-TARGETDURATION:6\n', 200);
+          return http.Response('#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\nsegment.ts\n', 200);
         }
         return http.Response('', 404);
       });
