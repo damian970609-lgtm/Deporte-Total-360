@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'app_i18n.dart';
 
@@ -36,35 +36,14 @@ class SportsSummariesScreen extends StatelessWidget {
   ];
 
   Future<void> _openSearch(BuildContext context, _SummaryCategory category) async {
-    final uri = Uri.https(
-      'www.youtube.com',
-      '/results',
-      <String, String>{'search_query': category.query},
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => YouTubeHighlightsPlayerScreen(
+          title: category.name,
+          query: category.query,
+        ),
+      ),
     );
-    try {
-      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!opened && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(appText(
-            'No se pudo abrir YouTube. Comprueba que tengas conexión.',
-            'Could not open YouTube. Check your connection.',
-            'Não foi possível abrir o YouTube. Verifique sua conexão.',
-            'Impossible d’ouvrir YouTube. Vérifiez votre connexion.',
-          ))),
-        );
-      }
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(appText(
-            'No se pudo abrir la búsqueda de resúmenes.',
-            'Could not open the highlights search.',
-            'Não foi possível abrir a busca de resumos.',
-            'Impossible d’ouvrir la recherche de résumés.',
-          ))),
-        );
-      }
-    }
   }
 
   @override
@@ -136,6 +115,185 @@ class SportsSummariesScreen extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+
+/// Reproduce los resultados de YouTube dentro de la APK, sin descargar ni
+/// redistribuir vídeos. La reproducción y sus restricciones pertenecen a YouTube.
+class YouTubeHighlightsPlayerScreen extends StatefulWidget {
+  const YouTubeHighlightsPlayerScreen({
+    super.key,
+    required this.title,
+    required this.query,
+  });
+
+  final String title;
+  final String query;
+
+  @override
+  State<YouTubeHighlightsPlayerScreen> createState() =>
+      _YouTubeHighlightsPlayerScreenState();
+}
+
+class _YouTubeHighlightsPlayerScreenState
+    extends State<YouTubeHighlightsPlayerScreen> {
+  InAppWebViewController? _controller;
+  double _progress = 0;
+  bool _loading = true;
+  bool _allowPop = false;
+  bool _handlingBack = false;
+
+  WebUri get _searchUrl => WebUri(
+        'https://www.youtube.com/results?search_query=${Uri.encodeQueryComponent(widget.query)}',
+      );
+
+  Future<void> _handleBack() async {
+    if (_handlingBack) return;
+    _handlingBack = true;
+    try {
+      final controller = _controller;
+      if (controller != null) {
+        try {
+          if (await controller.canGoBack()) {
+            await controller.goBack();
+            return;
+          }
+        } catch (_) {
+          // Si YouTube no expone historial, se permite salir de esta vista.
+        }
+      }
+      if (!mounted) return;
+      setState(() => _allowPop = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      });
+    } finally {
+      _handlingBack = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope<void>(
+      canPop: _allowPop,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _handleBack();
+      },
+      child: Scaffold(
+        backgroundColor: _summaryBg,
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF020B19),
+          leading: IconButton(
+            onPressed: _handleBack,
+            icon: const Icon(Icons.arrow_back_rounded, color: _summaryCyan),
+          ),
+          title: Text(
+            'RESÚMENES · ${widget.title.toUpperCase()}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _summaryCyan,
+              fontWeight: FontWeight.w900,
+              fontSize: 12,
+            ),
+          ),
+          actions: <Widget>[
+            IconButton(
+              tooltip: appText('Recargar', 'Reload', 'Recarregar', 'Recharger'),
+              onPressed: () => _controller?.reload(),
+              icon: const Icon(Icons.refresh_rounded, color: _summaryCyan),
+            ),
+          ],
+        ),
+        body: Column(
+          children: <Widget>[
+            if (_loading)
+              LinearProgressIndicator(
+                value: _progress == 0 ? null : _progress,
+                minHeight: 2,
+                color: _summaryCyan,
+                backgroundColor: _summaryPanel,
+              ),
+            Expanded(
+              child: InAppWebView(
+                initialUrlRequest: URLRequest(url: _searchUrl),
+                initialSettings: InAppWebViewSettings(
+                  javaScriptEnabled: true,
+                  domStorageEnabled: true,
+                  databaseEnabled: true,
+                  thirdPartyCookiesEnabled: true,
+                  supportMultipleWindows: true,
+                  javaScriptCanOpenWindowsAutomatically: true,
+                  mediaPlaybackRequiresUserGesture: true,
+                  allowsInlineMediaPlayback: true,
+                  iframeAllowFullscreen: true,
+                  isElementFullscreenEnabled: true,
+                  hardwareAcceleration: true,
+                  safeBrowsingEnabled: true,
+                ),
+                onWebViewCreated: (controller) => _controller = controller,
+                onProgressChanged: (controller, progress) {
+                  if (!mounted) return;
+                  setState(() {
+                    _progress = progress / 100;
+                    _loading = progress < 100;
+                  });
+                },
+                onLoadStop: (controller, url) {
+                  if (mounted) setState(() => _loading = false);
+                },
+                onCreateWindow: (controller, action) async {
+                  final target = action.request.url;
+                  if (target == null || target.scheme != 'https') return false;
+                  try {
+                    await controller.loadUrl(
+                      urlRequest: action.request,
+                    );
+                  } catch (_) {
+                    // No se abre una ventana externa si falla la navegación.
+                  }
+                  return false;
+                },
+                shouldOverrideUrlLoading: (controller, action) async {
+                  final target = action.request.url;
+                  if (target == null || target.scheme != 'https') {
+                    return NavigationActionPolicy.CANCEL;
+                  }
+                  return NavigationActionPolicy.ALLOW;
+                },
+                onReceivedError: (controller, request, error) {
+                  if (request.isForMainFrame == true && mounted) {
+                    setState(() => _loading = false);
+                  }
+                },
+              ),
+            ),
+            Container(
+              width: double.infinity,
+              color: _summaryPanel,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              child: Text(
+                appText(
+                  'Reproducción desde YouTube. La disponibilidad y las restricciones dependen de YouTube y del canal original.',
+                  'Playback is provided by YouTube. Availability and restrictions depend on YouTube and the original channel.',
+                  'A reprodução é fornecida pelo YouTube. A disponibilidade e as restrições dependem do YouTube e do canal original.',
+                  'La lecture est fournie par YouTube. La disponibilité et les restrictions dépendent de YouTube et de la chaîne d’origine.',
+                ),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: _summaryMuted,
+                  fontSize: 9,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
