@@ -13,6 +13,7 @@ const String _authorizedKey = 'dt360_auto_live_authorized_v1';
 /// regiones. El usuario debe confirmar que puede reproducirlos en su territorio.
 const String defaultAutoLivePlaylistUrls =
     'https://dearbulut.github.io/iptv/playlists/category/sports.m3u\n'
+    'https://dearbulut.github.io/iptv/playlists/online.m3u\n'
     'https://iptv-org.github.io/iptv/categories/sports.m3u';
 const String defaultAutoLiveEpgUrl =
     'https://dearbulut.github.io/iptv/epg/guide.xml.gz';
