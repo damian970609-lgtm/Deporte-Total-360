@@ -9,6 +9,20 @@ const String _playlistUrlKey = 'dt360_auto_live_playlist_url_v1';
 const String _epgUrlKey = 'dt360_auto_live_epg_url_v1';
 const String _authorizedKey = 'dt360_auto_live_authorized_v1';
 
+/// Catálogos internacionales; las listas incluyen feeds públicos de distintas
+/// regiones. El usuario debe confirmar que puede reproducirlos en su territorio.
+const String defaultAutoLivePlaylistUrls =
+    'https://dearbulut.github.io/iptv/playlists/category/sports.m3u\\n'
+    'https://iptv-org.github.io/iptv/categories/sports.m3u';
+const String defaultAutoLiveEpgUrl =
+    'https://dearbulut.github.io/iptv/epg/guide.xml.gz';
+
+List<String> _splitPlaylistUrls(String value) => value
+    .split(RegExp(r'[\\r\\n;]+'))
+    .map((url) => url.trim())
+    .where((url) => url.isNotEmpty)
+    .toList(growable: false);
+
 bool isSafeHttpUrl(String value) {
   final uri = Uri.tryParse(value.trim());
   return uri != null && uri.hasAuthority &&
@@ -33,14 +47,18 @@ class AutoLiveSettings {
   final String epgUrl;
   final bool authorizationConfirmed;
 
+  List<String> get playlistUrls => _splitPlaylistUrls(playlistUrl);
+
   bool get isConfigured => authorizationConfirmed &&
-      isSafeHttpUrl(playlistUrl) && isSafeHttpUrl(epgUrl);
+      playlistUrls.isNotEmpty &&
+      playlistUrls.every(isSafeHttpUrl) &&
+      isSafeHttpUrl(epgUrl);
 
   static Future<AutoLiveSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
     return AutoLiveSettings(
-      playlistUrl: prefs.getString(_playlistUrlKey) ?? '',
-      epgUrl: prefs.getString(_epgUrlKey) ?? '',
+      playlistUrl: prefs.getString(_playlistUrlKey) ?? defaultAutoLivePlaylistUrls,
+      epgUrl: prefs.getString(_epgUrlKey) ?? defaultAutoLiveEpgUrl,
       authorizationConfirmed: prefs.getBool(_authorizedKey) ?? false,
     );
   }
@@ -50,10 +68,13 @@ class AutoLiveSettings {
     required String epgUrl,
     required bool authorizationConfirmed,
   }) async {
-    final playlist = playlistUrl.trim();
+    final playlist = _splitPlaylistUrls(playlistUrl).join('\\n');
     final epg = epgUrl.trim();
-    if (!isSafeHttpUrl(playlist) || !isSafeHttpUrl(epg)) {
-      throw const FormatException('Las direcciones M3U y EPG deben ser HTTP o HTTPS válidas.');
+    final playlistUrls = _splitPlaylistUrls(playlist);
+    if (playlistUrls.isEmpty ||
+        !playlistUrls.every(isSafeHttpUrl) ||
+        !isSafeHttpUrl(epg)) {
+      throw const FormatException('Cada lista M3U y la EPG deben tener una dirección HTTP o HTTPS válida.');
     }
     if (!authorizationConfirmed) {
       throw const FormatException('Confirma que tienes derecho a reproducir las señales de la lista.');
@@ -228,22 +249,32 @@ class AutomaticLiveService {
     required String playlistUrl, required String epgUrl,
     bool forceRefresh = false,
   }) async {
-    if (!isSafeHttpUrl(playlistUrl) || !isSafeHttpUrl(epgUrl)) {
-      throw const FormatException('Configura una URL válida para M3U y otra para XMLTV/EPG.');
+    final playlistUrls = _splitPlaylistUrls(playlistUrl);
+    if (playlistUrls.isEmpty ||
+        !playlistUrls.every(isSafeHttpUrl) ||
+        !isSafeHttpUrl(epgUrl)) {
+      throw const FormatException('Configura una o más listas M3U válidas y una guía XMLTV/EPG.');
     }
+    final playlistCacheKey = playlistUrls.join('\\n');
     final now = DateTime.now();
     final cached = _cachedCatalog;
     if (!forceRefresh && cached != null &&
-        _cachedPlaylist == playlistUrl && _cachedEpg == epgUrl &&
+        _cachedPlaylist == playlistCacheKey && _cachedEpg == epgUrl &&
         _cachedAt != null && now.difference(_cachedAt!) < const Duration(minutes: 5)) {
       return cached;
     }
-    final bodies = await Future.wait<String>(<Future<String>>[
-      _downloadText(playlistUrl, maxBytes: 12 * 1024 * 1024),
-      _downloadText(epgUrl, maxBytes: 32 * 1024 * 1024),
-    ]);
-    final channels = parseM3u(bodies[0]);
-    final programmes = parseXmltv(bodies[1]);
+    final playlistBodies = await Future.wait<String>(
+      playlistUrls.map((url) => _downloadText(url, maxBytes: 12 * 1024 * 1024)),
+    );
+    final epgBody = await _downloadText(epgUrl, maxBytes: 96 * 1024 * 1024);
+    final channelsByUrl = <String, M3uChannel>{};
+    for (final body in playlistBodies) {
+      for (final channel in parseM3u(body)) {
+        channelsByUrl.putIfAbsent(channel.url, () => channel);
+      }
+    }
+    final channels = channelsByUrl.values.toList(growable: false);
+    final programmes = parseXmltv(epgBody);
     if (channels.isEmpty) {
       throw const FormatException('La lista M3U no contiene canales HLS o MP4 compatibles.');
     }
@@ -253,7 +284,7 @@ class AutomaticLiveService {
     final catalog = AutoLiveCatalog(channels: channels, programmes: programmes);
     _cachedCatalog = catalog;
     _cachedAt = now;
-    _cachedPlaylist = playlistUrl;
+    _cachedPlaylist = playlistCacheKey;
     _cachedEpg = epgUrl;
     return catalog;
   }
