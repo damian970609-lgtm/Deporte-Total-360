@@ -91,12 +91,18 @@ void main() {
                 'competition': 'Liga de prueba',
                 'homeTeam': 'Equipo Azul',
                 'awayTeam': 'Equipo Rojo',
-                'homeTeamLogo': 'https://img.example/azul.png',
-                'awayTeamLogo': 'https://img.example/rojo.png',
+                'homeTeamLogo': <String, dynamic>{
+                  'url': '//img.example/azul.png',
+                },
+                'awayTeamLogo': <String, dynamic>{
+                  'contentUrl': '/assets/escudos/rojo.svg',
+                },
                 'participants': <Map<String, dynamic>>[
                   <String, dynamic>{
                     'name': 'Equipo Azul',
-                    'imageUrl': 'https://img.example/azul.png',
+                    'imageUrl': <String, dynamic>{
+                      'src': '//img.example/azul.png',
+                    },
                     'country': 'España',
                     'role': 'home',
                   },
@@ -130,7 +136,8 @@ void main() {
       expect(result, hasLength(1));
       expect(result!.single.event.id, 'cloud-event-1');
       expect(result.single.event.homeTeamLogo, 'https://img.example/azul.png');
-      expect(result.single.event.awayTeamLogo, 'https://img.example/rojo.png');
+      expect(result.single.event.awayTeamLogo,
+          'https://www.marca.com/assets/escudos/rojo.svg');
       expect(result.single.event.participants.single.name, 'Equipo Azul');
       expect(result.single.event.participants.single.country, 'España');
       expect(result.single.event.venue, 'Estadio de prueba');
