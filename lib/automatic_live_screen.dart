@@ -37,7 +37,9 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
     WidgetsBinding.instance.addObserver(this);
     _refresh(force: true);
     _timer = Timer.periodic(const Duration(seconds: 45), (_) {
-      if (mounted && widget.isActive) _refresh();
+      // La preparación sigue activa aunque el usuario esté en otra pestaña,
+      // mientras la aplicación permanezca abierta en primer plano.
+      if (mounted) _refresh();
     });
   }
 
@@ -49,7 +51,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && widget.isActive) _refresh(force: true);
+    if (state == AppLifecycleState.resumed) _refresh(force: true);
   }
 
   @override
