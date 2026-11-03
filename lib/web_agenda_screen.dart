@@ -259,7 +259,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
           onPressed: _handleToolbarBack,
           icon: const Icon(Icons.arrow_back_rounded, color: _brandCyan),
         ),
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
