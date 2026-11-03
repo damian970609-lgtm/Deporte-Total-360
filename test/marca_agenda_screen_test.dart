@@ -32,7 +32,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.text('AGENDA DE HOY'), findsOneWidget);
+    expect(find.text('AGENDA DEPORTIVA'), findsOneWidget);
     expect(find.text('Equipo A'), findsOneWidget);
     expect(find.text('VS'), findsOneWidget);
     expect(find.text('Equipo B'), findsOneWidget);
