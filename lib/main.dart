@@ -12,7 +12,7 @@ import 'public_chat_screen.dart';
 import 'sports_api_service.dart';
 import 'sports_statistics_screen.dart';
 import 'sports_summaries_screen.dart';
-import 'web_agenda_screen.dart';
+import 'marca_agenda_screen.dart';
 
 // Identidad visual de DEPORTE TOTAL 360°: azul noche, cian, rosa y verde neón.
 const Color appBg = Color(0xFF030814);
@@ -178,8 +178,6 @@ class _MainShellState extends State<MainShell> {
   static const int _summariesTab = 6;
   static const int _settingsTab = 7;
 
-  final GlobalKey<WebAgendaScreenState> _agendaWebKey =
-      GlobalKey<WebAgendaScreenState>();
   int _selectedIndex = _homeTab;
   String _selectedStatisticsSport = 'Fútbol';
   bool _handlingBack = false;
@@ -263,11 +261,6 @@ class _MainShellState extends State<MainShell> {
     if (_handlingBack) return;
     _handlingBack = true;
     try {
-      if (_selectedIndex == _agendaTab) {
-        final handled =
-            await _agendaWebKey.currentState?.handleSystemBack() ?? false;
-        if (handled) return;
-      }
       if (_selectedIndex != _homeTab) {
         if (mounted) setState(() => _selectedIndex = _homeTab);
         return;
@@ -360,10 +353,8 @@ class _MainShellState extends State<MainShell> {
         isActive: _selectedIndex == _liveTab,
       ),
       _visitedTabs.contains(_agendaTab)
-          ? WebAgendaScreen(
-              key: _agendaWebKey,
-              pageTitle: 'AGENDA DE HOY',
-              onExit: () => _selectTab(_homeTab),
+          ? MarcaAgendaScreen(
+              isActive: _selectedIndex == _agendaTab,
               onOpenLive: () => _selectTab(_liveTab),
             )
           : const SizedBox.shrink(),
