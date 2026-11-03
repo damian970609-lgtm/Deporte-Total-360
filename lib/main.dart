@@ -2057,6 +2057,8 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                     keyboardType: TextInputType.url,
                     autocorrect: false,
                     enableSuggestions: false,
+                    minLines: 2,
+                    maxLines: 3,
                     decoration: const InputDecoration(
                       labelText: 'URLs de listas M3U (una por línea)',
                       hintText: 'Se cargan dos listas deportivas internacionales por defecto',
