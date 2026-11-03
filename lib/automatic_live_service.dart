@@ -265,6 +265,9 @@ class SportsAgendaEvent {
     this.statusLabel = '',
     this.homeScore = '',
     this.awayScore = '',
+    this.providerLeagueId,
+    this.providerSeasonId,
+    this.providerSeriesId,
     this.endsAt,
   });
   final String id;
@@ -282,6 +285,9 @@ class SportsAgendaEvent {
   final String statusLabel;
   final String homeScore;
   final String awayScore;
+  final int? providerLeagueId;
+  final int? providerSeasonId;
+  final int? providerSeriesId;
   final DateTime startsAt;
   final DateTime? endsAt;
   final String detailUrl;
@@ -302,6 +308,9 @@ class SportsAgendaEvent {
     'statusLabel': statusLabel,
     'homeScore': homeScore,
     'awayScore': awayScore,
+    'providerLeagueId': providerLeagueId,
+    'providerSeasonId': providerSeasonId,
+    'providerSeriesId': providerSeriesId,
     'startsAt': startsAt.toIso8601String(),
     'endsAt': endsAt?.toIso8601String(),
     'detailUrl': detailUrl,
@@ -355,6 +364,9 @@ class SportsAgendaEvent {
       statusLabel: (row['statusLabel'] ?? '').toString(),
       homeScore: (row['homeScore'] ?? '').toString(),
       awayScore: (row['awayScore'] ?? '').toString(),
+      providerLeagueId: int.tryParse((row['providerLeagueId'] ?? '').toString()),
+      providerSeasonId: int.tryParse((row['providerSeasonId'] ?? '').toString()),
+      providerSeriesId: int.tryParse((row['providerSeriesId'] ?? '').toString()),
       startsAt: startsAt.toLocal(),
       endsAt: end?.toLocal(),
       detailUrl: detailUrl,
@@ -591,6 +603,9 @@ class AutomaticLiveService {
           statusLabel: (eventData['statusLabel'] ?? '').toString(),
           homeScore: (eventData['homeScore'] ?? '').toString(),
           awayScore: (eventData['awayScore'] ?? '').toString(),
+          providerLeagueId: int.tryParse((eventData['providerLeagueId'] ?? '').toString()),
+          providerSeasonId: int.tryParse((eventData['providerSeasonId'] ?? '').toString()),
+          providerSeriesId: int.tryParse((eventData['providerSeriesId'] ?? '').toString()),
           startsAt: startsAt.toLocal(),
           endsAt: endsAt?.toLocal(),
           detailUrl: isSafeHttpUrl(detailUrl)
