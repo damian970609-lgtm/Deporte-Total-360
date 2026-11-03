@@ -149,7 +149,9 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 if (timeMatch[5].toUpperCase() === 'AM' && hour === 12) hour = 0;
               }
               let start = null;
-              const dateValue = node.getAttribute('datetime') ||
+              const timeNode = node.querySelector('time[datetime]');
+              const dateValue = (timeNode && timeNode.getAttribute('datetime')) ||
+                node.getAttribute('datetime') ||
                 node.getAttribute('data-start') ||
                 node.getAttribute('data-date') ||
                 (node.dataset && (node.dataset.start || node.dataset.datetime || node.dataset.date));
@@ -160,11 +162,20 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
               if (!start) {
                 start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0);
               }
+              let end = null;
+              const endValue = node.getAttribute('data-end') ||
+                (node.dataset && (node.dataset.end || node.dataset.endTime));
+              if (endValue) {
+                const parsedEnd = new Date(endValue);
+                if (!Number.isNaN(parsedEnd.getTime())) end = parsedEnd;
+              }
+              const textLower = rawText.toLowerCase();
+              if (/finalizado|terminado|finished|final\\b/.test(textLower)) end = now;
               const iso = start.toISOString();
+              const endIso = end ? end.toISOString() : null;
               const key = anchor.href + '|' + title + '|' + iso;
               if (seen.has(key)) continue;
               seen.add(key);
-              const textLower = rawText.toLowerCase();
               let sport = 'Fútbol';
               if (/nba|basquet|basketball/.test(textLower)) sport = 'Básquet';
               else if (/tenis|tennis/.test(textLower)) sport = 'Tenis';
@@ -172,15 +183,19 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
               else if (/beisbol|baseball/.test(textLower)) sport = 'Béisbol';
               const eventId = (node.dataset && (node.dataset.eventId || node.dataset.fixtureId)) ||
                 anchor.href.split('/').filter(Boolean).pop() || key;
+              const competitionNode = node.querySelector(
+                '[class*="competition"],[class*="league"],[data-league]'
+              );
+              const competition = (competitionNode && competitionNode.textContent || '').replace(/\\s+/g, ' ').trim();
               found.push({
                 id: String(eventId),
                 title: title,
                 sport: sport,
-                competition: '',
+                competition: competition,
                 homeTeam: pair[0].trim(),
                 awayTeam: pair.slice(1).join(' vs ').trim(),
                 startsAt: iso,
-                endsAt: null,
+                endsAt: endIso,
                 detailUrl: anchor.href
               });
             }
