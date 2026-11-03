@@ -12,15 +12,10 @@ class AutomaticLiveScreen extends StatefulWidget {
   const AutomaticLiveScreen({
     super.key,
     required this.onOpenAgenda,
-    required this.onOpenSsh101,
-    required this.onOpenSsh101Encoder,
     this.isActive = true,
   });
 
-  // Estos callbacks se conservan para no romper la navegación existente.
   final VoidCallback onOpenAgenda;
-  final VoidCallback onOpenSsh101;
-  final VoidCallback onOpenSsh101Encoder;
   final bool isActive;
 
   @override
