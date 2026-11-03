@@ -42,6 +42,30 @@ void main() {
       expect(grid.physics, isA<NeverScrollableScrollPhysics>());
     });
 
+    testWidgets('muestra el próximo evento con su horario mientras espera la señal', (tester) async {
+      const waitingEvent = LivePlayerWaitingEvent(
+        heading: 'Fútbol · Liga de prueba',
+        match: 'Equipo Azul vs Equipo Rojo',
+        startLabel: 'Comienza 19:30',
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: LivePlayerBoard(
+              sources: <LivePlayerSource>[],
+              waitingEvents: <LivePlayerWaitingEvent>[waitingEvent],
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Fútbol · Liga de prueba'), findsOneWidget);
+      expect(find.text('Equipo Azul vs Equipo Rojo'), findsOneWidget);
+      expect(find.text('Comienza 19:30'), findsOneWidget);
+      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(4));
+    });
+
     testWidgets('muestra el evento asignado y espera en los otros tres canales', (tester) async {
       const source = LivePlayerSource(
         title: 'DEPORTE TOTAL 360° CANAL 1',

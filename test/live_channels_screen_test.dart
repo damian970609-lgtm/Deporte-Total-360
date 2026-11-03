@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:deporte_total_360/live_channels_screen.dart';
+import 'package:video_player/video_player.dart';
 
 void main() {
   testWidgets('la multivista incorpora automáticamente eventos nuevos', (tester) async {
@@ -24,6 +25,30 @@ void main() {
     expect(refreshes, 1);
     expect(find.text('MULTIVISTA · 2/4 EVENTOS'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+
+  group('selector de resolución', () {
+    test('presenta la altura disponible como resolución legible', () {
+      const track = VideoTrack(
+        id: 'video-720',
+        isSelected: true,
+        width: 1280,
+        height: 720,
+        bitrate: 2800000,
+      );
+      expect(videoTrackResolutionLabel(track), '720p');
+    });
+
+    test('usa la etiqueta del proveedor cuando no hay altura', () {
+      const track = VideoTrack(
+        id: 'video-auto',
+        isSelected: false,
+        label: 'HD',
+        bitrate: 1500000,
+      );
+      expect(videoTrackResolutionLabel(track), 'HD');
+    });
   });
 
   group('Validación de señales autorizadas', () {

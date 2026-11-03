@@ -31,6 +31,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     with WidgetsBindingObserver {
   final AutomaticLiveService _service = AutomaticLiveService();
   List<ScheduledLiveEvent> _scheduled = <ScheduledLiveEvent>[];
+  List<FutbolLibreEvent> _agendaEvents = <FutbolLibreEvent>[];
   Timer? _refreshTimer;
   Timer? _eventBoundaryTimer;
   bool _refreshing = false;
@@ -84,7 +85,10 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
           : <ScheduledLiveEvent>[];
 
       if (!mounted) return;
-      setState(() => _scheduled = latest);
+      setState(() {
+        _agendaEvents = events;
+        _scheduled = latest;
+      });
       _scheduleEventBoundaryRefresh();
     } catch (_) {
       // Un fallo temporal no borra las asignaciones vigentes.
@@ -141,6 +145,43 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     return result;
   }
 
+  List<LivePlayerWaitingEvent> _waitingEvents(
+    List<LivePlayerSource> activeSources,
+  ) {
+    final now = DateTime.now();
+    final activeEventIds = activeSources
+        .map((source) => source.eventId)
+        .whereType<String>()
+        .toSet();
+    final upcoming = _agendaEvents.where((event) {
+      if (activeEventIds.contains(event.id)) return false;
+      final end = event.endsAt ??
+          event.startsAt.add(const Duration(hours: 3));
+      return now.isBefore(end);
+    }).toList()
+      ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+
+    return upcoming
+        .take(4 - activeSources.length)
+        .map((event) {
+          final teams = event.homeTeam.isNotEmpty && event.awayTeam.isNotEmpty
+              ? '\${event.homeTeam} vs \${event.awayTeam}'
+              : event.title;
+          final localStart = event.startsAt.toLocal();
+          final time =
+              '\${localStart.hour.toString().padLeft(2, '0')}:\${localStart.minute.toString().padLeft(2, '0')}';
+          final heading = event.competition.isNotEmpty
+              ? '\${event.sport} · \${event.competition}'
+              : event.sport;
+          return LivePlayerWaitingEvent(
+            heading: heading,
+            match: teams,
+            startLabel: 'Comienza $time',
+          );
+        })
+        .toList(growable: false);
+  }
+
   /// Actualiza justo al inicio o al fin del evento, además del control
   /// periódico del catálogo que continúa ejecutándose cada 45 segundos.
   void _scheduleEventBoundaryRefresh() {
@@ -166,6 +207,8 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
 
   @override
   Widget build(BuildContext context) {
+    final activeSources = _playerSources();
+    final waitingEvents = _waitingEvents(activeSources);
     return Scaffold(
       backgroundColor: _autoBg,
       appBar: AppBar(
@@ -190,7 +233,8 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         ],
       ),
       body: LivePlayerBoard(
-        sources: _playerSources(),
+        sources: activeSources,
+        waitingEvents: waitingEvents,
         isActive: widget.isActive,
       ),
     );

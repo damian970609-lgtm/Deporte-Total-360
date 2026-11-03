@@ -1333,22 +1333,50 @@ class LivePlayerSource {
     required this.title,
     required this.url,
     this.subtitle,
+    this.eventId,
   });
 
   final String title;
   final String url;
   final String? subtitle;
+  final String? eventId;
 }
 
-/// Cuatro espacios fijos para ver eventos simultáneos sin desplazarse.
+class LivePlayerWaitingEvent {
+  const LivePlayerWaitingEvent({
+    required this.heading,
+    required this.match,
+    required this.startLabel,
+  });
+
+  final String heading;
+  final String match;
+  final String startLabel;
+}
+
+/// Formato de resolución legible para el selector de calidad.
+String videoTrackResolutionLabel(VideoTrack track) {
+  final height = track.height;
+  if (height != null && height > 0) return '\${height}p';
+  final label = track.label?.trim();
+  if (label != null && label.isNotEmpty) return label;
+  final bitrate = track.bitrate;
+  if (bitrate != null && bitrate > 0) {
+    return '\${(bitrate / 1000).round()} kbps';
+  }
+  return 'Calidad disponible';
+}
+
 class LivePlayerBoard extends StatelessWidget {
   const LivePlayerBoard({
     super.key,
     required this.sources,
+    this.waitingEvents = const <LivePlayerWaitingEvent>[],
     this.isActive = true,
   });
 
   final List<LivePlayerSource> sources;
+  final List<LivePlayerWaitingEvent> waitingEvents;
   final bool isActive;
 
   @override
@@ -1356,6 +1384,10 @@ class LivePlayerBoard extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth > constraints.maxHeight ? 4 : 2;
+        final activeSources = sources.take(4).toList(growable: false);
+        final waiting = waitingEvents
+            .take(4 - activeSources.length)
+            .toList(growable: false);
         return Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 960),
@@ -1372,54 +1404,62 @@ class LivePlayerBoard extends StatelessWidget {
               ),
               itemBuilder: (context, index) {
                 final channelNumber = index + 1;
-                if (index >= sources.length) {
-                  return _WaitingLivePlayerTile(channelNumber: channelNumber);
-                }
-                final source = sources[index];
-                return Container(
-                  padding: const EdgeInsets.all(5),
-                  decoration: BoxDecoration(
-                    color: _livePanel,
-                    borderRadius: BorderRadius.circular(11),
-                    border: Border.all(color: _liveLine),
-                  ),
-                  child: Column(
-                    children: <Widget>[
-                      Expanded(
-                        child: Center(
-                          child: AspectRatio(
-                            aspectRatio: 16 / 9,
-                            child: _LiveVideoTile(
-                              key: ValueKey<String>(
-                                'board-$channelNumber-${source.url}',
+                if (index < activeSources.length) {
+                  final source = activeSources[index];
+                  return Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      color: _livePanel,
+                      borderRadius: BorderRadius.circular(11),
+                      border: Border.all(color: _liveLine),
+                    ),
+                    child: Column(
+                      children: <Widget>[
+                        Expanded(
+                          child: Center(
+                            child: AspectRatio(
+                              aspectRatio: 16 / 9,
+                              child: _LiveVideoTile(
+                                key: ValueKey<String>(
+                                  'board-$channelNumber-\${source.url}',
+                                ),
+                                source: source,
+                                initiallyMuted: index > 0,
+                                autoStart: false,
+                                isActive: isActive,
                               ),
-                              source: source,
-                              initiallyMuted: index > 0,
-                              autoStart: false,
-                              isActive: isActive,
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      SizedBox(
-                        height: 29,
-                        child: Text(
-                          source.subtitle ?? 'Transmisión detectada',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: _liveMuted,
-                            fontSize: 9,
-                            height: 1.25,
-                            fontWeight: FontWeight.w700,
+                        const SizedBox(height: 4),
+                        SizedBox(
+                          height: 29,
+                          child: Text(
+                            source.subtitle ?? 'Transmisión en directo',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: _liveMuted,
+                              fontSize: 9,
+                              height: 1.25,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
+                      ],
+                    ),
+                  );
+                }
+
+                final waitingIndex = index - activeSources.length;
+                if (waitingIndex < waiting.length) {
+                  return _WaitingLivePlayerTile(
+                    channelNumber: channelNumber,
+                    event: waiting[waitingIndex],
+                  );
+                }
+                return _WaitingLivePlayerTile(channelNumber: channelNumber);
               },
             ),
           ),
@@ -1430,9 +1470,13 @@ class LivePlayerBoard extends StatelessWidget {
 }
 
 class _WaitingLivePlayerTile extends StatelessWidget {
-  const _WaitingLivePlayerTile({required this.channelNumber});
+  const _WaitingLivePlayerTile({
+    required this.channelNumber,
+    this.event,
+  });
 
   final int channelNumber;
+  final LivePlayerWaitingEvent? event;
 
   @override
   Widget build(BuildContext context) {
@@ -1461,13 +1505,63 @@ class _WaitingLivePlayerTile extends StatelessWidget {
               ),
             ),
           ),
-          const Expanded(
-            child: Center(
-              child: Icon(
-                Icons.play_circle_outline_rounded,
-                color: _liveMuted,
-                size: 42,
-              ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+              child: event == null
+                  ? const Center(
+                      child: Icon(
+                        Icons.play_circle_outline_rounded,
+                        color: _liveMuted,
+                        size: 42,
+                      ),
+                    )
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        const Icon(
+                          Icons.event_available_rounded,
+                          color: _liveCyan,
+                          size: 23,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          event!.heading,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: _liveCyan,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          event!.match,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            height: 1.25,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          event!.startLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: _liveMuted,
+                            fontSize: 9,
+                          ),
+                        ),
+                      ],
+                    ),
             ),
           ),
           const Padding(
@@ -1480,7 +1574,7 @@ class _WaitingLivePlayerTile extends StatelessWidget {
               style: TextStyle(
                 color: _liveMuted,
                 fontSize: 8,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w900,
               ),
             ),
           ),
@@ -1490,6 +1584,7 @@ class _WaitingLivePlayerTile extends StatelessWidget {
   }
 }
 
+/// Un reproductor de 1 a 4 cuadros. Cada cuadro administra su propio player nativo.
 /// Un reproductor de 1 a 4 cuadros. Cada cuadro administra su propio player nativo.
 class LivePlayerGridScreen extends StatefulWidget {
   const LivePlayerGridScreen({
@@ -1639,9 +1734,13 @@ class _LiveVideoTile extends StatefulWidget {
 class _LiveVideoTileState extends State<_LiveVideoTile> {
   VideoPlayerController? _controller;
   String? _error;
+  List<VideoTrack> _videoTracks = <VideoTrack>[];
+  String? _manualQualityTrackId;
   bool _loading = false;
   bool _showControls = true;
   bool _muted = false;
+  bool _isFullscreen = false;
+  bool _compactPlayback = false;
 
   @override
   void initState() {
@@ -1654,6 +1753,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
   void didUpdateWidget(covariant _LiveVideoTile oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isActive && !widget.isActive) {
+      _compactPlayback = false;
       final controller = _controller;
       if (controller?.value.isPlaying == true) {
         unawaited(controller!.pause());
@@ -1667,6 +1767,21 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
     super.dispose();
   }
 
+  Future<List<VideoTrack>> _readVideoTracks(
+    VideoPlayerController controller,
+  ) async {
+    try {
+      if (!controller.isVideoTrackSupportAvailable()) {
+        return <VideoTrack>[];
+      }
+      final tracks = await controller.getVideoTracks();
+      return tracks.toList(growable: false)
+        ..sort((a, b) => (b.height ?? 0).compareTo(a.height ?? 0));
+    } catch (_) {
+      return <VideoTrack>[];
+    }
+  }
+
   Future<void> _initialize() async {
     if (!widget.isActive) return;
     final old = _controller;
@@ -1676,15 +1791,21 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
     setState(() {
       _loading = true;
       _error = null;
+      _videoTracks = <VideoTrack>[];
+      _manualQualityTrackId = null;
+      _compactPlayback = false;
+      _isFullscreen = false;
     });
+
     final uri = Uri.tryParse(widget.source.url.trim());
     if (uri == null || !isSupportedAuthorizedMediaUrl(uri.toString())) {
       setState(() {
         _loading = false;
-        _error = 'La URL no es un archivo HLS o MP4 directo válido.';
+        _error = 'La URL no es una señal multimedia directa válida.';
       });
       return;
     }
+
     final controller = VideoPlayerController.networkUrl(
       uri,
       formatHint: _videoFormatHintFor(uri),
@@ -1695,18 +1816,23 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
       await controller.initialize();
       await controller.setLooping(false);
       await controller.setVolume(_muted ? 0 : 1);
+      final tracks = await _readVideoTracks(controller);
       if (!mounted || !widget.isActive) {
         await controller.dispose();
         if (identical(_controller, controller)) _controller = null;
         return;
       }
+      setState(() {
+        _videoTracks = tracks;
+        _loading = false;
+      });
       await controller.play();
       if (!mounted) {
         await controller.dispose();
         if (identical(_controller, controller)) _controller = null;
         return;
       }
-      setState(() => _loading = false);
+      setState(() {});
     } catch (error) {
       if (!mounted) {
         await controller.dispose();
@@ -1724,17 +1850,26 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
 
   Future<void> _togglePlayback() async {
     if (!widget.isActive) return;
-    final controller = _controller;
+    var controller = _controller;
     if (controller == null || !controller.value.isInitialized) {
       await _initialize();
+      controller = _controller;
+      if (controller == null || !controller.value.isInitialized) return;
+      if (controller.value.isPlaying) {
+        await _openFullscreen(controller);
+      }
       return;
     }
+
     if (controller.value.isPlaying) {
       await controller.pause();
-    } else {
-      await controller.play();
+      if (mounted) setState(() {});
+      return;
     }
+
+    await controller.play();
     if (mounted) setState(() {});
+    await _openFullscreen(controller);
   }
 
   Future<void> _toggleMute() async {
@@ -1746,207 +1881,606 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _openFullscreen() async {
-    if (!widget.isActive) return;
+  Future<void> _applyQuality(VideoTrack? track) async {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
-    final resumeAfter = controller.value.isPlaying;
-    await controller.pause();
-    if (!mounted) return;
+    try {
+      // null elimina el límite manual y devuelve ExoPlayer al modo ABR.
+      await controller.selectVideoTrack(track);
+      if (!mounted) return;
+      setState(() => _manualQualityTrackId = track?.id);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo cambiar la resolución: $error')),
+      );
+    }
+  }
+
+  Future<void> _openFullscreen(VideoPlayerController controller) async {
+    if (!widget.isActive || !controller.value.isInitialized) return;
+    setState(() => _isFullscreen = true);
+
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => _LiveFullscreenPlayer(
           title: widget.source.title,
-          url: widget.source.url,
+          controller: controller,
+          initiallyMuted: _muted,
+          initialQualityTrackId: _manualQualityTrackId,
+          onQualityChanged: (track) {
+            if (!mounted || !identical(_controller, controller)) return;
+            setState(() => _manualQualityTrackId = track?.id);
+          },
         ),
       ),
     );
-    if (resumeAfter &&
-        mounted &&
-        widget.isActive &&
-        controller.value.isInitialized) {
-      await controller.play();
+
+    if (!mounted || !identical(_controller, controller)) return;
+    final tracks = await _readVideoTracks(controller);
+    if (!mounted || !identical(_controller, controller)) return;
+    setState(() {
+      _isFullscreen = false;
+      _videoTracks = tracks;
+      _muted = controller.value.volume == 0;
+      // Primera pulsación de atrás: regresar a la miniatura y conservar vídeo.
+      _compactPlayback = controller.value.isInitialized;
+    });
+  }
+
+  Future<void> _stopCompactPlayback() async {
+    final controller = _controller;
+    if (controller == null) {
+      if (mounted) setState(() => _compactPlayback = false);
+      return;
     }
+    _compactPlayback = false;
+    try {
+      if (controller.value.isInitialized) await controller.pause();
+      await controller.dispose();
+    } catch (_) {
+      // El controlador puede haberse cerrado al cambiar el evento.
+    }
+    if (!mounted || !identical(_controller, controller)) return;
+    setState(() {
+      _controller = null;
+      _videoTracks = <VideoTrack>[];
+      _manualQualityTrackId = null;
+      _loading = false;
+      _error = null;
+      _isFullscreen = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
     final initialized = controller?.value.isInitialized ?? false;
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF050A13),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _liveLine),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        fit: StackFit.expand,
-        children: <Widget>[
-          if (initialized)
-            Center(
-              child: GestureDetector(
-                onTap: () => setState(() => _showControls = !_showControls),
-                child: AspectRatio(
-                  aspectRatio: controller!.value.aspectRatio > 0
-                      ? controller.value.aspectRatio
-                      : 16 / 9,
-                  child: VideoPlayer(controller),
+    final isPlaying = controller?.value.isPlaying ?? false;
+
+    return PopScope<void>(
+      canPop: !_compactPlayback,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _compactPlayback) {
+          unawaited(_stopCompactPlayback());
+        }
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF050A13),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _liveLine),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            if (initialized && !_isFullscreen)
+              Center(
+                child: GestureDetector(
+                  onTap: () {
+                    if (isPlaying) {
+                      unawaited(_openFullscreen(controller!));
+                    } else {
+                      setState(() => _showControls = !_showControls);
+                    }
+                  },
+                  child: AspectRatio(
+                    aspectRatio: controller!.value.aspectRatio > 0
+                        ? controller.value.aspectRatio
+                        : 16 / 9,
+                    child: VideoPlayer(controller),
+                  ),
+                ),
+              )
+            else
+              const ColoredBox(
+                color: Colors.black,
+                child: Center(
+                  child: Icon(
+                    Icons.live_tv_rounded,
+                    size: 34,
+                    color: _liveMuted,
+                  ),
                 ),
               ),
-            )
-          else
-            const ColoredBox(
-              color: Colors.black,
-              child: Center(
-                child: Icon(
-                  Icons.live_tv_rounded,
-                  size: 34,
-                  color: _liveMuted,
+            if (!_loading &&
+                _error == null &&
+                (!initialized || !isPlaying) &&
+                !_isFullscreen)
+              Center(
+                child: IconButton.filled(
+                  onPressed: _togglePlayback,
+                  iconSize: 39,
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  style: IconButton.styleFrom(
+                    backgroundColor: _liveCyan,
+                    foregroundColor: Colors.black,
+                  ),
+                  tooltip: 'Reproducir en pantalla completa',
                 ),
               ),
-            ),
-          if (!_loading &&
-              _error == null &&
-              (!initialized || controller?.value.isPlaying == false))
-            Center(
-              child: IconButton.filled(
-                onPressed: _togglePlayback,
-                iconSize: 39,
-                icon: const Icon(Icons.play_arrow_rounded),
-                style: IconButton.styleFrom(
-                  backgroundColor: _liveCyan,
-                  foregroundColor: Colors.black,
-                ),
-                tooltip: 'Reproducir transmisión',
+            if (_loading)
+              const Center(
+                child: CircularProgressIndicator(color: _liveCyan),
               ),
-            ),
-          if (_loading)
-            const Center(
-              child: CircularProgressIndicator(color: _liveCyan),
-            ),
-          if (_error != null)
-            ColoredBox(
-              color: const Color(0xDD000000),
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      const Icon(Icons.error_outline_rounded,
-                          color: _liveRed, size: 28),
-                      const SizedBox(height: 7),
-                      Text(
-                        _error!,
-                        textAlign: TextAlign.center,
-                        maxLines: 4,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          height: 1.35,
+            if (_error != null)
+              ColoredBox(
+                color: const Color(0xDD000000),
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        const Icon(Icons.error_outline_rounded,
+                            color: _liveRed, size: 28),
+                        const SizedBox(height: 7),
+                        Text(
+                          _error!,
+                          textAlign: TextAlign.center,
+                          maxLines: 4,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            height: 1.35,
+                          ),
                         ),
+                        const SizedBox(height: 6),
+                        TextButton.icon(
+                          onPressed: _initialize,
+                          icon: const Icon(Icons.refresh_rounded, size: 16),
+                          label: const Text('REINTENTAR'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            if (initialized && controller!.value.isBuffering && !_isFullscreen)
+              const Positioned(
+                top: 42,
+                right: 8,
+                child: SizedBox(
+                  width: 17,
+                  height: 17,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: _liveCyan,
+                  ),
+                ),
+              ),
+            if (!_isFullscreen)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  color: Colors.black.withAlpha(150),
+                  child: Row(
+                    children: <Widget>[
+                      Icon(
+                        isPlaying ? Icons.circle : Icons.circle_outlined,
+                        color: isPlaying ? _liveRed : _liveMuted,
+                        size: 7,
                       ),
-                      const SizedBox(height: 6),
-                      TextButton.icon(
-                        onPressed: _initialize,
-                        icon: const Icon(Icons.refresh_rounded, size: 16),
-                        label: const Text('REINTENTAR'),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          widget.source.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
-          if (initialized && controller!.value.isBuffering)
-            const Positioned(
-              top: 42,
-              right: 8,
-              child: SizedBox(
-                width: 17,
-                height: 17,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: _liveCyan,
+            if (initialized && _showControls && !_isFullscreen)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  color: Colors.black.withAlpha(165),
+                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: <Widget>[
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        onPressed: _togglePlayback,
+                        icon: Icon(
+                          isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 19,
+                        ),
+                        tooltip: 'Pausar o reproducir',
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        onPressed: _toggleMute,
+                        icon: Icon(
+                          _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                          color: Colors.white,
+                          size: 17,
+                        ),
+                        tooltip: _muted ? 'Activar sonido' : 'Silenciar',
+                      ),
+                      _VideoQualityPickerButton(
+                        controller: controller!,
+                        tracks: _videoTracks,
+                        selectedTrackId: _manualQualityTrackId,
+                        onChanged: _applyQuality,
+                        compact: true,
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _openFullscreen(controller),
+                        icon: const Icon(
+                          Icons.fullscreen_rounded,
+                          color: Colors.white,
+                          size: 19,
+                        ),
+                        tooltip: 'Pantalla completa',
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              color: Colors.black.withAlpha(150),
-              child: Row(
-                children: <Widget>[
-                  const Icon(Icons.circle, color: _liveRed, size: 7),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      widget.source.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (initialized && _showControls)
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                color: Colors.black.withAlpha(165),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VideoQualityPickerButton extends StatelessWidget {
+  const _VideoQualityPickerButton({
+    required this.controller,
+    required this.tracks,
+    required this.selectedTrackId,
+    required this.onChanged,
+    this.compact = false,
+  });
+
+  final VideoPlayerController controller;
+  final List<VideoTrack> tracks;
+  final String? selectedTrackId;
+  final ValueChanged<VideoTrack?> onChanged;
+  final bool compact;
+
+  String _details(VideoTrack track) {
+    final parts = <String>[];
+    final bitrate = track.bitrate;
+    if (bitrate != null && bitrate > 0) {
+      parts.add('\${(bitrate / 1000).round()} kb/s');
+    }
+    if (track.codec != null && track.codec!.isNotEmpty) {
+      parts.add(track.codec!);
+    }
+    return parts.join(' · ');
+  }
+
+  Future<void> _openPicker(BuildContext context) async {
+    final sorted = List<VideoTrack>.of(tracks)
+      ..sort((a, b) => (b.height ?? 0).compareTo(a.height ?? 0));
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: _livePanel,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 12, bottom: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Padding(
+                padding: EdgeInsets.fromLTRB(18, 5, 18, 13),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
                   children: <Widget>[
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      onPressed: _togglePlayback,
-                      icon: Icon(
-                        controller!.value.isPlaying
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
+                    Icon(Icons.high_quality_rounded, color: _liveCyan),
+                    SizedBox(width: 10),
+                    Text(
+                      'CALIDAD DE TRANSMISIÓN',
+                      style: TextStyle(
                         color: Colors.white,
-                        size: 20,
+                        fontWeight: FontWeight.w900,
                       ),
-                      tooltip: 'Pausar o reproducir',
-                    ),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      onPressed: _toggleMute,
-                      icon: Icon(
-                        _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                      tooltip: _muted ? 'Activar sonido' : 'Silenciar',
-                    ),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      onPressed: _openFullscreen,
-                      icon: const Icon(
-                        Icons.fullscreen_rounded,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                      tooltip: 'Pantalla completa',
                     ),
                   ],
                 ),
               ),
+              ListTile(
+                leading: const Icon(Icons.auto_awesome_rounded, color: _liveCyan),
+                title: const Text(
+                  'Automática',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+                ),
+                subtitle: const Text(
+                  'Se adapta al ancho de banda disponible',
+                  style: TextStyle(color: _liveMuted, fontSize: 11),
+                ),
+                trailing: selectedTrackId == null
+                    ? const Icon(Icons.check_circle_rounded, color: _liveGreen)
+                    : null,
+                onTap: () async {
+                  try {
+                    await controller.selectVideoTrack(null);
+                    onChanged(null);
+                    if (sheetContext.mounted) Navigator.pop(sheetContext);
+                  } catch (error) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('No se pudo activar calidad automática: $error')),
+                      );
+                    }
+                  }
+                },
+              ),
+              if (sorted.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(18, 8, 18, 18),
+                  child: Text(
+                    'Esta señal no publica varias resoluciones. Se mantiene la calidad automática disponible.',
+                    style: TextStyle(color: _liveMuted, fontSize: 12),
+                  ),
+                ),
+              for (final track in sorted)
+                ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.hd_rounded, color: _liveMuted),
+                  title: Text(
+                    videoTrackResolutionLabel(track),
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+                  ),
+                  subtitle: Text(
+                    _details(track).isEmpty ? 'Resolución del proveedor' : _details(track),
+                    style: const TextStyle(color: _liveMuted, fontSize: 11),
+                  ),
+                  trailing: selectedTrackId == track.id
+                      ? const Icon(Icons.check_circle_rounded, color: _liveGreen)
+                      : null,
+                  onTap: () async {
+                    try {
+                      await controller.selectVideoTrack(track);
+                      onChanged(track);
+                      if (sheetContext.mounted) Navigator.pop(sheetContext);
+                    } catch (error) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('No se pudo cambiar la resolución: $error')),
+                        );
+                      }
+                    }
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final label = selectedTrackId == null
+        ? 'AUTO'
+        : (tracks.where((track) => track.id == selectedTrackId).firstOrNull
+                ?.let((track) => videoTrackResolutionLabel(track)) ??
+            'CALIDAD');
+    return TextButton.icon(
+      onPressed: () => _openPicker(context),
+      icon: const Icon(Icons.high_quality_rounded, size: 17),
+      label: Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900)),
+      style: TextButton.styleFrom(
+        foregroundColor: selectedTrackId == null ? _liveCyan : _liveGreen,
+        padding: compact
+            ? const EdgeInsets.symmetric(horizontal: 3)
+            : const EdgeInsets.symmetric(horizontal: 8),
+        minimumSize: Size(compact ? 35 : 52, 32),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    );
+  }
+}
+
+class _LiveFullscreenPlayer extends StatefulWidget {
+  const _LiveFullscreenPlayer({
+    required this.title,
+    required this.controller,
+    required this.initiallyMuted,
+    required this.initialQualityTrackId,
+    required this.onQualityChanged,
+  });
+
+  final String title;
+  final VideoPlayerController controller;
+  final bool initiallyMuted;
+  final String? initialQualityTrackId;
+  final ValueChanged<VideoTrack?> onQualityChanged;
+
+  @override
+  State<_LiveFullscreenPlayer> createState() => _LiveFullscreenPlayerState();
+}
+
+class _LiveFullscreenPlayerState extends State<_LiveFullscreenPlayer> {
+  List<VideoTrack> _videoTracks = <VideoTrack>[];
+  String? _manualQualityTrackId;
+  bool _muted = false;
+  bool _showControls = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _muted = widget.initiallyMuted;
+    _manualQualityTrackId = widget.initialQualityTrackId;
+    unawaited(SystemChrome.setPreferredOrientations(
+      const <DeviceOrientation>[
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ],
+    ));
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky));
+    _loadTracks();
+  }
+
+  Future<void> _loadTracks() async {
+    try {
+      final controller = widget.controller;
+      if (!controller.isVideoTrackSupportAvailable()) return;
+      final tracks = await controller.getVideoTracks();
+      if (!mounted) return;
+      setState(() {
+        _videoTracks = tracks.toList(growable: false)
+          ..sort((a, b) => (b.height ?? 0).compareTo(a.height ?? 0));
+      });
+    } catch (_) {
+      // La calidad automática sigue disponible aunque el proveedor no exponga pistas.
+    }
+  }
+
+  @override
+  void dispose() {
+    // El controlador pertenece a la miniatura; no se detiene al cerrar fullscreen.
+    unawaited(SystemChrome.setPreferredOrientations(const <DeviceOrientation>[]));
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
+    super.dispose();
+  }
+
+  Future<void> _togglePlayback() async {
+    final controller = widget.controller;
+    if (controller.value.isPlaying) {
+      await controller.pause();
+    } else {
+      await controller.play();
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _toggleMute() async {
+    _muted = !_muted;
+    await widget.controller.setVolume(_muted ? 0 : 1);
+    if (mounted) setState(() {});
+  }
+
+  void _qualityChanged(VideoTrack? track) {
+    _manualQualityTrackId = track?.id;
+    widget.onQualityChanged(track);
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            Center(
+              child: GestureDetector(
+                onTap: () => setState(() => _showControls = !_showControls),
+                child: AspectRatio(
+                  aspectRatio: controller.value.aspectRatio > 0
+                      ? controller.value.aspectRatio
+                      : 16 / 9,
+                  child: VideoPlayer(controller),
+                ),
+              ),
             ),
-        ],
+            if (controller.value.isBuffering)
+              const Center(
+                child: CircularProgressIndicator(color: _liveCyan),
+              ),
+            if (_showControls)
+              Positioned(
+                top: 8,
+                left: 8,
+                right: 8,
+                child: Row(
+                  children: <Widget>[
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                      tooltip: 'Volver al reproductor pequeño',
+                    ),
+                    Expanded(
+                      child: Text(
+                        widget.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    _VideoQualityPickerButton(
+                      controller: controller,
+                      tracks: _videoTracks,
+                      selectedTrackId: _manualQualityTrackId,
+                      onChanged: _qualityChanged,
+                    ),
+                  ],
+                ),
+              ),
+            if (_showControls)
+              Positioned(
+                bottom: 15,
+                left: 0,
+                right: 0,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    IconButton.filledTonal(
+                      onPressed: _togglePlayback,
+                      icon: Icon(
+                        controller.value.isPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    IconButton.filledTonal(
+                      onPressed: _toggleMute,
+                      icon: Icon(
+                        _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
