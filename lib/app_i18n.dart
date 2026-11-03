@@ -4,9 +4,6 @@ enum AppLanguage { spanish, english, portuguese, french }
 
 final ValueNotifier<AppLanguage> appLanguage =
     ValueNotifier<AppLanguage>(AppLanguage.spanish);
-const String defaultSsh101Channel = '';
-final ValueNotifier<String> channelSlug =
-    ValueNotifier<String>(defaultSsh101Channel);
 final ValueNotifier<String> telegramLink = ValueNotifier<String>('');
 
 String languageCode(AppLanguage language) {
