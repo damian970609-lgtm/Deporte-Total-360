@@ -1907,15 +1907,17 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
     );
 
     if (!mounted || !identical(_controller, controller)) return;
-    final tracks = await _readVideoTracks(controller);
-    if (!mounted || !identical(_controller, controller)) return;
     setState(() {
       _isFullscreen = false;
-      _videoTracks = tracks;
       _muted = controller.value.volume == 0;
       // Primera pulsación de atrás: regresar a la miniatura y conservar vídeo.
+      // Se marca antes de consultar las pistas para que la siguiente pulsación
+      // ya quede interceptada y pueda detener el directo.
       _compactPlayback = controller.value.isInitialized;
     });
+    final tracks = await _readVideoTracks(controller);
+    if (!mounted || !identical(_controller, controller)) return;
+    setState(() => _videoTracks = tracks);
   }
 
   Future<void> _stopCompactPlayback() async {
