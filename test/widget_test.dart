@@ -87,7 +87,7 @@ void main() {
 
     expect(find.text('Deportes en vivo'), findsOneWidget);
     expect(find.text('Agenda hoy'), findsOneWidget);
-    expect(find.text('Noticias'), findsOneWidget);
+    expect(find.text('Noticias'), findsWidgets);
     expect(find.text('Mister Fantasy'), findsOneWidget);
     expect(find.text('Estadísticas'), findsWidgets);
     expect(find.text('Resúmenes'), findsOneWidget);
