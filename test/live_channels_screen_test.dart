@@ -16,6 +16,10 @@ void main() {
         isSupportedAuthorizedMediaUrl('http://media.example/live.m3u8'),
         isTrue,
       );
+      expect(
+        isSupportedAuthorizedMediaUrl('https://media.example/live.ts'),
+        isTrue,
+      );
     });
 
     test('rechaza páginas web, RTMP, DASH y URLs con credenciales', () {
