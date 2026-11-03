@@ -9,14 +9,29 @@ const String _playlistUrlKey = 'dt360_auto_live_playlist_url_v1';
 const String _epgUrlKey = 'dt360_auto_live_epg_url_v1';
 const String _authorizedKey = 'dt360_auto_live_authorized_v1';
 
-/// Catálogos internacionales; las listas incluyen feeds públicos de distintas
-/// regiones. El usuario debe confirmar que puede reproducirlos en su territorio.
-const String defaultAutoLivePlaylistUrls =
-    'https://dearbulut.github.io/iptv/playlists/category/sports.m3u\n'
-    'https://dearbulut.github.io/iptv/playlists/online.m3u\n'
+/// Catálogos globales y una lista adicional de emisoras deportivas públicas.
+/// La presencia en un índice no sustituye la comprobación de derechos del emisor.
+const String legacyDefaultAutoLivePlaylistUrls =
+    'https://dearbulut.github.io/iptv/playlists/category/sports.m3u\\n'
+    'https://dearbulut.github.io/iptv/playlists/online.m3u\\n'
     'https://iptv-org.github.io/iptv/categories/sports.m3u';
-const String defaultAutoLiveEpgUrl =
+const String legacyDefaultAutoLiveEpgUrl =
     'https://dearbulut.github.io/iptv/epg/guide.xml.gz';
+
+const String defaultAutoLivePlaylistUrls =
+    'https://dearbulut.github.io/iptv/playlists/category/sports.m3u\\n'
+    'https://dearbulut.github.io/iptv/playlists/online.m3u\\n'
+    'https://iptv-org.github.io/iptv/categories/sports.m3u\\n'
+    'https://raw.githubusercontent.com/freecasthub/public-iptv/main/sports.m3u\\n'
+    'https://dearbulut.github.io/iptv/playlists/best.m3u';
+
+const String defaultAutoLiveEpgUrl =
+    'https://dearbulut.github.io/iptv/epg/guide.xml.gz\\n'
+    'https://iptv-epg.org/files/epg-cw.xml\\n'
+    'https://iptv-epg.org/files/epg-jm.xml\\n'
+    'https://iptv-epg.org/files/epg-br.xml\\n'
+    'https://iptv-epg.org/files/epg-ar.xml\\n'
+    'https://iptv-epg.org/files/epg-es.xml';
 
 List<String> _splitPlaylistUrls(String value) => value
     .split(RegExp(r'[\r\n;]+'))
@@ -49,17 +64,33 @@ class AutoLiveSettings {
   final bool authorizationConfirmed;
 
   List<String> get playlistUrls => _splitPlaylistUrls(playlistUrl);
+  List<String> get epgUrls => _splitPlaylistUrls(epgUrl);
 
   bool get isConfigured => authorizationConfirmed &&
       playlistUrls.isNotEmpty &&
       playlistUrls.every(isSafeHttpUrl) &&
-      isSafeHttpUrl(epgUrl);
+      epgUrls.isNotEmpty &&
+      epgUrls.every(isSafeHttpUrl);
 
   static Future<AutoLiveSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
+    var playlist = prefs.getString(_playlistUrlKey) ?? defaultAutoLivePlaylistUrls;
+    var epg = prefs.getString(_epgUrlKey) ?? defaultAutoLiveEpgUrl;
+
+    // Migra la configuración predeterminada anterior sin sobrescribir listas
+    // o guías personalizadas que el usuario haya guardado.
+    if (playlist.trim() == legacyDefaultAutoLivePlaylistUrls.trim()) {
+      playlist = defaultAutoLivePlaylistUrls;
+      await prefs.setString(_playlistUrlKey, playlist);
+    }
+    if (epg.trim() == legacyDefaultAutoLiveEpgUrl.trim()) {
+      epg = defaultAutoLiveEpgUrl;
+      await prefs.setString(_epgUrlKey, epg);
+    }
+
     return AutoLiveSettings(
-      playlistUrl: prefs.getString(_playlistUrlKey) ?? defaultAutoLivePlaylistUrls,
-      epgUrl: prefs.getString(_epgUrlKey) ?? defaultAutoLiveEpgUrl,
+      playlistUrl: playlist,
+      epgUrl: epg,
       authorizationConfirmed: prefs.getBool(_authorizedKey) ?? false,
     );
   }
@@ -70,12 +101,14 @@ class AutoLiveSettings {
     required bool authorizationConfirmed,
   }) async {
     final playlist = _splitPlaylistUrls(playlistUrl).join('\n');
-    final epg = epgUrl.trim();
+    final epg = _splitPlaylistUrls(epgUrl).join('\n');
     final playlistUrls = _splitPlaylistUrls(playlist);
+    final epgUrls = _splitPlaylistUrls(epg);
     if (playlistUrls.isEmpty ||
         !playlistUrls.every(isSafeHttpUrl) ||
-        !isSafeHttpUrl(epg)) {
-      throw const FormatException('Cada lista M3U y la EPG deben tener una dirección HTTP o HTTPS válida.');
+        epgUrls.isEmpty ||
+        !epgUrls.every(isSafeHttpUrl)) {
+      throw const FormatException('Cada lista M3U y cada guía EPG deben tener una dirección HTTP o HTTPS válida.');
     }
     if (!authorizationConfirmed) {
       throw const FormatException('Confirma que tienes derecho a reproducir las señales de la lista.');
@@ -253,21 +286,24 @@ class AutomaticLiveService {
     bool forceRefresh = false,
   }) async {
     final playlistUrls = _splitPlaylistUrls(playlistUrl);
+    final epgUrls = _splitPlaylistUrls(epgUrl);
     if (playlistUrls.isEmpty ||
         !playlistUrls.every(isSafeHttpUrl) ||
-        !isSafeHttpUrl(epgUrl)) {
-      throw const FormatException('Configura una o más listas M3U válidas y una guía XMLTV/EPG.');
+        epgUrls.isEmpty ||
+        !epgUrls.every(isSafeHttpUrl)) {
+      throw const FormatException('Configura listas M3U y guías XMLTV/EPG con direcciones HTTP o HTTPS válidas.');
     }
     final playlistCacheKey = playlistUrls.join('\n');
+    final epgCacheKey = epgUrls.join('\n');
     final now = DateTime.now();
     final cached = _cachedCatalog;
     if (!forceRefresh && cached != null &&
-        _cachedPlaylist == playlistCacheKey && _cachedEpg == epgUrl &&
+        _cachedPlaylist == playlistCacheKey && _cachedEpg == epgCacheKey &&
         _cachedAt != null && now.difference(_cachedAt!) < const Duration(minutes: 5)) {
       return cached;
     }
-    // Una lista caída no debe bloquear las demás: cada fuente se descarga
-    // de forma independiente y se conservan todas las que respondan bien.
+
+    // Cada M3U es independiente: una caída no bloquea las listas de respaldo.
     final playlistBodies = await Future.wait<String?>(
       playlistUrls.map((url) async {
         try {
@@ -277,7 +313,6 @@ class AutomaticLiveService {
         }
       }),
     );
-    final epgBody = await _downloadText(epgUrl, maxBytes: 96 * 1024 * 1024);
     final channelsByUrl = <String, M3uChannel>{};
     for (final body in playlistBodies.whereType<String>()) {
       for (final channel in parseM3u(body)) {
@@ -286,24 +321,54 @@ class AutomaticLiveService {
     }
     final channels = channelsByUrl.values.toList(growable: false);
     if (channels.isEmpty) {
-      throw const FormatException('Ninguna de las listas deportivas respondió con canales HLS/MP4 compatibles.');
+      throw const FormatException('Ninguna lista M3U respondió con canales HLS/MP4/TS compatibles.');
     }
-    final programmes = parseXmltv(epgBody);
+
+    // Se fusionan varias guías. Si una EPG no responde o publica XML inválido,
+    // las demás siguen aportando programas. Las guías regionales tienen un
+    // límite menor para cuidar la memoria del teléfono.
+    final programmesByKey = <String, XmltvProgramme>{};
+    for (var index = 0; index < epgUrls.length; index++) {
+      try {
+        final epgBody = await _downloadText(
+          epgUrls[index],
+          maxBytes: index == 0 ? 128 * 1024 * 1024 : 24 * 1024 * 1024,
+          timeout: const Duration(seconds: 12),
+        );
+        for (final programme in parseXmltv(epgBody)) {
+          final key = <String>[
+            programme.channelId.toLowerCase(),
+            programme.title.toLowerCase().trim(),
+            programme.startsAt.toUtc().toIso8601String(),
+            programme.endsAt.toUtc().toIso8601String(),
+          ].join('|');
+          programmesByKey.putIfAbsent(key, () => programme);
+        }
+      } catch (_) {
+        // Fallback: continuar con la siguiente guía regional/global.
+      }
+    }
+    final programmes = programmesByKey.values.toList(growable: false);
     if (programmes.isEmpty) {
-      throw const FormatException('La EPG XMLTV no contiene programas legibles.');
+      throw const FormatException('Ninguna guía EPG/XMLTV respondió con programas legibles.');
     }
+
     final catalog = AutoLiveCatalog(channels: channels, programmes: programmes);
     _cachedCatalog = catalog;
     _cachedAt = now;
     _cachedPlaylist = playlistCacheKey;
-    _cachedEpg = epgUrl;
+    _cachedEpg = epgCacheKey;
     return catalog;
   }
 
-  Future<String> _downloadText(String value, {required int maxBytes}) async {
+  Future<String> _downloadText(
+    String value, {
+    required int maxBytes,
+    Duration timeout = const Duration(seconds: 25),
+  }) async {
     final response = await _client.get(Uri.parse(value.trim()),
       headers: const <String, String>{'Accept': '*/*'})
-      .timeout(const Duration(seconds: 25));
+      .timeout(timeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw HttpException('La fuente respondió HTTP ' + response.statusCode.toString() + '.');
     }
@@ -425,8 +490,17 @@ class AutomaticLiveService {
       if (channel.tvgId.isNotEmpty) {
         byId.putIfAbsent(channel.tvgId, () => <M3uChannel>[]).add(channel);
       }
-      final name = normalizeText(channel.tvgName.isNotEmpty ? channel.tvgName : channel.name);
-      if (name.isNotEmpty) byName.putIfAbsent(name, () => <M3uChannel>[]).add(channel);
+      // Los XMLTV no siempre usan el mismo tvg-id. Se crean alias por nombre
+      // de canal y por ID normalizado para mejorar el cruce entre proveedores.
+      for (final rawName in <String>[channel.name, channel.tvgName, channel.tvgId]) {
+        final name = normalizeText(rawName);
+        if (name.isEmpty) continue;
+        byName.putIfAbsent(name, () => <M3uChannel>[]).add(channel);
+        final compactName = name.replaceAll(' ', '');
+        if (compactName.isNotEmpty) {
+          byName.putIfAbsent(compactName, () => <M3uChannel>[]).add(channel);
+        }
+      }
     }
 
     final output = <ScheduledLiveEvent>[];
@@ -449,7 +523,11 @@ class AutomaticLiveService {
           ...(programme.channelName.isEmpty
               ? <M3uChannel>[]
               : byName[normalizeText(programme.channelName)] ?? <M3uChannel>[]),
+          ...(programme.channelName.isEmpty
+              ? <M3uChannel>[]
+              : byName[normalizeText(programme.channelName).replaceAll(' ', '')] ?? <M3uChannel>[]),
           ...(byName[normalizeText(programme.channelId)] ?? <M3uChannel>[]),
+          ...(byName[normalizeText(programme.channelId).replaceAll(' ', '')] ?? <M3uChannel>[]),
         ];
         for (final channel in mapped) {
           if (!isDirectPlayableStream(channel.url) || !used.add(channel.url)) continue;
@@ -467,7 +545,7 @@ class AutomaticLiveService {
       // indicadores HD/FHD/UHD y finalmente un orden estable del proveedor.
       candidates.sort((a, b) => b.qualityScore.compareTo(a.qualityScore));
       final checkedCandidates = await Future.wait<ScheduledLiveSource>(
-        candidates.take(6).map(_probeCandidate),
+        candidates.take(12).map(_probeCandidate),
       );
       final verifiedCandidates = checkedCandidates
           .where((candidate) => candidate.available)
