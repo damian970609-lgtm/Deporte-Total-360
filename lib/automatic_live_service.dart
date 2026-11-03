@@ -173,11 +173,13 @@ class ScheduledLiveSource {
   const ScheduledLiveSource({
     required this.channelName, required this.url,
     required this.programmeTitle, required this.programmeEndsAt,
+    required this.qualityScore,
   });
   final String channelName;
   final String url;
   final String programmeTitle;
   final DateTime programmeEndsAt;
+  final int qualityScore;
 }
 
 class ScheduledLiveEvent {
@@ -359,7 +361,7 @@ class AutomaticLiveService {
         programmeMatchesEvent(programme.title, event)).toList()
         ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
 
-      final sources = <ScheduledLiveSource>[];
+      final candidates = <ScheduledLiveSource>[];
       final used = <String>{};
       for (final programme in programmes) {
         final mapped = <M3uChannel>[
@@ -368,15 +370,20 @@ class AutomaticLiveService {
         ];
         for (final channel in mapped) {
           if (!isDirectPlayableStream(channel.url) || !used.add(channel.url)) continue;
-          sources.add(ScheduledLiveSource(
-            channelName: channel.name, url: channel.url,
-            programmeTitle: programme.title, programmeEndsAt: programme.endsAt,
+          candidates.add(ScheduledLiveSource(
+            channelName: channel.name,
+            url: channel.url,
+            programmeTitle: programme.title,
+            programmeEndsAt: programme.endsAt,
+            qualityScore: _qualityScore(channel),
           ));
-          if (sources.length == 4) break;
         }
-        if (sources.length == 4) break;
       }
-      if (sources.isEmpty) continue;
+      if (candidates.isEmpty) continue;
+      // Una sola señal por evento: primero la resolución anunciada, después
+      // indicadores HD/FHD/UHD y finalmente un orden estable del proveedor.
+      candidates.sort((a, b) => b.qualityScore.compareTo(a.qualityScore));
+      final sources = <ScheduledLiveSource>[candidates.first];
       final programmeEnd = sources.map((s) => s.programmeEndsAt).reduce(
         (a, b) => a.isAfter(b) ? a : b,
       );
@@ -405,6 +412,18 @@ class AutomaticLiveService {
         .where((t) => t.length >= 4 && !ignored.contains(t)).toSet();
     if (tokens.length < 2) return false;
     return tokens.where((token) => programme.contains(token)).length >= 2;
+  }
+
+  static int _qualityScore(M3uChannel channel) {
+    final metadata = normalizeText(
+      '${channel.name} ${channel.tvgName} ${channel.group} ${channel.logo}',
+    );
+    final url = channel.url.toLowerCase();
+    if (RegExp(r'4k|uhd|2160p?').hasMatch(metadata) || url.contains('2160')) return 500;
+    if (RegExp(r'1080p?|full hd|fhd').hasMatch(metadata) || url.contains('1080')) return 400;
+    if (RegExp(r'720p?|hd').hasMatch(metadata) || url.contains('720')) return 300;
+    if (RegExp(r'576p?|480p?|sd').hasMatch(metadata) || url.contains('480')) return 200;
+    return 100;
   }
 
   static String normalizeText(String value) {
