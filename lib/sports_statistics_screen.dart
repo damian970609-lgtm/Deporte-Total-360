@@ -63,7 +63,36 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
         (_sports.any((item) => item.id == widget.initialSport)
             ? widget.initialSport
             : 'football');
+    _searchController.text = _defaultSearchTerm(_sportId);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _search();
+    });
   }
+
+  String _defaultSearchTerm(String sportId) {
+    const terms = <String, String>{
+      'football': 'Premier League',
+      'basketball': 'NBA',
+      'nba': 'NBA',
+      'baseball': 'MLB',
+      'american-football': 'NFL',
+      'hockey': 'NHL',
+      'handball': 'Champions League',
+      'rugby': 'Six Nations',
+      'volleyball': 'Champions League',
+      'afl': 'AFL',
+      'formula-1': '',
+      'mma': '',
+    };
+    return terms[sportId] ?? '';
+  }
+
+  String get _apiSportName => SportsApiService.supportedSports.entries
+      .firstWhere(
+        (entry) => entry.value == _sportId,
+        orElse: () => const MapEntry<String, String>('Fútbol', 'football'),
+      )
+      .key;
 
   _SportOption get _sport => _sports.firstWhere(
         (item) => item.id == _sportId,
@@ -144,8 +173,9 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
     setState(() {
       _sportId = value;
       _resetResults();
-      _searchController.clear();
+      _searchController.text = _defaultSearchTerm(value);
     });
+    _search();
   }
 
   Future<void> _search() async {
@@ -172,18 +202,21 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
       _resetResults();
     });
     try {
-      final rows = await _service.fetchLeagues(sport: _sport.name, search: term);
+      final rows = await _service.fetchLeagues(sport: _apiSportName, search: term);
       if (!mounted) return;
       setState(() {
         _leagues = rows;
         _searching = false;
         if (rows.isEmpty) {
-          _error = appText('No se encontraron ligas con ese nombre.',
-              'No leagues were found for that name.',
-              'Nenhuma liga foi encontrada com esse nome.',
-              'Aucune ligue trouvée pour ce nom.');
+          _error = appText('No se encontraron ligas con ese nombre. Comprueba el plan y la cobertura de este deporte.',
+              'No leagues were found. Check this sport’s plan and coverage.',
+              'Nenhuma liga foi encontrada. Verifique o plano e a cobertura deste esporte.',
+              'Aucune ligue trouvée. Vérifiez le forfait et la couverture de ce sport.');
         }
       });
+      if (rows.isNotEmpty && mounted) {
+        await _selectLeague(rows.first);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -193,7 +226,7 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
     }
   }
 
-  void _selectLeague(Map<String, dynamic> row) {
+  Future<void> _selectLeague(Map<String, dynamic> row) async {
     final id = _leagueId(row);
     if (id.isEmpty) {
       setState(() => _error = appText(
@@ -225,6 +258,7 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
       _error = null;
       _resultHeading = '';
     });
+    await _loadStandings();
   }
 
   List<Map<String, dynamic>> _extractStandingRows(
@@ -290,7 +324,7 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
     });
     try {
       final result = await _service.fetchStandings(
-          sport: _sport.name, leagueId: id, season: _season);
+          sport: _apiSportName, leagueId: id, season: _season);
       final rows = _extractStandingRows(result);
       if (!mounted) return;
       setState(() {
