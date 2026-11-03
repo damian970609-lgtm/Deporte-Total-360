@@ -4,7 +4,6 @@ import 'app_i18n.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:video_player/video_player.dart';
 
 import 'agenda_screen.dart';
 import 'channel_catalog_screen.dart';
@@ -32,19 +31,9 @@ const Color appYellow = Color(0xFFFFD600);
 const Color appRed = Color(0xFFFF3155);
 const Color appMuted = Color(0xFFA9BDD6);
 
-// Se conservan las direcciones de servidor que ya existían en el proyecto.
-// No se usan para los partidos de la agenda; la agenda solo acepta fuentes
-// verificadas que le sean suministradas por una API autorizada.
-const String rtmpBase = 'rtmp://ssh101.bozztv.com/ssh101/';
-const String hlsBase = 'https://live21.bozztv.com/akamaissh101/ssh101/';
 const String contactUrl = 'https://wa.me/5927214741';
 const String settingsPhotoAsset =
     'assets/images/file_000000006048820e9e0720f1adf548f1.png';
-
-// No se inventa el enlace del canal Telegram: queda vacío hasta que el dueño
-// guarde su enlace público real desde Ajustes.
-String buildRtmpUrl(String channel) => '$rtmpBase$channel';
-String buildHlsUrl(String channel) => '$hlsBase$channel/playlist.m3u8';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,10 +50,6 @@ Future<void> _initializeAppServices() async {
   try {
     final prefs = await SharedPreferences.getInstance();
     appLanguage.value = parseLanguage(prefs.getString('app_language'));
-    final savedChannel = prefs.getString('ssh101_channel')?.trim();
-    channelSlug.value = savedChannel == null || savedChannel.isEmpty
-        ? defaultSsh101Channel
-        : savedChannel;
     telegramLink.value = prefs.getString('telegram_public_link') ?? '';
     final savedApiUrl = prefs.getString('sports_api_base_url');
     sportsApiBaseUrl.value =
@@ -135,41 +120,32 @@ class DeporteTotal360App extends StatelessWidget {
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
-
   @override
   State<MainShell> createState() => _MainShellState();
 }
 
 class _MainShellState extends State<MainShell> {
   static const int _homeTab = 0;
-  static const int _feedTab = 1;
-  static const int _notificationsTab = 2;
-  static const int _statisticsTab = 3;
-  static const int _liveTab = 4;
-  static const int _agendaWebTab = 5;
-  static const int _nativeAgendaTab = 6;
-  static const int _newsTab = 7;
-  static const int _summariesTab = 8;
-  static const int _fantasyTab = 9;
-  static const int _chatTab = 10;
-  static const int _channelsTab = 11;
-  static const int _settingsTab = 12;
+  static const int _liveTab = 1;
+  static const int _agendaTab = 2;
+  static const int _newsTab = 3;
+  static const int _fantasyTab = 4;
+  static const int _statisticsTab = 5;
+  static const int _summariesTab = 6;
+  static const int _settingsTab = 7;
 
   final GlobalKey<WebAgendaScreenState> _webAgendaKey =
       GlobalKey<WebAgendaScreenState>();
-
   int _selectedIndex = _homeTab;
-  final List<bool> _initializedTabs = <bool>[
-    true, false, false, false, false, false, false, false, false, false, false,
-    false, false,
-  ];
+  final Set<int> _visitedTabs = <int>{_homeTab};
   String _selectedStatisticsSport = 'Fútbol';
   bool _handlingBack = false;
 
   void _selectTab(int index) {
-    if (index < 0 || index > _settingsTab) return;
+    if (index < _homeTab || index > _settingsTab) return;
     setState(() {
       _selectedIndex = index;
+      _visitedTabs.add(index);
     });
   }
 
@@ -177,57 +153,13 @@ class _MainShellState extends State<MainShell> {
     setState(() {
       _selectedStatisticsSport = sport;
       _selectedIndex = _statisticsTab;
+      _visitedTabs.add(_statisticsTab);
     });
   }
 
-  Widget _tabButton(int index, IconData icon, String label, Color accent) {
-    final selected = _selectedIndex == index;
-    return SizedBox(
-      key: ValueKey<String>('bottom-tab-$index'),
-      width: 78,
-      child: InkWell(
-        onTap: () => _selectTab(index),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          margin: const EdgeInsets.fromLTRB(3, 6, 3, 5),
-          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
-          decoration: BoxDecoration(
-            color: selected ? accent.withAlpha(30) : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: selected ? accent.withAlpha(180) : Colors.transparent,
-            ),
-            boxShadow: selected
-                ? <BoxShadow>[BoxShadow(color: accent.withAlpha(28), blurRadius: 10)]
-                : const <BoxShadow>[],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Icon(icon, color: selected ? accent : appMuted, size: 20),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: selected ? Colors.white : appMuted,
-                  fontSize: 9,
-                  fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openStatistics() async {
-    _selectTab(_statisticsTab);
-  }
-
-  void _openAgenda() => _selectTab(_nativeAgendaTab);
+  void _openStatistics() => _selectTab(_statisticsTab);
+  void _openAgenda() => _selectTab(_agendaTab);
+  void _openFantasy() => _selectTab(_fantasyTab);
 
   Future<void> _openMultiMatchView(List<MatchEvent> matches) async {
     await Navigator.of(context).push<void>(
@@ -245,17 +177,97 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  void _openEmbeddedWebAgenda() => _selectTab(_agendaWebTab);
+  Future<void> _openChannelList() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const ChannelCatalogScreen(),
+      ),
+    );
+  }
 
-  void _openPublicChat() => _selectTab(_chatTab);
+  Future<void> _openEmbeddedWebAgenda() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (routeContext) => PopScope<void>(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) async {
+            if (didPop) return;
+            final handled =
+                await _webAgendaKey.currentState?.handleSystemBack() ?? false;
+            if (!handled && routeContext.mounted) {
+              Navigator.of(routeContext).pop();
+            }
+          },
+          child: WebAgendaScreen(
+            key: _webAgendaKey,
+            onExit: () => Navigator.of(routeContext).maybePop(),
+            onOpenLive: () {
+              Navigator.of(routeContext).pop();
+              _selectTab(_liveTab);
+            },
+          ),
+        ),
+      ),
+    );
+  }
 
-  void _openFantasy() => _selectTab(_fantasyTab);
+  Future<void> _openPublicChat() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => PublicChatScreen(isActive: true),
+      ),
+    );
+  }
+
+  Future<void> _openFeed() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (routeContext) => SportsFeedScreen(
+          onOpenLive: () {
+            Navigator.of(routeContext).pop();
+            _selectTab(_liveTab);
+          },
+          onOpenAgenda: () {
+            Navigator.of(routeContext).pop();
+            _selectTab(_agendaTab);
+          },
+          onOpenNews: () {
+            Navigator.of(routeContext).pop();
+            _selectTab(_newsTab);
+          },
+          onOpenSummaries: () {
+            Navigator.of(routeContext).pop();
+            _selectTab(_summariesTab);
+          },
+          onOpenChat: () {
+            Navigator.of(routeContext).pop();
+            _openPublicChat();
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openNotifications() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (routeContext) => SportsNotificationsScreen(
+          onOpenAgenda: () {
+            Navigator.of(routeContext).pop();
+            _selectTab(_agendaTab);
+          },
+          onOpenLive: () {
+            Navigator.of(routeContext).pop();
+            _selectTab(_liveTab);
+          },
+        ),
+      ),
+    );
+  }
 
   Future<void> _openDonations() async {
     await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => const DonationsScreen(),
-      ),
+      MaterialPageRoute<void>(builder: (_) => const DonationsScreen()),
     );
   }
 
@@ -269,7 +281,7 @@ class _MainShellState extends State<MainShell> {
           backgroundColor: appPanel,
           title: Text(
             appText('Canal de Telegram', 'Telegram channel', 'Canal do Telegram', 'Canal Telegram'),
-            style: TextStyle(color: appCyan, fontWeight: FontWeight.w900),
+            style: const TextStyle(color: appCyan, fontWeight: FontWeight.w900),
           ),
           content: Text(
             appText(
@@ -277,7 +289,7 @@ class _MainShellState extends State<MainShell> {
               'This space is reserved for your channel. No public link is configured yet; we will not open a generic or invented one.',
               'Este espaço está reservado para seu canal. Ainda não há um link público configurado; não abriremos um link genérico ou inventado.',
               'Cet espace est réservé à votre chaîne. Aucun lien public n’est encore configuré ; aucun lien générique ou inventé ne sera ouvert.'),
-            style: TextStyle(color: appMuted, height: 1.45),
+            style: const TextStyle(color: appMuted, height: 1.45),
           ),
           actions: <Widget>[
             TextButton(
@@ -303,20 +315,10 @@ class _MainShellState extends State<MainShell> {
     if (_handlingBack) return;
     _handlingBack = true;
     try {
-      // 1. Si estamos en la web integrada, retrocede dentro de ella.
-      if (_selectedIndex == _agendaWebTab) {
-        final handled =
-            await _webAgendaKey.currentState?.handleSystemBack() ?? false;
-        if (handled) return;
-      }
-
-      // 2. Desde cualquier otra sección vuelve a Inicio.
       if (_selectedIndex != _homeTab) {
         if (mounted) setState(() => _selectedIndex = _homeTab);
         return;
       }
-
-      // 3. Solo en Inicio se pregunta si se desea cerrar la app.
       if (!mounted) return;
       final shouldExit = await showDialog<bool>(
         context: context,
@@ -360,35 +362,22 @@ class _MainShellState extends State<MainShell> {
           onNavigate: _selectTab,
           onSportSelected: _selectSport,
           onTelegram: _openTelegram,
-          onContact: () => openExternalLink(
-            context,
-            contactUrl,
-            label: 'WhatsApp',
-          ),
+          onContact: () => openExternalLink(context, contactUrl, label: 'WhatsApp'),
           onDonations: _openDonations,
           onFantasy: _openFantasy,
           onStatistics: _openStatistics,
           onOpenAgenda: _openAgenda,
           onChat: _openPublicChat,
-        );
-      case _statisticsTab:
-        return SportsStatisticsScreen(
-          key: ValueKey<String>('statistics-$_selectedStatisticsSport'),
-          initialSport: _selectedStatisticsSport,
-          onOpenAgenda: _openAgenda,
+          onOpenFeed: _openFeed,
+          onOpenNotifications: _openNotifications,
+          onOpenChannelCatalog: _openChannelList,
         );
       case _liveTab:
         return LiveScreen(
           onOpenMultiView: _openMultiMatchView,
           onOpenChannelCatalog: _openChannelCatalog,
         );
-      case _agendaWebTab:
-        return WebAgendaScreen(
-          key: _webAgendaKey,
-          onExit: () => _selectTab(_nativeAgendaTab),
-          onOpenLive: () => _selectTab(_liveTab),
-        );
-      case _nativeAgendaTab:
+      case _agendaTab:
         return AgendaScreen(
           initialSport: 'Todos',
           onOpenWebAgenda: _openEmbeddedWebAgenda,
@@ -397,47 +386,78 @@ class _MainShellState extends State<MainShell> {
         );
       case _newsTab:
         return const NewsScreen();
-      case _summariesTab:
-        return SportsSummariesScreen(isActive: _selectedIndex == _summariesTab);
       case _fantasyTab:
         return FantasyScreen(onExit: () => _selectTab(_homeTab));
-      case _chatTab:
-        return PublicChatScreen(isActive: _selectedIndex == _chatTab);
-      case _channelsTab:
-        return const ChannelCatalogScreen();
+      case _statisticsTab:
+        return SportsStatisticsScreen(
+          key: ValueKey<String>('statistics-${_selectedStatisticsSport}'),
+          initialSport: _selectedStatisticsSport,
+          onOpenAgenda: _openAgenda,
+        );
+      case _summariesTab:
+        return SportsSummariesScreen(isActive: _selectedIndex == _summariesTab);
       case _settingsTab:
         return const SettingsScreen();
-      case _feedTab:
-        return SportsFeedScreen(
-          onOpenLive: () => _selectTab(_liveTab),
-          onOpenAgenda: () => _selectTab(_nativeAgendaTab),
-          onOpenNews: () => _selectTab(_newsTab),
-          onOpenSummaries: () => _selectTab(_summariesTab),
-          onOpenChat: () => _selectTab(_chatTab),
-        );
-      case _notificationsTab:
-        return SportsNotificationsScreen(
-          onOpenAgenda: () => _selectTab(_nativeAgendaTab),
-          onOpenLive: () => _selectTab(_liveTab),
-        );
       default:
         return const SizedBox.shrink();
     }
   }
 
+  Widget _tabButton(int index, IconData icon, String label, Color accent) {
+    final selected = _selectedIndex == index;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: SizedBox(
+        key: ValueKey<String>('bottom-tab-$index'),
+        width: 82,
+        height: 66,
+        child: InkWell(
+          onTap: () => _selectTab(index),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            margin: const EdgeInsets.fromLTRB(3, 6, 3, 5),
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
+            decoration: BoxDecoration(
+              color: selected ? accent.withAlpha(30) : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: selected ? accent.withAlpha(180) : Colors.transparent,
+              ),
+              boxShadow: selected
+                  ? <BoxShadow>[BoxShadow(color: accent.withAlpha(28), blurRadius: 10)]
+                  : const <BoxShadow>[],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(icon, color: selected ? accent : appMuted, size: 20),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: selected ? Colors.white : appMuted,
+                    fontSize: 9,
+                    fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final pages = List<Widget>.generate(13, (index) {
-      if (index == _selectedIndex) {
-        _initializedTabs[index] = true;
-      }
-      if (!_initializedTabs[index]) {
-        return const SizedBox.shrink();
-      }
-      // Los WebViews ocultos consumen memoria. Android puede destruir su
-      // renderizador; los recreamos al volver a seleccionar cada sección.
-      if (index != _selectedIndex &&
-          (index == _agendaWebTab || index == _fantasyTab)) {
+    final pages = List<Widget>.generate(8, (index) {
+      if (index == _selectedIndex) _visitedTabs.add(index);
+      if (!_visitedTabs.contains(index)) return const SizedBox.shrink();
+      if (index != _selectedIndex && index == _fantasyTab) {
         return const SizedBox.shrink();
       }
       return _buildTab(index);
@@ -450,21 +470,14 @@ class _MainShellState extends State<MainShell> {
       },
       child: Scaffold(
         backgroundColor: appBg,
-        body: IndexedStack(
-          index: _selectedIndex,
-          children: pages,
-        ),
+        body: IndexedStack(index: _selectedIndex, children: pages),
         bottomNavigationBar: Container(
           height: 66,
           decoration: BoxDecoration(
             color: const Color(0xFF020B19),
             border: const Border(top: BorderSide(color: appLine)),
             boxShadow: <BoxShadow>[
-              BoxShadow(
-                color: appCyan.withAlpha(18),
-                blurRadius: 18,
-                offset: const Offset(0, -4),
-              ),
+              BoxShadow(color: appCyan.withAlpha(18), blurRadius: 18, offset: const Offset(0, -4)),
             ],
           ),
           child: SafeArea(
@@ -474,18 +487,13 @@ class _MainShellState extends State<MainShell> {
               child: Row(
                 children: <Widget>[
                   _tabButton(_homeTab, Icons.home_rounded, tr('home'), appCyan),
-                  _tabButton(_feedTab, Icons.dynamic_feed_rounded, 'Feed', appGreen),
-                  _tabButton(_notificationsTab, Icons.notifications_active_rounded, 'Notificaciones', appYellow),
-                  _tabButton(_statisticsTab, Icons.query_stats_rounded, tr('statistics'), appCyan),
-                  _tabButton(_liveTab, Icons.live_tv_rounded, tr('live'), appPink),
-                  _tabButton(_agendaWebTab, Icons.public_rounded, 'Fútbol Libre', appGreen),
-                  _tabButton(_nativeAgendaTab, Icons.calendar_month_rounded, 'Partidos', appYellow),
+                  _tabButton(_liveTab, Icons.live_tv_rounded, 'Deportes en vivo', appPink),
+                  _tabButton(_agendaTab, Icons.calendar_month_rounded, 'Agenda hoy', appGreen),
                   _tabButton(_newsTab, Icons.article_rounded, tr('news'), appGreen),
+                  _tabButton(_fantasyTab, Icons.emoji_events_rounded, 'Mister Fantasy', appYellow),
+                  _tabButton(_statisticsTab, Icons.query_stats_rounded, tr('statistics'), appCyan),
                   _tabButton(_summariesTab, Icons.play_circle_fill_rounded,
                       appText('Resúmenes', 'Highlights', 'Resumos', 'Résumés'), appPink),
-                  _tabButton(_fantasyTab, Icons.emoji_events_rounded, 'Fantasy', appYellow),
-                  _tabButton(_chatTab, Icons.forum_rounded, 'Chat', appCyan),
-                  _tabButton(_channelsTab, Icons.live_tv_rounded, 'Canales TV', appGreen),
                   _tabButton(_settingsTab, Icons.settings_rounded, tr('settings'), appCyan),
                 ],
               ),
@@ -587,6 +595,9 @@ class HomeDashboard extends StatelessWidget {
     required this.onStatistics,
     required this.onOpenAgenda,
     required this.onChat,
+    required this.onOpenFeed,
+    required this.onOpenNotifications,
+    required this.onOpenChannelCatalog,
   });
 
   final ValueChanged<int> onNavigate;
@@ -598,6 +609,9 @@ class HomeDashboard extends StatelessWidget {
   final VoidCallback onStatistics;
   final VoidCallback onOpenAgenda;
   final VoidCallback onChat;
+  final VoidCallback onOpenFeed;
+  final VoidCallback onOpenNotifications;
+  final VoidCallback onOpenChannelCatalog;
 
   @override
   Widget build(BuildContext context) {
@@ -644,7 +658,7 @@ class HomeDashboard extends StatelessWidget {
           ),
           IconButton(
             tooltip: tr('settings'),
-            onPressed: () => onNavigate(12),
+            onPressed: () => onNavigate(7),
             icon: const Icon(Icons.settings_rounded, color: appCyan),
           ),
         ],
@@ -889,14 +903,14 @@ class HomeDashboard extends StatelessWidget {
                 _HomeActionCard(
                   title: tr('streams'),
                   subtitle: appText(
-                    'Ver canales y abrir el reproductor SSH101',
-                    'Watch channels and open the SSH101 player',
-                    'Ver canais e abrir o player SSH101',
-                    'Voir les chaînes et ouvrir le lecteur SSH101',
+                    'Canales deportivos, partidos en vivo y multivista',
+                    'Sports channels, live matches and multi-view',
+                    'Canais esportivos, partidas ao vivo e multivista',
+                    'Chaînes sportives, matchs en direct et multivue',
                   ),
                   icon: Icons.live_tv_rounded,
                   color: appRed,
-                  onTap: () => onNavigate(4),
+                  onTap: () => onNavigate(1),
                 ),
                 const SizedBox(height: 8),
                 _HomeActionCard(
@@ -948,7 +962,7 @@ class HomeDashboard extends StatelessWidget {
                   ),
                   icon: Icons.article_rounded,
                   color: appYellow,
-                  onTap: () => onNavigate(7),
+                  onTap: () => onNavigate(3),
                 ),
                 const SizedBox(height: 8),
                 _HomeActionCard(
@@ -962,6 +976,58 @@ class HomeDashboard extends StatelessWidget {
                   icon: Icons.emoji_events_rounded,
                   color: appPink,
                   onTap: onFantasy,
+                ),
+                const SizedBox(height: 8),
+                _HomeActionCard(
+                  title: appText('RESÚMENES', 'HIGHLIGHTS', 'RESUMOS', 'RÉSUMÉS'),
+                  subtitle: appText(
+                    'Goles, jugadas y vídeos deportivos',
+                    'Goals, plays and sports videos',
+                    'Gols, jogadas e vídeos esportivos',
+                    'Buts, actions et vidéos sportives',
+                  ),
+                  icon: Icons.play_circle_fill_rounded,
+                  color: appPink,
+                  onTap: () => onNavigate(6),
+                ),
+                const SizedBox(height: 8),
+                _HomeActionCard(
+                  title: appText('FEED DEPORTIVO', 'SPORTS FEED', 'FEED ESPORTIVO', 'FIL SPORTIF'),
+                  subtitle: appText(
+                    'Publicaciones y contenido de la comunidad',
+                    'Community posts and sports content',
+                    'Publicações e conteúdo da comunidade',
+                    'Publications et contenu de la communauté',
+                  ),
+                  icon: Icons.dynamic_feed_rounded,
+                  color: appGreen,
+                  onTap: onOpenFeed,
+                ),
+                const SizedBox(height: 8),
+                _HomeActionCard(
+                  title: appText('NOTIFICACIONES', 'NOTIFICATIONS', 'NOTIFICAÇÕES', 'NOTIFICATIONS'),
+                  subtitle: appText(
+                    'Avisos y recordatorios deportivos',
+                    'Sports alerts and reminders',
+                    'Alertas e lembretes esportivos',
+                    'Alertes et rappels sportifs',
+                  ),
+                  icon: Icons.notifications_active_rounded,
+                  color: appYellow,
+                  onTap: onOpenNotifications,
+                ),
+                const SizedBox(height: 8),
+                _HomeActionCard(
+                  title: appText('CATÁLOGO DE CANALES', 'CHANNEL CATALOG', 'CATÁLOGO DE CANAIS', 'CATALOGUE DES CHAÎNES'),
+                  subtitle: appText(
+                    'Consultar las señales de tu proveedor autorizado',
+                    'Browse your authorized provider channels',
+                    'Consultar sinais do provedor autorizado',
+                    'Consulter les chaînes de votre fournisseur autorisé',
+                  ),
+                  icon: Icons.live_tv_rounded,
+                  color: appCyan,
+                  onTap: onOpenChannelCatalog,
                 ),
                 const SizedBox(height: 8),
                 _HomeActionCard(
