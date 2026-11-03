@@ -619,7 +619,9 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
 
   Future<void> _openSelectedMultiView() async {
     final selected = _fixtures
-        .where((fixture) => _selectedForMultiView.contains(fixture.id))
+        .where((fixture) =>
+            fixture.status == LiveFixtureStatus.live &&
+            _selectedForMultiView.contains(fixture.id))
         .map((fixture) {
           final streams = _sourcesFor(fixture.id);
           if (streams.isEmpty) return null;
