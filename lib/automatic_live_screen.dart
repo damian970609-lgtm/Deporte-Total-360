@@ -312,8 +312,8 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
             if (_error != null)
               _notice('No se pudo actualizar el catálogo', _error!, icon: Icons.cloud_off_rounded),
             if (!configured && !_loading)
-              _notice('Falta configurar M3U y EPG',
-                'Abre Ajustes de desarrollador y añade las direcciones de tu lista M3U y guía XMLTV de un proveedor autorizado. Las direcciones se guardan localmente en este teléfono.',
+              _notice('Fuentes internacionales pendientes de activar',
+                'Ya hay dos listas deportivas globales y una EPG precargadas en Ajustes de desarrollador. Revisa las fuentes, confirma que tienes derecho a reproducirlas en tu región y pulsa VALIDAR Y GUARDAR. La agenda de Fútbol Libre se consulta en la pestaña Agenda.',
                 icon: Icons.settings_suggest_rounded),
             if (_agendaEvents.isEmpty && !_loading) ...<Widget>[
               _notice('Agenda de Fútbol Libre pendiente',
