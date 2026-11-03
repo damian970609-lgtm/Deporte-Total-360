@@ -166,13 +166,13 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         .take(4 - activeSources.length)
         .map((event) {
           final teams = event.homeTeam.isNotEmpty && event.awayTeam.isNotEmpty
-              ? '\${event.homeTeam} vs \${event.awayTeam}'
+              ? '${event.homeTeam} vs ${event.awayTeam}'
               : event.title;
           final localStart = event.startsAt.toLocal();
           final time =
-              '\${localStart.hour.toString().padLeft(2, '0')}:\${localStart.minute.toString().padLeft(2, '0')}';
+              '${localStart.hour.toString().padLeft(2, '0')}:${localStart.minute.toString().padLeft(2, '0')}';
           final heading = event.competition.isNotEmpty
-              ? '\${event.sport} · \${event.competition}'
+              ? '${event.sport} · ${event.competition}'
               : event.sport;
           final startLabel = now.isBefore(event.startsAt)
               ? 'Comienza $time'
