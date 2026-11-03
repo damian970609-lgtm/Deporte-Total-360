@@ -127,10 +127,22 @@ class FutbolLibreAgendaStore {
 
   static Future<void> save(List<FutbolLibreEvent> events) async {
     final prefs = await SharedPreferences.getInstance();
-    final unique = <String, FutbolLibreEvent>{};
-    for (final event in events) { unique[event.id] = event; }
-    await prefs.setString(_key,
-        jsonEncode(unique.values.map((event) => event.toJson()).toList()));
+    final previous = await load();
+    final unique = <String, FutbolLibreEvent>{
+      for (final event in previous) event.id: event,
+    };
+    for (final event in events) {
+      unique[event.id] = event;
+    }
+    final cutoff = DateTime.now().subtract(const Duration(hours: 4));
+    unique.removeWhere((id, event) {
+      final end = event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
+      return end.isBefore(cutoff);
+    });
+    await prefs.setString(
+      _key,
+      jsonEncode(unique.values.map((event) => event.toJson()).toList()),
+    );
   }
 
   static Future<List<FutbolLibreEvent>> load() async {
