@@ -1591,10 +1591,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   title: Text(
                     appText(
-                      'Servidor de estadísticas y agenda',
-                      'Statistics and schedule server',
-                      'Servidor de estatísticas e agenda',
-                      'Serveur des statistiques et du calendrier',
+                      'Servidor de estadísticas',
+                      'Statistics server',
+                      'Servidor de estatísticas',
+                      'Serveur des statistiques',
                     ),
                     style: const TextStyle(
                       color: Colors.white,
@@ -1604,10 +1604,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   subtitle: Text(
                     appText(
-                      'Comprobar la conexión y configurar la URL pública del Worker.',
-                      'Check the connection and configure the public Worker URL.',
-                      'Verifique a conexão e configure a URL pública do Worker.',
-                      'Vérifier la connexion et configurer l’URL publique du Worker.',
+                      'Comprobar la conexión del servicio de estadísticas y configurar el Worker.',
+                      'Check the statistics service and configure the public Worker URL.',
+                      'Verifique a conexão do serviço de estatísticas e configure o Worker.',
+                      'Vérifier le service de statistiques et configurer le Worker.',
                     ),
                     style: const TextStyle(color: appMuted, fontSize: 11, height: 1.4),
                   ),
