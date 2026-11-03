@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -123,6 +124,8 @@ class NotificationService {
 
   static Future<void> _registerDeviceToken(String? token) async {
     if (token == null || token.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool('notifications_enabled') ?? false)) return;
     final base = SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value);
     if (base == null) return;
     try {
@@ -138,6 +141,25 @@ class NotificationService {
     } catch (_) {
       // Se vuelve a registrar al refrescarse el token o reiniciar la app.
     }
+  }
+
+  static Future<void> registerCurrentDevice() async {
+    if (!_firebaseConfigured || Firebase.apps.isEmpty) return;
+    await _registerDeviceToken(await FirebaseMessaging.instance.getToken());
+  }
+
+  static Future<void> unregisterCurrentDevice() async {
+    if (!_firebaseConfigured || Firebase.apps.isEmpty) return;
+    final token = await FirebaseMessaging.instance.getToken();
+    if (token == null || token.isEmpty) return;
+    final base = SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value);
+    if (base == null) return;
+    try {
+      await http.post(Uri.parse('$base/api/live/devices/unregister'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({'token': token}),
+      ).timeout(const Duration(seconds: 12));
+    } catch (_) {}
   }
 
   static void _handleRemoteOpen(RemoteMessage message) {
@@ -166,7 +188,7 @@ class NotificationService {
           'Une diffusion sportive est disponible.',
         );
     await _plugin.show(
-      id: _stableId('fcm:\${message.data['eventId'] ?? message.messageId ?? body}'),
+      id: _stableId('fcm:${message.data['eventId'] ?? message.messageId ?? body}'),
       title: title,
       body: body,
       notificationDetails: NotificationDetails(
