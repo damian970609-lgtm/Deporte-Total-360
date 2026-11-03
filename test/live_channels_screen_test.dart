@@ -1,7 +1,31 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:deporte_total_360/live_channels_screen.dart';
 
 void main() {
+  testWidgets('la multivista incorpora automáticamente eventos nuevos', (tester) async {
+    var refreshes = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: LivePlayerGridScreen(
+        sources: const <LivePlayerSource>[],
+        refreshInterval: const Duration(seconds: 1),
+        refreshSources: () async {
+          refreshes++;
+          return const <LivePlayerSource>[
+            LivePlayerSource(title: 'Fútbol · Equipo Azul vs Equipo Rojo', url: 'https://media.example/one.m3u8'),
+            LivePlayerSource(title: 'Fútbol · Equipo Verde vs Equipo Blanco', url: 'https://media.example/two.m3u8'),
+          ];
+        },
+      ),
+    ));
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(refreshes, 1);
+    expect(find.text('MULTIVISTA · 2/4 EVENTOS'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   group('Validación de señales autorizadas', () {
     test('acepta HLS y MP4 directos por HTTP(S)', () {
       expect(
