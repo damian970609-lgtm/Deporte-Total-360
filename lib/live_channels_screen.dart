@@ -828,7 +828,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
             children: <Widget>[
               Expanded(
                 child: Text(
-                  fixture.competition,
+                  '${fixture.sport.toUpperCase()} · ${fixture.competition}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
