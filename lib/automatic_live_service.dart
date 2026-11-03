@@ -377,12 +377,10 @@ class AutomaticLiveService {
         if (sources.length == 4) break;
       }
       if (sources.isEmpty) continue;
-      final latestEnd = sources.map((s) => s.programmeEndsAt).fold<DateTime>(
-        event.endsAt ?? eventLimit,
-        (latest, candidate) => candidate.isAfter(latest) ? candidate : latest,
+      final programmeEnd = sources.map((s) => s.programmeEndsAt).reduce(
+        (a, b) => a.isAfter(b) ? a : b,
       );
-      final removeAt = event.endsAt != null && event.endsAt!.isBefore(latestEnd)
-          ? event.endsAt! : latestEnd;
+      final removeAt = event.endsAt ?? programmeEnd;
       if (now.isBefore(removeAt)) {
         output.add(ScheduledLiveEvent(event: event, sources: sources, removeAt: removeAt));
       }
