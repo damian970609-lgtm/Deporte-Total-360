@@ -430,17 +430,13 @@ class AutomaticLiveService {
       final verifiedCandidates = checkedCandidates
           .where((candidate) => candidate.available)
           .toList(growable: true);
-      // Compara la resolución de las listas HLS maestras y prioriza la de
-      // mayor calidad entre las señales que respondieron a la comprobación.
+      // Solo se programa una fuente cuya lista de reproducción respondió
+      // correctamente a la comprobación. No se asignan señales no verificadas.
+      if (verifiedCandidates.isEmpty) continue;
+      // Entre las señales disponibles, se conserva una sola: la de mayor
+      // calidad anunciada y confirmada por la lista HLS.
       verifiedCandidates.sort((a, b) => b.qualityScore.compareTo(a.qualityScore));
-      final sources = <ScheduledLiveSource>[
-        if (verifiedCandidates.isNotEmpty)
-          verifiedCandidates.first
-        else
-          // Algunos proveedores legítimos rechazan HEAD/GET de comprobación
-          // aunque ExoPlayer pueda reproducir con sus reglas de red.
-          candidates.first,
-      ];
+      final sources = <ScheduledLiveSource>[verifiedCandidates.first];
       final programmeEnd = sources.map((s) => s.programmeEndsAt).reduce(
         (a, b) => a.isAfter(b) ? a : b,
       );
