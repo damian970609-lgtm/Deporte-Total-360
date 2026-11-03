@@ -146,22 +146,51 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
   }
 
-  List<MapEntry<String, String>> _flatten(dynamic value, [String prefix = '']) {
-    final output = <MapEntry<String, String>>[];
-    if (value is Map) {
-      for (final entry in value.entries) {
-        final key = entry.key.toString();
-        if (key == 'id' || key == 'image' || key == 'logo' || key == 'url') continue;
-        output.addAll(_flatten(entry.value, prefix.isEmpty ? key : '$prefix · $key'));
+  List<MapEntry<String, String>> _formatStatistics(dynamic value) {
+    if (value is Map && value['periods'] is List) {
+      final output = <MapEntry<String, String>>[];
+      for (final periodValue in value['periods'] as List) {
+        if (periodValue is! Map) continue;
+        final period = Map<String, dynamic>.from(periodValue);
+        final periodName = (period['name'] ?? period['period'] ?? 'Partido').toString();
+        final groups = period['groups'];
+        if (groups is! List) continue;
+        for (final groupValue in groups) {
+          if (groupValue is! Map) continue;
+          final group = Map<String, dynamic>.from(groupValue);
+          final groupName = (group['name'] ?? group['key'] ?? 'Estadísticas').toString();
+          final items = group['items'];
+          if (items is! List) continue;
+          for (final itemValue in items) {
+            if (itemValue is! Map) continue;
+            final item = Map<String, dynamic>.from(itemValue);
+            final name = (item['name'] ?? item['key'] ?? 'Dato').toString();
+            final home = item['home'];
+            final away = item['away'];
+            String display(dynamic side) {
+              if (side is Map) {
+                return (side['display'] ?? side['value'] ?? '').toString();
+              }
+              return (side ?? '').toString();
+            }
+            final homeText = display(home);
+            final awayText = display(away);
+            final valueText = <String>[
+              if (homeText.isNotEmpty) 'Local: $homeText',
+              if (awayText.isNotEmpty) 'Visitante: $awayText',
+            ].join('  ·  ');
+            if (valueText.isNotEmpty) {
+              output.add(MapEntry<String, String>(
+                '$periodName · $groupName · $name',
+                valueText,
+              ));
+            }
+          }
+        }
       }
-    } else if (value is List) {
-      for (var i = 0; i < value.length; i++) {
-        output.addAll(_flatten(value[i], '$prefix ${i + 1}'));
-      }
-    } else if (value != null && value.toString().trim().isNotEmpty) {
-      output.add(MapEntry<String, String>(prefix.isEmpty ? 'Dato' : prefix, value.toString()));
+      if (output.isNotEmpty) return output;
     }
-    return output;
+    return _flatten(value);
   }
 
   Future<void> _loadStatistics(SportsAgendaEvent event) async {
@@ -185,7 +214,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       } else {
         throw const FormatException('Este evento todavía no tiene estadísticas enlazadas a SportsAPI.');
       }
-      final rows = _flatten(response);
+      final rows = _formatStatistics(response);
       if (!mounted) return;
       setState(() {
         _loadingStats = false;
@@ -202,6 +231,49 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       });
     }
   }
+
+  Future<void> _loadStandings(SportsAgendaEvent event) async {
+    setState(() {
+      _selectedEvent = event;
+      _loadingStats = true;
+      _statsError = null;
+      _statistics = <MapEntry<String, String>>[];
+    });
+    try {
+      dynamic response;
+      if (event.providerLeagueId != null && event.providerSeasonId != null) {
+        response = await _api.fetchLeagueStandings(
+          leagueId: event.providerLeagueId!,
+          seasonId: event.providerSeasonId!,
+        );
+      } else if (event.providerSeriesId != null && event.providerSeasonId != null) {
+        response = await _api.fetchSeriesStandings(
+          seriesId: event.providerSeriesId!,
+          seasonId: event.providerSeasonId!,
+        );
+      } else {
+        throw const FormatException(
+          'SportsAPI todavía no ha proporcionado la liga, serie o temporada de este evento.',
+        );
+      }
+      final rows = _flatten(response);
+      if (!mounted) return;
+      setState(() {
+        _loadingStats = false;
+        _statistics = rows.take(60).toList(growable: false);
+        if (_statistics.isEmpty) {
+          _statsError = 'SportsAPI todavía no ha publicado una clasificación para esta competición.';
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingStats = false;
+        _statsError = error.toString();
+      });
+    }
+  }
+
 
   String _time(DateTime value) {
     final local = value.toLocal();
@@ -357,6 +429,26 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
                   const SizedBox(height: 5),
                   Text(_selectedEvent!.title,
                       style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 8),
+                  if ((_selectedEvent!.providerLeagueId != null &&
+                          _selectedEvent!.providerSeasonId != null) ||
+                      (_selectedEvent!.providerSeriesId != null &&
+                          _selectedEvent!.providerSeasonId != null))
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: _loadingStats
+                            ? null
+                            : () => _loadStandings(_selectedEvent!),
+                        icon: const Icon(Icons.leaderboard_rounded, size: 15),
+                        label: const Text('VER CLASIFICACIÓN DE LA COMPETICIÓN'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _apiStatsCyan,
+                          side: const BorderSide(color: _apiStatsLine),
+                          textStyle: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: 10),
                   if (_loadingStats)
                     const Center(child: Padding(
