@@ -649,8 +649,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                           handlerName: 'dt360AgendaOnlyNotice',
                           callback: (arguments) async {
                             _showNotice(
-                              'Agenda: solo horarios y eventos',
-                              'Los reproductores y enlaces de transmisiones de Fútbol Libre están desactivados aquí. La APK busca la señal en sus listas M3U y EPG.',
+                              'Agenda: solo horarios y eventos. Los reproductores y enlaces de transmisiones de Fútbol Libre están desactivados aquí; la APK busca las señales en sus listas M3U y EPG.',
                             );
                             return true;
                           },
