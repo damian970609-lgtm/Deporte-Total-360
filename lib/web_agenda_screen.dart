@@ -42,7 +42,10 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
   bool _loading = true;
   bool _canGoBack = false;
   bool _canGoForward = false;
-  bool _blockKnownTrackers = true;
+  // MARCA carga módulos de programación desde varios dominios. Se deja la
+  // protección opcional desactivada inicialmente para no ocultar el calendario.
+  bool _blockKnownTrackers = false;
+  Timer? _loadTimeoutTimer;
   String? _errorMessage;
   String? _noticeMessage;
 
@@ -51,6 +54,12 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
   bool _isHttpUrl(WebUri uri) {
     final scheme = uri.scheme.toLowerCase();
     return (scheme == 'https' || scheme == 'http') && uri.host.isNotEmpty;
+  }
+
+  @override
+  void dispose() {
+    _loadTimeoutTimer?.cancel();
+    super.dispose();
   }
 
   void _showNotice(String message) {
@@ -790,6 +799,14 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         );
                       },
                       onLoadStart: (controller, url) {
+                        _loadTimeoutTimer?.cancel();
+                        _loadTimeoutTimer = Timer(const Duration(seconds: 25), () {
+                          if (!mounted || !_loading) return;
+                          setState(() {
+                            _loading = false;
+                            _errorMessage = 'MARCA está tardando demasiado en responder. Comprueba tu conexión y pulsa Recargar.';
+                          });
+                        });
                         if (!mounted) return;
                         setState(() {
                           _loading = true;
@@ -806,6 +823,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         });
                       },
                       onLoadStop: (controller, url) async {
+                        _loadTimeoutTimer?.cancel();
                         if (!mounted) return;
                         setState(() {
                           _loading = false;
@@ -850,6 +868,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         if (!(request.isForMainFrame ?? true) || !mounted) {
                           return;
                         }
+                        _loadTimeoutTimer?.cancel();
                         setState(() {
                           _loading = false;
                           _errorMessage =
@@ -862,6 +881,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         }
                         final statusCode = response.statusCode ?? 0;
                         if (statusCode >= 400) {
+                          _loadTimeoutTimer?.cancel();
                           setState(() {
                             _loading = false;
                             _errorMessage =
