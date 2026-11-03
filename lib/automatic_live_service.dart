@@ -265,7 +265,7 @@ class AutomaticLiveService {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw HttpException('La fuente respondió HTTP ' + response.statusCode.toString() + '.');
     }
-    var bytes = response.bodyBytes;
+    List<int> bytes = response.bodyBytes;
     if (bytes.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b) {
       try {
         bytes = gzip.decode(bytes);
