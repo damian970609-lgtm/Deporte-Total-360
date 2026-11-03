@@ -299,6 +299,7 @@ class LiveChannelsScreen extends StatefulWidget {
 
 class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
   static const List<String> _sports = <String>[
+    'Todos',
     'Fútbol',
     'Básquet',
     'NBA',
@@ -321,11 +322,11 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
   final Set<String> _favorites = <String>{};
   final Set<String> _selectedForMultiView = <String>{};
 
-  String _sport = 'Fútbol';
-  String _dateFilter = 'Hoy';
+  String _sport = 'Todos';
+  String _dateFilter = 'Todos';
   String _statusFilter = 'Todos';
   String _query = '';
-  bool _loading = false;
+  bool _loading = true;
   String? _error;
   int _requestVersion = 0;
   Timer? _refreshTimer;
@@ -337,7 +338,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
     _apiUrlListener = _onApiUrlChanged;
     sportsApiBaseUrl.addListener(_apiUrlListener);
     _loadSavedConfiguration();
-    _loadSchedule();
+    _loadSchedule(initial: true);
     _refreshTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       if (mounted && widget.isActive && !_loading) _loadSchedule();
     });
@@ -408,21 +409,58 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
     }
   }
 
-  Future<void> _loadSchedule() async {
+  Future<void> _loadSchedule({bool initial = false}) async {
     final version = ++_requestVersion;
     if (mounted) {
-      setState(() {
+      void prepareLoading() {
         _loading = true;
         _error = null;
-      });
+      }
+      if (initial) {
+        prepareLoading();
+      } else {
+        setState(prepareLoading);
+      }
     }
     try {
-      final rows = await _api.fetchAgendaEvents(
-        sport: _sport,
-        dateFilter: _dateFilter,
-      );
+      final sportErrors = <String, String>{};
+      final List<Map<String, dynamic>> rows;
+      if (_sport == 'Todos') {
+        final partialFixtures = <LiveFixture>[];
+        rows = await _api.fetchAllAgendaEvents(
+          dateFilter: _dateFilter,
+          onSportError: (sport, error) {
+            sportErrors[sport] = error.toString();
+          },
+          onSportComplete: (sport, sportRows) {
+            final additions = sportRows
+                .map((row) => LiveFixture.tryParse(
+                      row,
+                      (row['_sportName'] ?? sport).toString(),
+                    ))
+                .whereType<LiveFixture>();
+            partialFixtures.addAll(additions);
+            if (mounted && version == _requestVersion) {
+              setState(() {
+                _fixtures
+                  ..clear()
+                  ..addAll(partialFixtures);
+                _loading = true;
+              });
+            }
+          },
+        );
+      } else {
+        rows = await _api.fetchAgendaEvents(
+          sport: _sport,
+          dateFilter: _dateFilter,
+        );
+      }
       final parsed = rows
-          .map((row) => LiveFixture.tryParse(row, _sport))
+          .map((row) => LiveFixture.tryParse(
+                row,
+                (row['_sportName'] ?? _sport).toString(),
+              ))
           .whereType<LiveFixture>()
           .toList()
         ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
@@ -431,19 +469,21 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
       // estable del evento que devuelve la agenda, nunca por una URL capturada
       // de una página externa. Un fallo del catálogo no bloquea la agenda.
       var catalogSources = <LiveStreamSource>[];
-      try {
-        final catalogRows = await _api.fetchAuthorizedLiveSources(
-          sport: _sport,
-          dateFilter: _dateFilter,
-        );
-        final fixtureIds = parsed.map((fixture) => fixture.id).toSet();
-        catalogSources = catalogRows
-            .map(LiveStreamSource.fromCatalogJson)
-            .whereType<LiveStreamSource>()
-            .where((source) => fixtureIds.contains(source.eventId))
-            .toList(growable: false);
-      } catch (_) {
-        catalogSources = <LiveStreamSource>[];
+      if (_sport != 'Todos') {
+        try {
+          final catalogRows = await _api.fetchAuthorizedLiveSources(
+            sport: _sport,
+            dateFilter: _dateFilter,
+          );
+          final fixtureIds = parsed.map((fixture) => fixture.id).toSet();
+          catalogSources = catalogRows
+              .map(LiveStreamSource.fromCatalogJson)
+              .whereType<LiveStreamSource>()
+              .where((source) => fixtureIds.contains(source.eventId))
+              .toList(growable: false);
+        } catch (_) {
+          catalogSources = <LiveStreamSource>[];
+        }
       }
 
       if (!mounted || version != _requestVersion) return;
@@ -482,6 +522,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
   List<LiveFixture> get _filteredFixtures {
     final query = _query.trim().toLowerCase();
     return _fixtures.where((fixture) {
+      if (_sport != 'Todos' && fixture.sport != _sport) return false;
       if (_statusFilter == 'En vivo' &&
           fixture.status != LiveFixtureStatus.live) {
         return false;
