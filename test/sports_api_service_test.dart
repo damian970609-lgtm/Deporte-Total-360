@@ -131,6 +131,45 @@ void main() {
       );
     });
 
+    test('combina los doce deportes en una respuesta etiquetada para el feed Todos', () async {
+      sportsApiBaseUrl.value = 'https://worker.example';
+      SportsApiService.minimumRequestIntervalForTesting = Duration.zero;
+      final completedSports = <String>[];
+      SportsApiService.clientOverride = MockClient((request) async {
+        expect(request.url.path, startsWith('/api/'));
+        final sportPath = request.url.path.split('/')[2];
+        return http.Response(
+          jsonEncode(<String, dynamic>{
+            'response': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'fixture': <String, dynamic>{
+                  'id': sportPath,
+                  'date': '2026-11-03T18:00:00Z',
+                  'status': <String, dynamic>{'short': 'NS'},
+                },
+                'teams': <String, dynamic>{
+                  'home': <String, dynamic>{'name': 'Local $sportPath'},
+                  'away': <String, dynamic>{'name': 'Visitante $sportPath'},
+                },
+              },
+            ],
+            'errors': <String, dynamic>{},
+          }),
+          200,
+        );
+      });
+
+      final rows = await SportsApiService().fetchAllAgendaEvents(
+        dateFilter: 'Hoy',
+        onSportComplete: (sport, sportRows) => completedSports.add(sport),
+      );
+
+      expect(rows, hasLength(SportsApiService.supportedSports.length));
+      expect(completedSports.toSet(), SportsApiService.supportedSports.keys.toSet());
+      expect(rows.map((row) => row['_sportName']).toSet(),
+          SportsApiService.supportedSports.keys.toSet());
+    });
+
     test('consulta partidos y devuelve el número de eventos recibidos', () async {
       sportsApiBaseUrl.value = 'https://worker.example';
       SportsApiService.clientOverride = MockClient((request) async {
