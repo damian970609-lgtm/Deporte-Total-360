@@ -19,12 +19,12 @@ void main() {
   });
 
   group('configuración internacional', () {
-    test('precarga tres listas deportivas globales y una EPG sin autorizar automáticamente', () async {
+    test('precarga cinco listas deportivas y once EPG regionales/global sin autorizar automáticamente', () async {
       final settings = await AutoLiveSettings.load();
 
       expect(settings.playlistUrls, hasLength(5));
       expect(settings.playlistUrls.every(isSafeHttpUrl), isTrue);
-      expect(settings.epgUrls, hasLength(6));
+      expect(settings.epgUrls, hasLength(11));
       expect(settings.epgUrls.every(isSafeHttpUrl), isTrue);
       expect(settings.epgUrl, defaultAutoLiveEpgUrl);
       expect(settings.isConfigured, isFalse);
@@ -103,8 +103,8 @@ https://media.example/backup.m3u8
 
       final catalog = await AutomaticLiveService(client: client).loadCatalog(
         playlistUrl: 'https://playlist.example/sports.m3u',
-        epgUrl: 'https://epg-offline.example/guide.xml\\n'
-            'https://epg-one.example/guide.xml\\n'
+        epgUrl: 'https://epg-offline.example/guide.xml\n'
+            'https://epg-one.example/guide.xml\n'
             'https://epg-two.example/guide.xml',
       );
 
@@ -221,7 +221,7 @@ https://media.example/two.m3u8
         if (request.url.path.endsWith('.m3u')) return http.Response(playlist, 200);
         if (request.url.path.endsWith('.xml')) return http.Response(xml, 200);
         if (request.url.path.endsWith('.m3u8')) {
-          return http.Response('#EXTM3U\\n#EXT-X-TARGETDURATION:6\\n', 200);
+          return http.Response('#EXTM3U\n#EXT-X-TARGETDURATION:6\n', 200);
         }
         return http.Response('', 404);
       });
