@@ -64,6 +64,16 @@ class NotificationService {
       onDidReceiveNotificationResponse: _handleLocalNotificationResponse,
     );
     _initialized = true;
+    final androidNotifications = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    await androidNotifications?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'sports_live_events',
+        'Transmisiones deportivas',
+        description: 'Avisos de transmisiones deportivas disponibles.',
+        importance: Importance.max,
+      ),
+    );
     await _initializeFirebasePush();
   }
 
