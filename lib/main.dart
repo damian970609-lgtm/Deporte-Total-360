@@ -10,7 +10,7 @@ import 'news_screen.dart';
 import 'notification_service.dart';
 import 'public_chat_screen.dart';
 import 'sports_api_service.dart';
-import 'sports_statistics_screen.dart';
+import 'sportsapi_statistics_screen.dart';
 import 'sports_summaries_screen.dart';
 import 'marca_agenda_screen.dart';
 
@@ -361,7 +361,7 @@ class _MainShellState extends State<MainShell> {
       _visitedTabs.contains(_newsTab) ? const NewsScreen() : const SizedBox.shrink(),
       _visitedTabs.contains(_fantasyTab) ? const FantasyScreen() : const SizedBox.shrink(),
       _visitedTabs.contains(_statisticsTab)
-          ? SportsStatisticsScreen(
+          ? SportsApiStatisticsScreen(
               key: ValueKey<String>('statistics-${_selectedStatisticsSport}'),
               initialSport: _selectedStatisticsSport,
               onOpenAgenda: () => _selectTab(_agendaTab),
@@ -624,173 +624,76 @@ class HomeDashboard extends StatelessWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   children: <Widget>[
                     _SportTile(
-                      title: appText('FÚTBOL', 'FOOTBALL', 'FUTEBOL', 'FOOTBALL'),
-                      subtitle: appText(
-                        'Ligas • Copas',
-                        'Leagues • Cups',
-                        'Ligas • Copas',
-                        'Ligues • Coupes',
-                      ),
+                      title: 'FÚTBOL',
+                      subtitle: 'LaLiga • Premier • Champions',
                       icon: Icons.sports_soccer_rounded,
                       color: appGreen,
                       onTap: () => onSportSelected('Fútbol'),
                     ),
                     _SportTile(
-                      title: appText('BÁSQUET', 'BASKETBALL', 'BASQUETE', 'BASKET-BALL'),
-                      subtitle: 'NBA • FIBA',
+                      title: 'BALONCESTO',
+                      subtitle: 'NBA • WNBA • FIBA',
                       icon: Icons.sports_basketball_rounded,
                       color: appYellow,
-                      onTap: () => onSportSelected('Básquet'),
+                      onTap: () => onSportSelected('Baloncesto'),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                GridView.count(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 1.23,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: <Widget>[
                     _SportTile(
-                      title: appText('BÉISBOL', 'BASEBALL', 'BEISEBOL', 'BASEBALL'),
-                      subtitle: 'MLB • Ligas',
+                      title: 'BÉISBOL',
+                      subtitle: 'MLB • WBC • WBSC',
                       icon: Icons.sports_baseball_rounded,
                       color: appPink,
                       onTap: () => onSportSelected('Béisbol'),
                     ),
                     _SportTile(
-                      title: appText('VÓLEY', 'VOLLEYBALL', 'VÔLEI', 'VOLLEY-BALL'),
-                      subtitle: 'Ligas • Torneos',
-                      icon: Icons.sports_volleyball_rounded,
-                      color: appBlue,
-                      onTap: () => onSportSelected('Vóley'),
+                      title: 'HOCKEY',
+                      subtitle: 'NHL • PWHL • IIHF',
+                      icon: Icons.sports_hockey_rounded,
+                      color: appCyan,
+                      onTap: () => onSportSelected('Hockey sobre hielo'),
                     ),
                     _SportTile(
-                      title: 'RUGBY',
-                      subtitle: appText(
-                        'Ligas • Torneos',
-                        'Leagues • Tournaments',
-                        'Ligas • Torneios',
-                        'Ligues • Tournois',
-                      ),
-                      icon: Icons.sports_rugby_rounded,
+                      title: 'VOLEIBOL',
+                      subtitle: 'VNL • FIVB',
+                      icon: Icons.sports_volleyball_rounded,
+                      color: appBlue,
+                      onTap: () => onSportSelected('Voleibol'),
+                    ),
+                    _SportTile(
+                      title: 'MMA',
+                      subtitle: 'UFC • Combates',
+                      icon: Icons.sports_mma_rounded,
+                      color: appPink,
+                      onTap: () => onSportSelected('MMA'),
+                    ),
+                    _SportTile(
+                      title: 'FÚTBOL SALA',
+                      subtitle: 'Mundiales • Copas',
+                      icon: Icons.sports_soccer_rounded,
                       color: appGreen,
-                      onTap: () => onSportSelected('Rugby'),
+                      onTap: () => onSportSelected('Fútbol sala'),
+                    ),
+                    _SportTile(
+                      title: 'CICLISMO',
+                      subtitle: 'Tour • Giro • Vuelta',
+                      icon: Icons.directions_bike_rounded,
+                      color: appYellow,
+                      onTap: () => onSportSelected('Ciclismo'),
+                    ),
+                    _SportTile(
+                      title: 'DEPORTES DE MOTOR',
+                      subtitle: 'F1 • MotoGP',
+                      icon: Icons.sports_motorsports_rounded,
+                      color: appBlue,
+                      onTap: () => onSportSelected('Deportes de motor'),
+                    ),
+                    _SportTile(
+                      title: 'BALONMANO',
+                      subtitle: 'IHF • EHF',
+                      icon: Icons.sports_handball_rounded,
+                      color: appGreen,
+                      onTap: () => onSportSelected('Balonmano'),
                     ),
                   ],
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: appPanel,
-                    borderRadius: BorderRadius.circular(13),
-                    border: Border.all(color: appCyan.withAlpha(135)),
-                    boxShadow: <BoxShadow>[
-                      BoxShadow(color: appBlue.withAlpha(18), blurRadius: 15),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Row(
-                        children: <Widget>[
-                          const Icon(Icons.sports_rounded, color: appPink, size: 19),
-                          const SizedBox(width: 7),
-                          Expanded(
-                            child: Text(
-                              appText(
-                                'OTROS DEPORTES',
-                                'MORE SPORTS',
-                                'OUTROS ESPORTES',
-                                'AUTRES SPORTS',
-                              ),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: .4,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            'API-Sports',
-                            style: TextStyle(color: appMuted, fontSize: 9),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 7,
-                        runSpacing: 7,
-                        children: <Widget>[
-                          _HomeSportChip(
-                            label: 'NBA',
-                            icon: Icons.sports_basketball_rounded,
-                            color: appYellow,
-                            onTap: () => onSportSelected('NBA'),
-                          ),
-                          _HomeSportChip(
-                            label: 'HOCKEY',
-                            icon: Icons.sports_hockey_rounded,
-                            color: appCyan,
-                            onTap: () => onSportSelected('Hockey sobre hielo'),
-                          ),
-                          _HomeSportChip(
-                            label: 'NFL',
-                            icon: Icons.sports_football_rounded,
-                            color: appPink,
-                            onTap: () => onSportSelected('Fútbol americano'),
-                          ),
-                          _HomeSportChip(
-                            label: appText('BALONMANO', 'HANDBALL', 'HANDEBOL', 'HANDBALL'),
-                            icon: Icons.sports_handball_rounded,
-                            color: appGreen,
-                            onTap: () => onSportSelected('Balonmano'),
-                          ),
-                          _HomeSportChip(
-                            label: 'FÚTBOL AUSTRALIANO',
-                            icon: Icons.sports_football_rounded,
-                            color: appBlue,
-                            onTap: () => onSportSelected('Fútbol australiano'),
-                          ),
-                          _HomeSportChip(
-                            label: 'FÓRMULA 1',
-                            icon: Icons.sports_motorsports_rounded,
-                            color: appYellow,
-                            onTap: () => onSportSelected('Fórmula 1'),
-                          ),
-                          _HomeSportChip(
-                            label: 'MMA',
-                            icon: Icons.sports_mma_rounded,
-                            color: appPink,
-                            onTap: () => onSportSelected('MMA'),
-                          ),
-                          _HomeSportChip(
-                            label: appText('TENIS · PRÓXIMAMENTE', 'TENNIS · COMING SOON', 'TÊNIS · EM BREVE', 'TENNIS · BIENTÔT'),
-                            icon: Icons.sports_tennis_rounded,
-                            color: appMuted,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        appText(
-                          'Los deportes disponibles abren sus datos y estadísticas. Tenis se muestra como próximamente porque el servidor actual no ofrece todavía ese endpoint.',
-                          'Available sports open their data and statistics. Tennis is marked as coming soon because the current server does not yet provide that endpoint.',
-                          'Os esportes disponíveis abrem seus dados e estatísticas. Tênis aparece como em breve porque o servidor ainda não oferece esse endpoint.',
-                          'Les sports disponibles ouvrent leurs données et statistiques. Le tennis est indiqué comme bientôt disponible car le serveur ne propose pas encore cet endpoint.',
-                        ),
-                        style: const TextStyle(
-                          color: appMuted,
-                          fontSize: 9,
-                          height: 1.35,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
                 const SizedBox(height: 17),
                 _SectionHeading(
