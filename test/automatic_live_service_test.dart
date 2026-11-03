@@ -19,7 +19,7 @@ void main() {
   });
 
   group('configuración internacional', () {
-    test('precarga dos listas deportivas globales y una EPG sin autorizar automáticamente', () async {
+    test('precarga tres listas deportivas globales y una EPG sin autorizar automáticamente', () async {
       final settings = await AutoLiveSettings.load();
 
       expect(settings.playlistUrls, hasLength(3));
