@@ -319,7 +319,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
                 icon: Icons.settings_suggest_rounded),
             if (_agendaEvents.isEmpty && !_loading) ...<Widget>[
               _notice('Agenda de Fútbol Libre pendiente',
-                'Abre Agenda de hoy para que la APK lea los eventos visibles publicados por Fútbol Libre.',
+                'Abre Agenda de hoy. La APK leerá solamente horarios, deporte, competición y equipos; no abrirá enlaces ni reproductores de transmisiones de Fútbol Libre.',
                 icon: Icons.event_busy_rounded),
               const SizedBox(height: 8),
               OutlinedButton.icon(
@@ -332,7 +332,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
             ],
             if (configured && _agendaEvents.isNotEmpty && _scheduled.isEmpty && !_loading && _error == null)
               _notice('Todavía no hay señales asociadas',
-                'No se encontró una coincidencia suficiente entre el título del evento, la hora de la EPG y un canal de la lista. No se asignan canales al azar.',
+                'Se buscaron coincidencias de equipos, deporte y horario en las listas M3U y las guías EPG configuradas. No se encontró una señal comprobable; no se abrirá ningún reproductor de Fútbol Libre ni se asignará un canal al azar.',
                 icon: Icons.search_off_rounded),
             if (_scheduled.isNotEmpty) ...<Widget>[
               Row(children: <Widget>[
@@ -353,7 +353,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
             Text('Actualizado ${_time(_updatedAt)} · se revisa cada 45 segundos mientras esta sección está abierta.',
               textAlign: TextAlign.center, style: const TextStyle(color: _autoMuted, fontSize: 9)),
             const SizedBox(height: 10),
-            const Text('La calidad depende de las señales, del proveedor, de los derechos disponibles en tu región y de la conexión. La APK no puede garantizar que una fuente externa esté siempre activa.',
+            const Text('La pestaña Agenda de Fútbol Libre se usa solo como calendario. Las señales se buscan en fuentes M3U independientes y se contrastan con varias EPG; una comprobación HTTP no garantiza reproducción continua ni derechos en todas las regiones. Ningún catálogo externo puede garantizar una transmisión permanente.',
               textAlign: TextAlign.center, style: TextStyle(color: _autoMuted, fontSize: 9, height: 1.4)),
           ],
         ),
