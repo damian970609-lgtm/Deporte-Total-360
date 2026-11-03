@@ -235,6 +235,7 @@ class LiveStreamSource {
     required this.sport,
     required this.name,
     required this.url,
+    this.isRemote = false,
   });
 
   final String id;
@@ -243,6 +244,7 @@ class LiveStreamSource {
   final String sport;
   final String name;
   final String url;
+  final bool isRemote;
 
   Uri? get validatedUri =>
       isSupportedAuthorizedMediaUrl(url) ? Uri.tryParse(url.trim()) : null;
@@ -275,6 +277,14 @@ class LiveStreamSource {
     }
     return source;
   }
+
+  /// El catálogo remoto solo puede entregar señales directas autorizadas.
+  static LiveStreamSource? fromCatalogJson(dynamic value) {
+    if (value is! Map) return null;
+    final map = Map<String, dynamic>.from(value);
+    map['isRemote'] = true;
+    return LiveStreamSource.fromJson(map);
+  }
 }
 
 class LiveChannelsScreen extends StatefulWidget {
@@ -306,6 +316,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
   final TextEditingController _searchController = TextEditingController();
   final List<LiveFixture> _fixtures = <LiveFixture>[];
   final List<LiveStreamSource> _sources = <LiveStreamSource>[];
+  final List<LiveStreamSource> _remoteSources = <LiveStreamSource>[];
   final Set<String> _favorites = <String>{};
   final Set<String> _selectedForMultiView = <String>{};
 
@@ -414,11 +425,34 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
           .whereType<LiveFixture>()
           .toList()
         ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+
+      // El catálogo procede del Worker del propietario. Se asocia por el ID
+      // estable del evento que devuelve la agenda, nunca por una URL capturada
+      // de una página externa. Un fallo del catálogo no bloquea la agenda.
+      var catalogSources = <LiveStreamSource>[];
+      try {
+        final catalogRows = await _api.fetchAuthorizedLiveSources(
+          sport: _sport,
+          dateFilter: _dateFilter,
+        );
+        final fixtureIds = parsed.map((fixture) => fixture.id).toSet();
+        catalogSources = catalogRows
+            .map(LiveStreamSource.fromCatalogJson)
+            .whereType<LiveStreamSource>()
+            .where((source) => fixtureIds.contains(source.eventId))
+            .toList(growable: false);
+      } catch (_) {
+        catalogSources = <LiveStreamSource>[];
+      }
+
       if (!mounted || version != _requestVersion) return;
       setState(() {
         _fixtures
           ..clear()
           ..addAll(parsed);
+        _remoteSources
+          ..clear()
+          ..addAll(catalogSources);
         _loading = false;
         _error = null;
         _selectedForMultiView.removeWhere((id) =>
@@ -438,9 +472,10 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
     }
   }
 
-  List<LiveStreamSource> _sourcesFor(String eventId) => _sources
-      .where((source) => source.eventId == eventId)
-      .toList(growable: false);
+  List<LiveStreamSource> _sourcesFor(String eventId) => <LiveStreamSource>[
+        ..._sources.where((source) => source.eventId == eventId),
+        ..._remoteSources.where((source) => source.eventId == eventId),
+      ];
 
   List<LiveFixture> get _filteredFixtures {
     final query = _query.trim().toLowerCase();
@@ -592,6 +627,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
   }
 
   Future<void> _removeSource(LiveStreamSource source) async {
+    if (source.isRemote) return;
     setState(() {
       _sources.removeWhere((item) => item.id == source.id);
       if (_sourcesFor(source.eventId).isEmpty) {
@@ -879,7 +915,9 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        source.name,
+                        source.isRemote
+                            ? '${source.name} · CATÁLOGO'
+                            : source.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -895,9 +933,10 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
                           : null,
                       child: const Text('VER'),
                     ),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () => _removeSource(source),
+                    if (!source.isRemote)
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _removeSource(source),
                       icon: const Icon(
                         Icons.delete_outline_rounded,
                         color: _liveMuted,
