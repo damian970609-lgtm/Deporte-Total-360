@@ -509,7 +509,7 @@ class AutomaticLiveService {
           final maxHeight = resolutions.isEmpty ? 0 : resolutions.reduce(
             (a, b) => a > b ? a : b,
           );
-          final bandwidths = RegExp(r'BANDWIDTH=(\\d+)')
+          final bandwidths = RegExp(r'BANDWIDTH=(\d+)')
               .allMatches(body)
               .map((match) => int.tryParse(match.group(1) ?? '') ?? 0);
           final maxBandwidth = bandwidths.isEmpty ? 0 : bandwidths.reduce(
