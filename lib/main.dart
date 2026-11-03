@@ -1575,7 +1575,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   title: Text(
                     appText(
-                      'Servidor de estadísticas y agenda',
+                      'Servidor de estadísticas y señales',
                       'Statistics and schedule server',
                       'Servidor de estatísticas e agenda',
                       'Serveur des statistiques et du calendrier',
