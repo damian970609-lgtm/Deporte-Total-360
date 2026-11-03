@@ -154,7 +154,34 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
               if (title.length < 5) title = rawText;
               title = title.replace(/\b(EN VIVO|VER PARTIDO|VER AHORA|DETALLES)\b/ig, '').replace(timePattern, '').trim();
               const pair = title.split(/\s+(?:vs?\.?|versus|contra|[-–—])\s+/i);
-              if (pair.length < 2) continue;
+              const textLower = rawText.toLowerCase();
+              let sport = 'Fútbol';
+              if (/table tennis|tenis de mesa|ping\s?pong/.test(textLower)) sport = 'Tenis de mesa';
+              else if (/nba|basquet|basketball|baloncesto/.test(textLower)) sport = 'Básquet';
+              else if (/tenis|tennis|wta|atp/.test(textLower)) sport = 'Tenis';
+              else if (/formula\s?1|f1\b/.test(textLower)) sport = 'Fórmula 1';
+              else if (/motogp|moto\s?gp|motociclismo/.test(textLower)) sport = 'Motociclismo';
+              else if (/nascar|rally|motorsport|automovilismo/.test(textLower)) sport = 'Automovilismo';
+              else if (/beisbol|baseball|mlb\b/.test(textLower)) sport = 'Béisbol';
+              else if (/futbol americano|american football|nfl\b|gridiron/.test(textLower)) sport = 'Fútbol americano';
+              else if (/rugby/.test(textLower)) sport = 'Rugby';
+              else if (/voleibol|volleyball/.test(textLower)) sport = 'Voleibol';
+              else if (/cricket|críquet/.test(textLower)) sport = 'Críquet';
+              else if (/hockey|nhl\b/.test(textLower)) sport = 'Hockey';
+              else if (/boxeo|boxing|kickboxing/.test(textLower)) sport = 'Boxeo';
+              else if (/mma\b|ufc\b|artes marciales mixtas/.test(textLower)) sport = 'MMA';
+              else if (/wrestling|lucha libre/.test(textLower)) sport = 'Lucha libre';
+              else if (/ciclismo|cycling/.test(textLower)) sport = 'Ciclismo';
+              else if (/golf/.test(textLower)) sport = 'Golf';
+              else if (/balonmano|handball/.test(textLower)) sport = 'Balonmano';
+              else if (/atletismo|athletics/.test(textLower)) sport = 'Atletismo';
+              else if (/natacion|swimming/.test(textLower)) sport = 'Natación';
+              else if (/surf|skateboarding|snowboard|esports|e-sports/.test(textLower)) sport = 'Otros deportes';
+              const individualSports = new Set([
+                'Fórmula 1', 'Motociclismo', 'Automovilismo', 'Ciclismo',
+                'Golf', 'Atletismo', 'Natación', 'Otros deportes'
+              ]);
+              if (pair.length < 2 && !individualSports.has(sport)) continue;
               let hour = parseInt(timeMatch[1] || timeMatch[3], 10);
               const minute = parseInt(timeMatch[2] || timeMatch[4], 10);
               if (timeMatch[5]) {
@@ -182,18 +209,12 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 const parsedEnd = new Date(endValue);
                 if (!Number.isNaN(parsedEnd.getTime())) end = parsedEnd;
               }
-              const textLower = rawText.toLowerCase();
               if (/finalizado|terminado|finished|final\b/.test(textLower)) end = now;
               const iso = start.toISOString();
               const endIso = end ? end.toISOString() : null;
               const key = anchor.href + '|' + title + '|' + iso;
               if (seen.has(key)) continue;
               seen.add(key);
-              let sport = 'Fútbol';
-              if (/nba|basquet|basketball/.test(textLower)) sport = 'Básquet';
-              else if (/tenis|tennis/.test(textLower)) sport = 'Tenis';
-              else if (/formula 1|f1\b/.test(textLower)) sport = 'Fórmula 1';
-              else if (/beisbol|baseball/.test(textLower)) sport = 'Béisbol';
               const eventId = (node.dataset && (node.dataset.eventId || node.dataset.fixtureId)) ||
                 anchor.href.split('/').filter(Boolean).pop() || key;
               const competitionNode = node.querySelector(
@@ -205,8 +226,8 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 title: title,
                 sport: sport,
                 competition: competition,
-                homeTeam: pair[0].trim(),
-                awayTeam: pair.slice(1).join(' vs ').trim(),
+                homeTeam: pair.length > 1 ? pair[0].trim() : '',
+                awayTeam: pair.length > 1 ? pair.slice(1).join(' vs ').trim() : '',
                 startsAt: iso,
                 endsAt: endIso,
                 detailUrl: anchor.href
