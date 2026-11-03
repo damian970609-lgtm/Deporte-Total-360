@@ -53,6 +53,19 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
     return (scheme == 'https' || scheme == 'http') && uri.host.isNotEmpty;
   }
 
+  bool _isFutbolLibrePlaybackRoute(WebUri url) {
+    final uri = Uri.tryParse(url.toString());
+    if (uri == null) return false;
+    final host = uri.host.toLowerCase();
+    final isAgendaHost = host == 'futbol-libre.cam' ||
+        host.endsWith('.futbol-libre.cam');
+    if (!isAgendaHost) return false;
+    return RegExp(
+      r'(?:^|/)(?:canal|channel|player|watch|stream|live|embed|partido|match|fixture|encuentro)(?:/|$)',
+      caseSensitive: false,
+    ).hasMatch(uri.path);
+  }
+
   void _showNotice(String message) {
     if (!mounted) return;
     setState(() => _noticeMessage = message);
@@ -399,6 +412,13 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
       return false;
     }
 
+    if (_isFutbolLibrePlaybackRoute(target)) {
+      _showNotice(
+        'La Agenda solo muestra horarios y equipos. Las transmisiones de Fútbol Libre están desactivadas en esta pestaña.',
+      );
+      return false;
+    }
+
     if (WebProtectionPolicy.isBlockedUrl(target.toString())) {
       _showNotice(
         'Se bloqueó una ventana de publicidad o seguimiento conocida.',
@@ -669,6 +689,13 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         if (!_isHttpUrl(uri)) {
                           _showNotice(
                             'Se bloqueó un enlace externo no web para mantener la navegación dentro de la aplicación.',
+                          );
+                          return NavigationActionPolicy.CANCEL;
+                        }
+
+                        if (_isFutbolLibrePlaybackRoute(uri)) {
+                          _showNotice(
+                            'La Agenda solo muestra horarios y equipos. Las transmisiones de Fútbol Libre están desactivadas en esta pestaña.',
                           );
                           return NavigationActionPolicy.CANCEL;
                         }
