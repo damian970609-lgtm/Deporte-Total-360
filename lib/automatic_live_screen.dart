@@ -125,7 +125,8 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen> with WidgetsB
     }
     final sources = <LivePlayerSource>[];
     for (final item in ordered) {
-      if (sources.length >= 4 || item.sources.isEmpty) break;
+      if (sources.length >= 4) break;
+      if (item.sources.isEmpty) continue;
       final source = item.sources.first;
       if (!isDirectPlayableStream(source.url)) continue;
       sources.add(LivePlayerSource(
