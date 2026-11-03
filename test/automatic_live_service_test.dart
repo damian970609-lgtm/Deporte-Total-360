@@ -164,6 +164,43 @@ https://media.example/two.m3u8
       expect(result.every((item) => item.sources.single.available), isTrue);
     });
 
+    test('no asigna una señal cuando falla la comprobación de disponibilidad', () async {
+      final start = DateTime.now().add(const Duration(minutes: 10));
+      final stop = start.add(const Duration(hours: 1));
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="football.one",Football HD
+https://media.example/offline.m3u8
+''';
+      final xml = '<tv>'
+          '<programme channel="football.one" start="${_xmlTime(start)}" stop="${_xmlTime(stop)}"><title>Azul vs Rojo</title></programme>'
+          '</tv>';
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('.m3u')) return http.Response(playlist, 200);
+        if (request.url.path.endsWith('.xml')) return http.Response(xml, 200);
+        if (request.url.path.endsWith('.m3u8')) return http.Response('offline', 503);
+        return http.Response('', 404);
+      });
+      final event = FutbolLibreEvent(
+        id: 'offline',
+        title: 'Azul vs Rojo',
+        sport: 'Fútbol',
+        startsAt: start,
+        detailUrl: 'https://futbol-libre.cam/offline',
+      );
+      final result = await AutomaticLiveService(client: client).schedule(
+        events: <FutbolLibreEvent>[event],
+        now: start.subtract(const Duration(minutes: 10)),
+        settings: const AutoLiveSettings(
+          playlistUrl: 'https://provider.example/channels.m3u',
+          epgUrl: 'https://provider.example/guide.xml',
+          authorizationConfirmed: true,
+        ),
+      );
+
+      expect(result, isEmpty);
+    });
+
     test('no empareja un programa que pertenece a otro evento', () {
       final event = FutbolLibreEvent(
         id: 'match',
