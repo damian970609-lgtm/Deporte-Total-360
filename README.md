@@ -5,7 +5,7 @@ Aplicación Android en Flutter. El APK se compila en GitHub Actions; la carpeta 
 Navegación principal: Inicio, Deportes en vivo, Agenda de hoy, Noticias, Mister Fantasy, Estadísticas, Resúmenes y Ajustes. Agenda de hoy muestra la programación de MARCA; Deportes en vivo busca señales por separado en los catálogos M3U/XMLTV. Chat, Telegram, contacto y donaciones permanecen como accesos auxiliares.
 
 Archivos principales:
-- lib/main.dart: navegación de ocho secciones, inicio y ajustes, sin reproductor ni configuración SSH101.
+- lib/main.dart: navegación de ocho secciones, inicio y ajustes.
 - lib/automatic_live_service.dart y lib/automatic_live_screen.dart: captura de eventos de agenda, lectura de M3U/XMLTV, clasificación y asignación automática de señales a cuatro reproductores fijos y retiro de señales al terminar su horario EPG.
 - lib/live_media_format.dart y lib/live_channels_screen.dart: detección explícita de HLS, DASH, Smooth Streaming y vídeo progresivo, adaptación de calidad automática con ExoPlayer, selector manual por pistas y transición fullscreen/miniatura sin recrear el controlador.
 - lib/sports_summaries_screen.dart: categorías deportivas y reproducción de YouTube dentro de la app mediante WebView.
