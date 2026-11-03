@@ -362,7 +362,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
               const homeTeam = pair.length > 1 ? pair[0].trim() : '';
               const awayTeam = pair.length > 1 ? pair.slice(1).join(' vs ').trim() : '';
               const normalizeLabel = (value) => String(value || '')
-                .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
                 .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
               const imageNodes = Array.from(node.querySelectorAll('img'));
               const resolveImage = (image) => {
@@ -372,7 +372,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                   image.getAttribute('data-src') ||
                   image.getAttribute('data-lazy-src') ||
                   image.getAttribute('data-original') ||
-                  (image.getAttribute('srcset') || '').split(',')[0].trim().split(/\\s+/)[0];
+                  (image.getAttribute('srcset') || '').split(',')[0].trim().split(/\s+/)[0];
                 if (!source || /^data:/i.test(source)) return '';
                 try {
                   const url = new URL(source, location.href);
@@ -400,7 +400,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 '[class*="venue"],[class*="stadium"],[data-venue]'
               );
               const venue = (venueNode && venueNode.textContent || '')
-                .replace(/\\s+/g, ' ').trim();
+                .replace(/\s+/g, ' ').trim();
               const participants = pair.length > 1 ? [
                 { name: homeTeam, imageUrl: homeTeamLogo, country: '', role: 'home' },
                 { name: awayTeam, imageUrl: awayTeamLogo, country: '', role: 'away' }
