@@ -531,16 +531,7 @@ class AutomaticLiveService {
                 .whereType<SportsAgendaParticipant>()
                 .toList(growable: false)
             : <SportsAgendaParticipant>[];
-        String safeLogo(dynamic value) {
-          final text = (value ?? '').toString().trim();
-          final parsed = Uri.tryParse(text);
-          return parsed != null &&
-                  parsed.scheme == 'https' &&
-                  parsed.hasAuthority &&
-                  parsed.userInfo.isEmpty
-              ? text
-              : '';
-        }
+        String safeLogo(dynamic value) => _marcaImageUrl(value);
         final homeTeam = (eventData['homeTeam'] ?? '').toString();
         final awayTeam = (eventData['awayTeam'] ?? '').toString();
         String participantLogo(String name) => participants
@@ -554,14 +545,35 @@ class AutomaticLiveService {
           competition: (eventData['competition'] ?? '').toString(),
           homeTeam: homeTeam,
           awayTeam: awayTeam,
-          homeTeamLogo: safeLogo(eventData['homeTeamLogo']).isNotEmpty
-              ? safeLogo(eventData['homeTeamLogo'])
+          homeTeamLogo: safeLogo(
+            eventData['homeTeamLogo'] ??
+            eventData['homeTeamLogoUrl'] ??
+            eventData['homeLogo'],
+          ).isNotEmpty
+              ? safeLogo(
+                  eventData['homeTeamLogo'] ??
+                  eventData['homeTeamLogoUrl'] ??
+                  eventData['homeLogo'],
+                )
               : participantLogo(homeTeam),
-          awayTeamLogo: safeLogo(eventData['awayTeamLogo']).isNotEmpty
-              ? safeLogo(eventData['awayTeamLogo'])
+          awayTeamLogo: safeLogo(
+            eventData['awayTeamLogo'] ??
+            eventData['awayTeamLogoUrl'] ??
+            eventData['awayLogo'],
+          ).isNotEmpty
+              ? safeLogo(
+                  eventData['awayTeamLogo'] ??
+                  eventData['awayTeamLogoUrl'] ??
+                  eventData['awayLogo'],
+                )
               : participantLogo(awayTeam),
           participants: participants,
-          imageUrl: safeLogo(eventData['imageUrl']),
+          imageUrl: safeLogo(
+            eventData['imageUrl'] ??
+            eventData['image'] ??
+            eventData['thumbnailUrl'] ??
+            eventData['photo'],
+          ),
           venue: (eventData['venue'] ?? '').toString(),
           status: (eventData['status'] ?? 'scheduled').toString(),
           startsAt: startsAt.toLocal(),
