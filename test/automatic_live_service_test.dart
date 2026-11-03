@@ -44,6 +44,16 @@ void main() {
         competition: 'Liga de prueba',
         homeTeam: 'Equipo Azul',
         awayTeam: 'Equipo Rojo',
+        homeTeamLogo: 'https://img.example/azul.png',
+        awayTeamLogo: 'https://img.example/rojo.png',
+        participants: const <SportsAgendaParticipant>[
+          SportsAgendaParticipant(
+            name: 'Carlos Alcaraz',
+            imageUrl: 'https://img.example/alcaraz.png',
+            country: 'España',
+          ),
+        ],
+        venue: 'Estadio de prueba',
         startsAt: DateTime.now().add(const Duration(hours: 1)),
         detailUrl: 'https://www.marca.com/programacion-tv.html',
       );
@@ -53,6 +63,11 @@ void main() {
 
       expect(saved, hasLength(1));
       expect(saved.single.id, 'marca-event-1');
+      expect(saved.single.homeTeamLogo, 'https://img.example/azul.png');
+      expect(saved.single.awayTeamLogo, 'https://img.example/rojo.png');
+      expect(saved.single.participants.single.name, 'Carlos Alcaraz');
+      expect(saved.single.participants.single.imageUrl, 'https://img.example/alcaraz.png');
+      expect(saved.single.venue, 'Estadio de prueba');
       expect(saved.single.detailUrl, 'https://www.marca.com/programacion-tv.html');
     });
   });
@@ -76,6 +91,17 @@ void main() {
                 'competition': 'Liga de prueba',
                 'homeTeam': 'Equipo Azul',
                 'awayTeam': 'Equipo Rojo',
+                'homeTeamLogo': 'https://img.example/azul.png',
+                'awayTeamLogo': 'https://img.example/rojo.png',
+                'participants': <Map<String, dynamic>>[
+                  <String, dynamic>{
+                    'name': 'Equipo Azul',
+                    'imageUrl': 'https://img.example/azul.png',
+                    'country': 'España',
+                    'role': 'home',
+                  },
+                ],
+                'venue': 'Estadio de prueba',
                 'startsAt': start.toUtc().toIso8601String(),
                 'endsAt': stop.toUtc().toIso8601String(),
                 'detailUrl': 'https://www.marca.com/programacion-tv.html',
@@ -103,6 +129,11 @@ void main() {
 
       expect(result, hasLength(1));
       expect(result!.single.event.id, 'cloud-event-1');
+      expect(result.single.event.homeTeamLogo, 'https://img.example/azul.png');
+      expect(result.single.event.awayTeamLogo, 'https://img.example/rojo.png');
+      expect(result.single.event.participants.single.name, 'Equipo Azul');
+      expect(result.single.event.participants.single.country, 'España');
+      expect(result.single.event.venue, 'Estadio de prueba');
       expect(result.single.sources.single.channelName, 'Canal Deportes ES');
       expect(result.single.sources.single.languagePriority, 2);
       expect(result.single.sources.single.available, isTrue);
