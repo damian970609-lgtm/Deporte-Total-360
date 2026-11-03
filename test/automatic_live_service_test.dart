@@ -217,7 +217,7 @@ https://media.example/offline.m3u8
         id: 'match',
         title: 'Equipo Azul vs Equipo Rojo',
         sport: 'Fútbol',
-        startsAt: DateTime(2026, 11, 3, 10),
+        startsAt: DateTime.now().add(const Duration(hours: 1)),
         detailUrl: 'https://futbol-libre.cam/match',
       );
       expect(
