@@ -74,7 +74,7 @@ class NotificationService {
         AndroidFlutterLocalNotificationsPlugin>();
     final localGranted =
         await android?.requestNotificationsPermission() ?? false;
-    if (!_firebaseConfigured) return localGranted;
+    if (!_firebaseConfigured || Firebase.apps.isEmpty) return localGranted;
     final settings = await FirebaseMessaging.instance.requestPermission(
       alert: true,
       badge: true,
@@ -124,11 +124,11 @@ class NotificationService {
 
   static Future<void> _registerDeviceToken(String? token) async {
     if (token == null || token.isEmpty) return;
-    final prefs = await SharedPreferences.getInstance();
-    if (!(prefs.getBool('notifications_enabled') ?? false)) return;
-    final base = SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value);
-    if (base == null) return;
     try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!(prefs.getBool('notifications_enabled') ?? false)) return;
+      final base = SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value);
+      if (base == null) return;
       await http.post(
         Uri.parse('$base/api/live/devices/register'),
         headers: const {'Content-Type': 'application/json'},
