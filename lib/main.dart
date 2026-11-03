@@ -3,7 +3,6 @@ import 'app_i18n.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:video_player/video_player.dart';
 import 'automatic_live_screen.dart';
 
 import 'fantasy_screen.dart';
@@ -27,11 +26,6 @@ const Color appGreen = Color(0xFF39FF9C);
 const Color appYellow = Color(0xFFFFD600);
 const Color appRed = Color(0xFFFF3155);
 const Color appMuted = Color(0xFFA9BDD6);
-
-const String rtmpBase = 'rtmp://ssh101.bozztv.com/ssh101/';
-const String hlsBase = 'https://live21.bozztv.com/akamaissh101/ssh101/';
-String buildRtmpUrl(String channel) => '$rtmpBase$channel';
-String buildHlsUrl(String channel) => '$hlsBase$channel/playlist.m3u8';
 
 const String contactUrl = 'https://wa.me/5927214741';
 const String settingsPhotoAsset =
@@ -79,11 +73,6 @@ Future<void> main() async {
   try {
     final prefs = await SharedPreferences.getInstance();
     appLanguage.value = parseLanguage(prefs.getString('app_language'));
-    final savedChannel = prefs.getString('ssh101_channel')?.trim();
-    channelSlug.value = savedChannel != null &&
-            RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(savedChannel)
-        ? savedChannel
-        : defaultSsh101Channel;
     telegramLink.value = prefs.getString('telegram_public_link') ?? '';
     final savedApiUrl = prefs.getString('sports_api_base_url');
     sportsApiBaseUrl.value =
@@ -193,28 +182,6 @@ class _MainShellState extends State<MainShell> {
   void _openStatistics() => _selectTab(_statisticsTab);
 
   void _openWebAgenda() => _selectTab(_agendaTab);
-
-  Future<void> _openSsh101() async {
-    final slug = channelSlug.value.trim();
-    if (slug.isEmpty || !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(slug)) {
-      _selectTab(_settingsTab);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Configura tu identificador SSH101 en Ajustes para abrir tu canal.')),
-        );
-      }
-      return;
-    }
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => LivePlayerScreen(channel: slug)),
-    );
-  }
-
-  Future<void> _openSsh101Encoder() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const EncoderConfigScreen()),
-    );
-  }
 
   Future<void> _openPublicChat() async {
     await Navigator.of(context).push<void>(
@@ -368,8 +335,6 @@ class _MainShellState extends State<MainShell> {
       ),
       AutomaticLiveScreen(
         onOpenAgenda: () => _selectTab(_agendaTab),
-        onOpenSsh101: _openSsh101,
-        onOpenSsh101Encoder: _openSsh101Encoder,
         isActive: _selectedIndex == _liveTab,
       ),
       _visitedTabs.contains(_agendaTab)
@@ -1364,7 +1329,6 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _telegramController;
-  late final TextEditingController _channelController;
   bool _saving = false;
   bool _notificationsEnabled = false;
 
@@ -1372,7 +1336,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _telegramController = TextEditingController(text: telegramLink.value);
-    _channelController = TextEditingController(text: channelSlug.value);
     _loadNotificationPreference();
   }
 
@@ -1418,7 +1381,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     _telegramController.dispose();
-    _channelController.dispose();
     super.dispose();
   }
 
@@ -1446,15 +1408,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _save() async {
     final link = _telegramController.text.trim();
-    final slug = _channelController.text.trim();
-    if (slug.isNotEmpty && !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(slug)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(
-          'El identificador SSH101 solo admite letras, números, guion y guion bajo.',
-        )),
-      );
-      return;
-    }
     if (link.isNotEmpty) {
       final uri = Uri.tryParse(link);
       if (uri == null ||
@@ -1469,9 +1422,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _saving = true);
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('ssh101_channel', slug);
       await prefs.setString('telegram_public_link', link);
-      channelSlug.value = slug;
       telegramLink.value = link;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1769,35 +1720,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            _settingsCard(
-              border: appCyan,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  const Text(
-                    'CANAL PROPIO SSH101',
-                    style: TextStyle(color: appCyan, fontWeight: FontWeight.w900, fontSize: 15),
-                  ),
-                  const SizedBox(height: 7),
-                  const Text(
-                    'Identificador del canal que controlas en SSH101. Este reproductor es independiente de las señales automáticas.',
-                    style: TextStyle(color: appMuted, fontSize: 11, height: 1.4),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _channelController,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    decoration: const InputDecoration(
-                      labelText: 'Identificador SSH101',
-                      hintText: 'Tu identificador de canal',
-                      prefixIcon: Icon(Icons.live_tv_rounded),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
+
             _settingsCard(
               border: appPink,
               child: Column(
@@ -2095,418 +2018,6 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
       ),
     );
   }
-}
-
-class EncoderConfigScreen extends StatelessWidget {
-  const EncoderConfigScreen({super.key});
-
-  Future<void> _copy(BuildContext context, String value) async {
-    await Clipboard.setData(ClipboardData(text: value));
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Copiado al portapapeles.')),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final slug = channelSlug.value.trim();
-    final valid =
-        slug.isNotEmpty && RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(slug);
-    final rtmp = valid ? buildRtmpUrl(slug) : '${rtmpBase}<TU_CANAL>';
-    final hls = valid
-        ? buildHlsUrl(slug)
-        : '${hlsBase}<TU_CANAL>/playlist.m3u8';
-
-    return Scaffold(
-      backgroundColor: appBg,
-      appBar: AppBar(
-        title: Text(
-          appText('CONFIGURAR TRANSMISIÓN', 'STREAMING SETUP', 'CONFIGURAR TRANSMISSÃO', 'CONFIGURATION DU STREAM'),
-          style: TextStyle(
-            color: appCyan,
-            fontWeight: FontWeight.w900,
-            fontSize: 13,
-          ),
-        ),
-      ),
-      body: AppBackdrop(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: <Widget>[
-            Text(
-              appText(
-                'Configura estas direcciones en tu encoder únicamente si corresponden a tu cuenta y canal activos.',
-                'Use these encoder addresses only if they match your active account and channel.',
-                'Use estes endereços no encoder somente se corresponderem à sua conta e canal ativos.',
-                'Utilisez ces adresses dans votre encodeur uniquement si elles correspondent à votre compte et chaîne actifs.'),
-              style: TextStyle(color: appMuted, height: 1.45),
-            ),
-            const SizedBox(height: 16),
-            _CopyInfoCard(
-              title: appText('Servidor RTMP', 'RTMP server', 'Servidor RTMP', 'Serveur RTMP'),
-              value: rtmp,
-              onCopy: () => _copy(context, rtmp),
-            ),
-            const SizedBox(height: 10),
-            _CopyInfoCard(
-              title: appText('URL HLS de reproducción', 'HLS playback URL', 'URL HLS de reprodução', 'URL de lecture HLS'),
-              value: hls,
-              onCopy: () => _copy(context, hls),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              appText(
-                'Si la señal no aparece, verifica el estado de tu canal y consulta la documentación. Estas direcciones no garantizan que exista una retransmisión activa.',
-                'If the stream does not appear, check your channel status and service documentation. These addresses do not guarantee an active broadcast.',
-                'Se o sinal não aparecer, verifique o status do canal e a documentação. Esses endereços não garantem uma transmissão ativa.',
-                'Si le signal n’apparaît pas, vérifiez l’état de votre chaîne et la documentation. Ces adresses ne garantissent pas une diffusion active.'),
-              style: TextStyle(color: appMuted, fontSize: 12, height: 1.5),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CopyInfoCard extends StatelessWidget {
-  const _CopyInfoCard({
-    required this.title,
-    required this.value,
-    required this.onCopy,
-  });
-
-  final String title;
-  final String value;
-  final VoidCallback onCopy;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: appPanel,
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(color: appLine),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              title,
-              style: const TextStyle(
-                color: appCyan,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 8),
-            SelectableText(
-              value,
-              style: const TextStyle(color: Colors.white, fontSize: 12),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: onCopy,
-                icon: const Icon(Icons.copy_rounded, size: 17),
-                label: Text(appText('Copiar', 'Copy', 'Copiar', 'Copier')),
-                style: TextButton.styleFrom(foregroundColor: appGreen),
-              ),
-            ),
-          ],
-        ),
-      );
-}
-
-class LivePlayerScreen extends StatefulWidget {
-  const LivePlayerScreen({super.key, required this.channel});
-  final String channel;
-
-  @override
-  State<LivePlayerScreen> createState() => _LivePlayerScreenState();
-}
-
-class _LivePlayerScreenState extends State<LivePlayerScreen> {
-  VideoPlayerController? _controller;
-  String? _error;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _initializePlayer();
-  }
-
-  Future<void> _initializePlayer() async {
-    final slug = widget.channel.trim();
-    if (slug.isEmpty || !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(slug)) {
-      setState(() {
-        _loading = false;
-        _error = appText(
-            'El identificador del canal no es válido. Abre Ajustes y revísalo.',
-            'The channel ID is invalid. Open Settings and check it.',
-            'O ID do canal é inválido. Abra Configurações e verifique.',
-            'L’identifiant de la chaîne est invalide. Ouvrez les paramètres et vérifiez-le.');
-      });
-      return;
-    }
-    final uri = Uri.tryParse(buildHlsUrl(slug));
-    if (uri == null ||
-        uri.host.isEmpty ||
-        (uri.scheme != 'https' && uri.scheme != 'http')) {
-      setState(() {
-        _loading = false;
-        _error = appText('La dirección de reproducción no es válida.', 'The playback URL is invalid.', 'O endereço de reprodução é inválido.', 'L’adresse de lecture est invalide.');
-      });
-      return;
-    }
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    final oldController = _controller;
-    _controller = null;
-    await oldController?.dispose();
-    final controller = VideoPlayerController.networkUrl(
-      uri,
-      formatHint: VideoFormat.hls,
-    );
-    _controller = controller;
-    try {
-      await controller.initialize().timeout(const Duration(seconds: 25));
-      await controller.setLooping(false);
-      if (!mounted) {
-        await controller.dispose();
-        return;
-      }
-      setState(() => _loading = false);
-    } catch (_) {
-      if (!mounted) {
-        await controller.dispose();
-        if (identical(_controller, controller)) _controller = null;
-        return;
-      }
-      setState(() {
-        _loading = false;
-        _error = appText(
-            'No se pudo abrir el canal. Puede estar fuera de línea o no permitir esta conexión.',
-            'The channel could not be opened. It may be offline or may not allow this connection.',
-            'Não foi possível abrir o canal. Ele pode estar offline ou não permitir esta conexão.',
-            'Impossible d’ouvrir la chaîne. Elle peut être hors ligne ou refuser cette connexion.');
-      });
-      await controller.dispose();
-      if (identical(_controller, controller)) _controller = null;
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = _controller;
-    return Scaffold(
-      backgroundColor: appBg,
-      appBar: AppBar(
-        title: Text(
-          appText('CANAL EN VIVO', 'LIVE CHANNEL', 'CANAL AO VIVO', 'CHAÎNE EN DIRECT'),
-          style: TextStyle(
-            color: appCyan,
-            fontWeight: FontWeight.w900,
-            fontSize: 14,
-          ),
-        ),
-      ),
-      body: AppBackdrop(
-        child: ListView(
-          padding: const EdgeInsets.all(14),
-          children: <Widget>[
-            Container(
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: appCyan),
-              ),
-              child: AspectRatio(
-                aspectRatio: controller?.value.isInitialized == true
-                    ? controller!.value.aspectRatio
-                    : 16 / 9,
-                child: _loading
-                    ? const Center(
-                        child: CircularProgressIndicator(color: appCyan),
-                      )
-                    : _error != null
-                        ? Padding(
-                            padding: const EdgeInsets.all(18),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: <Widget>[
-                                const Icon(
-                                  Icons.portable_wifi_off_rounded,
-                                  color: appRed,
-                                  size: 42,
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  _error!,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                OutlinedButton.icon(
-                                  onPressed: _initializePlayer,
-                                  icon: const Icon(Icons.refresh_rounded),
-                                  label: Text(appText('Reintentar', 'Retry', 'Tentar novamente', 'Réessayer')),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: appCyan,
-                                    side: const BorderSide(color: appCyan),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : controller == null || !controller.value.isInitialized
-                            ? Center(
-                                child: Text(
-                                  appText('El reproductor no está disponible.', 'The player is unavailable.', 'O player não está disponível.', 'Le lecteur n’est pas disponible.'),
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                              )
-                            : ValueListenableBuilder<VideoPlayerValue>(
-                                valueListenable: controller,
-                                builder: (context, value, _) => Stack(
-                                  alignment: Alignment.center,
-                                  children: <Widget>[
-                                    VideoPlayer(controller),
-                                    if (!value.isPlaying)
-                                      IconButton.filled(
-                                        onPressed: () => controller.play(),
-                                        iconSize: 44,
-                                        icon: const Icon(Icons.play_arrow_rounded),
-                                        style: IconButton.styleFrom(
-                                          backgroundColor: appBlue,
-                                          foregroundColor: Colors.white,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (controller != null &&
-                controller.value.isInitialized &&
-                _error == null)
-              FilledButton.icon(
-                onPressed: () async {
-                  if (controller.value.isPlaying) {
-                    await controller.pause();
-                  } else {
-                    await controller.play();
-                  }
-                  if (mounted) setState(() {});
-                },
-                icon: Icon(
-                  controller.value.isPlaying
-                      ? Icons.pause_rounded
-                      : Icons.play_arrow_rounded,
-                ),
-                label: Text(
-                  controller.value.isPlaying ? appText('Pausar', 'Pause', 'Pausar', 'Pause') : appText('Reproducir', 'Play', 'Reproduzir', 'Lire'),
-                ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: appBlue,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-            const SizedBox(height: 8),
-            Text(
-              appText('Canal configurado: ${widget.channel}', 'Configured channel: ${widget.channel}', 'Canal configurado: ${widget.channel}', 'Chaîne configurée : ${widget.channel}'),
-              style: const TextStyle(
-                color: appCyan,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              appText(
-                'La reproducción depende de que el servidor entregue una señal compatible y que tengas permiso para acceder a ella.',
-                'Playback depends on the server providing a compatible stream and your permission to access it.',
-                'A reprodução depende de o servidor fornecer um sinal compatível e de você ter permissão para acessá-lo.',
-                'La lecture dépend d’un signal compatible fourni par le serveur et de votre autorisation d’y accéder.'),
-              style: TextStyle(color: appMuted, fontSize: 12, height: 1.45),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class DonationsScreen extends StatelessWidget {
-  const DonationsScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        backgroundColor: appBg,
-        appBar: AppBar(
-          title: Text(
-            tr('donations'),
-            style: const TextStyle(
-              color: appCyan,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
-        body: AppBackdrop(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Container(
-                padding: const EdgeInsets.all(22),
-                decoration: BoxDecoration(
-                  color: appPanel,
-                  borderRadius: BorderRadius.circular(19),
-                  border: Border.all(color: appPink),
-                  boxShadow: <BoxShadow>[
-                    BoxShadow(color: appPink.withAlpha(25), blurRadius: 22),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    const Icon(Icons.favorite_rounded, color: appPink, size: 56),
-                    SizedBox(height: 13),
-                    Text(
-                      appText('GRACIAS POR APOYAR', 'THANK YOU FOR SUPPORTING US', 'OBRIGADO POR APOIAR', 'MERCI DE VOTRE SOUTIEN'),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: appCyan,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 18,
-                      ),
-                    ),
-                    SizedBox(height: 9),
-                    Text(
-                      appText('Tu apoyo ayuda a mantener y mejorar Deporte Total 360°. El cobro todavía no está conectado; no se realizará ningún pago desde esta pantalla.', 'Your support helps maintain and improve Deporte Total 360°. Payments are not connected yet; this screen will not charge you.', 'Seu apoio ajuda a manter e melhorar o Deporte Total 360°. O pagamento ainda não está conectado; nenhuma cobrança será feita nesta tela.', 'Votre soutien aide à maintenir et améliorer Deporte Total 360°. Le paiement n’est pas encore connecté ; aucun paiement ne sera effectué depuis cet écran.'),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: appMuted, height: 1.5),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
 }
 
 Future<void> openExternalLink(
