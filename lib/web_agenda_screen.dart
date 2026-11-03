@@ -30,7 +30,7 @@ class WebAgendaScreen extends StatefulWidget {
   final String pageTitle;
   final bool showLiveButton;
 
-  static const String initialUrl = 'https://futbol-libre.cam/';
+  static const String initialUrl = 'https://www.marca.com/programacion-tv.html';
 
   @override
   State<WebAgendaScreen> createState() => WebAgendaScreenState();
@@ -51,19 +51,6 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
   bool _isHttpUrl(WebUri uri) {
     final scheme = uri.scheme.toLowerCase();
     return (scheme == 'https' || scheme == 'http') && uri.host.isNotEmpty;
-  }
-
-  bool _isFutbolLibrePlaybackRoute(WebUri url) {
-    final uri = Uri.tryParse(url.toString());
-    if (uri == null) return false;
-    final host = uri.host.toLowerCase();
-    final isAgendaHost = host == 'futbol-libre.cam' ||
-        host.endsWith('.futbol-libre.cam');
-    if (!isAgendaHost) return false;
-    return RegExp(
-      r'(?:^|/)(?:canal|channel|player|watch|stream|live|embed|partido|match|fixture|encuentro)(?:/|$)',
-      caseSensitive: false,
-    ).hasMatch(uri.path);
   }
 
   void _showNotice(String message) {
@@ -140,17 +127,59 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
             const found = [];
             const seen = new Set();
             const now = new Date();
+            // MARCA publica la programación en hora peninsular española.
+            // Convertimos esa hora a un instante absoluto para mostrarla
+            // correctamente en la zona horaria local del teléfono.
+            const madridParts = new Intl.DateTimeFormat('en-GB', {
+              timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit',
+              day: '2-digit'
+            }).formatToParts(now);
+            const madridFields = Object.fromEntries(
+              madridParts.map((part) => [part.type, part.value])
+            );
+            const madridToday = {
+              year: Number(madridFields.year),
+              month: Number(madridFields.month) - 1,
+              day: Number(madridFields.day)
+            };
+            const madridDate = (year, month, day, hour, minute) => {
+              const target = Date.UTC(year, month, day, hour, minute, 0);
+              let candidate = new Date(target);
+              for (let pass = 0; pass < 3; pass++) {
+                const parts = new Intl.DateTimeFormat('en-GB', {
+                  timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit',
+                  day: '2-digit', hour: '2-digit', minute: '2-digit',
+                  second: '2-digit', hourCycle: 'h23'
+                }).formatToParts(candidate);
+                const fields = Object.fromEntries(
+                  parts.map((part) => [part.type, Number(part.value)])
+                );
+                const represented = Date.UTC(
+                  fields.year, fields.month - 1, fields.day,
+                  fields.hour, fields.minute, fields.second
+                );
+                candidate = new Date(candidate.getTime() + target - represented);
+              }
+              return candidate;
+            };
             const timePattern = /\b(2[0-3]|[01]?\d):([0-5]\d)\b|\b(1[0-2]|0?[1-9]):([0-5]\d)\s*(AM|PM)\b/i;
             for (const node of nodes) {
               const rawText = (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim();
               if (rawText.length < 12 || rawText.length > 500) continue;
-              const timeMatch = rawText.match(timePattern);
+              const timeNode = node.querySelector('time');
+              const timeText = timeNode ? (timeNode.textContent || '') : '';
+              const timeMatch = (rawText + ' ' + timeText).match(timePattern);
               if (!timeMatch) continue;
               const anchor = node.matches('a[href]') ? node : node.querySelector('a[href]');
-              if (!anchor || !anchor.href || !/^https?:/i.test(anchor.href)) continue;
-              if (/\/canal\/|\/channel\//i.test(new URL(anchor.href).pathname)) continue;
+              const eventContainer = node.matches(
+                'article,li,[data-event],[class*="match"],[class*="fixture"],[class*="event"]'
+              );
+              const eventUrl = anchor && anchor.href ? anchor.href : location.href;
+              if (!eventContainer && !anchor) continue;
+              if (!/^https?:/i.test(eventUrl)) continue;
+              if (anchor && /\\/canal\\/|\\/channel\\//i.test(new URL(eventUrl).pathname)) continue;
               const heading = node.querySelector('h1,h2,h3,h4,[class*="title"],[class*="team"]');
-              let title = (heading && heading.textContent || anchor.textContent || '').replace(/\s+/g, ' ').trim();
+              let title = (heading && heading.textContent || rawText).replace(/\s+/g, ' ').trim();
               if (title.length < 5) title = rawText;
               title = title.replace(/\b(EN VIVO|VER PARTIDO|VER AHORA|DETALLES)\b/ig, '').replace(timePattern, '').trim();
               const pair = title.split(/\s+(?:vs?\.?|versus|contra|[-–—])\s+/i);
@@ -192,17 +221,17 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 const value = (raw || '').toLowerCase().replace(/\s+/g, ' ').trim();
                 if (!value) return null;
                 if (/\b(mañana|tomorrow)\b/.test(value)) {
-                  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-                  return { year: next.getFullYear(), month: next.getMonth(), day: next.getDate() };
+                  const next = new Date(Date.UTC(madridToday.year, madridToday.month, madridToday.day + 1));
+                  return { year: next.getUTCFullYear(), month: next.getUTCMonth(), day: next.getUTCDate() };
                 }
                 if (/\b(hoy|today)\b/.test(value)) {
-                  return { year: now.getFullYear(), month: now.getMonth(), day: now.getDate() };
+                  return madridToday;
                 }
                 let match = value.match(/\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/);
                 if (match) return { year: Number(match[1]), month: Number(match[2]) - 1, day: Number(match[3]) };
                 match = value.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/);
                 if (match) {
-                  let year = Number(match[3] || now.getFullYear());
+                  let year = Number(match[3] || madridToday.year);
                   if (year < 100) year += 2000;
                   return { year, month: Number(match[2]) - 1, day: Number(match[1]) };
                 }
@@ -213,9 +242,9 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 };
                 match = value.match(/\b(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\s+de\s+(20\d{2}))?\b/);
                 if (match) {
-                  let year = Number(match[3] || now.getFullYear());
+                  let year = Number(match[3] || madridToday.year);
                   const month = months[match[2]];
-                  if (!match[3] && month < now.getMonth() - 5) year++;
+                  if (!match[3] && month < madridToday.month - 5) year++;
                   return { year, month, day: Number(match[1]) };
                 }
                 return null;
@@ -237,7 +266,6 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 contextNode = contextNode.parentElement;
               }
               let start = null;
-              const timeNode = node.querySelector('time[datetime]');
               const dateValue = (timeNode && timeNode.getAttribute('datetime')) ||
                 node.getAttribute('datetime') ||
                 node.getAttribute('data-start') ||
@@ -250,15 +278,15 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                     start = parsed;
                   } else {
                     const explicit = parseDateHint(dateValue) || dateHint;
-                    if (explicit) start = new Date(explicit.year, explicit.month, explicit.day, hour, minute, 0);
+                    if (explicit) start = madridDate(explicit.year, explicit.month, explicit.day, hour, minute);
                   }
                 }
               }
               if (!start && dateHint) {
-                start = new Date(dateHint.year, dateHint.month, dateHint.day, hour, minute, 0);
+                start = madridDate(dateHint.year, dateHint.month, dateHint.day, hour, minute);
               }
               if (!start) {
-                start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0);
+                start = madridDate(madridToday.year, madridToday.month, madridToday.day, hour, minute);
                 // Sin fecha explícita no se reutilizan horarios claramente caducados.
                 if (start.getTime() < now.getTime() - 6 * 60 * 60 * 1000) continue;
               }
@@ -269,14 +297,23 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 const parsedEnd = new Date(endValue);
                 if (!Number.isNaN(parsedEnd.getTime())) end = parsedEnd;
               }
-              if (/finalizado|terminado|finished|final\b/.test(textLower)) end = now;
+              const statusNode = node.querySelector(
+                '[data-status],[class*="status"],[class*="state"]'
+              );
+              const statusText = (statusNode && statusNode.textContent || '')
+                .replace(/\s+/g, ' ').trim().toLowerCase();
+              if (/\b(?:finalizado|finalizada|terminado|terminada|finished|full time|ft)\b/.test(statusText) ||
+                  /\b(?:FINALIZADO|TERMINADO|FULL TIME|FT)\b/i.test(rawText)) {
+                end = now;
+              }
+              if (/\b(?:cancelado|cancelada|suspendido|suspendida)\b/.test(statusText)) continue;
               const iso = start.toISOString();
               const endIso = end ? end.toISOString() : null;
-              const key = anchor.href + '|' + title + '|' + iso;
+              const key = eventUrl + '|' + title + '|' + iso;
               if (seen.has(key)) continue;
               seen.add(key);
-              const eventId = (node.dataset && (node.dataset.eventId || node.dataset.fixtureId)) ||
-                anchor.href.split('/').filter(Boolean).pop() || key;
+              const rawId = node.dataset && (node.dataset.eventId || node.dataset.fixtureId);
+              const eventId = String(rawId || key);
               const competitionNode = node.querySelector(
                 '[class*="competition"],[class*="league"],[data-league]'
               );
@@ -290,7 +327,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                 awayTeam: pair.length > 1 ? pair.slice(1).join(' vs ').trim() : '',
                 startsAt: iso,
                 endsAt: endIso,
-                detailUrl: anchor.href
+                detailUrl: eventUrl
               });
             }
             if (window.flutter_inappwebview) {
@@ -490,13 +527,6 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
 
     if (target == null || !_isHttpUrl(target)) {
       _showNotice('Se bloqueó una ventana con una dirección no compatible.');
-      return false;
-    }
-
-    if (_isFutbolLibrePlaybackRoute(target)) {
-      _showNotice(
-        'La Agenda solo muestra horarios y equipos. Las transmisiones de Fútbol Libre están desactivadas en esta pestaña.',
-      );
       return false;
     }
 
@@ -709,7 +739,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                           handlerName: 'dt360AgendaOnlyNotice',
                           callback: (arguments) async {
                             _showNotice(
-                              'Agenda: solo horarios y eventos. Los reproductores y enlaces de transmisiones de Fútbol Libre están desactivados aquí; la APK busca las señales en sus listas M3U y EPG.',
+                              'Agenda: solo datos deportivos. No se reproducen vídeos incrustados; la APK busca las señales por separado en listas M3U y guías EPG.',
                             );
                             return true;
                           },
@@ -721,10 +751,10 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                               return 0;
                             }
                             final events = (arguments.first as List)
-                                .map(FutbolLibreEvent.fromJson)
-                                .whereType<FutbolLibreEvent>()
+                                .map(SportsAgendaEvent.fromJson)
+                                .whereType<SportsAgendaEvent>()
                                 .toList(growable: false);
-                            await FutbolLibreAgendaStore.save(events);
+                            await SportsAgendaStore.save(events);
                             return events.length;
                           },
                         );
@@ -767,13 +797,6 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         if (!_isHttpUrl(uri)) {
                           _showNotice(
                             'Se bloqueó un enlace externo no web para mantener la navegación dentro de la aplicación.',
-                          );
-                          return NavigationActionPolicy.CANCEL;
-                        }
-
-                        if (_isFutbolLibrePlaybackRoute(uri)) {
-                          _showNotice(
-                            'La Agenda solo muestra horarios y equipos. Las transmisiones de Fútbol Libre están desactivadas en esta pestaña.',
                           );
                           return NavigationActionPolicy.CANCEL;
                         }
@@ -824,7 +847,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
             padding: const EdgeInsets.fromLTRB(10, 5, 10, 7),
             color: const Color(0xFF020B19),
             child: const Text(
-              'La agenda y sus reproductores son servicios de terceros. '
+              'La programación de MARCA es un servicio externo; sus reproductores no se utilizan. '
               'La protección detiene dominios conocidos, pero no garantiza '
               'eliminar todos los anuncios ni que cada señal sea compatible.',
               textAlign: TextAlign.center,
