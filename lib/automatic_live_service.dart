@@ -12,25 +12,30 @@ const String _authorizedKey = 'dt360_auto_live_authorized_v1';
 /// Catálogos globales y una lista adicional de emisoras deportivas públicas.
 /// La presencia en un índice no sustituye la comprobación de derechos del emisor.
 const String legacyDefaultAutoLivePlaylistUrls =
-    'https://dearbulut.github.io/iptv/playlists/category/sports.m3u\\n'
-    'https://dearbulut.github.io/iptv/playlists/online.m3u\\n'
+    'https://dearbulut.github.io/iptv/playlists/category/sports.m3u\n'
+    'https://dearbulut.github.io/iptv/playlists/online.m3u\n'
     'https://iptv-org.github.io/iptv/categories/sports.m3u';
 const String legacyDefaultAutoLiveEpgUrl =
     'https://dearbulut.github.io/iptv/epg/guide.xml.gz';
 
 const String defaultAutoLivePlaylistUrls =
-    'https://dearbulut.github.io/iptv/playlists/category/sports.m3u\\n'
-    'https://dearbulut.github.io/iptv/playlists/online.m3u\\n'
-    'https://iptv-org.github.io/iptv/categories/sports.m3u\\n'
-    'https://raw.githubusercontent.com/freecasthub/public-iptv/main/sports.m3u\\n'
+    'https://dearbulut.github.io/iptv/playlists/category/sports.m3u\n'
+    'https://dearbulut.github.io/iptv/playlists/online.m3u\n'
+    'https://iptv-org.github.io/iptv/categories/sports.m3u\n'
+    'https://raw.githubusercontent.com/freecasthub/public-iptv/main/sports.m3u\n'
     'https://dearbulut.github.io/iptv/playlists/best.m3u';
 
 const String defaultAutoLiveEpgUrl =
-    'https://dearbulut.github.io/iptv/epg/guide.xml.gz\\n'
-    'https://iptv-epg.org/files/epg-cw.xml\\n'
-    'https://iptv-epg.org/files/epg-jm.xml\\n'
-    'https://iptv-epg.org/files/epg-br.xml\\n'
-    'https://iptv-epg.org/files/epg-ar.xml\\n'
+    'https://dearbulut.github.io/iptv/epg/guide.xml.gz\n'
+    'https://iptv-epg.org/files/epg-cw.xml\n'
+    'https://iptv-epg.org/files/epg-jm.xml\n'
+    'https://iptv-epg.org/files/epg-co.xml\n'
+    'https://iptv-epg.org/files/epg-ve.xml\n'
+    'https://iptv-epg.org/files/epg-pa.xml\n'
+    'https://iptv-epg.org/files/epg-br.xml\n'
+    'https://iptv-epg.org/files/epg-ar.xml\n'
+    'https://iptv-epg.org/files/epg-mx.xml\n'
+    'https://iptv-epg.org/files/epg-cl.xml\n'
     'https://iptv-epg.org/files/epg-es.xml';
 
 List<String> _splitPlaylistUrls(String value) => value
