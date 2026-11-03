@@ -354,12 +354,12 @@ class _MainShellState extends State<MainShell> {
                 NavigationDestination(
                   icon: const Icon(Icons.live_tv_outlined),
                   selectedIcon: const Icon(Icons.live_tv_rounded, color: appPink),
-                  label: 'En vivo',
+                  label: 'Deportes en vivo',
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.calendar_month_outlined),
                   selectedIcon: const Icon(Icons.calendar_month_rounded, color: appGreen),
-                  label: 'Agenda',
+                  label: 'Agenda de hoy',
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.article_outlined),
@@ -2280,80 +2280,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            _settingsCard(
-              border: appGreen,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    tr('stream_config').toUpperCase(),
-                    style: TextStyle(
-                      color: appCyan,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    tr('stream_description'),
-                    style: TextStyle(
-                      color: appMuted,
-                      fontSize: 12,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 11),
-                  TextField(
-                    controller: _channelController,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    onChanged: (_) => setState(() {}),
-                    decoration: InputDecoration(
-                      labelText: tr('channel_id'),
-                      hintText: 'NombreDeTuCanal',
-                      prefixIcon: Icon(Icons.live_tv_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _saving ? null : _save,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: appGreen,
-                        foregroundColor: appBg,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      icon: const Icon(Icons.save_rounded),
-                      label: Text(
-                        _saving ? tr('saving') : tr('save_config'),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  _CopyInfoCard(
-                    title: tr('rtmp_server'),
-                    value: rtmp,
-                    onCopy: () => _copy(rtmp),
-                  ),
-                  const SizedBox(height: 9),
-                  _CopyInfoCard(
-                    title: tr('hls_url'),
-                    value: hls,
-                    onCopy: () => _copy(hls),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 13),
-            Text(
-              tr('stream_notice'),
-              style: TextStyle(
-                color: appMuted,
-                fontSize: 11,
-                height: 1.5,
-              ),
-            ),
+
           ],
         ),
       ),
