@@ -1753,7 +1753,10 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
         ),
       ),
     );
-    if (resumeAfter && mounted && controller.value.isInitialized) {
+    if (resumeAfter &&
+        mounted &&
+        widget.isActive &&
+        controller.value.isInitialized) {
       await controller.play();
     }
   }
