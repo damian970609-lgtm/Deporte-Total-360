@@ -223,6 +223,68 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
     }
   }
 
+  Future<void> _installAgendaOnlyMode(InAppWebViewController controller) async {
+    // La pestaña Agenda solo conserva los datos del calendario. Se ocultan y
+    // detienen reproductores incrustados y se impide abrir páginas de partidos.
+    try {
+      await controller.evaluateJavascript(source: r'''
+        (() => {
+          const removeEmbeddedPlayers = () => {
+            const selectors = [
+              'video', 'audio', 'object', 'embed',
+              'iframe[src*="player"]', 'iframe[src*="embed"]',
+              'iframe[src*="stream"]', 'iframe[src*="live"]',
+              'iframe[src*="m3u8"]'
+            ];
+            document.querySelectorAll(selectors.join(',')).forEach((element) => {
+              try { element.pause?.(); } catch (_) {}
+              try { element.remove(); } catch (_) {}
+            });
+          };
+          removeEmbeddedPlayers();
+          if (!window.__dt360AgendaPlayerObserver && document.documentElement) {
+            window.__dt360AgendaPlayerObserver = true;
+            new MutationObserver(removeEmbeddedPlayers).observe(document.documentElement, {
+              childList: true, subtree: true
+            });
+          }
+
+          if (!window.__dt360AgendaOnlyClickGuard) {
+            window.__dt360AgendaOnlyClickGuard = true;
+            document.addEventListener('click', (event) => {
+              const target = event.target instanceof Element
+                ? event.target : event.target?.parentElement;
+              const anchor = target?.closest('a[href]');
+              if (!anchor) return;
+
+              const card = anchor.closest(
+                'article,li,[data-event],[class*="match"],[class*="fixture"],[class*="event"]'
+              ) || anchor.parentElement;
+              const cardText = (card?.innerText || card?.textContent || '')
+                .replace(/\s+/g, ' ').trim();
+              const eventCard = /\b(?:2[0-3]|[01]?\d):[0-5]\d\b/.test(cardText) &&
+                /\b(?:vs?\.?|versus|contra)\b/i.test(cardText);
+              const path = new URL(anchor.href, location.href).pathname;
+              const playerPath = /(?:^|\/)(?:canal|channel|player|watch|stream|live|embed|partido|match)(?:\/|$)/i
+                .test(path);
+              const actionText = (anchor.innerText || anchor.textContent || '').trim();
+              const playerAction = /VER\s+(?:PARTIDO|AHORA|EN\s+VIVO)|EN\s+VIVO|WATCH|PLAY|REPRODUCIR/i
+                .test(actionText);
+              if (!eventCard && !playerPath && !playerAction) return;
+
+              event.preventDefault();
+              event.stopPropagation();
+              event.stopImmediatePropagation();
+              window.flutter_inappwebview?.callHandler('dt360AgendaOnlyNotice');
+            }, true);
+          }
+        })();
+      ''');
+    } catch (_) {
+      // Un fallo de inyección no debe interrumpir la lectura de la agenda.
+    }
+  }
+
   Future<void> _refreshNavigationState() async {
     final controller = _controller;
     if (controller == null || !mounted) return;
@@ -543,6 +605,16 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                       onWebViewCreated: (controller) {
                         _controller = controller;
                         controller.addJavaScriptHandler(
+                          handlerName: 'dt360AgendaOnlyNotice',
+                          callback: (arguments) async {
+                            _showNotice(
+                              'Agenda: solo horarios y eventos',
+                              'Los reproductores y enlaces de transmisiones de Fútbol Libre están desactivados aquí. La APK busca la señal en sus listas M3U y EPG.',
+                            );
+                            return true;
+                          },
+                        );
+                        controller.addJavaScriptHandler(
                           handlerName: 'dt360AgendaEvents',
                           callback: (arguments) async {
                             if (arguments.isEmpty || arguments.first is! List) {
@@ -583,6 +655,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         });
                         await _installAdElementCleanup(controller);
                         await _installAgendaEventScanner(controller);
+                        await _installAgendaOnlyMode(controller);
                         await _refreshNavigationState();
                       },
                       onUpdateVisitedHistory:
