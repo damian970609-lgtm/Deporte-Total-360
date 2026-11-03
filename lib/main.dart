@@ -795,10 +795,10 @@ class HomeDashboard extends StatelessWidget {
                 _HomeActionCard(
                   title: tr('streams'),
                   subtitle: appText(
-                    'Ver canales y abrir el reproductor SSH101',
-                    'Watch channels and open the SSH101 player',
-                    'Ver canais e abrir o player SSH101',
-                    'Voir les chaînes et ouvrir le lecteur SSH101',
+                    'Abrir el centro de transmisiones',
+                    'Open the live streaming center',
+                    'Abrir a central de transmissões',
+                    'Ouvrir le centre de diffusion en direct',
                   ),
                   icon: Icons.live_tv_rounded,
                   color: appRed,
@@ -855,6 +855,19 @@ class HomeDashboard extends StatelessWidget {
                   icon: Icons.article_rounded,
                   color: appYellow,
                   onTap: () => onNavigate(3),
+                ),
+                const SizedBox(height: 8),
+                _HomeActionCard(
+                  title: 'RESÚMENES',
+                  subtitle: appText(
+                    'Vídeos destacados y resúmenes desde YouTube',
+                    'Highlights and recaps from YouTube',
+                    'Vídeos e resumos do YouTube',
+                    'Temps forts et résumés sur YouTube',
+                  ),
+                  icon: Icons.play_circle_fill_rounded,
+                  color: appGreen,
+                  onTap: () => onNavigate(6),
                 ),
                 const SizedBox(height: 8),
                 _HomeActionCard(
