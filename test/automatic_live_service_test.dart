@@ -130,7 +130,7 @@ https://media.example/two.m3u8
       ];
       final result = await AutomaticLiveService(client: client).schedule(
         events: events,
-        now: start,
+        now: start.add(const Duration(minutes: 10)),
         settings: const AutoLiveSettings(
           playlistUrl: 'https://provider.example/channels.m3u',
           epgUrl: 'https://provider.example/guide.xml',
