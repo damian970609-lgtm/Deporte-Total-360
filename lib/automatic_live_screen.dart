@@ -32,6 +32,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
   final AutomaticLiveService _service = AutomaticLiveService();
   List<ScheduledLiveEvent> _scheduled = <ScheduledLiveEvent>[];
   List<FutbolLibreEvent> _agendaEvents = <FutbolLibreEvent>[];
+  final Map<String, DateTime> _knownEventEndTimes = <String, DateTime>{};
   Timer? _refreshTimer;
   Timer? _eventBoundaryTimer;
   bool _refreshing = false;
@@ -83,6 +84,16 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
               forceRefresh: force,
             )
           : <ScheduledLiveEvent>[];
+
+      final refreshTime = DateTime.now();
+      for (final item in latest) {
+        _knownEventEndTimes[item.event.id] = item.removeAt;
+      }
+      _knownEventEndTimes.removeWhere(
+        (id, endAt) => refreshTime.isAfter(
+          endAt.add(const Duration(hours: 2)),
+        ),
+      );
 
       if (!mounted) return;
       setState(() {
@@ -156,7 +167,8 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         .toSet();
     final upcoming = _agendaEvents.where((event) {
       if (activeEventIds.contains(event.id)) return false;
-      final end = event.endsAt ??
+      final end = _knownEventEndTimes[event.id] ??
+          event.endsAt ??
           event.startsAt.add(const Duration(hours: 3));
       return now.isBefore(end);
     }).toList()
