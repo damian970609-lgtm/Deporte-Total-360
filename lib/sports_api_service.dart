@@ -235,11 +235,14 @@ class SportsApiService {
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    final start = dateFilter == 'Mañana'
+        ? today.add(const Duration(days: 1))
+        : today;
     final end = dateFilter == 'Todos'
         ? today.add(const Duration(days: 6))
-        : today;
+        : start;
     final query = <String, String>{
-      'from': _dateParam(today),
+      'from': _dateParam(start),
       'to': _dateParam(end),
       'timezone': 'America/Guyana',
     };
