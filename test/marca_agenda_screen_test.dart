@@ -19,6 +19,8 @@ void main() {
               competition: 'Liga de prueba',
               homeTeam: 'Equipo A',
               awayTeam: 'Equipo B',
+              homeTeamLogo: 'https://img.example/equipo-a.png',
+              awayTeamLogo: 'https://img.example/equipo-b.png',
               startsAt: start,
               detailUrl: 'https://www.marca.com/programacion-tv.html',
             ),
@@ -31,7 +33,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.text('AGENDA DE HOY'), findsOneWidget);
-    expect(find.text('Equipo A vs Equipo B'), findsOneWidget);
+    expect(find.text('Equipo A'), findsOneWidget);
+    expect(find.text('VS'), findsOneWidget);
+    expect(find.text('Equipo B'), findsOneWidget);
     expect(find.text('Liga de prueba'), findsOneWidget);
     expect(find.text('VER TRANSMISIONES'), findsOneWidget);
   });
