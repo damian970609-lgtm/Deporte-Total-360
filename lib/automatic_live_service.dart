@@ -424,11 +424,12 @@ class AutomaticLiveService {
       // Una sola señal por evento: primero la resolución anunciada, después
       // indicadores HD/FHD/UHD y finalmente un orden estable del proveedor.
       candidates.sort((a, b) => b.qualityScore.compareTo(a.qualityScore));
-      final verifiedCandidates = <ScheduledLiveSource>[];
-      for (final candidate in candidates.take(6)) {
-        final checked = await _probeCandidate(candidate);
-        if (checked.available) verifiedCandidates.add(checked);
-      }
+      final checkedCandidates = await Future.wait<ScheduledLiveSource>(
+        candidates.take(6).map(_probeCandidate),
+      );
+      final verifiedCandidates = checkedCandidates
+          .where((candidate) => candidate.available)
+          .toList(growable: true);
       // Compara la resolución de las listas HLS maestras y prioriza la de
       // mayor calidad entre las señales que respondieron a la comprobación.
       verifiedCandidates.sort((a, b) => b.qualityScore.compareTo(a.qualityScore));
