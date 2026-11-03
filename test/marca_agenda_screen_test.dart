@@ -43,7 +43,8 @@ void main() {
 
 
   testWidgets('muestra participantes y disciplina en eventos individuales', (tester) async {
-    final start = DateTime.now().add(const Duration(hours: 2));
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day, 14);
     await tester.pumpWidget(
       MaterialApp(
         home: MarcaAgendaScreen(
