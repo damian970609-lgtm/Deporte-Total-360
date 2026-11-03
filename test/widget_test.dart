@@ -1,13 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:deporte_total_360/agenda_screen.dart';
 import 'package:deporte_total_360/main.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sports_statistics_screen.dart';
+import 'package:deporte_total_360/web_agenda_screen.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
   testWidgets('estadísticas muestra selector multideporte e IDs', (tester) async {
+    SportsApiService.resetForTesting();
+    SportsApiService.clientOverride = MockClient((request) async =>
+        http.Response('{"response":[],"errors":[]}', 200));
+    addTearDown(() {
+      SportsApiService.clientOverride = null;
+      SportsApiService.resetForTesting();
+    });
     await tester.pumpWidget(
       const MaterialApp(home: SportsStatisticsScreen()),
     );
@@ -19,6 +28,13 @@ void main() {
   });
 
   testWidgets('ofrece la categoría Fórmula 1 y abre su pantalla específica', (tester) async {
+    SportsApiService.resetForTesting();
+    SportsApiService.clientOverride = MockClient((request) async =>
+        http.Response('{"response":[],"errors":[]}', 200));
+    addTearDown(() {
+      SportsApiService.clientOverride = null;
+      SportsApiService.resetForTesting();
+    });
     await tester.pumpWidget(
       const MaterialApp(
         home: SportsStatisticsScreen(initialSport: 'Fórmula 1'),
@@ -28,15 +44,8 @@ void main() {
     expect(find.text('SPORT ID  •  formula-1'), findsOneWidget);
     expect(find.textContaining('Tipo de clasificación'), findsOneWidget);
   });
-  testWidgets('la agenda de fútbol muestra por defecto los próximos siete días', (tester) async {
-    sportsApiBaseUrl.value = '';
-    await tester.pumpWidget(
-      const MaterialApp(home: AgendaScreen(initialSport: 'Fútbol')),
-    );
-
-    expect(find.text('Próximos 7 días'), findsOneWidget);
-    await tester.pumpWidget(const SizedBox.shrink());
-    sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
+  test('la agenda principal utiliza Fútbol Libre como fuente', () {
+    expect(WebAgendaScreen.initialUrl, 'https://futbol-libre.cam/');
   });
 
   testWidgets('Ajustes expone un acceso visible al servidor deportivo', (tester) async {
@@ -46,7 +55,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Servidor de estadísticas y agenda'), findsOneWidget);
+    expect(find.text('Servidor de estadísticas y señales'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
