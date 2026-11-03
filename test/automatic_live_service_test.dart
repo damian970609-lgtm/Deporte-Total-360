@@ -22,7 +22,7 @@ void main() {
     test('precarga dos listas deportivas globales y una EPG sin autorizar automáticamente', () async {
       final settings = await AutoLiveSettings.load();
 
-      expect(settings.playlistUrls, hasLength(2));
+      expect(settings.playlistUrls, hasLength(3));
       expect(settings.playlistUrls.every(isSafeHttpUrl), isTrue);
       expect(settings.epgUrl, defaultAutoLiveEpgUrl);
       expect(settings.isConfigured, isFalse);
