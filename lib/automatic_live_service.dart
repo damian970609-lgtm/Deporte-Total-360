@@ -262,6 +262,9 @@ class SportsAgendaEvent {
     this.imageUrl = '',
     this.venue = '',
     this.status = 'scheduled',
+    this.statusLabel = '',
+    this.homeScore = '',
+    this.awayScore = '',
     this.endsAt,
   });
   final String id;
@@ -276,6 +279,9 @@ class SportsAgendaEvent {
   final String imageUrl;
   final String venue;
   final String status;
+  final String statusLabel;
+  final String homeScore;
+  final String awayScore;
   final DateTime startsAt;
   final DateTime? endsAt;
   final String detailUrl;
@@ -293,6 +299,9 @@ class SportsAgendaEvent {
     'imageUrl': imageUrl,
     'venue': venue,
     'status': status,
+    'statusLabel': statusLabel,
+    'homeScore': homeScore,
+    'awayScore': awayScore,
     'startsAt': startsAt.toIso8601String(),
     'endsAt': endsAt?.toIso8601String(),
     'detailUrl': detailUrl,
@@ -343,6 +352,9 @@ class SportsAgendaEvent {
       imageUrl: eventImage,
       venue: (row['venue'] ?? '').toString(),
       status: (row['status'] ?? 'scheduled').toString(),
+      statusLabel: (row['statusLabel'] ?? '').toString(),
+      homeScore: (row['homeScore'] ?? '').toString(),
+      awayScore: (row['awayScore'] ?? '').toString(),
       startsAt: startsAt.toLocal(),
       endsAt: end?.toLocal(),
       detailUrl: detailUrl,
@@ -576,6 +588,9 @@ class AutomaticLiveService {
           ),
           venue: (eventData['venue'] ?? '').toString(),
           status: (eventData['status'] ?? 'scheduled').toString(),
+          statusLabel: (eventData['statusLabel'] ?? '').toString(),
+          homeScore: (eventData['homeScore'] ?? '').toString(),
+          awayScore: (eventData['awayScore'] ?? '').toString(),
           startsAt: startsAt.toLocal(),
           endsAt: endsAt?.toLocal(),
           detailUrl: isSafeHttpUrl(detailUrl)
