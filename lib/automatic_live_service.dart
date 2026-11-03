@@ -289,9 +289,6 @@ class AutomaticLiveService {
       throw const FormatException('Ninguna de las listas deportivas respondió con canales HLS/MP4 compatibles.');
     }
     final programmes = parseXmltv(epgBody);
-    if (channels.isEmpty) {
-      throw const FormatException('La lista M3U no contiene canales HLS o MP4 compatibles.');
-    }
     if (programmes.isEmpty) {
       throw const FormatException('La EPG XMLTV no contiene programas legibles.');
     }
