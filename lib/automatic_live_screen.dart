@@ -140,6 +140,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         title: 'DEPORTE TOTAL 360° CANAL ${result.length + 1}',
         url: selected.url,
         subtitle: details.join(' · '),
+        eventId: event.id,
       ));
     }
     return result;
@@ -173,10 +174,13 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
           final heading = event.competition.isNotEmpty
               ? '\${event.sport} · \${event.competition}'
               : event.sport;
+          final startLabel = now.isBefore(event.startsAt)
+              ? 'Comienza $time'
+              : 'Evento iniciado · $time';
           return LivePlayerWaitingEvent(
             heading: heading,
             match: teams,
-            startLabel: 'Comienza $time',
+            startLabel: startLabel,
           );
         })
         .toList(growable: false);
