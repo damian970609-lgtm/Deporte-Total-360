@@ -20,9 +20,22 @@ class HighlightsScreen extends StatefulWidget {
 
 class _HighlightsScreenState extends State<HighlightsScreen> {
   InAppWebViewController? _controller;
+  late final TextEditingController _searchController;
   bool _loading = true;
   double _progress = 0;
   String _query = 'resúmenes deportivos de hoy';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController(text: _query);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   WebUri get _searchUri => WebUri(
         'https://www.youtube.com/results?search_query=${Uri.encodeQueryComponent(_query)}',
@@ -33,6 +46,7 @@ class _HighlightsScreenState extends State<HighlightsScreen> {
     if (clean.isEmpty) return;
     setState(() {
       _query = clean;
+      _searchController.text = clean;
       _loading = true;
       _progress = 0;
     });
@@ -96,8 +110,7 @@ class _HighlightsScreenState extends State<HighlightsScreen> {
             child: Column(
               children: <Widget>[
                 TextField(
-                  controller: TextEditingController(text: _query)
-                    ..selection = TextSelection.collapsed(offset: _query.length),
+                  controller: _searchController,
                   onSubmitted: _search,
                   style: const TextStyle(color: Colors.white, fontSize: 13),
                   decoration: InputDecoration(
