@@ -176,14 +176,6 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  Future<void> _openFantasy() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => const FantasyScreen(),
-      ),
-    );
-  }
-
   Future<void> _openDonations() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -299,7 +291,7 @@ class _MainShellState extends State<MainShell> {
           label: 'WhatsApp',
         ),
         onDonations: _openDonations,
-        onFantasy: _openFantasy,
+        onFantasy: () => _selectTab(_fantasyTab),
         onStatistics: _openStatistics,
         onOpenAgenda: _openAgenda,
         onChat: _openPublicChat,
@@ -394,7 +386,7 @@ class _MainShellState extends State<MainShell> {
                   selectedIcon: const Icon(Icons.settings_rounded, color: appCyan),
                   label: 'Ajustes',
                 ),
-              ],,
+              ],
             ),
           ),
         ),
@@ -854,7 +846,7 @@ class HomeDashboard extends StatelessWidget {
                   ),
                   icon: Icons.article_rounded,
                   color: appYellow,
-                  onTap: () => onNavigate(3),
+                  onTap: () => onNavigate(_newsTab),
                 ),
                 const SizedBox(height: 8),
                 _HomeActionCard(
@@ -867,7 +859,7 @@ class HomeDashboard extends StatelessWidget {
                   ),
                   icon: Icons.play_circle_fill_rounded,
                   color: appGreen,
-                  onTap: () => onNavigate(6),
+                  onTap: () => onNavigate(_highlightsTab),
                 ),
                 const SizedBox(height: 8),
                 _HomeActionCard(
