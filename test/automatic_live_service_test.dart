@@ -118,10 +118,10 @@ void main() {
       expect(find.text('Fútbol · Liga de prueba'), findsOneWidget);
       expect(find.text('Equipo Azul vs Equipo Rojo'), findsOneWidget);
       expect(find.text('Comienza 19:30'), findsOneWidget);
-      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(4));
+      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(8));
     });
 
-    testWidgets('muestra el evento asignado y espera en los otros tres canales', (tester) async {
+    testWidgets('muestra el evento asignado y espera en los otros siete canales', (tester) async {
       const source = LivePlayerSource(
         title: 'DEPORTE TOTAL 360° CANAL 1',
         url: 'https://media.example/evento.m3u8',
@@ -139,7 +139,7 @@ void main() {
       expect(find.text('DEPORTE TOTAL 360° CANAL 1'), findsOneWidget);
       expect(find.text('Fútbol · Liga · Tigres vs Atlas'), findsOneWidget);
       expect(find.byTooltip('Reproducir en pantalla completa'), findsOneWidget);
-      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(3));
+      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(7));
     });
   });
 
