@@ -54,7 +54,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('DAMIÁN APK · CENTRO IPTV'), findsOneWidget);
-    expect(find.text('GESTIONAR LISTAS IPTV Y EPG'), findsOneWidget);
+    expect(find.text('ABRIR REPRODUCTOR Y EXTRACTOR IPTV'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
