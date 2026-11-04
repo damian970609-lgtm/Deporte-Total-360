@@ -375,7 +375,7 @@ class SportsAgendaEvent {
 }
 
 class SportsAgendaStore {
-  static const String _key = 'dt360_sports_agenda_events_v2';
+  static const String _key = 'dt360_sports_agenda_events_v3';
 
   /// Sustituye la captura anterior por el contenido visible más reciente.
   /// Así los eventos retirados de la agenda no quedan programados.
