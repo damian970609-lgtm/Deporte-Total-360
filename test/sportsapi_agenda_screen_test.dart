@@ -14,7 +14,7 @@ void main() {
           onOpenLive: () {},
           loadEvents: () async => <SportsAgendaEvent>[
             SportsAgendaEvent(
-              id: 'marca-test-1',
+              id: 'sportsapi-agenda-test-1',
               title: 'Equipo A vs Equipo B',
               sport: 'Fútbol',
               competition: 'Liga de prueba',
