@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'automatic_live_service.dart';
+import 'sportsapi_app_service.dart';
 import 'web_agenda_screen.dart';
 
 const Color _agendaBg = Color(0xFF030814);
@@ -101,8 +102,17 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
       return events;
     }
 
-    // Si el Worker aún no responde, conserva el último calendario sincronizado.
-    return SportsAgendaStore.load();
+    // Si el Worker no publica un calendario agregado, consulta SportsAPI
+    // directamente para los diez deportes favoritos. La clave permanece en
+    // Cloudflare y la APK solo recibe los datos públicos de cada evento.
+    try {
+      final events = await SportsApiAppService().fetchFavoriteAgendaEvents();
+      await SportsAgendaStore.save(events);
+      return events;
+    } catch (_) {
+      // Una caída temporal conserva el último calendario sincronizado.
+      return SportsAgendaStore.load();
+    }
   }
 
   Future<void> _refresh() async {
