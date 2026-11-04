@@ -1041,7 +1041,7 @@ class AutomaticLiveService {
         ..write(name.isEmpty ? 'Canal deportivo' : name)
         ..write('\n')
         ..write(channel.url.trim())
-        ..write('\\n');
+        ..write('\n');
     }
     return output.toString();
   }
