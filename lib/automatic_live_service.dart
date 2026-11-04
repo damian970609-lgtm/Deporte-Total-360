@@ -899,7 +899,7 @@ class AutomaticLiveService {
   static String _m3uAttribute(String value) => value
       .replaceAll('&', '&amp;')
       .replaceAll('"', '&quot;')
-      .replaceAll('\\r', ' ')
+      .replaceAll('\r', ' ')
       .replaceAll('\\n', ' ')
       .trim();
 
