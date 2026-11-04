@@ -106,7 +106,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     }
   }
 
-  Future<void> _loadDate(DateTime value) async {
+  Future<void> _loadDate(DateTime value, {bool forceRefresh = false}) async {
     final date = DateTime(value.year, value.month, value.day);
     setState(() {
       _selectedDate = date;
@@ -117,7 +117,10 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       _statsError = null;
     });
     try {
-      final events = await _api.fetchFavoriteAgendaEvents(date: date);
+      final events = await _api.fetchFavoriteAgendaEvents(
+        date: date,
+        forceRefresh: forceRefresh,
+      );
       if (!mounted) return;
       setState(() {
         _events = events;
@@ -132,7 +135,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     }
   }
 
-  Future<void> _refresh() => _loadDate(_selectedDate);
+  Future<void> _refresh() => _loadDate(_selectedDate, forceRefresh: true);
 
   Future<void> _pickDate() async {
     final today = DateTime.now();
