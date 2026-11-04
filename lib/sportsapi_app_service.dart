@@ -126,6 +126,7 @@ class SportsApiAppService {
 
   Future<List<SportsAgendaEvent>> fetchFavoriteAgendaEvents({
     DateTime? date,
+    bool forceRefresh = false,
   }) {
     // SportsAPI recibe días UTC, mientras la agenda se presenta por día local.
     // En zonas horarias negativas una jornada local puede abarcar dos fechas UTC.
@@ -136,10 +137,11 @@ class SportsApiAppService {
         localDay.day.toString().padLeft(2, '0');
     final cached = _agendaCache[day];
     final expires = _agendaCacheExpiry[day];
-    if (cached != null && expires != null && DateTime.now().isBefore(expires)) {
+    if (!forceRefresh && cached != null && expires != null &&
+        DateTime.now().isBefore(expires)) {
       return Future<List<SportsAgendaEvent>>.value(cached);
     }
-    final pending = _agendaInFlight[day];
+    final pending = forceRefresh ? null : _agendaInFlight[day];
     if (pending != null) return pending;
     final future = _fetchFavoriteAgendaEvents(localDay);
     _agendaInFlight[day] = future;
@@ -148,7 +150,9 @@ class SportsApiAppService {
       _agendaCacheExpiry[day] = DateTime.now().add(const Duration(minutes: 5));
       return events;
     }).whenComplete(() {
-      _agendaInFlight.remove(day);
+      if (identical(_agendaInFlight[day], future)) {
+        _agendaInFlight.remove(day);
+      }
     });
   }
 
@@ -304,9 +308,8 @@ class SportsApiAppService {
         }
 
         if (event == null) return null;
-        final localStart = event.startsAt.toLocal();
-        if (localStart.isBefore(localStartDate(localDay)) ||
-            !localStart.isBefore(localStartDate(localDay).add(const Duration(days: 1)))) {
+        if (event.startsAt.isBefore(localStart) ||
+            !event.startsAt.isBefore(localEnd)) {
           return null;
         }
         return event;
@@ -331,8 +334,6 @@ class SportsApiAppService {
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
   }
 
-  DateTime localStartDate(DateTime value) =>
-      DateTime(value.year, value.month, value.day);
 
   SportsAgendaEvent? _fixtureEvent(
     Map<String, dynamic> row,
