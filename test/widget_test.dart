@@ -53,9 +53,12 @@ void main() {
     }
     await tester.pumpAndSettle();
 
-    expect(find.text('MENÚ SECRETO'), findsOneWidget);
-    expect(find.text('OTTFOX · EDITOR IPTV Y EPG'), findsOneWidget);
-    expect(find.text('AÑADIR FUENTES AL BUSCADOR AUTOMÁTICO'), findsOneWidget);
+    expect(find.text('CENTRO IPTV · DAMIAN.APK'), findsOneWidget);
+    expect(find.text('CENTRO DE LISTAS, GUÍAS Y CANALES'), findsOneWidget);
+    expect(find.textContaining('ADMINISTRAR FUENTES'), findsOneWidget);
+    expect(find.textContaining('EXPLORAR Y PROBAR CANALES'), findsOneWidget);
+    expect(find.textContaining('SINCRONIZAR CON OTTFOX'), findsOneWidget);
+    expect(find.text('CONEXIÓN DEL SERVIDOR DEPORTIVO'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
