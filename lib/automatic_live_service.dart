@@ -177,8 +177,8 @@ class AutoLiveSettings {
 
     // Las fuentes añadidas desde el menú secreto se fusionan con las originales.
     final additional = await loadAdditionalSources();
-    playlist = <String>{..._splitPlaylistUrls(playlist), ...additional.playlistUrls}.join('\\n');
-    epg = <String>{..._splitPlaylistUrls(epg), ...additional.epgUrls}.join('\\n');
+    playlist = <String>{..._splitPlaylistUrls(playlist), ...additional.playlistUrls}.join('\n');
+    epg = <String>{..._splitPlaylistUrls(epg), ...additional.epgUrls}.join('\n');
 
     return AutoLiveSettings(
       playlistUrl: playlist,
