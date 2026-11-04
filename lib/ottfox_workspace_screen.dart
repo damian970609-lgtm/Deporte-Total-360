@@ -303,8 +303,8 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
         if (isNew) playlists.add(text);
         final epg = <String>{...settings.epgUrls, ..._epgUrlsFromM3u(text)};
         await AutoLiveSettings.save(
-          playlistUrl: settings.playlistUrls.join('\\n'),
-          epgUrl: epg.join('\\n'),
+          playlistUrl: settings.playlistUrls.join('\n'),
+          epgUrl: epg.join('\n'),
           authorizationConfirmed: true,
           playlistText: '',
           playlistTexts: playlists,
@@ -326,8 +326,8 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
         }
         final urls = <String>{...settings.playlistUrls, text};
         await AutoLiveSettings.save(
-          playlistUrl: urls.join('\\n'),
-          epgUrl: settings.epgUrls.join('\\n'),
+          playlistUrl: urls.join('\n'),
+          epgUrl: settings.epgUrls.join('\n'),
           authorizationConfirmed: true,
           playlistText: '',
           playlistTexts: settings.localPlaylistTexts,
