@@ -6,8 +6,8 @@ Navegación principal: Inicio, Deportes en vivo, Agenda de hoy, Noticias, Mister
 
 Archivos principales:
 - lib/main.dart: navegación de ocho secciones, inicio y ajustes.
-- lib/automatic_live_service.dart y lib/automatic_live_screen.dart: captura de eventos de agenda, lectura de varias M3U/XMLTV, clasificación y asignación automática de señales verificadas a ocho reproductores simultáneos y desplazables, con hasta tres fuentes alternativas para recuperación si falla la principal.
-- lib/iptv_sources_screen.dart: gestor de listas M3U/M3U8 y guías XMLTV por URL, con importación de varias direcciones pegadas por líneas, alta, eliminación, prioridad, fusión de catálogos, detección de duplicados, búsqueda y selección de fuentes alternativas; el catálogo se puede explorar aunque no responda una guía EPG.
+- lib/automatic_live_service.dart y lib/automatic_live_screen.dart: captura de eventos de agenda, lectura de varias M3U/XMLTV, análisis M3U/XMLTV y descompresión GZIP fuera del hilo de interfaz, descargas limitadas por lotes/tamaño, clasificación y asignación automática de señales verificadas a ocho reproductores simultáneos y desplazables, con fuentes alternativas para recuperación si falla la principal.
+- lib/iptv_sources_screen.dart: reproductor nativo y extractor de listas M3U/M3U8 y guías XMLTV por URL; importa muchas direcciones, fusiona fuentes, agrupa duplicados, muestra programación EPG actual/siguiente, permite buscar, elegir alternativas, armar una multivista de hasta ocho señales y copiar una M3U consolidada con referencias EPG; el análisis se realiza en isolates y el catálogo se puede explorar aunque falle una guía.
 - lib/live_media_format.dart y lib/live_channels_screen.dart: detección explícita de HLS, DASH, Smooth Streaming y vídeo progresivo, adaptación de calidad automática con ExoPlayer, selector manual por pistas y transición fullscreen/miniatura sin recrear el controlador.
 - lib/sports_summaries_screen.dart: categorías deportivas y reproducción de YouTube dentro de la app mediante WebView.
 - lib/public_chat_screen.dart: sala pública de chat compartida.
