@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'automatic_live_service.dart';
 import 'live_channels_screen.dart';
@@ -34,6 +35,8 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
   List<String> _playlistUrls = <String>[];
   List<String> _epgUrls = <String>[];
   List<_MergedM3uChannel> _mergedChannels = <_MergedM3uChannel>[];
+  AutoLiveCatalog? _catalog;
+  String _progressMessage = '';
   int _programmeCount = 0;
   int _rawChannelCount = 0;
   bool _loading = true;
@@ -50,6 +53,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _service.dispose();
     super.dispose();
   }
 
@@ -436,26 +440,68 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
     setState(() {
       _refreshing = true;
       _error = null;
+      _progressMessage = 'Preparando las fuentes…';
     });
     try {
       final catalog = await _service.loadCatalog(
-        playlistUrl: _playlistUrls.join('\n'),
-        epgUrl: _epgUrls.join('\n'),
+        playlistUrl: _playlistUrls.join('\\n'),
+        epgUrl: _epgUrls.join('\\n'),
         forceRefresh: true,
+        downloadBatchSize: 2,
+        batchPause: const Duration(milliseconds: 160),
+        maxPlaylistBytes: 8 * 1024 * 1024,
+        maxEpgBytes: 12 * 1024 * 1024,
+        onProgress: (phase, completed, total) {
+          if (!mounted) return;
+          setState(() {
+            _progressMessage = phase == 'M3U'
+                ? 'Extrayendo listas M3U: $completed de $total'
+                : 'Procesando guías EPG: $completed de $total';
+          });
+        },
       );
       final grouped = _groupChannels(catalog.channels);
       if (!mounted) return;
       setState(() {
+        _catalog = catalog;
         _rawChannelCount = catalog.channels.length;
         _programmeCount = catalog.programmes.length;
         _mergedChannels = grouped;
       });
     } catch (error) {
-      if (mounted) {
-        setState(() => _error = error.toString());
-      }
+      if (mounted) setState(() => _error = error.toString());
     } finally {
-      if (mounted) setState(() => _refreshing = false);
+      if (mounted) {
+        setState(() {
+          _refreshing = false;
+          _progressMessage = '';
+        });
+      }
+    }
+  }
+
+  Future<void> _copyCombinedPlaylist() async {
+    final catalog = _catalog;
+    if (catalog == null || catalog.channels.isEmpty) return;
+    final merged = AutomaticLiveService.buildMergedM3u(
+      catalog,
+      epgUrls: _epgUrls,
+    );
+    try {
+      await Clipboard.setData(ClipboardData(text: merged));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Lista combinada copiada: ${catalog.channels.length} señales únicas y ${_epgUrls.length} referencias EPG.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo copiar la lista combinada: $error')),
+      );
     }
   }
 
@@ -628,7 +674,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                     border: Border.all(color: _iptvCyan.withAlpha(150)),
                   ),
                   child: const Text(
-                    'Añade muchas listas M3U/M3U8 y guías XMLTV/EPG, pegando varias direcciones a la vez. El catálogo reúne los canales, agrupa duplicados y conserva fuentes alternativas. Puedes explorar los canales aunque una guía EPG no responda; la programación aparecerá cuando haya datos disponibles. Los ocho reproductores permanecen intactos.',
+                    'Gestiona listas M3U/M3U8 y guías XMLTV/EPG desde un único centro. El extractor combina fuentes, elimina duplicados y conserva alternativas. El reproductor nativo abre canales directos compatibles con controles de calidad y pantalla completa; los ocho espacios multivista de la app se mantienen. El análisis pesado se procesa fuera de la interfaz.',
                     style: TextStyle(
                       color: _iptvMuted,
                       fontSize: 11,
@@ -650,6 +696,39 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                   urls: _epgUrls,
                   epg: true,
                 ),
+                if (_refreshing)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: _iptvPanel2,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _iptvCyan.withAlpha(120)),
+                    ),
+                    child: Row(
+                      children: <Widget>[
+                        const SizedBox(
+                          width: 19,
+                          height: 19,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: _iptvCyan,
+                          ),
+                        ),
+                        const SizedBox(width: 11),
+                        Expanded(
+                          child: Text(
+                            _progressMessage,
+                            style: const TextStyle(
+                              color: _iptvMuted,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 Container(
                   padding: const EdgeInsets.all(13),
                   margin: const EdgeInsets.only(bottom: 12),
@@ -727,8 +806,8 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                               : const Icon(Icons.sync_rounded),
                           label: Text(
                             _refreshing
-                                ? 'ACTUALIZANDO CATÁLOGO…'
-                                : 'DESCARGAR Y FUSIONAR LISTAS',
+                                ? 'EXTRAYENDO LISTAS Y EPG…'
+                                : 'EXTRAER Y FUSIONAR TODAS LAS FUENTES',
                           ),
                           style: FilledButton.styleFrom(
                             backgroundColor: _iptvGreen,
@@ -736,6 +815,22 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                           ),
                         ),
                       ),
+                      if (_catalog != null) ...<Widget>[
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _copyCombinedPlaylist,
+                            icon: const Icon(Icons.copy_all_rounded),
+                            label: const Text('COPIAR LISTA M3U + REFERENCIAS EPG'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _iptvCyan,
+                              side: const BorderSide(color: _iptvCyan),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
