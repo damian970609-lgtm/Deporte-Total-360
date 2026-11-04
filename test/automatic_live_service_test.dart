@@ -287,6 +287,37 @@ void main() {
       expect(settings.playlistUrls, hasLength(12));
       expect(settings.epgUrls, hasLength(20));
     });
+
+    test('guarda y carga en el reproductor la M3U local exportada desde OTTFOX', () async {
+      const localPlaylist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="ottfox.test" group-title="Deportes",Canal OTTFOX
+https://cdn.example/live/ottfox.m3u8
+''';
+
+      await AutoLiveSettings.save(
+        playlistUrl: 'https://lists.example/owned.m3u',
+        epgUrl: 'https://guide.example/owned.xml',
+        authorizationConfirmed: true,
+        playlistText: localPlaylist,
+      );
+      final settings = await AutoLiveSettings.load();
+      expect(settings.playlistText, localPlaylist.trim());
+
+      final service = AutomaticLiveService(
+        client: MockClient((request) async => http.Response('', 404)),
+      );
+      addTearDown(service.dispose);
+      final catalog = await service.loadCatalog(
+        playlistUrl: '',
+        epgUrl: '',
+        playlistText: settings.playlistText,
+      );
+
+      expect(catalog.channels, hasLength(1));
+      expect(catalog.channels.single.name, 'Canal OTTFOX');
+      expect(catalog.channels.single.url, 'https://cdn.example/live/ottfox.m3u8');
+    });
   });
 
   group('captura de agenda', () {
