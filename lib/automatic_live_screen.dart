@@ -72,20 +72,15 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     if (mounted) setState(() {});
 
     try {
-      // La nube es la fuente principal: prepara los eventos y canales
-      // aunque este dispositivo no sea el que ejecuta el planificador.
+      // La pestaña Live obtiene los diez deportes favoritos directamente
+      // desde SportsAPI y conserva la última agenda nativa si falla la red.
       final settings = await AutoLiveSettings.load();
-      final localEvents = await SportsAgendaStore.load();
       List<SportsAgendaEvent> events;
-      var loadedFromSportsApi = false;
       try {
-        // El tablero Live obtiene primero los diez deportes favoritos, aunque
-        // el usuario nunca haya abierto la pestaña Agenda.
         events = await SportsApiAppService().fetchFavoriteAgendaEvents();
-        loadedFromSportsApi = true;
         await SportsAgendaStore.save(events);
       } catch (_) {
-        events = localEvents;
+        events = await SportsAgendaStore.load();
       }
 
       // La agenda viene de SportsAPI; diez minutos antes de cada inicio,
