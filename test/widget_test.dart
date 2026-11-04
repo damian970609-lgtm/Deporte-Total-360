@@ -59,7 +59,7 @@ void main() {
     for (var tap = 0; tap < 10; tap++) {
       await tester.tap(find.text('DAMIAN.APK'));
     }
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('OTTFOX · EDITOR IPTV'), findsOneWidget);
     expect(find.text('ÚNICO ACCESO DEL MENÚ SECRETO'), findsOneWidget);
