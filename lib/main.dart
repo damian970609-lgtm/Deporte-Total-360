@@ -12,7 +12,7 @@ import 'public_chat_screen.dart';
 import 'sports_api_service.dart';
 import 'sportsapi_statistics_screen.dart';
 import 'sports_summaries_screen.dart';
-import 'marca_agenda_screen.dart';
+import 'sportsapi_agenda_screen.dart';
 
 // Identidad visual de DEPORTE TOTAL 360°: azul noche, cian, rosa y verde neón.
 const Color appBg = Color(0xFF030814);
@@ -201,7 +201,7 @@ class _MainShellState extends State<MainShell> {
 
   void _openStatistics() => _selectTab(_statisticsTab);
 
-  void _openWebAgenda() => _selectTab(_agendaTab);
+  void _openAgenda() => _selectTab(_agendaTab);
 
   Future<void> _openPublicChat() async {
     await Navigator.of(context).push<void>(
@@ -345,7 +345,7 @@ class _MainShellState extends State<MainShell> {
         onDonations: _openDonations,
         onFantasy: _openFantasy,
         onStatistics: _openStatistics,
-        onOpenAgenda: _openWebAgenda,
+        onOpenAgenda: _openAgenda,
         onChat: _openPublicChat,
       ),
       AutomaticLiveScreen(
@@ -353,7 +353,7 @@ class _MainShellState extends State<MainShell> {
         isActive: _selectedIndex == _liveTab,
       ),
       _visitedTabs.contains(_agendaTab)
-          ? MarcaAgendaScreen(
+          ? SportsApiAgendaScreen(
               isActive: _selectedIndex == _agendaTab,
               onOpenLive: () => _selectTab(_liveTab),
             )
