@@ -203,6 +203,32 @@ class AutoLiveSettings {
     );
   }
 
+  /// Reemplaza todas las fuentes gestionadas y elimina las preferencias
+  /// adicionales antiguas para que las URLs borradas no reaparezcan.
+  static Future<void> replaceAllSources({
+    required String playlistUrl,
+    required String epgUrl,
+  }) async {
+    final playlists = <String>{..._splitPlaylistUrls(playlistUrl)};
+    final epgs = <String>{..._splitPlaylistUrls(epgUrl)};
+    if (playlists.isEmpty || !playlists.every(isSafeHttpUrl)) {
+      throw const FormatException(
+        'Añade al menos una lista M3U/M3U8 con una dirección HTTP o HTTPS válida.',
+      );
+    }
+    if (epgs.isEmpty || !epgs.every(isSafeHttpUrl)) {
+      throw const FormatException(
+        'Añade al menos una guía XMLTV/EPG con una dirección HTTP o HTTPS válida.',
+      );
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_playlistUrlKey, playlists.join('\n'));
+    await prefs.setString(_epgUrlKey, epgs.join('\n'));
+    await prefs.setBool(_authorizedKey, true);
+    await prefs.remove(_additionalPlaylistUrlsKey);
+    await prefs.remove(_additionalEpgUrlsKey);
+  }
+
   /// Añade enlaces propios/autorizados y evita duplicados. Se admiten varias
   /// direcciones separadas por líneas o punto y coma.
   static Future<AutoLiveAdditionalSources> addAdditionalSources({
@@ -495,9 +521,11 @@ class M3uChannel {
     this.logo = '',
     this.language = '',
     this.country = '',
+    this.sourceUrl = '',
   });
   final String name;
   final String url;
+  final String sourceUrl;
   final String tvgId;
   final String tvgName;
   final String group;
@@ -636,7 +664,11 @@ class AutomaticLiveService {
         // Algunas M3U contienen rutas relativas; se resuelven contra la
         // dirección de la propia lista antes de pasar la URL al reproductor.
         final baseUri = Uri.tryParse(batch[index]);
-        for (final channel in parseM3u(body, baseUri: baseUri)) {
+        for (final channel in parseM3u(
+          body,
+          baseUri: baseUri,
+          sourceUrl: batch[index],
+        )) {
           channelsByUrl.putIfAbsent(channel.url, () => channel);
         }
       }
@@ -757,7 +789,11 @@ class AutomaticLiveService {
     return body;
   }
 
-  static List<M3uChannel> parseM3u(String body, {Uri? baseUri}) {
+  static List<M3uChannel> parseM3u(
+    String body, {
+    Uri? baseUri,
+    String sourceUrl = '',
+  }) {
     final lines = body.replaceAll('\r', '').split('\n');
     final result = <M3uChannel>[];
     Map<String, String>? pending;
@@ -799,6 +835,7 @@ class AutomaticLiveService {
         logo: data['tvg-logo'] ?? '',
         language: data['tvg-language'] ?? data['language'] ?? '',
         country: data['tvg-country'] ?? data['country'] ?? '',
+        sourceUrl: sourceUrl,
       ));
       pending = null;
       pendingName = '';
@@ -1017,15 +1054,15 @@ class AutomaticLiveService {
       // Solo se programa una fuente cuya lista de reproducción respondió
       // correctamente a la comprobación. No se asignan señales no verificadas.
       if (verifiedCandidates.isEmpty) continue;
-      // Entre las señales disponibles, se conserva una sola: la de mayor
-      // calidad anunciada y confirmada por la lista HLS.
+      // Se conserva la señal principal y hasta tres alternativas que
+      // también superaron la comprobación de disponibilidad.
       verifiedCandidates.sort((a, b) {
         final language = b.languagePriority.compareTo(a.languagePriority);
         return language != 0
             ? language
             : b.qualityScore.compareTo(a.qualityScore);
       });
-      final sources = <ScheduledLiveSource>[verifiedCandidates.first];
+      final sources = verifiedCandidates.take(4).toList(growable: false);
       final programmeEnd = sources.map((s) => s.programmeEndsAt).reduce(
         (a, b) => a.isAfter(b) ? a : b,
       );
