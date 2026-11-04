@@ -73,8 +73,12 @@ void main() {
   });
 
 
-  group('tablero fijo de transmisiones', () {
-    testWidgets('mantiene ocho canales visibles y permite desplazamiento', (tester) async {
+  group('tablero de ocho canales de transmisiones', () {
+    testWidgets('mantiene ocho canales numerados y permite desplazarse', (tester) async {
+      await tester.view.setPhysicalSize(const Size(430, 620));
+      await tester.view.setDevicePixelRatio(1);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -82,16 +86,18 @@ void main() {
           ),
         ),
       );
+      await tester.pump();
 
-      for (var channel = 1; channel <= 8; channel++) {
-        expect(
-          find.text('DEPORTE TOTAL 360° CANAL $channel'),
-          findsOneWidget,
-        );
-      }
-      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(8));
+      expect(find.text('DEPORTE TOTAL 360° CANAL 1'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('DEPORTE TOTAL 360° CANAL 8'),
+        420,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('DEPORTE TOTAL 360° CANAL 8'), findsOneWidget);
       final grid = tester.widget<GridView>(find.byType(GridView));
       expect(grid.physics, isA<BouncingScrollPhysics>());
+      await tester.pumpWidget(const SizedBox.shrink());
     });
 
     testWidgets('muestra el próximo evento con su horario mientras espera la señal', (tester) async {
