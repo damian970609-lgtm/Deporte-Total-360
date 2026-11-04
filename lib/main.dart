@@ -1775,13 +1775,13 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                     const Icon(Icons.auto_awesome_rounded, color: appPink),
                     SizedBox(width: 9),
                     Expanded(child: Text(
-                      'CENTRO DE LISTAS Y CANALES IPTV',
+                      'REPRODUCTOR NATIVO + EXTRACTOR IPTV / EPG',
                       style: TextStyle(color: appPink, fontWeight: FontWeight.w900, fontSize: 12),
                     )),
                   ]),
                   SizedBox(height: 9),
                   Text(
-                    'Administra tus propias listas M3U/M3U8 y guías EPG/XMLTV. Combina varias fuentes, consulta el catálogo unificado, busca canales, revisa sus alternativas y conserva los ocho reproductores de Deporte Total 360°. Pega varias direcciones de una vez, una por línea.',
+                    'Importa muchas listas M3U/M3U8 y guías XMLTV/EPG, unifica canales y alternativas, consulta la programación y exporta una M3U combinada. Reproduce canales en el reproductor nativo y arma una multivista de hasta ocho señales. El análisis de listas y guías se procesa fuera de la interfaz para reducir bloqueos.',
                     style: TextStyle(color: appMuted, fontSize: 11, height: 1.45),
                   ),
                   const SizedBox(height: 12),
@@ -1796,7 +1796,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                         );
                       },
                       icon: const Icon(Icons.playlist_add_check_rounded),
-                      label: const Text('GESTIONAR LISTAS IPTV Y EPG'),
+                      label: const Text('ABRIR REPRODUCTOR Y EXTRACTOR IPTV'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: appCyan,
                         side: const BorderSide(color: appCyan),
