@@ -2400,14 +2400,17 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
       ''');
       final appliedToOttfox = applyResult == true ||
           applyResult.toString().toLowerCase() == 'true';
+      final appliedMessage = appliedToOttfox
+          ? 'La lista se aplicó a la biblioteca local.'
+          : 'Pulsa Aplicar cambios si el editor lo solicita.';
 
       if (!mounted) return;
       setState(() {
         _syncMessage =
             'OTTFOX recibió $_channelCount canales combinados de '
             '$_playlistCount listas y $_epgCount guías XMLTV. '
-            '$linkedGuideCount guías se colocaron en los campos EPG; '
-            '${appliedToOttfox ? 'la lista se aplicó a la biblioteca local.' : 'pulsa Aplicar cambios si el editor lo solicita.'}';
+            '$linkedGuideCount guías se colocaron en los campos EPG. '
+            '$appliedMessage';
       });
     } catch (error) {
       if (!mounted) return;
