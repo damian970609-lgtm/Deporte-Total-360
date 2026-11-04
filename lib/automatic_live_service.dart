@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io' show gzip;
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -667,7 +668,10 @@ class AutomaticLiveService {
       );
       for (final epgBody in bodies.whereType<String>()) {
         try {
-          for (final programme in parseXmltv(epgBody)) {
+          final parsedProgrammes = await Isolate.run(
+            () => parseXmltv(epgBody),
+          );
+          for (final programme in parsedProgrammes) {
             final key = <String>[
               programme.channelId.toLowerCase(),
               programme.title.toLowerCase().trim(),
