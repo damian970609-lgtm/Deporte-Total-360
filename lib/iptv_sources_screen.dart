@@ -118,12 +118,17 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
               TextField(
                 controller: controller,
                 autofocus: true,
-                keyboardType: TextInputType.url,
+                keyboardType: TextInputType.multiline,
+                maxLines: 4,
+                minLines: 2,
                 autocorrect: false,
                 enableSuggestions: false,
                 decoration: InputDecoration(
-                  labelText: epg ? 'URL de la guía' : 'URL de la lista',
-                  hintText: 'https://servidor-autorizado/archivo',
+                  alignLabelWithHint: true,
+                  labelText: epg
+                      ? 'Direcciones de guías EPG (una por línea)'
+                      : 'Direcciones de listas M3U (una por línea)',
+                  hintText: 'https://servidor-autorizado/lista.m3u\\nhttps://otro-servidor/lista.m3u8',
                   prefixIcon: const Icon(Icons.link_rounded),
                 ),
               ),
@@ -155,14 +160,20 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
             ),
             FilledButton(
               onPressed: () {
-                final url = controller.text.trim();
-                if (!isSafeHttpUrl(url)) {
+                final urls = controller.text
+                    .split(RegExp(r'[\\r\\n;]+'))
+                    .map((item) => item.trim())
+                    .where((item) => item.isNotEmpty)
+                    .toSet()
+                    .toList(growable: false);
+                if (urls.isEmpty || !urls.every(isSafeHttpUrl)) {
                   setDialogState(() {
-                    validationError = 'Introduce una dirección HTTP o HTTPS válida.';
+                    validationError =
+                        'Revisa las direcciones: cada línea debe ser una URL HTTP o HTTPS válida.';
                   });
                   return;
                 }
-                Navigator.pop(dialogContext, url);
+                Navigator.pop(dialogContext, urls.join('\\n'));
               },
               child: const Text('Agregar'),
             ),
@@ -174,17 +185,32 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
     if (value == null || !mounted) return;
 
     final list = epg ? _epgUrls : _playlistUrls;
-    if (list.contains(value)) {
+    final incoming = value
+        .split(RegExp(r'[\\r\\n;]+'))
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty);
+    var added = 0;
+    setState(() {
+      for (final url in incoming) {
+        if (isSafeHttpUrl(url) && !list.contains(url)) {
+          list.add(url);
+          added++;
+        }
+      }
+      _error = null;
+    });
+    if (added == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Esa fuente ya está en la lista.')),
+        const SnackBar(content: Text('No se agregaron fuentes nuevas; revisa si ya estaban guardadas.')),
       );
       return;
     }
-    setState(() {
-      list.add(value);
-      _error = null;
-    });
     await _saveSettings();
+    if (mounted && added > 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Se agregaron $added fuentes correctamente.')),
+      );
+    }
   }
 
   Future<void> _removeSource({required bool epg, required int index}) async {
@@ -406,7 +432,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
   }
 
   Future<void> _refreshCatalog() async {
-    if (_refreshing || _playlistUrls.isEmpty || _epgUrls.isEmpty) return;
+    if (_refreshing || _playlistUrls.isEmpty) return;
     setState(() {
       _refreshing = true;
       _error = null;
@@ -602,7 +628,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                     border: Border.all(color: _iptvCyan.withAlpha(150)),
                   ),
                   child: const Text(
-                    'Agrega varias listas M3U/M3U8 y guías XMLTV. Se combinan con las fuentes automáticas existentes; las URLs repetidas se eliminan y los canales equivalentes se agrupan para mostrar sus fuentes alternativas. La agenda deportiva y los cuatro reproductores actuales se conservan.',
+                    'Añade muchas listas M3U/M3U8 y guías XMLTV/EPG, pegando varias direcciones a la vez. El catálogo reúne los canales, agrupa duplicados y conserva fuentes alternativas. Puedes explorar los canales aunque una guía EPG no responda; la programación aparecerá cuando haya datos disponibles. Los ocho reproductores permanecen intactos.',
                     style: TextStyle(
                       color: _iptvMuted,
                       fontSize: 11,
@@ -645,7 +671,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                       ),
                       const SizedBox(height: 7),
                       const Text(
-                        'Actualiza para descargar las listas y las guías configuradas. Los canales con el mismo tvg-id se agrupan, y sus enlaces se conservan como alternativas.',
+                        'Descarga y combina todas las listas. Las guías EPG se incorporan cuando responden; los canales no desaparecen si una guía falla. Los canales repetidos se agrupan por tvg-id o nombre y conservan sus alternativas.',
                         style: TextStyle(
                           color: _iptvMuted,
                           fontSize: 11,
