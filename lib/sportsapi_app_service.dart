@@ -109,11 +109,13 @@ class SportsApiAppService {
   Future<List<SportsAgendaEvent>> fetchFavoriteAgendaEvents({
     DateTime? date,
   }) {
+    // SportsAPI date is a UTC calendar day. Use the phone's calendar
+    // date deliberately so the native Agenda tab stays aligned with the
+    // user's local day; returned instants are converted to local time below.
     final selected = date ?? DateTime.now();
-    final utc = selected.toUtc();
-    final day = utc.year.toString().padLeft(4, '0') + '-' +
-        utc.month.toString().padLeft(2, '0') + '-' +
-        utc.day.toString().padLeft(2, '0');
+    final day = selected.year.toString().padLeft(4, '0') + '-' +
+        selected.month.toString().padLeft(2, '0') + '-' +
+        selected.day.toString().padLeft(2, '0');
     final cached = _agendaCache[day];
     final expires = _agendaCacheExpiry[day];
     if (cached != null && expires != null && DateTime.now().isBefore(expires)) {
