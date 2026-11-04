@@ -25,15 +25,15 @@ class SportsSummariesScreen extends StatelessWidget {
   const SportsSummariesScreen({super.key});
 
   static const List<_SummaryCategory> _categories = <_SummaryCategory>[
-    _SummaryCategory('Fútbol', 'LaLiga Premier League Serie A Bundesliga Ligue 1 MLS Brasileirao Champions League Copa Libertadores World Cup women official highlights', Icons.sports_soccer_rounded, _summaryCyan),
-    _SummaryCategory('Baloncesto', 'NBA WNBA FIBA official basketball highlights', Icons.sports_basketball_rounded, _summaryPink),
-    _SummaryCategory('Béisbol', 'MLB World Baseball Classic WBSC official highlights', Icons.sports_baseball_rounded, _summaryCyan),
-    _SummaryCategory('Hockey sobre hielo', 'NHL PWHL IIHF official ice hockey highlights', Icons.sports_hockey_rounded, _summaryPink),
-    _SummaryCategory('Voleibol', 'Volleyball Nations League FIVB men women official highlights', Icons.sports_volleyball_rounded, _summaryCyan),
+    _SummaryCategory('Fútbol', 'LaLiga Premier League Serie A Bundesliga Ligue 1 MLS Brasileirao FIFA World Cup Eurocopa Copa America World Cup Qualifiers Champions League International Friendlies Club World Cup AFCON Asian Cup Gold Cup Nations League Libertadores Sudamericana FA Cup Copa del Rey Coppa Italia DFB Pokal Liga F WSL NWSL Women's World Cup Women's EURO Copa America Femenina WAFCON Women's Asian Cup W Gold Cup Women's Champions League Libertadores Femenina official highlights', Icons.sports_soccer_rounded, _summaryCyan),
+    _SummaryCategory('Baloncesto', 'NBA WNBA FIBA World Cup Olympic Basketball official highlights', Icons.sports_basketball_rounded, _summaryPink),
+    _SummaryCategory('Béisbol', 'MLB World Baseball Classic WBSC Premier12 Women's Baseball World Cup official highlights', Icons.sports_baseball_rounded, _summaryCyan),
+    _SummaryCategory('Hockey sobre hielo', 'NHL PWHL IIHF Men's World Championship IIHF Women's World Championship Olympic Ice Hockey official highlights', Icons.sports_hockey_rounded, _summaryPink),
+    _SummaryCategory('Voleibol', 'Volleyball Nations League FIVB Men's World Championship FIVB Women's World Championship Men's Club World Championship Women's Club World Championship Olympic Volleyball official highlights', Icons.sports_volleyball_rounded, _summaryCyan),
     _SummaryCategory('MMA', 'UFC official fight highlights men women', Icons.sports_mma_rounded, _summaryPink),
-    _SummaryCategory('Fútbol sala', 'FIFA Futsal World Cup UEFA Futsal EURO Copa America futsal highlights', Icons.sports_soccer_rounded, _summaryCyan),
-    _SummaryCategory('Ciclismo', 'Tour de France Giro d Italia Vuelta a Espana women men cycling highlights', Icons.directions_bike_rounded, _summaryPink),
-    _SummaryCategory('Deportes de motor', 'Formula 1 MotoGP F1 Academy WorldWCR official highlights', Icons.sports_motorsports_rounded, _summaryCyan),
+    _SummaryCategory('Fútbol sala', 'FIFA Futsal World Cup UEFA Futsal EURO Copa America de Futsal AFC Futsal Asian Cup FIFA Futsal Women's World Cup AFC Women's Futsal Asian Cup Copa America Femenina official highlights', Icons.sports_soccer_rounded, _summaryCyan),
+    _SummaryCategory('Ciclismo', 'Tour de France Tour de France Femmes Giro d Italia Giro d Italia Women La Vuelta a Espana La Vuelta Femenina official cycling highlights', Icons.directions_bike_rounded, _summaryPink),
+    _SummaryCategory('Deportes de motor', 'Formula 1 MotoGP F1 Academy FIM Women's Circuit Racing World Championship official highlights', Icons.sports_motorsports_rounded, _summaryCyan),
     _SummaryCategory('Balonmano', 'IHF EHF handball world championship men women highlights', Icons.sports_handball_rounded, _summaryPink),
   ];
 
