@@ -116,6 +116,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // Espera el Future de SharedPreferences y el refresco inicial del catálogo
+    // fuera del reloj falso de testWidgets, sin depender de Isolate.run.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
 
     expect(find.text('Prueba TV'), findsOneWidget);
     expect(find.byTooltip('Agregar a favoritos'), findsOneWidget);
