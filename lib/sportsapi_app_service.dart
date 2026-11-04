@@ -99,24 +99,51 @@ class SportsApiAppService {
     return _text(value);
   }
 
+  static final Map<String, List<SportsAgendaEvent>> _agendaCache =
+      <String, List<SportsAgendaEvent>>{};
+  static final Map<String, DateTime> _agendaCacheExpiry =
+      <String, DateTime>{};
+  static final Map<String, Future<List<SportsAgendaEvent>>> _agendaInFlight =
+      <String, Future<List<SportsAgendaEvent>>>{};
+
   Future<List<SportsAgendaEvent>> fetchFavoriteAgendaEvents({
     DateTime? date,
-  }) async {
+  }) {
     final selected = date ?? DateTime.now();
     final utc = selected.toUtc();
     final day = utc.year.toString().padLeft(4, '0') + '-' +
         utc.month.toString().padLeft(2, '0') + '-' +
         utc.day.toString().padLeft(2, '0');
+    final cached = _agendaCache[day];
+    final expires = _agendaCacheExpiry[day];
+    if (cached != null && expires != null && DateTime.now().isBefore(expires)) {
+      return Future<List<SportsAgendaEvent>>.value(cached);
+    }
+    final pending = _agendaInFlight[day];
+    if (pending != null) return pending;
+    final future = _fetchFavoriteAgendaEvents(day);
+    _agendaInFlight[day] = future;
+    return future.then((events) {
+      _agendaCache[day] = events;
+      _agendaCacheExpiry[day] = DateTime.now().add(const Duration(minutes: 2));
+      return events;
+    }).whenComplete(() {
+      _agendaInFlight.remove(day);
+    });
+  }
 
+  Future<List<SportsAgendaEvent>> _fetchFavoriteAgendaEvents(String day) async {
     var successfulSports = 0;
     final results = await Future.wait(_sportNames.entries.map((entry) async {
       try {
         final isRace = entry.key == 'cycling' || entry.key == 'motorsport';
         final payload = await _get(
           isRace ? '/races' : '/fixtures',
-          <String, String>{'date': day, 'sport': entry.key, 'page': '0'},
+          <String, String>{'date': day, 'sport': entry.key, if (!isRace) 'page': '0'},
         );
-        if (payload is! List) throw const FormatException('SportsAPI devolvió una agenda con formato inválido.');
+        if (payload is! List) {
+          throw const FormatException('SportsAPI devolvió una agenda con formato inválido.');
+        }
         successfulSports++;
         return payload.whereType<Map>().map((raw) {
           final row = Map<String, dynamic>.from(raw);
