@@ -1488,48 +1488,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 13),
             _settingsCard(
-              border: appBlue,
-              child: Material(
-                color: Colors.transparent,
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const CircleAvatar(
-                    backgroundColor: Color(0x332D8CFF),
-                    child: Icon(Icons.cloud_sync_rounded, color: appCyan),
-                  ),
-                  title: Text(
-                    appText(
-                      'Servidor de estadísticas',
-                      'Statistics server',
-                      'Servidor de estatísticas',
-                      'Serveur des statistiques',
-                    ),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
-                    ),
-                  ),
-                  subtitle: Text(
-                    appText(
-                      'Comprobar la conexión del servicio de estadísticas y configurar el Worker.',
-                      'Check the statistics service and configure the public Worker URL.',
-                      'Verifique a conexão do serviço de estatísticas e configure o Worker.',
-                      'Vérifier le service de statistiques et configurer le Worker.',
-                    ),
-                    style: const TextStyle(color: appMuted, fontSize: 11, height: 1.4),
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded, color: appCyan),
-                  onTap: () => Navigator.of(context).push<void>(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const DeveloperSettingsScreen(),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 13),
-            _settingsCard(
               border: appCyan,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1791,7 +1749,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
       backgroundColor: appBg,
       appBar: AppBar(
         title: Text(
-          appText('SERVIDOR Y DATOS DEPORTIVOS', 'SPORTS DATA SERVER', 'SERVIDOR E DADOS ESPORTIVOS', 'SERVEUR ET DONNÉES SPORTIVES'),
+          appText('DAMIÁN APK · CENTRO IPTV', 'DAMIÁN APK · IPTV CONTROL', 'DAMIÁN APK · IPTV', 'DAMIÁN APK · IPTV'),
           style: TextStyle(
             color: appCyan,
             fontWeight: FontWeight.w900,
@@ -1907,13 +1865,13 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                     const Icon(Icons.auto_awesome_rounded, color: appPink),
                     SizedBox(width: 9),
                     Expanded(child: Text(
-                      'FUENTES DEPORTIVAS AUTOMÁTICAS',
+                      'CENTRO DE LISTAS Y CANALES IPTV',
                       style: TextStyle(color: appPink, fontWeight: FontWeight.w900, fontSize: 12),
                     )),
                   ]),
                   SizedBox(height: 9),
                   Text(
-                    'Las listas de canales y guías de programación se descargan y actualizan automáticamente. Primero se priorizan señales en español; cuando no hay una señal española disponible, se prueban fuentes internacionales. Las direcciones y el catálogo permanecen ocultos en la interfaz y no requieren validación manual del usuario.',
+                    'Administra tus propias listas M3U/M3U8 y guías EPG/XMLTV. Combina varias fuentes, consulta el catálogo unificado, busca canales, revisa sus alternativas y conserva los ocho reproductores de Deporte Total 360°. Pega varias direcciones de una vez, una por línea.',
                     style: TextStyle(color: appMuted, fontSize: 11, height: 1.45),
                   ),
                   const SizedBox(height: 12),
