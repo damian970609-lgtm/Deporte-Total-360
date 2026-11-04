@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io' show gzip;
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -500,6 +501,13 @@ class AutoLiveCatalog {
 class AutomaticLiveService {
   AutomaticLiveService({http.Client? client}) : _client = client ?? http.Client();
   final http.Client _client;
+  bool _disposed = false;
+
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _client.close();
+  }
   AutoLiveCatalog? _cachedCatalog;
   DateTime? _cachedAt;
   String? _cachedPlaylist;
@@ -664,8 +672,14 @@ class AutomaticLiveService {
   }
 
   Future<AutoLiveCatalog> loadCatalog({
-    required String playlistUrl, required String epgUrl,
+    required String playlistUrl,
+    required String epgUrl,
     bool forceRefresh = false,
+    int downloadBatchSize = 2,
+    Duration batchPause = const Duration(milliseconds: 160),
+    int maxPlaylistBytes = 8 * 1024 * 1024,
+    int maxEpgBytes = 12 * 1024 * 1024,
+    void Function(String phase, int completed, int total)? onProgress,
   }) async {
     final playlistUrls = _splitPlaylistUrls(playlistUrl);
     final epgUrls = _splitPlaylistUrls(epgUrl);
@@ -674,7 +688,8 @@ class AutomaticLiveService {
         !epgUrls.every(isSafeHttpUrl)) {
       throw const FormatException('Configura al menos una lista M3U y utiliza direcciones HTTP o HTTPS válidas para las guías EPG.');
     }
-    final playlistCacheKey = playlistUrls.join('\n');
+    final int effectiveBatchSize = downloadBatchSize.clamp(1, 2).toInt();
+    final playlistCacheKey = playlistUrls.join('\\n');
     final epgCacheKey = epgUrls.join('\n');
     final now = DateTime.now();
     final cached = _cachedCatalog;
@@ -684,17 +699,17 @@ class AutomaticLiveService {
       return cached;
     }
 
-    // Se descargan tres listas a la vez para limitar memoria y conexiones.
-    // Una lista caída no bloquea el resto del catálogo.
+    // Se descargan una o dos listas a la vez para limitar memoria y conexiones.
+    // El análisis M3U se ejecuta en un isolate y no bloquea la interfaz.
     final channelsByUrl = <String, M3uChannel>{};
-    for (var batchStart = 0; batchStart < playlistUrls.length; batchStart += 3) {
-      final batch = playlistUrls.skip(batchStart).take(3).toList(growable: false);
+    for (var batchStart = 0; batchStart < playlistUrls.length; batchStart += effectiveBatchSize) {
+      final batch = playlistUrls.skip(batchStart).take(effectiveBatchSize).toList(growable: false);
       final playlistBodies = await Future.wait<String?>(
         batch.map((url) async {
           try {
             return await _downloadText(
               url,
-              maxBytes: 8 * 1024 * 1024,
+              maxBytes: maxPlaylistBytes,
               timeout: const Duration(seconds: 12),
             );
           } catch (_) {
@@ -708,14 +723,19 @@ class AutomaticLiveService {
         // Algunas M3U contienen rutas relativas; se resuelven contra la
         // dirección de la propia lista antes de pasar la URL al reproductor.
         final baseUri = Uri.tryParse(batch[index]);
-        for (final channel in parseM3u(
-          body,
-          baseUri: baseUri,
-          sourceUrl: batch[index],
-        )) {
-          channelsByUrl.putIfAbsent(channel.url, () => channel);
+        try {
+          final parsedChannels = await Isolate.run(
+            () => parseM3u(body, baseUri: baseUri, sourceUrl: batch[index]),
+          );
+          for (final channel in parsedChannels) {
+            channelsByUrl.putIfAbsent(channel.url, () => channel);
+          }
+        } catch (_) {
+          // Una lista dañada no impide continuar con las demás fuentes.
         }
       }
+      onProgress?.call('M3U', batchStart + batch.length, playlistUrls.length);
+      if (batchPause > Duration.zero) await Future<void>.delayed(batchPause);
     }
     final channels = channelsByUrl.values.toList(growable: false);
     if (channels.isEmpty) {
@@ -726,16 +746,16 @@ class AutomaticLiveService {
     // Cuando existen guías, se fusionan en lotes; un fallo de una guía no
     // impide mostrar los canales importados correctamente.
     final programmesByKey = <String, XmltvProgramme>{};
-    // Descarga por lotes pequeños: varias guías pueden responder a la vez, pero
-    // nunca se abren todas las descargas grandes simultáneamente.
-    for (var batchStart = 0; batchStart < epgUrls.length; batchStart += 3) {
-      final batch = epgUrls.skip(batchStart).take(3).toList(growable: false);
+    // XMLTV puede consumir bastante memoria. Se descarga por lotes pequeños
+    // y cada documento se analiza fuera del hilo de interfaz.
+    for (var batchStart = 0; batchStart < epgUrls.length; batchStart += effectiveBatchSize) {
+      final batch = epgUrls.skip(batchStart).take(effectiveBatchSize).toList(growable: false);
       final bodies = await Future.wait<String?>(
         batch.map((url) async {
           try {
             return await _downloadText(
               url,
-              maxBytes: 20 * 1024 * 1024,
+              maxBytes: maxEpgBytes,
               timeout: const Duration(seconds: 12),
             );
           } catch (_) {
@@ -745,7 +765,8 @@ class AutomaticLiveService {
       );
       for (final epgBody in bodies.whereType<String>()) {
         try {
-          for (final programme in parseXmltv(epgBody)) {
+          final parsedProgrammes = await Isolate.run(() => parseXmltv(epgBody));
+          for (final programme in parsedProgrammes) {
             final key = <String>[
               programme.channelId.toLowerCase(),
               programme.title.toLowerCase().trim(),
@@ -758,6 +779,8 @@ class AutomaticLiveService {
           // Una guía inválida no interrumpe las siguientes fuentes.
         }
       }
+      onProgress?.call('EPG', batchStart + batch.length, epgUrls.length);
+      if (batchPause > Duration.zero) await Future<void>.delayed(batchPause);
     }
     final programmes = programmesByKey.values.toList(growable: false);
     final catalog = AutoLiveCatalog(channels: channels, programmes: programmes);
@@ -798,29 +821,25 @@ class AutomaticLiveService {
       }
       compressed.add(chunk);
     }
-    var bytes = compressed.takeBytes();
-    if (bytes.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b) {
+    final bytes = compressed.takeBytes();
+    return Isolate.run(() {
       try {
-        final expanded = BytesBuilder(copy: false);
-        var expandedLength = 0;
-        await for (final chunk in gzip.decoder
-            .bind(Stream<List<int>>.value(bytes))
-            .timeout(timeout)) {
-          expandedLength += chunk.length;
-          if (expandedLength > maxBytes) {
+        var decodedBytes = bytes;
+        if (decodedBytes.length >= 2 && decodedBytes[0] == 0x1f && decodedBytes[1] == 0x8b) {
+          decodedBytes = gzip.decoder.convert(decodedBytes);
+          if (decodedBytes.length > maxBytes) {
             throw const FormatException('El XML descomprimido supera el límite permitido.');
           }
-          expanded.add(chunk);
         }
-        bytes = expanded.takeBytes();
-      } catch (error) {
-        if (error is FormatException) rethrow;
-        throw const FormatException('No se pudo descomprimir la fuente GZIP.');
+        final body = utf8.decode(decodedBytes, allowMalformed: true);
+        if (body.trim().isEmpty) throw const FormatException('La fuente está vacía.');
+        return body;
+      } on FormatException {
+        rethrow;
+      } catch (_) {
+        throw const FormatException('No se pudo descomprimir o decodificar la fuente.');
       }
-    }
-    final body = utf8.decode(bytes, allowMalformed: true);
-    if (body.trim().isEmpty) throw const FormatException('La fuente está vacía.');
-    return body;
+    });
   }
 
   static List<M3uChannel> parseM3u(
@@ -875,6 +894,57 @@ class AutomaticLiveService {
       pendingName = '';
     }
     return result;
+  }
+
+  static String _m3uAttribute(String value) => value
+      .replaceAll('&', '&amp;')
+      .replaceAll('"', '&quot;')
+      .replaceAll('\\r', ' ')
+      .replaceAll('\\n', ' ')
+      .trim();
+
+  static String _m3uSingleLine(String value) =>
+      value.replaceAll(RegExp(r'[\\r\\n]+'), ' ').trim();
+
+  /// Combina los canales directos sin duplicados y conserva referencias EPG.
+  static String buildMergedM3u(
+    AutoLiveCatalog catalog, {
+    List<String> epgUrls = const <String>[],
+  }) {
+    final guides = <String>{
+      for (final url in epgUrls)
+        if (isSafeHttpUrl(url)) url.trim(),
+    }.toList(growable: false);
+    final guideHeader = guides.isEmpty
+        ? ''
+        : ' url-tvg="${_m3uAttribute(guides.join(','))}"'
+          ' x-tvg-url="${_m3uAttribute(guides.join(','))}"';
+    final output = StringBuffer('#EXTM3U$guideHeader\\n');
+    final seen = <String>{};
+    for (final channel in catalog.channels) {
+      if (!isDirectPlayableStream(channel.url) || !seen.add(channel.url)) continue;
+      final attributes = <String, String>{
+        if (channel.tvgId.trim().isNotEmpty) 'tvg-id': channel.tvgId,
+        if (channel.tvgName.trim().isNotEmpty) 'tvg-name': channel.tvgName,
+        if (channel.logo.trim().isNotEmpty) 'tvg-logo': channel.logo,
+        'group-title': channel.group.trim().isNotEmpty ? channel.group : 'Deportes',
+        if (channel.language.trim().isNotEmpty) 'tvg-language': channel.language,
+        if (channel.country.trim().isNotEmpty) 'tvg-country': channel.country,
+      };
+      final metadata = attributes.entries
+          .map((entry) => '${entry.key}="${_m3uAttribute(entry.value)}"')
+          .join(' ');
+      final name = _m3uSingleLine(channel.name);
+      output
+        ..write('#EXTINF:-1')
+        ..write(metadata.isEmpty ? '' : ' $metadata')
+        ..write(',')
+        ..write(name.isEmpty ? 'Canal' : name)
+        ..write('\\n')
+        ..write(channel.url.trim())
+        ..write('\\n');
+    }
+    return output.toString();
   }
 
   static List<XmltvProgramme> parseXmltv(String body) {
