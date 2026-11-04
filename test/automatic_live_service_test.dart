@@ -915,6 +915,52 @@ https://media.example/live.m3u8
       }
     });
 
+    test('publica canales en cuanto termina cada lote M3U, antes de esperar la EPG', () async {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.fast" group-title="Deportes",Canal rápido
+https://media.example/fast.m3u8
+''';
+      final epgGate = Completer<void>();
+      final channelsReady = Completer<List<M3uChannel>>();
+      final client = MockClient((request) async {
+        if (request.url.host == 'playlist.example') {
+          return http.Response(playlist, 200);
+        }
+        if (request.url.host == 'guide.example') {
+          await epgGate.future;
+          return http.Response('<tv></tv>', 200);
+        }
+        return http.Response('', 404);
+      });
+      final service = AutomaticLiveService(client: client);
+      try {
+        final loading = service.loadCatalog(
+          playlistUrl: 'https://playlist.example/sports.m3u',
+          epgUrl: 'https://guide.example/guide.xml',
+          forceRefresh: true,
+          downloadBatchSize: 1,
+          batchPause: Duration.zero,
+          onChannelsLoaded: (channels) {
+            if (!channelsReady.isCompleted) channelsReady.complete(channels);
+          },
+        );
+
+        final earlyChannels = await channelsReady.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(earlyChannels, hasLength(1));
+        expect(earlyChannels.single.name, 'Canal rápido');
+
+        epgGate.complete();
+        final catalog = await loading;
+        expect(catalog.channels, hasLength(1));
+      } finally {
+        if (!epgGate.isCompleted) epgGate.complete();
+        service.dispose();
+      }
+    });
+
     test('exporta una sola M3U con canales únicos y todas las referencias EPG', () {
       final catalog = AutoLiveCatalog(
         channels: const <M3uChannel>[
