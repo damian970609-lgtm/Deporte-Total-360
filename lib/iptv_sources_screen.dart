@@ -217,24 +217,24 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
   }
 
   Future<void> _pastePlaylistText() async {
-    final controller = TextEditingController();
+    var playlistText = '';
     final text = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: _iptvPanel,
         title: const Text(
-          'Importar contenido M3U',
+          'Pegar contenido M3U',
           style: TextStyle(color: _iptvCyan, fontWeight: FontWeight.w900),
         ),
         content: SizedBox(
           width: double.maxFinite,
           child: TextField(
-            controller: controller,
             autofocus: true,
             minLines: 6,
             maxLines: 12,
             autocorrect: false,
             enableSuggestions: false,
+            onChanged: (value) => playlistText = value,
             decoration: const InputDecoration(
               alignLabelWithHint: true,
               hintText: 'Pega aquí el contenido de la lista que comienza con #EXTM3U',
@@ -247,13 +247,12 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
             child: const Text('Cancelar'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            onPressed: () => Navigator.pop(dialogContext, playlistText),
             child: const Text('Importar'),
           ),
         ],
       ),
     );
-    controller.dispose();
     if (text != null && mounted) await _importPlaylistText(text);
   }
 
@@ -346,7 +345,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
   }
 
   Future<void> _addSource({required bool epg}) async {
-    final controller = TextEditingController();
+    var inputValue = '';
     var validationError = '';
     final value = await showDialog<String>(
       context: context,
@@ -365,13 +364,13 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               TextField(
-                controller: controller,
                 autofocus: true,
                 keyboardType: TextInputType.multiline,
                 maxLines: 4,
                 minLines: 2,
                 autocorrect: false,
                 enableSuggestions: false,
+                onChanged: (text) => inputValue = text,
                 decoration: InputDecoration(
                   alignLabelWithHint: true,
                   labelText: epg
@@ -409,8 +408,8 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
             ),
             FilledButton(
               onPressed: () {
-                final urls = controller.text
-                    .split(RegExp(r'[\r\n;]+'))
+                final urls = inputValue
+                    .split(RegExp(r'[\\r\\n;]+'))
                     .map((item) => item.trim())
                     .where((item) => item.isNotEmpty)
                     .toSet()
@@ -433,7 +432,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                   });
                   return;
                 }
-                Navigator.pop(dialogContext, urls.join('\n'));
+                Navigator.pop(dialogContext, urls.join('\\n'));
               },
               child: const Text('Agregar'),
             ),
@@ -441,7 +440,6 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
         ),
       ),
     );
-    controller.dispose();
     if (value == null || !mounted) return;
 
     await _addUrls(value, epg: epg);
