@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:deporte_total_360/agenda_screen.dart';
 import 'package:deporte_total_360/main.dart';
+import 'package:deporte_total_360/ottfox_workspace_screen.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sports_statistics_screen.dart';
 
@@ -39,10 +40,17 @@ void main() {
     sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
   });
 
-  testWidgets('el menú oculto DAMIAN.APK abre directamente OTTFOX y elimina los paneles antiguos', (tester) async {
+  testWidgets('el menú oculto DAMIAN.APK abre directamente el destino secreto', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await tester.pumpWidget(
-      const MaterialApp(home: SettingsScreen()),
+      MaterialApp(
+        home: SettingsScreen(
+          secretMenuBuilder: (_) => const Scaffold(
+            appBar: AppBar(title: Text('OTTFOX · EDITOR IPTV')),
+            body: Text('ÚNICO ACCESO DEL MENÚ SECRETO'),
+          ),
+        ),
+      ),
     );
     await tester.pump();
 
@@ -54,10 +62,26 @@ void main() {
     await tester.pump();
 
     expect(find.text('OTTFOX · EDITOR IPTV'), findsOneWidget);
+    expect(find.text('ÚNICO ACCESO DEL MENÚ SECRETO'), findsOneWidget);
     expect(find.text('ABRIR REPRODUCTOR Y EXTRACTOR IPTV'), findsNothing);
     expect(find.text('CODOPLAYER · REPRODUCTOR WEB'), findsNothing);
-    expect(find.text('ABRIR CODOPLAYER EN LA APK'), findsNothing);
 
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('la pantalla del menú secreto construye OTTFOX directamente', (tester) async {
+    Widget? destination;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            destination = const DeveloperSettingsScreen().build(context);
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+    expect(destination, isA<OttfoxWorkspaceScreen>());
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
