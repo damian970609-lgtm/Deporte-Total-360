@@ -24,10 +24,18 @@ const String _manualFavoriteUrlsKey = 'dt360_secret_iptv_favorite_urls_v1';
 const String _sharedFavoriteUrlsKey = 'dt360_iptv_favorite_urls_v1';
 
 class IptvSourcesScreen extends StatefulWidget {
-  const IptvSourcesScreen({super.key, this.manualOnly = false});
+  const IptvSourcesScreen({
+    super.key,
+    this.manualOnly = false,
+    this.parseInBackground = true,
+  });
 
   /// Usa una biblioteca independiente sin listas públicas precargadas.
   final bool manualOnly;
+
+  /// Permite pruebas deterministas sin aislar el análisis de listas pequeñas.
+  /// En producción permanece activado para no bloquear la interfaz.
+  final bool parseInBackground;
 
   @override
   State<IptvSourcesScreen> createState() => _IptvSourcesScreenState();
@@ -690,7 +698,10 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
         playlistTexts: _playlistTexts,
         forceRefresh: true,
         downloadBatchSize: 4,
-        batchPause: const Duration(milliseconds: 100),
+        batchPause: widget.parseInBackground
+            ? const Duration(milliseconds: 100)
+            : Duration.zero,
+        parseInBackground: widget.parseInBackground,
         maxPlaylistBytes: 8 * 1024 * 1024,
         maxEpgBytes: 12 * 1024 * 1024,
         onChannelsLoaded: (channels) {
