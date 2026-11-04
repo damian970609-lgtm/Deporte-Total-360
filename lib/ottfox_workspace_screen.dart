@@ -312,6 +312,18 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
         await Future<void>.delayed(const Duration(milliseconds: 120));
       }
 
+      if (epgUrls.join('\n') != settings.epgUrls.join('\n')) {
+        // Guarda también las guías detectadas cuando todas las listas ya
+        // estaban importadas y no hubo ninguna M3U nueva que persistir.
+        await AutoLiveSettings.save(
+          playlistUrl: settings.playlistUrl,
+          epgUrl: epgUrls.join('\n'),
+          authorizationConfirmed: true,
+          playlistText: '',
+          playlistTexts: savedPlaylists,
+        );
+      }
+
       if (newPlaylists == 0) {
         _setSyncStatus(
           'Biblioteca revisada: no hay listas nuevas compatibles. ' +
