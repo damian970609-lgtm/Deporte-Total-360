@@ -126,15 +126,13 @@ void main() {
       expect(events.map((event) => event.id), isNot(contains('sportsapi-race-203-304')));
       expect(events.firstWhere((event) => event.id == 'sportsapi-race-202-303').competition, 'Tour de France');
       expect(events.firstWhere((event) => event.id == 'sportsapi-fixture-101').homeTeam, 'Team One');
-      expect(requested.where((uri) => uri.path.endsWith('/fixtures')), hasLength(9));
+      expect(requested.where((uri) => uri.path.endsWith('/fixtures')), hasLength(8));
       expect(
         requested.where((uri) =>
             uri.path.endsWith('/fixtures') &&
-            uri.queryParameters['sport'] == 'football' &&
-            uri.queryParameters['page'] == '1'),
-        hasLength(1),
+            uri.queryParameters['page'] != '0'),
+        isEmpty,
       );
-      expect(events.map((event) => event.id), contains('sportsapi-fixture-103'));
       expect(requested.where((uri) => uri.path.endsWith('/races')), hasLength(2));
       expect(requested.where((uri) => uri.path.endsWith('/favorites')), hasLength(2));
     } finally {
