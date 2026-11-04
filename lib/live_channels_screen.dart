@@ -229,6 +229,7 @@ VideoFormat _videoFormatHintFor(Uri uri) {
     case LiveMediaFormat.smoothStreaming:
       return VideoFormat.ss;
     case LiveMediaFormat.progressive:
+    case LiveMediaFormat.other:
     case null:
       return VideoFormat.other;
   }
