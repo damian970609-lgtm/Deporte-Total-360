@@ -680,6 +680,8 @@ class AutomaticLiveService {
     int maxPlaylistBytes = 8 * 1024 * 1024,
     int maxEpgBytes = 12 * 1024 * 1024,
     void Function(String phase, int completed, int total)? onProgress,
+    void Function(List<M3uChannel> channels)? onChannelsLoaded,
+    void Function(String url, Object error)? onSourceError,
   }) async {
     final playlistUrls = _splitPlaylistUrls(playlistUrl);
     final epgUrls = _splitPlaylistUrls(epgUrl);
@@ -688,7 +690,7 @@ class AutomaticLiveService {
         !epgUrls.every(isSafeHttpUrl)) {
       throw const FormatException('Configura al menos una lista M3U y utiliza direcciones HTTP o HTTPS válidas para las guías EPG.');
     }
-    final int effectiveBatchSize = downloadBatchSize.clamp(1, 2).toInt();
+    final int effectiveBatchSize = downloadBatchSize.clamp(1, 4).toInt();
     final playlistCacheKey = playlistUrls.join('\n');
     final epgCacheKey = epgUrls.join('\n');
     final now = DateTime.now();
@@ -702,6 +704,7 @@ class AutomaticLiveService {
     // Se descargan una o dos listas a la vez para limitar memoria y conexiones.
     // El análisis M3U se ejecuta en un isolate y no bloquea la interfaz.
     final channelsByUrl = <String, M3uChannel>{};
+    final playlistFailures = <String>[];
     for (var batchStart = 0; batchStart < playlistUrls.length; batchStart += effectiveBatchSize) {
       final batch = playlistUrls.skip(batchStart).take(effectiveBatchSize).toList(growable: false);
       final playlistBodies = await Future.wait<String?>(
@@ -712,7 +715,9 @@ class AutomaticLiveService {
               maxBytes: maxPlaylistBytes,
               timeout: const Duration(seconds: 12),
             );
-          } catch (_) {
+          } catch (error) {
+            playlistFailures.add(url);
+            onSourceError?.call(url, error);
             return null;
           }
         }),
@@ -727,19 +732,38 @@ class AutomaticLiveService {
           final parsedChannels = await Isolate.run(
             () => parseM3u(body, baseUri: baseUri, sourceUrl: batch[index]),
           );
+          if (parsedChannels.isEmpty) {
+            playlistFailures.add(batch[index]);
+            onSourceError?.call(
+              batch[index],
+              const FormatException('La lista no contiene enlaces directos compatibles.'),
+            );
+            continue;
+          }
           for (final channel in parsedChannels) {
             channelsByUrl.putIfAbsent(channel.url, () => channel);
           }
-        } catch (_) {
+        } catch (error) {
           // Una lista dañada no impide continuar con las demás fuentes.
+          playlistFailures.add(batch[index]);
+          onSourceError?.call(batch[index], error);
         }
+      }
+      if (channelsByUrl.isNotEmpty) {
+        onChannelsLoaded?.call(
+          List<M3uChannel>.unmodifiable(channelsByUrl.values),
+        );
       }
       onProgress?.call('M3U', batchStart + batch.length, playlistUrls.length);
       if (batchPause > Duration.zero) await Future<void>.delayed(batchPause);
     }
     final channels = channelsByUrl.values.toList(growable: false);
     if (channels.isEmpty) {
-      throw const FormatException('Ninguna lista M3U respondió con señales HLS, DASH o vídeo directo compatibles.');
+      final failedSources = playlistFailures.take(3).join(', ');
+      throw FormatException(
+        'No se pudo cargar ningún canal. Revisa las direcciones M3U, el acceso del proveedor o que incluyan enlaces HLS/DASH/TS/MP4 directos.'
+        '${failedSources.isEmpty ? '' : ' Fuentes sin respuesta o sin enlaces compatibles: $failedSources'}',
+      );
     }
 
     // Las listas M3U pueden explorarse aunque todavía no se haya añadido EPG.
