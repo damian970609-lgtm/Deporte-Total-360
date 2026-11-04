@@ -14,6 +14,7 @@ const Color _iptvLine = Color(0xFF123D65);
 const Color _iptvCyan = Color(0xFF00E5FF);
 const Color _iptvGreen = Color(0xFF39FF9C);
 const Color _iptvPink = Color(0xFFFF28CF);
+const Color _iptvYellow = Color(0xFFFFD600);
 const Color _iptvMuted = Color(0xFFA9BDD6);
 
 const String _manualPlaylistUrlsKey = 'dt360_secret_iptv_playlist_urls_v1';
