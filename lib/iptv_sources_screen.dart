@@ -161,7 +161,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
             FilledButton(
               onPressed: () {
                 final urls = controller.text
-                    .split(RegExp(r'[\\r\\n;]+'))
+                    .split(RegExp(r'[\r\n;]+))
                     .map((item) => item.trim())
                     .where((item) => item.isNotEmpty)
                     .toSet()
@@ -173,7 +173,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                   });
                   return;
                 }
-                Navigator.pop(dialogContext, urls.join('\\n'));
+                Navigator.pop(dialogContext, urls.join('\n'));
               },
               child: const Text('Agregar'),
             ),
