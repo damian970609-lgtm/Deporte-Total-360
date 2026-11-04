@@ -1435,16 +1435,18 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Row(
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 6,
                     children: <Widget>[
-                      Expanded(
-                        child: Text(
-                          'MULTIVISTA ${_multiViewQueue.length}/8',
-                          style: const TextStyle(
-                            color: _iptvGreen,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w900,
-                          ),
+                      Text(
+                        'MULTIVISTA ${_multiViewQueue.length}/8',
+                        style: const TextStyle(
+                          color: _iptvGreen,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
                       OutlinedButton.icon(
