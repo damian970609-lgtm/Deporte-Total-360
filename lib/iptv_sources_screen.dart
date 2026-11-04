@@ -556,7 +556,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
       }
     }
     String timeLabel(DateTime value) =>
-        '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+        "${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}";
     if (current != null) return 'AHORA ${timeLabel(current.startsAt)} · ${current.title}';
     if (next != null) return 'SIGUE ${timeLabel(next.startsAt)} · ${next.title}';
     return '';
