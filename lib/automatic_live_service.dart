@@ -709,7 +709,11 @@ class AutomaticLiveService {
         // Algunas M3U contienen rutas relativas; se resuelven contra la
         // dirección de la propia lista antes de pasar la URL al reproductor.
         final baseUri = Uri.tryParse(batch[index]);
-        for (final channel in parseM3u(body, baseUri: baseUri)) {
+        for (final channel in parseM3u(
+          body,
+          baseUri: baseUri,
+          sourceUrl: batch[index],
+        )) {
           channelsByUrl.putIfAbsent(channel.url, () => channel);
         }
       }
@@ -824,7 +828,11 @@ class AutomaticLiveService {
     return body;
   }
 
-  static List<M3uChannel> parseM3u(String body, {Uri? baseUri}) {
+  static List<M3uChannel> parseM3u(
+    String body, {
+    Uri? baseUri,
+    String sourceUrl = '',
+  }) {
     final lines = body.replaceAll('\r', '').split('\n');
     final result = <M3uChannel>[];
     Map<String, String>? pending;
@@ -866,6 +874,7 @@ class AutomaticLiveService {
         logo: data['tvg-logo'] ?? '',
         language: data['tvg-language'] ?? data['language'] ?? '',
         country: data['tvg-country'] ?? data['country'] ?? '',
+        sourceUrl: sourceUrl,
       ));
       pending = null;
       pendingName = '';
@@ -1027,15 +1036,15 @@ class AutomaticLiveService {
       // Solo se programa una fuente cuya lista de reproducción respondió
       // correctamente a la comprobación. No se asignan señales no verificadas.
       if (verifiedCandidates.isEmpty) continue;
-      // Entre las señales disponibles, se conserva una sola: la de mayor
-      // calidad anunciada y confirmada por la lista HLS.
+      // Se conserva la señal principal y hasta tres alternativas que también
+      // superaron la comprobación de disponibilidad del manifiesto o medio.
       verifiedCandidates.sort((a, b) {
         final language = b.languagePriority.compareTo(a.languagePriority);
         return language != 0
             ? language
             : b.qualityScore.compareTo(a.qualityScore);
       });
-      final sources = <ScheduledLiveSource>[verifiedCandidates.first];
+      final sources = verifiedCandidates.take(4).toList(growable: false);
       final programmeEnd = sources.map((s) => s.programmeEndsAt).reduce(
         (a, b) => a.isAfter(b) ? a : b,
       );
