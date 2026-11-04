@@ -314,11 +314,22 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
         return;
       }
 
+      // Publica inmediatamente los canales ya analizados. Así el usuario
+      // puede ver la lista aunque la posterior carga de EPG o de otras fuentes
+      // tenga un problema de red.
+      final importedCatalog = AutoLiveCatalog(
+        channels: channels,
+        programmes: const <XmltvProgramme>[],
+      );
+      final importedGroups = _groupChannels(channels);
       final discoveredEpg = _epgUrlsFromM3uHeader(text);
       var addedEpg = 0;
       setState(() {
         if (!_playlistTexts.contains(text)) _playlistTexts.add(text);
         _playlistText = '';
+        _catalog = importedCatalog;
+        _rawChannelCount = channels.length;
+        _mergedChannels = importedGroups;
         for (final url in discoveredEpg) {
           if (!_epgUrls.contains(url)) {
             _epgUrls.add(url);
