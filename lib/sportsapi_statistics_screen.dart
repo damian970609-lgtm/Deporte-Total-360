@@ -46,7 +46,6 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
   ];
 
   final SportsApiAppService _api = SportsApiAppService();
-  final AutomaticLiveService _live = AutomaticLiveService();
   String _sportId = 'football';
   List<Map<String, dynamic>> _catalog = <Map<String, dynamic>>[];
   List<SportsAgendaEvent> _events = <SportsAgendaEvent>[];
@@ -85,20 +84,17 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     try {
       final results = await Future.wait<dynamic>(<Future<dynamic>>[
         _api.fetchFavoriteSports(),
-        _live.fetchPublishedSchedule(),
+        _api.fetchFavoriteAgendaEvents(),
       ]);
       final catalog = results[0] as List<Map<String, dynamic>>;
-      final published = results[1] as List<ScheduledLiveEvent>?;
-      final events = published
-          ?.map((item) => item.event)
-          .toList(growable: false) ?? <SportsAgendaEvent>[];
+      final events = results[1] as List<SportsAgendaEvent>;
       if (!mounted) return;
       setState(() {
         _catalog = catalog;
         _events = events;
         _loading = false;
-        if (published == null) {
-          _error = 'El Worker todavía no publica la agenda de SportsAPI. Comprueba el secreto SPORTAPI_API_KEY en Cloudflare.';
+        if (events.isEmpty) {
+          _error = 'SportsAPI no devolvió eventos para hoy. Comprueba la conexión, la fecha UTC y la cobertura de tus competiciones favoritas.';
         }
       });
     } catch (error) {
@@ -119,13 +115,10 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       _statsError = null;
     });
     try {
-      final published = await _live.fetchPublishedSchedule();
-      if (published == null) {
-        throw const FormatException('El servidor todavía no ha publicado la agenda diaria.');
-      }
+      final events = await _api.fetchFavoriteAgendaEvents();
       if (!mounted) return;
       setState(() {
-        _events = published.map((item) => item.event).toList(growable: false);
+        _events = events;
         _loading = false;
       });
     } catch (error) {
