@@ -1643,7 +1643,7 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
       if (!mounted) return;
       final next = updated
           .where((source) => isSupportedAuthorizedMediaUrl(source.url))
-          .take(4)
+          .take(8)
           .toList(growable: false);
       setState(() => _sources = next);
     } catch (_) {
@@ -1663,7 +1663,7 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
   Widget build(BuildContext context) {
     final safeSources = _sources
         .where((source) => isSupportedAuthorizedMediaUrl(source.url))
-        .take(4)
+        .take(8)
         .toList(growable: false);
     final columns = safeSources.length <= 1 ? 1 : 2;
     return Scaffold(
@@ -1673,7 +1673,7 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
         title: Text(
           safeSources.length == 1
               ? 'REPRODUCTOR EN VIVO'
-              : 'MULTIVISTA · ${safeSources.length}/4 EVENTOS',
+              : 'MULTIVISTA · ${safeSources.length}/8 EVENTOS',
           style: const TextStyle(
             color: _liveCyan,
             fontSize: 13,
