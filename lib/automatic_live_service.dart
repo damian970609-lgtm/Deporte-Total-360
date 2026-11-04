@@ -1100,21 +1100,287 @@ class AutomaticLiveService {
     if (programme.isEmpty) return false;
     final home = normalizeText(event.homeTeam);
     final away = normalizeText(event.awayTeam);
+    final sport = normalizeText(event.sport);
+    final competition = normalizeText(event.competition);
+
+    // Los eventos UFC suelen anunciarse por el nombre del evento, no por los
+    // dos luchadores. La competición es una señal fiable para esa disciplina.
+    if (sport == 'mma' && competition.isNotEmpty &&
+        programme.contains(competition)) {
+      return true;
+    }
+
     if (home.isNotEmpty && away.isNotEmpty) {
       return _teamMatchesProgramme(home, programme) &&
           _teamMatchesProgramme(away, programme);
     }
+
+    // En ciclismo y motor la API devuelve carreras, etapas y grandes premios,
+    // no dos equipos. Se cotejan tokens distintivos del evento y su serie.
     const ignored = <String>{
       'contra', 'versus', 'partido', 'futbol', 'football', 'basket',
       'liga', 'copa', 'final', 'directo', 'vivo', 'match', 'evento',
-      'hoy', 'club', 'the',
+      'hoy', 'club', 'the', 'de', 'del', 'la', 'el', 'and', 'the',
+      'cycling', 'motorsport', 'race', 'stage', 'etapa', 'grand',
+      'prix', 'gp', 'formula', 'moto', 'tour', 'women', 'men',
+      'championship', 'series',
     };
-    final tokens = normalizeText(event.title)
+    final tokens = normalizeText('${event.title} ${event.competition}')
         .split(' ')
-        .where((token) => token.length >= 4 && !ignored.contains(token))
+        .where((token) => token.length >= 4 && !ignored.contains(token) &&
+            !RegExp(r'^\\d+
+
+  Future<bool> _probeMediaBytes(Uri uri) async {
+    try {
+      final request = http.Request('GET', uri)
+        ..headers['Range'] = 'bytes=0-2047'
+        ..headers['Accept'] = '*/*';
+      final response = await _client.send(request)
+          .timeout(const Duration(seconds: 7));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        await response.stream.drain<void>();
+        return false;
+      }
+      var received = 0;
+      await for (final chunk in response.stream.timeout(const Duration(seconds: 7))) {
+        received += chunk.length;
+        if (received >= 2048) break;
+      }
+      return received > 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<({bool available, int quality})> _probeHls(
+    Uri uri, {
+    int depth = 0,
+  }) async {
+    if (depth > 2) return (available: false, quality: 0);
+    try {
+      final response = await _client.get(
+        uri,
+        headers: const <String, String>{
+          'Accept': 'application/vnd.apple.mpegurl,*/*',
+          'Range': 'bytes=0-1048575',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200 && response.statusCode != 206) {
+        return (available: false, quality: 0);
+      }
+      final body = utf8.decode(
+        response.bodyBytes.take(1024 * 1024).toList(),
+        allowMalformed: true,
+      );
+      if (!body.trimLeft().startsWith('#EXTM3U')) {
+        return (available: false, quality: 0);
+      }
+
+      final resolutions = RegExp(r'RESOLUTION=\d+x(\d+)')
+          .allMatches(body)
+          .map((match) => int.tryParse(match.group(1) ?? '') ?? 0);
+      final maxHeight = resolutions.isEmpty ? 0 : resolutions.reduce(
+        (a, b) => a > b ? a : b,
+      );
+      final bandwidths = RegExp(r'BANDWIDTH=(\d+)')
+          .allMatches(body)
+          .map((match) => int.tryParse(match.group(1) ?? '') ?? 0);
+      final maxBandwidth = bandwidths.isEmpty ? 0 : bandwidths.reduce(
+        (a, b) => a > b ? a : b,
+      );
+      final quality = maxHeight >= 2160 || maxBandwidth >= 12000000 ? 500 :
+          maxHeight >= 1080 || maxBandwidth >= 6000000 ? 400 :
+          maxHeight >= 720 || maxBandwidth >= 3000000 ? 300 :
+          maxHeight >= 480 || maxBandwidth >= 1200000 ? 200 : 50;
+
+      final lines = body.replaceAll('\r', '').split('\n');
+      final variants = <({int bandwidth, String url})>[];
+      for (var index = 0; index < lines.length - 1; index++) {
+        final line = lines[index].trim();
+        if (!line.startsWith('#EXT-X-STREAM-INF:')) continue;
+        var next = index + 1;
+        while (next < lines.length && lines[next].trim().isEmpty) {
+          next++;
+        }
+        if (next >= lines.length || lines[next].trim().startsWith('#')) continue;
+        final match = RegExp(r'BANDWIDTH=(\d+)').firstMatch(line);
+        variants.add((
+          bandwidth: int.tryParse(match?.group(1) ?? '') ?? 0,
+          url: lines[next].trim(),
+        ));
+      }
+      if (variants.isNotEmpty) {
+        variants.sort((a, b) => b.bandwidth.compareTo(a.bandwidth));
+        for (final variant in variants.take(3)) {
+          final nested = await _probeHls(uri.resolve(variant.url), depth: depth + 1);
+          if (nested.available) {
+            return (available: true, quality: quality > nested.quality ? quality : nested.quality);
+          }
+        }
+        return (available: false, quality: quality);
+      }
+
+      String? segment;
+      for (final raw in lines) {
+        final line = raw.trim();
+        if (line.isEmpty || line.startsWith('#')) continue;
+        segment = line;
+        break;
+      }
+      segment ??= RegExp(r'URI="([^"]+)"')
+          .firstMatch(body)
+          ?.group(1);
+      if (segment == null) return (available: false, quality: quality);
+
+      final segmentAvailable = await _probeMediaBytes(uri.resolve(segment));
+      return (available: segmentAvailable, quality: quality);
+    } catch (_) {
+      return (available: false, quality: 0);
+    }
+  }
+
+
+  Future<bool> _probeDashManifest(Uri uri) async {
+    try {
+      final response = await _client.get(
+        uri,
+        headers: const <String, String>{
+          'Accept': 'application/dash+xml,application/xml,text/xml,*/*',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return false;
+      }
+      final bytes = response.bodyBytes.take(1024 * 1024).toList();
+      final body = utf8.decode(bytes, allowMalformed: true);
+      final document = XmlDocument.parse(body);
+      if (document.rootElement.name.local.toLowerCase() != 'mpd') {
+        return false;
+      }
+      return document.findAllElements('Period').any(
+        (period) => period.findElements('AdaptationSet').isNotEmpty,
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _probeSmoothStreamingManifest(Uri uri) async {
+    try {
+      final response = await _client.get(
+        uri,
+        headers: const <String, String>{
+          'Accept': 'application/vnd.ms-sstr+xml,application/xml,*/*',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return false;
+      }
+      final body = utf8.decode(
+        response.bodyBytes.take(1024 * 1024).toList(),
+        allowMalformed: true,
+      );
+      final document = XmlDocument.parse(body);
+      return document.rootElement.name.local.toLowerCase() ==
+          'smoothstreamingmedia';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<ScheduledLiveSource> _probeCandidate(
+    ScheduledLiveSource source,
+  ) async {
+    final cached = _probeCache[source.url];
+    final now = DateTime.now();
+    if (cached != null &&
+        now.difference(cached.checkedAt) < const Duration(seconds: 75)) {
+      return ScheduledLiveSource(
+        channelName: source.channelName,
+        url: source.url,
+        programmeTitle: source.programmeTitle,
+        programmeEndsAt: source.programmeEndsAt,
+        qualityScore: source.qualityScore + cached.quality,
+        languagePriority: source.languagePriority,
+        available: cached.available,
+      );
+    }
+
+    var available = false;
+    var extraQuality = 0;
+    try {
+      final uri = Uri.parse(source.url);
+      switch (liveMediaFormatForUrl(source.url)) {
+        case LiveMediaFormat.hls:
+          final probe = await _probeHls(uri);
+          available = probe.available;
+          extraQuality = probe.quality;
+        case LiveMediaFormat.dash:
+          available = await _probeDashManifest(uri);
+        case LiveMediaFormat.smoothStreaming:
+          available = await _probeSmoothStreamingManifest(uri);
+        case LiveMediaFormat.progressive:
+          // Incluye MP4 y MPEG-TS directo. En HLS, los segmentos .ts
+          // se entregan al motor a través del manifiesto .m3u8.
+          available = await _probeMediaBytes(uri);
+        case null:
+          available = false;
+      }
+    } catch (_) {
+      available = false;
+    }
+    _probeCache[source.url] = (
+      available: available,
+      quality: extraQuality,
+      checkedAt: now,
+    );
+    return ScheduledLiveSource(
+      channelName: source.channelName,
+      url: source.url,
+      programmeTitle: source.programmeTitle,
+      programmeEndsAt: source.programmeEndsAt,
+      qualityScore: source.qualityScore + extraQuality,
+      languagePriority: source.languagePriority,
+      available: available,
+    );
+  }
+
+  static int _qualityScore(M3uChannel channel) {
+    final metadata = normalizeText(
+      '${channel.name} ${channel.tvgName} ${channel.group} ${channel.logo}',
+    );
+    final url = channel.url.toLowerCase();
+    if (RegExp(r'4k|uhd|2160p?').hasMatch(metadata) || url.contains('2160')) return 500;
+    if (RegExp(r'1080p?|full hd|fhd').hasMatch(metadata) || url.contains('1080')) return 400;
+    if (RegExp(r'720p?|hd').hasMatch(metadata) || url.contains('720')) return 300;
+    if (RegExp(r'576p?|480p?|sd').hasMatch(metadata) || url.contains('480')) return 200;
+    return 100;
+  }
+
+  static String normalizeText(String value) {
+    var text = value.toLowerCase();
+    const replacements = <String, String>{
+      'á':'a','é':'e','í':'i','ó':'o','ú':'u','ü':'u','ñ':'n',
+      'à':'a','è':'e','ì':'i','ò':'o','ù':'u',
+    };
+    replacements.forEach((from, to) => text = text.replaceAll(from, to));
+    return text.replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .trim().replaceAll(RegExp(r'\s+'), ' ');
+  }
+}
+
+class HttpException implements Exception {
+  const HttpException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+).hasMatch(token))
         .toSet();
-    if (tokens.length < 2) return false;
-    return tokens.where((token) => programme.contains(token)).length >= 2;
+    if (tokens.isEmpty) return false;
+    final matched = tokens.where((token) => programme.contains(token)).length;
+    final required = tokens.length == 1 ? 1 : (tokens.length * 0.5).ceil();
+    return matched >= required;
   }
 
   Future<bool> _probeMediaBytes(Uri uri) async {
