@@ -11,6 +11,10 @@ import 'live_media_format.dart';
 const String _playlistUrlKey = 'dt360_auto_live_playlist_url_v1';
 const String _epgUrlKey = 'dt360_auto_live_epg_url_v1';
 const String _authorizedKey = 'dt360_auto_live_authorized_v1';
+const String _additionalPlaylistUrlsKey =
+    'dt360_auto_live_additional_playlist_urls_v1';
+const String _additionalEpgUrlsKey =
+    'dt360_auto_live_additional_epg_urls_v1';
 
 /// Normaliza imágenes absolutas seguras de SportsAPI y de los equipos.
 /// Las rutas relativas se descartan: nunca se resuelven contra un sitio externo.
@@ -112,6 +116,16 @@ bool isSafeHttpUrl(String value) {
 bool isDirectPlayableStream(String value) =>
     liveMediaFormatForUrl(value) != null;
 
+class AutoLiveAdditionalSources {
+  const AutoLiveAdditionalSources({
+    this.playlistUrls = const <String>[],
+    this.epgUrls = const <String>[],
+  });
+
+  final List<String> playlistUrls;
+  final List<String> epgUrls;
+}
+
 class AutoLiveSettings {
   const AutoLiveSettings({
     required this.playlistUrl,
@@ -161,11 +175,78 @@ class AutoLiveSettings {
       await prefs.setString(_epgUrlKey, epg);
     }
 
+    // Las fuentes añadidas desde el menú secreto se fusionan con las originales.
+    final additional = await loadAdditionalSources();
+    playlist = <String>{..._splitPlaylistUrls(playlist), ...additional.playlistUrls}.join('\\n');
+    epg = <String>{..._splitPlaylistUrls(epg), ...additional.epgUrls}.join('\\n');
+
     return AutoLiveSettings(
       playlistUrl: playlist,
       epgUrl: epg,
       authorizationConfirmed: true,
     );
+  }
+
+  /// Recupera las fuentes adicionales guardadas en este dispositivo.
+  static Future<AutoLiveAdditionalSources> loadAdditionalSources() async {
+    final prefs = await SharedPreferences.getInstance();
+    final playlists = _splitPlaylistUrls(
+      prefs.getString(_additionalPlaylistUrlsKey) ?? '',
+    ).where(isSafeHttpUrl).toList(growable: false);
+    final epgs = _splitPlaylistUrls(
+      prefs.getString(_additionalEpgUrlsKey) ?? '',
+    ).where(isSafeHttpUrl).toList(growable: false);
+    return AutoLiveAdditionalSources(
+      playlistUrls: playlists,
+      epgUrls: epgs,
+    );
+  }
+
+  /// Añade enlaces propios/autorizados y evita duplicados. Se admiten varias
+  /// direcciones separadas por líneas o punto y coma.
+  static Future<AutoLiveAdditionalSources> addAdditionalSources({
+    String playlistUrl = '',
+    String epgUrl = '',
+  }) async {
+    final newPlaylists = _splitPlaylistUrls(playlistUrl);
+    final newEpgs = _splitPlaylistUrls(epgUrl);
+    if (newPlaylists.isEmpty && newEpgs.isEmpty) {
+      throw const FormatException('Añade al menos una dirección M3U o EPG.');
+    }
+    if (!newPlaylists.every(isSafeHttpUrl)) {
+      throw const FormatException('Cada lista M3U debe tener una dirección HTTP o HTTPS válida.');
+    }
+    if (!newEpgs.every(isSafeHttpUrl)) {
+      throw const FormatException('Cada guía EPG debe tener una dirección HTTP o HTTPS válida.');
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final current = await loadAdditionalSources();
+    final mergedPlaylists = <String>{
+      ...current.playlistUrls,
+      ...newPlaylists,
+    };
+    final mergedEpgs = <String>{
+      ...current.epgUrls,
+      ...newEpgs,
+    };
+    await prefs.setString(
+      _additionalPlaylistUrlsKey,
+      mergedPlaylists.join('\n'),
+    );
+    await prefs.setString(
+      _additionalEpgUrlsKey,
+      mergedEpgs.join('\n'),
+    );
+    return loadAdditionalSources();
+  }
+
+  /// Elimina únicamente las fuentes añadidas manualmente. Las fuentes
+  /// automáticas originales permanecen intactas.
+  static Future<void> clearAdditionalSources() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_additionalPlaylistUrlsKey);
+    await prefs.remove(_additionalEpgUrlsKey);
   }
 
   static Future<void> save({
@@ -503,6 +584,11 @@ class AutomaticLiveService {
   Future<AutoLiveCatalog> loadCatalog({
     required String playlistUrl, required String epgUrl,
     bool forceRefresh = false,
+    bool allowEmptyEpg = false,
+    int downloadBatchSize = 3,
+    Duration batchPause = Duration.zero,
+    int maxEpgBytes = 20 * 1024 * 1024,
+    void Function(String phase, int completed, int total)? onProgress,
   }) async {
     final playlistUrls = _splitPlaylistUrls(playlistUrl);
     final epgUrls = _splitPlaylistUrls(epgUrl);
@@ -525,8 +611,8 @@ class AutomaticLiveService {
     // Se descargan tres listas a la vez para limitar memoria y conexiones.
     // Una lista caída no bloquea el resto del catálogo.
     final channelsByUrl = <String, M3uChannel>{};
-    for (var batchStart = 0; batchStart < playlistUrls.length; batchStart += 3) {
-      final batch = playlistUrls.skip(batchStart).take(3).toList(growable: false);
+    for (var batchStart = 0; batchStart < playlistUrls.length; batchStart += effectiveBatchSize) {
+      final batch = playlistUrls.skip(batchStart).take(effectiveBatchSize).toList(growable: false);
       final playlistBodies = await Future.wait<String?>(
         batch.map((url) async {
           try {
@@ -550,6 +636,8 @@ class AutomaticLiveService {
           channelsByUrl.putIfAbsent(channel.url, () => channel);
         }
       }
+      onProgress?.call('M3U', batchStart + batch.length, playlistUrls.length);
+      if (batchPause > Duration.zero) await Future<void>.delayed(batchPause);
     }
     final channels = channelsByUrl.values.toList(growable: false);
     if (channels.isEmpty) {
@@ -562,14 +650,14 @@ class AutomaticLiveService {
     final programmesByKey = <String, XmltvProgramme>{};
     // Descarga por lotes pequeños: varias guías pueden responder a la vez, pero
     // nunca se abren todas las descargas grandes simultáneamente.
-    for (var batchStart = 0; batchStart < epgUrls.length; batchStart += 3) {
-      final batch = epgUrls.skip(batchStart).take(3).toList(growable: false);
+    for (var batchStart = 0; batchStart < epgUrls.length; batchStart += effectiveBatchSize) {
+      final batch = epgUrls.skip(batchStart).take(effectiveBatchSize).toList(growable: false);
       final bodies = await Future.wait<String?>(
         batch.map((url) async {
           try {
             return await _downloadText(
               url,
-              maxBytes: 20 * 1024 * 1024,
+              maxBytes: maxEpgBytes,
               timeout: const Duration(seconds: 12),
             );
           } catch (_) {
@@ -592,9 +680,11 @@ class AutomaticLiveService {
           // Una guía inválida no interrumpe las siguientes fuentes.
         }
       }
+      onProgress?.call('EPG', batchStart + batch.length, epgUrls.length);
+      if (batchPause > Duration.zero) await Future<void>.delayed(batchPause);
     }
     final programmes = programmesByKey.values.toList(growable: false);
-    if (programmes.isEmpty) {
+    if (programmes.isEmpty && !allowEmptyEpg) {
       throw const FormatException('Ninguna guía EPG/XMLTV respondió con programas legibles.');
     }
 
@@ -737,6 +827,63 @@ class AutomaticLiveService {
       ));
     }
     return result;
+  }
+
+  static String _m3uSingleLine(String value) =>
+      value.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+
+  static String _m3uAttribute(String value) =>
+      _m3uSingleLine(value).replaceAll('"', '%22');
+
+  /// Construye una lista única con todos los canales directos descargados por
+  /// el catálogo nativo. Las guías XMLTV se anuncian en ambas cabeceras M3U
+  /// habituales para que OTTFOX y otros editores puedan detectarlas.
+  static String buildOttfoxM3u(
+    AutoLiveCatalog catalog, {
+    List<String> epgUrls = const <String>[],
+  }) {
+    final guides = <String>{
+      for (final url in epgUrls)
+        if (isSafeHttpUrl(url)) url.trim(),
+    }.toList(growable: false);
+    final guideHeader = guides.isEmpty
+        ? ''
+        : ' url-tvg="${_m3uAttribute(guides.join(','))}"'
+          ' x-tvg-url="${_m3uAttribute(guides.join(','))}"';
+    final output = StringBuffer('#EXTM3U$guideHeader\n');
+    final seen = <String>{};
+
+    for (final channel in catalog.channels) {
+      if (!isDirectPlayableStream(channel.url) || !seen.add(channel.url)) {
+        continue;
+      }
+      final attributes = <String, String>{
+        if (channel.tvgId.trim().isNotEmpty) 'tvg-id': channel.tvgId,
+        if (channel.tvgName.trim().isNotEmpty) 'tvg-name': channel.tvgName,
+        if (channel.logo.trim().isNotEmpty) 'tvg-logo': channel.logo,
+        'group-title': channel.group.trim().isNotEmpty
+            ? channel.group
+            : 'Deportes',
+        if (channel.language.trim().isNotEmpty)
+          'tvg-language': channel.language,
+        if (channel.country.trim().isNotEmpty)
+          'tvg-country': channel.country,
+      };
+      final metadata = attributes.entries
+          .map((entry) =>
+              '${entry.key}="${_m3uAttribute(entry.value)}"')
+          .join(' ');
+      final name = _m3uSingleLine(channel.name);
+      output
+        ..write('#EXTINF:-1')
+        ..write(metadata.isEmpty ? '' : ' $metadata')
+        ..write(',')
+        ..write(name.isEmpty ? 'Canal deportivo' : name)
+        ..write('\n')
+        ..write(channel.url.trim())
+        ..write('\n');
+    }
+    return output.toString();
   }
 
   static DateTime? parseXmltvDate(String? value) {
