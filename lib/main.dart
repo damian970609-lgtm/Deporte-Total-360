@@ -1893,9 +1893,9 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
               onTap: () => _open(const IptvTestPlayerScreen()),
             ),
             _actionCard(
-              title: '3 · SINCRONIZAR CON OTTFOX',
-              subtitle: 'Enviar el catálogo combinado de listas y guías al editor',
-              detail: 'Prepara la M3U unificada con referencias EPG y muestra el avance de importación dentro de la APK.',
+              title: '3 · EDITAR / PREPARAR EN OTTFOX',
+              subtitle: 'Preparar el catálogo M3U y sus referencias EPG',
+              detail: 'La APK descarga y combina las fuentes que hayas configurado y las entrega al editor local de OTTFOX; OTTFOX no aporta canales propios.',
               icon: Icons.sync_alt_rounded,
               accent: appPink,
               onTap: () => _open(const OttfoxWebScreen()),
@@ -1909,7 +1909,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                 border: Border.all(color: appLine),
               ),
               child: const Text(
-                'Compatibilidad: direcciones HTTP/HTTPS de listas M3U/M3U8 y guías XMLTV/EPG. Se admiten enlaces multimedia directos compatibles con el reproductor. Las páginas de reproductores web, DRM, credenciales privadas y restricciones del proveedor no se extraen ni se eluden.',
+                'Compatibilidad: direcciones HTTP/HTTPS de listas M3U/M3U8 y guías XMLTV/EPG. OTTFOX mantiene su biblioteca en el navegador y no proporciona un catálogo universal de canales. Las páginas de reproductores web, DRM, credenciales privadas y restricciones del proveedor no se extraen ni se eluden.',
                 style: TextStyle(color: appMuted, fontSize: 10, height: 1.45),
               ),
             ),
