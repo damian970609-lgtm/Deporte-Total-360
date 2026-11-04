@@ -571,6 +571,13 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
               subtitle: selected.group.isEmpty
                   ? 'Canal IPTV autorizado'
                   : selected.group,
+              fallbackUrls: entry.channels
+                  .where((channel) =>
+                      channel.url != selected.url &&
+                      isSupportedAuthorizedMediaUrl(channel.url))
+                  .take(3)
+                  .map((channel) => channel.url)
+                  .toList(growable: false),
             ),
           ],
         ),
