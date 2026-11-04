@@ -35,6 +35,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
   List<String> _playlistUrls = <String>[];
   List<String> _epgUrls = <String>[];
   List<_MergedM3uChannel> _mergedChannels = <_MergedM3uChannel>[];
+  final List<M3uChannel> _multiViewQueue = <M3uChannel>[];
   AutoLiveCatalog? _catalog;
   String _progressMessage = '';
   int _programmeCount = 0;
@@ -505,6 +506,75 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
     }
   }
 
+  String _programmeLabel(M3uChannel channel) {
+    final programmes = _catalog?.programmes;
+    if (programmes == null || programmes.isEmpty) return '';
+    final channelKeys = <String>{
+      AutomaticLiveService.normalizeText(channel.tvgId),
+      AutomaticLiveService.normalizeText(channel.tvgName),
+      AutomaticLiveService.normalizeText(channel.name),
+    }..removeWhere((value) => value.isEmpty);
+    final matching = programmes.where((programme) {
+      final id = AutomaticLiveService.normalizeText(programme.channelId);
+      final name = AutomaticLiveService.normalizeText(programme.channelName);
+      return channelKeys.contains(id) || (name.isNotEmpty && channelKeys.contains(name));
+    }).toList(growable: false)
+      ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+    if (matching.isEmpty) return '';
+    final now = DateTime.now();
+    XmltvProgramme? current;
+    XmltvProgramme? next;
+    for (final programme in matching) {
+      if (!now.isBefore(programme.startsAt) && now.isBefore(programme.endsAt)) {
+        current = programme;
+        break;
+      }
+      if (programme.startsAt.isAfter(now)) {
+        next = programme;
+        break;
+      }
+    }
+    String timeLabel(DateTime value) =>
+        '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+    if (current != null) return 'AHORA ${timeLabel(current.startsAt)} · ${current.title}';
+    if (next != null) return 'SIGUE ${timeLabel(next.startsAt)} · ${next.title}';
+    return '';
+  }
+
+  void _addToMultiview(M3uChannel channel) {
+    if (_multiViewQueue.any((item) => item.url == channel.url)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ese canal ya está en la multivista.')),
+      );
+      return;
+    }
+    if (_multiViewQueue.length >= 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('La multivista admite un máximo de ocho señales.')),
+      );
+      return;
+    }
+    setState(() => _multiViewQueue.add(channel));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${channel.name} añadido a multivista (${_multiViewQueue.length}/8).')),
+    );
+  }
+
+  Future<void> _playMultiView() async {
+    if (_multiViewQueue.isEmpty) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => LivePlayerGridScreen(
+          sources: _multiViewQueue.map((channel) => LivePlayerSource(
+            title: channel.name,
+            url: channel.url,
+            subtitle: channel.group.isEmpty ? 'Canal IPTV autorizado' : channel.group,
+          )).toList(growable: false),
+        ),
+      ),
+    );
+  }
+
   List<_MergedM3uChannel> get _filteredChannels {
     final query = AutomaticLiveService.normalizeText(_searchController.text);
     if (query.isEmpty) return _mergedChannels;
@@ -866,6 +936,44 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          'MULTIVISTA ${_multiViewQueue.length}/8',
+                          style: const TextStyle(
+                            color: _iptvGreen,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _multiViewQueue.isEmpty ? null : _playMultiView,
+                        icon: const Icon(Icons.grid_view_rounded, size: 17),
+                        label: const Text('REPRODUCIR SELECCIÓN'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _iptvGreen,
+                          side: const BorderSide(color: _iptvGreen),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_multiViewQueue.isNotEmpty)
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 3,
+                      children: _multiViewQueue.map((channel) => Chip(
+                        label: Text(
+                          channel.name,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                        onDeleted: () => setState(() => _multiViewQueue.remove(channel)),
+                        visualDensity: VisualDensity.compact,
+                      )).toList(growable: false),
+                    ),
                   const SizedBox(height: 8),
                   Text(
                     'CANALES (' + filtered.length.toString() + ')',
@@ -897,21 +1005,27 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                           ),
                         ),
                         subtitle: Text(
-                          (entry.primary.group.isEmpty
-                                  ? 'Deportes / TV'
-                                  : entry.primary.group) +
-                              ' · ' +
-                              entry.channels.length.toString() +
-                              ' fuente(s)',
-                          maxLines: 1,
+                          <String>[
+                            (entry.primary.group.isEmpty
+                                    ? 'Deportes / TV'
+                                    : entry.primary.group) +
+                                ' · ' +
+                                entry.channels.length.toString() +
+                                ' fuente(s)',
+                            if (_programmeLabel(entry.primary).isNotEmpty)
+                              _programmeLabel(entry.primary),
+                          ].join('\\n'),
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             color: _iptvMuted,
                             fontSize: 10,
                           ),
                         ),
-                        trailing: const Icon(
-                          Icons.chevron_right_rounded,
+                        trailing: IconButton(
+                          tooltip: 'Añadir a multivista',
+                          onPressed: () => _addToMultiview(entry.primary),
+                          icon: const Icon(Icons.add_to_photos_rounded),
                           color: _iptvGreen,
                         ),
                         onTap: () => _showAlternatives(entry),
