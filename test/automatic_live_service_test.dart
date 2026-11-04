@@ -280,9 +280,9 @@ void main() {
     test('añade las nuevas fuentes a los valores anteriores y conserva listas personalizadas', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'dt360_auto_live_playlist_url_v1':
-            previousDefaultAutoLivePlaylistUrls + '\\nhttps://user.example/custom.m3u',
+            previousDefaultAutoLivePlaylistUrls + '\nhttps://user.example/custom.m3u',
         'dt360_auto_live_epg_url_v1':
-            previousDefaultAutoLiveEpgUrl + '\\nhttps://user.example/custom.xml',
+            previousDefaultAutoLiveEpgUrl + '\nhttps://user.example/custom.xml',
         'dt360_auto_live_authorized_v1': true,
       });
 
