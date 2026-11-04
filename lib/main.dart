@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'app_i18n.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'automatic_live_screen.dart';
+import 'automatic_live_service.dart';
 
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
@@ -28,6 +30,7 @@ const Color appRed = Color(0xFFFF3155);
 const Color appMuted = Color(0xFFA9BDD6);
 
 const String contactUrl = 'https://wa.me/5927214741';
+const String ottfoxWebUrl = 'https://ottfox.net/es/?utm_source=chatgpt.com';
 const String settingsPhotoAsset =
     'assets/images/file_000000006048820e9e0720f1adf548f1.png';
 
@@ -1487,48 +1490,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 13),
             _settingsCard(
-              border: appBlue,
-              child: Material(
-                color: Colors.transparent,
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const CircleAvatar(
-                    backgroundColor: Color(0x332D8CFF),
-                    child: Icon(Icons.cloud_sync_rounded, color: appCyan),
-                  ),
-                  title: Text(
-                    appText(
-                      'Servidor de estadísticas',
-                      'Statistics server',
-                      'Servidor de estatísticas',
-                      'Serveur des statistiques',
-                    ),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
-                    ),
-                  ),
-                  subtitle: Text(
-                    appText(
-                      'Comprobar la conexión del servicio de estadísticas y configurar el Worker.',
-                      'Check the statistics service and configure the public Worker URL.',
-                      'Verifique a conexão do serviço de estatísticas e configure o Worker.',
-                      'Vérifier le service de statistiques et configurer le Worker.',
-                    ),
-                    style: const TextStyle(color: appMuted, fontSize: 11, height: 1.4),
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded, color: appCyan),
-                  onTap: () => Navigator.of(context).push<void>(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const DeveloperSettingsScreen(),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 13),
-            _settingsCard(
               border: appCyan,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1712,18 +1673,28 @@ class DeveloperSettingsScreen extends StatefulWidget {
 
 class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
   late final TextEditingController _apiUrlController;
+  late final TextEditingController _playlistSourcesController;
+  late final TextEditingController _epgSourcesController;
   bool _testing = false;
   bool _saving = false;
+  bool _savingIptvSources = false;
+  int _additionalPlaylistCount = 0;
+  int _additionalEpgCount = 0;
 
   @override
   void initState() {
     super.initState();
     _apiUrlController = TextEditingController(text: sportsApiBaseUrl.value);
+    _playlistSourcesController = TextEditingController();
+    _epgSourcesController = TextEditingController();
+    _loadAdditionalIptvSources();
   }
 
   @override
   void dispose() {
     _apiUrlController.dispose();
+    _playlistSourcesController.dispose();
+    _epgSourcesController.dispose();
     super.dispose();
   }
 
@@ -1784,13 +1755,101 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
     }
   }
 
+  Future<void> _loadAdditionalIptvSources() async {
+    try {
+      final sources = await AutoLiveSettings.loadAdditionalSources();
+      if (!mounted) return;
+      setState(() {
+        _additionalPlaylistCount = sources.playlistUrls.length;
+        _additionalEpgCount = sources.epgUrls.length;
+      });
+    } catch (_) {
+      // La pantalla de administración sigue disponible si falla el almacenamiento.
+    }
+  }
+
+  Future<void> _addAdditionalIptvSources() async {
+    final playlistUrls = _playlistSourcesController.text.trim();
+    final epgUrls = _epgSourcesController.text.trim();
+    if (playlistUrls.isEmpty && epgUrls.isEmpty) {
+      _showMessage('Escribe al menos una URL M3U/M3U8 o XMLTV/EPG.');
+      return;
+    }
+    setState(() => _savingIptvSources = true);
+    try {
+      final sources = await AutoLiveSettings.addAdditionalSources(
+        playlistUrl: playlistUrls,
+        epgUrl: epgUrls,
+      );
+      if (!mounted) return;
+      _playlistSourcesController.clear();
+      _epgSourcesController.clear();
+      setState(() {
+        _additionalPlaylistCount = sources.playlistUrls.length;
+        _additionalEpgCount = sources.epgUrls.length;
+      });
+      _showMessage(
+        'Fuentes guardadas: ${sources.playlistUrls.length} listas y '
+        '${sources.epgUrls.length} guías. Se suman a los catálogos automáticos.',
+      );
+    } catch (error) {
+      _showMessage(error.toString().replaceFirst('FormatException: ', ''));
+    } finally {
+      if (mounted) setState(() => _savingIptvSources = false);
+    }
+  }
+
+  Future<void> _clearAdditionalIptvSources() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: appPanel,
+        title: const Text(
+          'Eliminar fuentes añadidas',
+          style: TextStyle(color: appCyan, fontWeight: FontWeight.w900),
+        ),
+        content: const Text(
+          'Se quitarán únicamente las URLs M3U y EPG añadidas aquí. '
+          'Las fuentes automáticas originales seguirán activas.',
+          style: TextStyle(color: appMuted, height: 1.4),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: appPink,
+              foregroundColor: appBg,
+            ),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await AutoLiveSettings.clearAdditionalSources();
+      if (!mounted) return;
+      setState(() {
+        _additionalPlaylistCount = 0;
+        _additionalEpgCount = 0;
+      });
+      _showMessage('Se eliminaron las fuentes adicionales. Las fuentes originales siguen activas.');
+    } catch (error) {
+      _showMessage('No se pudieron eliminar las fuentes: $error');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: appBg,
       appBar: AppBar(
         title: Text(
-          appText('SERVIDOR Y DATOS DEPORTIVOS', 'SPORTS DATA SERVER', 'SERVIDOR E DADOS ESPORTIVOS', 'SERVEUR ET DONNÉES SPORTIVES'),
+          appText('MENÚ SECRETO', 'SPORTS DATA SERVER', 'SERVIDOR E DADOS ESPORTIVOS', 'SERVEUR ET DONNÉES SPORTIVES'),
           style: TextStyle(
             color: appCyan,
             fontWeight: FontWeight.w900,
@@ -1897,6 +1956,150 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
               decoration: BoxDecoration(
                 color: appPanel,
                 borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: appCyan.withAlpha(180)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Row(
+                    children: <Widget>[
+                      Icon(Icons.playlist_add_check_circle_rounded, color: appCyan),
+                      SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          'OTTFOX · EDITOR IPTV Y EPG',
+                          style: TextStyle(
+                            color: appCyan,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Abre OTTFOX dentro de Deporte Total 360° para importar, ordenar y convertir tus propias listas y guías.',
+                    style: TextStyle(color: appMuted, height: 1.45, fontSize: 11),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).push<void>(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const OttfoxWebScreen(),
+                        ),
+                      ),
+                      icon: const Icon(Icons.open_in_browser_rounded),
+                      label: const Text('ABRIR OTTFOX EN LA APK'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: appCyan,
+                        side: const BorderSide(color: appCyan),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 17),
+                  const Divider(color: appLine),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'AÑADIR FUENTES AL BUSCADOR AUTOMÁTICO',
+                    style: TextStyle(
+                      color: appGreen,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Pega enlaces directos de tus listas M3U/M3U8. Puedes añadir varias URLs, una por línea.',
+                    style: TextStyle(color: appMuted, height: 1.4, fontSize: 11),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _playlistSourcesController,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    minLines: 1,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'URLs de listas M3U / M3U8',
+                      hintText: 'https://proveedor.example/deportes.m3u',
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Añade también las direcciones directas de tus guías XMLTV/EPG.',
+                    style: TextStyle(color: appMuted, height: 1.4, fontSize: 11),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _epgSourcesController,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    minLines: 1,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'URLs de EPG / XMLTV',
+                      hintText: 'https://proveedor.example/guia.xml.gz',
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  const SizedBox(height: 11),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _savingIptvSources ? null : _addAdditionalIptvSources,
+                      icon: _savingIptvSources
+                          ? const SizedBox(
+                              width: 17,
+                              height: 17,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.add_link_rounded),
+                      label: Text(
+                        _savingIptvSources ? 'GUARDANDO…' : 'AÑADIR LISTAS Y EPG',
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: appGreen,
+                        foregroundColor: appBg,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    'Fuentes adicionales guardadas: $_additionalPlaylistCount listas · $_additionalEpgCount guías',
+                    style: const TextStyle(color: appMuted, fontSize: 10),
+                  ),
+                  if (_additionalPlaylistCount > 0 || _additionalEpgCount > 0)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: _clearAdditionalIptvSources,
+                        icon: const Icon(Icons.delete_outline_rounded, size: 17),
+                        label: const Text('Quitar fuentes añadidas'),
+                        style: TextButton.styleFrom(foregroundColor: appPink),
+                      ),
+                    ),
+                  const SizedBox(height: 5),
+                  const Text(
+                    'Importante: OTTFOX no proporciona canales ni EPG; funciona como editor/conversor y guarda su biblioteca en el navegador. Para que la APK use una lista, añade aquí la URL directa de una fuente propia o autorizada. Las fuentes automáticas originales no se reemplazan.',
+                    style: TextStyle(color: appMuted, fontSize: 10, height: 1.45),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: appPanel,
+                borderRadius: BorderRadius.circular(15),
                 border: Border.all(color: appPink.withAlpha(180)),
               ),
               child: Column(
@@ -1927,12 +2130,174 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                 border: Border.all(color: appGreen.withAlpha(150)),
               ),
               child: Text(
-                appText('SEGURIDAD: la clave APISPORTS_KEY permanece como secreto del Worker en Cloudflare. La aplicación guarda solo la URL pública. El acceso directo desde Ajustes y el atajo de diez toques abren esta misma pantalla; ninguno sustituye autenticación real.', 'SECURITY: APISPORTS_KEY remains a Cloudflare Worker secret. The app stores only the public URL. The Settings shortcut and the ten-tap shortcut open this same screen; neither replaces real authentication.', 'SEGURANÇA: APISPORTS_KEY permanece como segredo do Worker no Cloudflare. O app salva apenas a URL pública. O atalho em Configurações e o atalho de dez toques abrem esta mesma tela; nenhum substitui autenticação real.', 'SÉCURITÉ : APISPORTS_KEY reste un secret du Worker Cloudflare. L’application ne conserve que l’URL publique. Le raccourci des paramètres et celui de dix pressions ouvrent le même écran ; aucun ne remplace une véritable authentification.'),
+                appText('SEGURIDAD: la clave APISPORTS_KEY permanece como secreto del Worker en Cloudflare. La aplicación guarda solo la URL pública. El menú secreto se abre con diez toques sobre DAMIAN.APK; este atajo no sustituye autenticación real.', 'SECURITY: APISPORTS_KEY remains a Cloudflare Worker secret. The app stores only the public URL. The secret menu opens after ten taps on DAMIAN.APK; this shortcut does not replace real authentication.', 'SEGURANÇA: APISPORTS_KEY permanece como segredo do Worker no Cloudflare. O app salva apenas a URL pública. O atalho em Configurações e o atalho de dez toques abrem esta mesma tela; nenhum substitui autenticação real.', 'SÉCURITÉ : APISPORTS_KEY reste un secret du Worker Cloudflare. L’application ne conserve que l’URL publique. Le menu secret s’ouvre après dix pressions sur DAMIAN.APK ; ce raccourci ne remplace pas une véritable authentification.'),
                 style: TextStyle(color: appMuted, fontSize: 11, height: 1.5),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class OttfoxWebScreen extends StatefulWidget {
+  const OttfoxWebScreen({super.key});
+
+  @override
+  State<OttfoxWebScreen> createState() => _OttfoxWebScreenState();
+}
+
+class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
+  InAppWebViewController? _controller;
+  bool _loading = true;
+  int _progress = 0;
+  String? _error;
+
+  Future<void> _reload() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+      _progress = 0;
+    });
+    await _controller?.reload();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: appBg,
+      appBar: AppBar(
+        title: const Text(
+          'OTTFOX · IPTV / EPG',
+          style: TextStyle(
+            color: appCyan,
+            fontWeight: FontWeight.w900,
+            fontSize: 13,
+          ),
+        ),
+        actions: <Widget>[
+          IconButton(
+            tooltip: 'Recargar OTTFOX',
+            onPressed: _reload,
+            icon: const Icon(Icons.refresh_rounded, color: appCyan),
+          ),
+        ],
+      ),
+      body: Column(
+        children: <Widget>[
+          if (_loading)
+            LinearProgressIndicator(
+              value: _progress == 0 ? null : _progress / 100,
+              minHeight: 2,
+              backgroundColor: appPanel,
+              color: appCyan,
+            ),
+          Expanded(
+            child: _error != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(22),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          const Icon(Icons.wifi_off_rounded, color: appPink, size: 42),
+                          const SizedBox(height: 10),
+                          const Text(
+                            'OTTFOX NO ESTÁ DISPONIBLE',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _error!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: appMuted, height: 1.4),
+                          ),
+                          const SizedBox(height: 12),
+                          FilledButton.icon(
+                            onPressed: _reload,
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: const Text('REINTENTAR'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : InAppWebView(
+                    initialUrlRequest: URLRequest(url: WebUri(ottfoxWebUrl)),
+                    initialSettings: InAppWebViewSettings(
+                      javaScriptEnabled: true,
+                      domStorageEnabled: true,
+                      databaseEnabled: true,
+                      thirdPartyCookiesEnabled: true,
+                      useShouldOverrideUrlLoading: true,
+                      supportMultipleWindows: true,
+                      javaScriptCanOpenWindowsAutomatically: true,
+                      mediaPlaybackRequiresUserGesture: true,
+                      allowsInlineMediaPlayback: true,
+                      safeBrowsingEnabled: true,
+                      allowFileAccess: false,
+                      allowContentAccess: true,
+                      loadsImagesAutomatically: true,
+                      cacheEnabled: true,
+                    ),
+                    onWebViewCreated: (controller) {
+                      _controller = controller;
+                    },
+                    onLoadStart: (controller, url) {
+                      if (!mounted) return;
+                      setState(() {
+                        _loading = true;
+                        _error = null;
+                        _progress = 0;
+                      });
+                    },
+                    onProgressChanged: (controller, progress) {
+                      if (!mounted) return;
+                      setState(() {
+                        _progress = progress;
+                        _loading = progress < 100;
+                      });
+                    },
+                    onLoadStop: (controller, url) {
+                      if (!mounted) return;
+                      setState(() {
+                        _loading = false;
+                        _progress = 100;
+                      });
+                    },
+                    shouldOverrideUrlLoading: (controller, action) async {
+                      final uri = action.request.url;
+                      if (uri == null) return NavigationActionPolicy.ALLOW;
+                      if (uri.scheme == 'https' || uri.scheme == 'http') {
+                        return NavigationActionPolicy.ALLOW;
+                      }
+                      return NavigationActionPolicy.CANCEL;
+                    },
+                    onReceivedError: (controller, request, error) {
+                      if (!(request.isForMainFrame ?? true) || !mounted) return;
+                      setState(() {
+                        _loading = false;
+                        _error = 'No se pudo cargar OTTFOX. Comprueba tu conexión e inténtalo de nuevo. Código: ${error.type}';
+                      });
+                    },
+                  ),
+          ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
+            color: const Color(0xFF020B19),
+            child: const Text(
+              'Las listas y la EPG que importes en OTTFOX permanecen en su biblioteca del navegador. '
+              'Para que el buscador de la APK las consulte, añade sus URLs directas en el menú secreto.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: appMuted, fontSize: 10, height: 1.4),
+            ),
+          ),
+        ],
       ),
     );
   }
