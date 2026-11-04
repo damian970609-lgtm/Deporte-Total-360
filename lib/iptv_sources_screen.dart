@@ -19,6 +19,8 @@ const Color _iptvMuted = Color(0xFFA9BDD6);
 const String _manualPlaylistUrlsKey = 'dt360_secret_iptv_playlist_urls_v1';
 const String _manualPlaylistTextsKey = 'dt360_secret_iptv_playlist_texts_v1';
 const String _manualEpgUrlsKey = 'dt360_secret_iptv_epg_urls_v1';
+const String _manualFavoriteUrlsKey = 'dt360_secret_iptv_favorite_urls_v1';
+const String _sharedFavoriteUrlsKey = 'dt360_iptv_favorite_urls_v1';
 
 class IptvSourcesScreen extends StatefulWidget {
   const IptvSourcesScreen({super.key, this.manualOnly = false});
@@ -47,7 +49,10 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
   String _playlistText = '';
   List<String> _playlistTexts = <String>[];
   List<_MergedM3uChannel> _mergedChannels = <_MergedM3uChannel>[];
+  final Set<String> _favoriteUrls = <String>{};
   final List<M3uChannel> _multiViewQueue = <M3uChannel>[];
+  bool _showFavoritesOnly = false;
+  bool _showAllChannels = false;
   AutoLiveCatalog? _catalog;
   Map<String, List<XmltvProgramme>> _epgIndex = <String, List<XmltvProgramme>>{};
   String _progressMessage = '';
@@ -85,13 +90,21 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
               .where(isSafeHttpUrl)
               .toList(growable: true);
           _playlistTexts = prefs.getStringList(_manualPlaylistTextsKey) ?? <String>[];
+          _favoriteUrls
+            ..clear()
+            ..addAll(prefs.getStringList(_manualFavoriteUrlsKey) ?? <String>[]);
           _playlistText = '';
           _loading = false;
         });
       } else {
         final settings = await AutoLiveSettings.load();
         if (!mounted) return;
+        final prefs = await SharedPreferences.getInstance();
+        if (!mounted) return;
         setState(() {
+          _favoriteUrls
+            ..clear()
+            ..addAll(prefs.getStringList(_sharedFavoriteUrlsKey) ?? <String>[]);
           _playlistUrls = List<String>.of(settings.playlistUrls);
           _epgUrls = List<String>.of(settings.epgUrls);
           _playlistText = '';
@@ -121,7 +134,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
       } else {
         await AutoLiveSettings.save(
           playlistUrl: _playlistUrls.join('\n'),
-          epgUrl: _epgUrls.join('\\n'),
+          epgUrl: _epgUrls.join('\n'),
           authorizationConfirmed: true,
           playlistText: _playlistText,
           playlistTexts: _playlistTexts,
@@ -847,10 +860,59 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
     );
   }
 
+  bool _isFavorite(M3uChannel channel) => _favoriteUrls.contains(channel.url);
+
+  Future<void> _toggleFavorite(M3uChannel channel) async {
+    final isRemoving = !_favoriteUrls.add(channel.url);
+    if (isRemoving) _favoriteUrls.remove(channel.url);
+    if (mounted) setState(() {});
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(
+        widget.manualOnly ? _manualFavoriteUrlsKey : _sharedFavoriteUrlsKey,
+        _favoriteUrls.toList(growable: false),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isRemoving
+                ? '${channel.name} eliminado de favoritos.'
+                : '${channel.name} agregado a favoritos.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo guardar el favorito: $error')),
+      );
+    }
+  }
+
+  Future<void> _copyChannelUrl(M3uChannel channel) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: channel.url));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('URL de ${channel.name} copiada.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo copiar la URL: $error')),
+      );
+    }
+  }
+
   List<_MergedM3uChannel> get _filteredChannels {
     final query = AutomaticLiveService.normalizeText(_searchController.text);
-    if (query.isEmpty) return _mergedChannels;
     return _mergedChannels.where((entry) {
+      if (_showFavoritesOnly &&
+          !entry.channels.any((channel) => _favoriteUrls.contains(channel.url))) {
+        return false;
+      }
+      if (query.isEmpty) return true;
       final channel = entry.primary;
       return AutomaticLiveService.normalizeText(
         channel.name + ' ' + channel.tvgName + ' ' +
