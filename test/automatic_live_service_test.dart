@@ -72,6 +72,29 @@ void main() {
   });
 
 
+
+  group('origen de listas IPTV', () {
+    test('conserva la URL de la lista que proporcionó cada canal', () {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.one" group-title="Deportes",Canal deportivo
+https://media.example/live.m3u8
+''';
+      final channels = AutomaticLiveService.parseM3u(
+        playlist,
+        baseUri: Uri.parse('https://lists.example/sports/main.m3u'),
+        sourceUrl: 'https://lists.example/sports/main.m3u',
+      );
+
+      expect(channels, hasLength(1));
+      expect(channels.single.name, 'Canal deportivo');
+      expect(
+        channels.single.sourceUrl,
+        'https://lists.example/sports/main.m3u',
+      );
+    });
+  });
+
   group('tablero de ocho canales de transmisiones', () {
     testWidgets('mantiene ocho canales numerados y permite desplazarse', (tester) async {
       await tester.binding.setSurfaceSize(const Size(430, 620));
@@ -202,6 +225,26 @@ void main() {
       expect(settings.epgUrls, hasLength(20));
       expect(settings.playlistUrls, isNot(contains('https://custom.example/extra.m3u')));
       expect(settings.epgUrls, isNot(contains('https://custom.example/extra.xml')));
+    });
+
+
+    test('reemplaza el conjunto administrado y no vuelve a cargar fuentes eliminadas', () async {
+      await AutoLiveSettings.addAdditionalSources(
+        playlistUrl: 'https://old.example/old.m3u',
+        epgUrl: 'https://old.example/old.xml',
+      );
+
+      await AutoLiveSettings.replaceAllSources(
+        playlistUrl: 'https://managed.example/sports.m3u',
+        epgUrl: 'https://managed.example/guide.xml',
+      );
+
+      final settings = await AutoLiveSettings.load();
+      final additional = await AutoLiveSettings.loadAdditionalSources();
+      expect(settings.playlistUrls, <String>['https://managed.example/sports.m3u']);
+      expect(settings.epgUrls, <String>['https://managed.example/guide.xml']);
+      expect(additional.playlistUrls, isEmpty);
+      expect(additional.epgUrls, isEmpty);
     });
 
     test('migra las listas antiguas sin pedir autorización manual', () async {
