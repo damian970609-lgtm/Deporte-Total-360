@@ -112,7 +112,15 @@ const String defaultAutoLivePlaylistUrls =
 const String defaultAutoLiveEpgUrl =
     previousDefaultAutoLiveEpgUrl + '\n'
     'https://iptv-epg.org/files/epg-do.xml\n'
-    'https://iptv-epg.org/files/epg-sv.xml';
+    'https://iptv-epg.org/files/epg-sv.xml\n'
+    'https://epgshare01.online/epgshare01/epg_ripper_ES1.xml.gz\n'
+    'https://epgshare01.online/epgshare01/epg_ripper_AR1.xml.gz\n'
+    'https://epgshare01.online/epgshare01/epg_ripper_MX1.xml.gz\n'
+    'https://epgshare01.online/epgshare01/epg_ripper_CO1.xml.gz\n'
+    'https://epgshare01.online/epgshare01/epg_ripper_CL1.xml.gz\n'
+    'https://epgshare01.online/epgshare01/epg_ripper_PE1.xml.gz\n'
+    'https://epgshare01.online/epgshare01/epg_ripper_DO1.xml.gz\n'
+    'https://epgshare01.online/epgshare01/epg_ripper_BR1.xml.gz';
 
 List<String> _splitPlaylistUrls(String value) => value
     .split(RegExp(r'[\r\n;]+'))
