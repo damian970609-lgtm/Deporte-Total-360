@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 
 import 'automatic_live_service.dart';
 import 'live_channels_screen.dart';
-import 'ottfox_workspace_screen.dart';
 
 const Color _iptvBg = Color(0xFF030814);
 const Color _iptvPanel = Color(0xFF071326);
@@ -115,12 +114,8 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
   }
 
 
-  Future<void> _openOttfox() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => const OttfoxWorkspaceScreen(),
-      ),
-    );
+  void _openOttfox() {
+    Navigator.of(context).maybePop();
   }
 
   Future<void> _importClipboardPlaylist() async {
@@ -1015,7 +1010,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                           OutlinedButton.icon(
                             onPressed: _openOttfox,
                             icon: const Icon(Icons.open_in_browser_rounded),
-                            label: const Text('ABRIR OTTFOX'),
+                            label: const Text('VOLVER A OTTFOX'),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: _iptvCyan,
                               side: const BorderSide(color: _iptvCyan),
