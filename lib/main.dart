@@ -1,9 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'app_i18n.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'automatic_live_screen.dart';
+import 'automatic_live_service.dart';
 
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
@@ -28,6 +32,7 @@ const Color appRed = Color(0xFFFF3155);
 const Color appMuted = Color(0xFFA9BDD6);
 
 const String contactUrl = 'https://wa.me/5927214741';
+const String ottfoxEditorUrl = 'https://ottfox.net/es/iptv-playlist-editor/';
 const String settingsPhotoAsset =
     'assets/images/file_000000006048820e9e0720f1adf548f1.png';
 
@@ -1487,48 +1492,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 13),
             _settingsCard(
-              border: appBlue,
-              child: Material(
-                color: Colors.transparent,
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const CircleAvatar(
-                    backgroundColor: Color(0x332D8CFF),
-                    child: Icon(Icons.cloud_sync_rounded, color: appCyan),
-                  ),
-                  title: Text(
-                    appText(
-                      'Servidor de estadísticas',
-                      'Statistics server',
-                      'Servidor de estatísticas',
-                      'Serveur des statistiques',
-                    ),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
-                    ),
-                  ),
-                  subtitle: Text(
-                    appText(
-                      'Comprobar la conexión del servicio de estadísticas y configurar el Worker.',
-                      'Check the statistics service and configure the public Worker URL.',
-                      'Verifique a conexão do serviço de estatísticas e configure o Worker.',
-                      'Vérifier le service de statistiques et configurer le Worker.',
-                    ),
-                    style: const TextStyle(color: appMuted, fontSize: 11, height: 1.4),
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded, color: appCyan),
-                  onTap: () => Navigator.of(context).push<void>(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const DeveloperSettingsScreen(),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 13),
-            _settingsCard(
               border: appCyan,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1712,18 +1675,28 @@ class DeveloperSettingsScreen extends StatefulWidget {
 
 class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
   late final TextEditingController _apiUrlController;
+  late final TextEditingController _playlistSourcesController;
+  late final TextEditingController _epgSourcesController;
   bool _testing = false;
   bool _saving = false;
+  bool _savingIptvSources = false;
+  int _additionalPlaylistCount = 0;
+  int _additionalEpgCount = 0;
 
   @override
   void initState() {
     super.initState();
     _apiUrlController = TextEditingController(text: sportsApiBaseUrl.value);
+    _playlistSourcesController = TextEditingController();
+    _epgSourcesController = TextEditingController();
+    _loadAdditionalIptvSources();
   }
 
   @override
   void dispose() {
     _apiUrlController.dispose();
+    _playlistSourcesController.dispose();
+    _epgSourcesController.dispose();
     super.dispose();
   }
 
@@ -1784,13 +1757,101 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
     }
   }
 
+  Future<void> _loadAdditionalIptvSources() async {
+    try {
+      final sources = await AutoLiveSettings.loadAdditionalSources();
+      if (!mounted) return;
+      setState(() {
+        _additionalPlaylistCount = sources.playlistUrls.length;
+        _additionalEpgCount = sources.epgUrls.length;
+      });
+    } catch (_) {
+      // La pantalla de administración sigue disponible si falla el almacenamiento.
+    }
+  }
+
+  Future<void> _addAdditionalIptvSources() async {
+    final playlistUrls = _playlistSourcesController.text.trim();
+    final epgUrls = _epgSourcesController.text.trim();
+    if (playlistUrls.isEmpty && epgUrls.isEmpty) {
+      _showMessage('Escribe al menos una URL M3U/M3U8 o XMLTV/EPG.');
+      return;
+    }
+    setState(() => _savingIptvSources = true);
+    try {
+      final sources = await AutoLiveSettings.addAdditionalSources(
+        playlistUrl: playlistUrls,
+        epgUrl: epgUrls,
+      );
+      if (!mounted) return;
+      _playlistSourcesController.clear();
+      _epgSourcesController.clear();
+      setState(() {
+        _additionalPlaylistCount = sources.playlistUrls.length;
+        _additionalEpgCount = sources.epgUrls.length;
+      });
+      _showMessage(
+        'Fuentes guardadas: ${sources.playlistUrls.length} listas y '
+        '${sources.epgUrls.length} guías. Se suman a los catálogos automáticos.',
+      );
+    } catch (error) {
+      _showMessage(error.toString().replaceFirst('FormatException: ', ''));
+    } finally {
+      if (mounted) setState(() => _savingIptvSources = false);
+    }
+  }
+
+  Future<void> _clearAdditionalIptvSources() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: appPanel,
+        title: const Text(
+          'Eliminar fuentes añadidas',
+          style: TextStyle(color: appCyan, fontWeight: FontWeight.w900),
+        ),
+        content: const Text(
+          'Se quitarán únicamente las URLs M3U y EPG añadidas aquí. '
+          'Las fuentes automáticas originales seguirán activas.',
+          style: TextStyle(color: appMuted, height: 1.4),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: appPink,
+              foregroundColor: appBg,
+            ),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await AutoLiveSettings.clearAdditionalSources();
+      if (!mounted) return;
+      setState(() {
+        _additionalPlaylistCount = 0;
+        _additionalEpgCount = 0;
+      });
+      _showMessage('Se eliminaron las fuentes adicionales. Las fuentes originales siguen activas.');
+    } catch (error) {
+      _showMessage('No se pudieron eliminar las fuentes: $error');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: appBg,
       appBar: AppBar(
         title: Text(
-          appText('SERVIDOR Y DATOS DEPORTIVOS', 'SPORTS DATA SERVER', 'SERVIDOR E DADOS ESPORTIVOS', 'SERVEUR ET DONNÉES SPORTIVES'),
+          appText('MENÚ SECRETO', 'SECRET MENU', 'MENU SECRETO', 'MENU SECRET'),
           style: TextStyle(
             color: appCyan,
             fontWeight: FontWeight.w900,
@@ -1897,6 +1958,150 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
               decoration: BoxDecoration(
                 color: appPanel,
                 borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: appCyan.withAlpha(180)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Row(
+                    children: <Widget>[
+                      Icon(Icons.playlist_add_check_circle_rounded, color: appCyan),
+                      SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          'OTTFOX · EDITOR IPTV Y EPG',
+                          style: TextStyle(
+                            color: appCyan,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'La APK descarga y combina automáticamente las 12 listas y 20 guías que ya utiliza, además de las fuentes adicionales, y las envía al editor OTTFOX.',
+                    style: TextStyle(color: appMuted, height: 1.45, fontSize: 11),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).push<void>(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const OttfoxWebScreen(),
+                        ),
+                      ),
+                      icon: const Icon(Icons.open_in_browser_rounded),
+                      label: const Text('SINCRONIZAR LISTAS + EPG EN OTTFOX'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: appCyan,
+                        side: const BorderSide(color: appCyan),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 17),
+                  const Divider(color: appLine),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'AÑADIR FUENTES AL BUSCADOR AUTOMÁTICO',
+                    style: TextStyle(
+                      color: appGreen,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Pega enlaces directos de tus listas M3U/M3U8. Puedes añadir varias URLs, una por línea.',
+                    style: TextStyle(color: appMuted, height: 1.4, fontSize: 11),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _playlistSourcesController,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    minLines: 1,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'URLs de listas M3U / M3U8',
+                      hintText: 'https://proveedor.example/deportes.m3u',
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Añade también las direcciones directas de tus guías XMLTV/EPG.',
+                    style: TextStyle(color: appMuted, height: 1.4, fontSize: 11),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _epgSourcesController,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    minLines: 1,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'URLs de EPG / XMLTV',
+                      hintText: 'https://proveedor.example/guia.xml.gz',
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  const SizedBox(height: 11),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _savingIptvSources ? null : _addAdditionalIptvSources,
+                      icon: _savingIptvSources
+                          ? const SizedBox(
+                              width: 17,
+                              height: 17,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.add_link_rounded),
+                      label: Text(
+                        _savingIptvSources ? 'GUARDANDO…' : 'AÑADIR LISTAS Y EPG',
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: appGreen,
+                        foregroundColor: appBg,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    'Fuentes adicionales guardadas: $_additionalPlaylistCount listas · $_additionalEpgCount guías',
+                    style: const TextStyle(color: appMuted, fontSize: 10),
+                  ),
+                  if (_additionalPlaylistCount > 0 || _additionalEpgCount > 0)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: _clearAdditionalIptvSources,
+                        icon: const Icon(Icons.delete_outline_rounded, size: 17),
+                        label: const Text('Quitar fuentes añadidas'),
+                        style: TextButton.styleFrom(foregroundColor: appPink),
+                      ),
+                    ),
+                  const SizedBox(height: 5),
+                  const Text(
+                    'Importante: OTTFOX no proporciona canales ni EPG; funciona como editor/conversor y guarda su biblioteca en el navegador. Para que la APK use una lista, añade aquí la URL directa de una fuente propia o autorizada. Las fuentes automáticas originales no se reemplazan.',
+                    style: TextStyle(color: appMuted, fontSize: 10, height: 1.45),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: appPanel,
+                borderRadius: BorderRadius.circular(15),
                 border: Border.all(color: appPink.withAlpha(180)),
               ),
               child: Column(
@@ -1927,12 +2132,467 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                 border: Border.all(color: appGreen.withAlpha(150)),
               ),
               child: Text(
-                appText('SEGURIDAD: la clave APISPORTS_KEY permanece como secreto del Worker en Cloudflare. La aplicación guarda solo la URL pública. El acceso directo desde Ajustes y el atajo de diez toques abren esta misma pantalla; ninguno sustituye autenticación real.', 'SECURITY: APISPORTS_KEY remains a Cloudflare Worker secret. The app stores only the public URL. The Settings shortcut and the ten-tap shortcut open this same screen; neither replaces real authentication.', 'SEGURANÇA: APISPORTS_KEY permanece como segredo do Worker no Cloudflare. O app salva apenas a URL pública. O atalho em Configurações e o atalho de dez toques abrem esta mesma tela; nenhum substitui autenticação real.', 'SÉCURITÉ : APISPORTS_KEY reste un secret du Worker Cloudflare. L’application ne conserve que l’URL publique. Le raccourci des paramètres et celui de dix pressions ouvrent le même écran ; aucun ne remplace une véritable authentification.'),
+                appText('SEGURIDAD: la clave APISPORTS_KEY permanece como secreto del Worker en Cloudflare. La aplicación guarda solo la URL pública. El menú secreto se abre con diez toques sobre DAMIAN.APK; este atajo no sustituye autenticación real.', 'SECURITY: APISPORTS_KEY remains a Cloudflare Worker secret. The app stores only the public URL. The secret menu opens after ten taps on DAMIAN.APK; this shortcut does not replace real authentication.', 'SEGURANÇA: APISPORTS_KEY permanece como segredo do Worker no Cloudflare. O app salva apenas a URL pública. O atalho em Configurações e o atalho de dez toques abrem esta mesma tela; nenhum substitui autenticação real.', 'SÉCURITÉ : APISPORTS_KEY reste un secret du Worker Cloudflare. L’application ne conserve que l’URL publique. Le menu secret s’ouvre après dix pressions sur DAMIAN.APK ; ce raccourci ne remplace pas une véritable authentification.'),
                 style: TextStyle(color: appMuted, fontSize: 11, height: 1.5),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class OttfoxWebScreen extends StatefulWidget {
+  const OttfoxWebScreen({super.key});
+
+  @override
+  State<OttfoxWebScreen> createState() => _OttfoxWebScreenState();
+}
+
+class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
+  InAppWebViewController? _controller;
+  final AutomaticLiveService _sourceService = AutomaticLiveService();
+  bool _loading = true;
+  bool _syncingSources = false;
+  bool _syncAttempted = false;
+  int _progress = 0;
+  int _playlistCount = 0;
+  int _epgCount = 0;
+  int _channelCount = 0;
+  String _syncMessage =
+      'Al abrir el editor, la APK descargará y unirá las listas y guías configuradas.';
+  String? _error;
+
+  Future<void> _reload() async {
+    _syncAttempted = false;
+    setState(() {
+      _loading = true;
+      _error = null;
+      _progress = 0;
+      _syncMessage = 'Recargando el editor OTTFOX…';
+    });
+    await _controller?.loadUrl(
+      urlRequest: URLRequest(url: WebUri(ottfoxEditorUrl)),
+    );
+  }
+
+  Future<void> _syncSourcesToOttfox(InAppWebViewController controller) async {
+    if (_syncAttempted || _syncingSources || !mounted) return;
+    _syncAttempted = true;
+    setState(() {
+      _syncingSources = true;
+      _syncMessage = 'Descargando las listas M3U y las guías XMLTV de Deporte Total 360°…';
+      _error = null;
+    });
+
+    try {
+      // Espera a que la interfaz del editor termine de montar sus campos.
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (!mounted) return;
+      final settings = await AutoLiveSettings.load();
+      _playlistCount = settings.playlistUrls.length;
+      _epgCount = settings.epgUrls.length;
+      if (!settings.isConfigured) {
+        throw const FormatException(
+          'No hay listas M3U y guías EPG válidas configuradas en este dispositivo.',
+        );
+      }
+
+      // La app descarga todas las fuentes originales y adicionales en lotes,
+      // resuelve los enlaces relativos y elimina duplicados por URL.
+      final catalog = await _sourceService.loadCatalog(
+        playlistUrl: settings.playlistUrl,
+        epgUrl: settings.epgUrl,
+        forceRefresh: true,
+        allowEmptyEpg: true,
+      );
+      final mergedPlaylist = AutomaticLiveService.buildOttfoxM3u(
+        catalog,
+        epgUrls: settings.epgUrls,
+      );
+      _channelCount = catalog.channels.length;
+      if (_channelCount == 0 || !mergedPlaylist.startsWith('#EXTM3U')) {
+        throw const FormatException(
+          'No se encontraron canales directos compatibles para importar.',
+        );
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _syncMessage =
+            'Preparando $_channelCount canales, $_playlistCount listas y '
+            '$_epgCount guías XMLTV para OTTFOX…';
+      });
+
+      // OTTFOX admite importar un archivo/texto M3U y asociar URL XMLTV/EPG.
+      // La app fusiona las 12 listas (y las adicionales del usuario) primero,
+      // y adjunta todas las guías en las cabeceras M3U. También rellena las
+      // cinco casillas EPG visibles del editor cuando están disponibles.
+      final script = '''
+        (() => {
+          const playlist = ${jsonEncode(mergedPlaylist)};
+          const epgUrls = ${jsonEncode(settings.epgUrls)};
+          const dispatchValue = (element, value) => {
+            element.value = value;
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+          };
+
+          const epgInputs = Array.from(document.querySelectorAll('input'))
+            .filter((element) => {
+              const marker = [
+                element.placeholder || '',
+                element.name || '',
+                element.id || '',
+                element.getAttribute('aria-label') || ''
+              ].join(' ').toLowerCase();
+              return /epg|xmltv/.test(marker);
+            });
+          const linkedGuides = Math.min(epgInputs.length, 5, epgUrls.length);
+          for (let index = 0; index < linkedGuides; index++) {
+            dispatchValue(epgInputs[index], epgUrls[index]);
+          }
+
+          const textarea = Array.from(document.querySelectorAll('textarea'))
+            .find((element) => {
+              const marker = [
+                element.placeholder || '',
+                element.name || '',
+                element.id || '',
+                element.getAttribute('aria-label') || ''
+              ].join(' ').toLowerCase();
+              return !/buscar|search/.test(marker);
+            });
+
+          let imported = false;
+          let importMode = '';
+          if (textarea) {
+            dispatchValue(textarea, playlist);
+            let scope = textarea.closest('form') || textarea.parentElement;
+            let buttons = Array.from((scope || document).querySelectorAll(
+              'button,input[type="button"],input[type="submit"]'
+            ));
+            let loadButton = buttons.find((button) =>
+              /^(cargar|importar|load)\$/i.test(
+                (button.innerText || button.value || button.textContent || '').trim()
+              )
+            );
+            if (!loadButton) {
+              loadButton = Array.from(document.querySelectorAll('button'))
+                .find((button) => /^(cargar|importar|load)\$/i.test(
+                  (button.innerText || button.textContent || '').trim()
+                ));
+            }
+            if (loadButton) {
+              loadButton.click();
+              imported = true;
+              importMode = 'textarea';
+            }
+          }
+          if (!imported) {
+            const fileInputs = Array.from(
+              document.querySelectorAll('input[type="file"]')
+            );
+            const fileInput = fileInputs.find((element) =>
+              !element.accept ||
+              /m3u|playlist|text|\\.txt/i.test(element.accept)
+            );
+            if (fileInput) {
+              const transfer = new DataTransfer();
+              transfer.items.add(new File(
+                [playlist],
+                'deporte-total-360-listas-unificadas.m3u',
+                { type: 'audio/x-mpegurl' }
+              ));
+              fileInput.files = transfer.files;
+              fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+              imported = true;
+              importMode = 'file';
+            }
+          }
+
+          return JSON.stringify({
+            imported,
+            importMode,
+            guideFieldsAvailable: epgInputs.length,
+            guidesLinkedInFields: linkedGuides,
+            channelLines: (playlist.match(/^#EXTINF:/gm) || []).length,
+            playlistHeaderContainsEpg:
+              /url-tvg=/.test(playlist) && /x-tvg-url=/.test(playlist)
+          });
+        })();
+      ''';
+
+      final rawResult = await controller.evaluateJavascript(source: script);
+      Map<String, dynamic> result = <String, dynamic>{};
+      if (rawResult is String) {
+        try {
+          final decoded = jsonDecode(rawResult);
+          if (decoded is Map) result = Map<String, dynamic>.from(decoded);
+        } catch (_) {}
+      } else if (rawResult is Map) {
+        result = Map<String, dynamic>.from(rawResult);
+      }
+
+      if (result['imported'] != true) {
+        throw const FormatException(
+          'OTTFOX abrió, pero no expuso el campo de importación de M3U. '
+          'La APK sí descargó las fuentes; puedes recargar el editor e importar manualmente.',
+        );
+      }
+
+      // Después de cargar el M3U, vuelve a rellenar la EPG: el editor puede
+      // reconstruir sus controles al procesar la lista. Se pasan cinco URLs a
+      // los campos visibles y todas las demás ya viajan en la cabecera M3U.
+      await Future<void>.delayed(const Duration(seconds: 3));
+      final guideFillScript = '''
+        (() => {
+          const urls = ${jsonEncode(settings.epgUrls)};
+          const fields = Array.from(document.querySelectorAll('input'))
+            .filter((element) => /epg|xmltv/i.test([
+              element.placeholder || '',
+              element.name || '',
+              element.id || '',
+              element.getAttribute('aria-label') || ''
+            ].join(' ')));
+          const linked = Math.min(fields.length, 5, urls.length);
+          for (let index = 0; index < linked; index++) {
+            fields[index].value = urls[index];
+            fields[index].dispatchEvent(new Event('input', { bubbles: true }));
+            fields[index].dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          return JSON.stringify({ linked, available: fields.length });
+        })();
+      ''';
+      final guideRawResult =
+          await controller.evaluateJavascript(source: guideFillScript);
+      var linkedGuideCount = 0;
+      if (guideRawResult is String) {
+        try {
+          final decoded = jsonDecode(guideRawResult);
+          if (decoded is Map) {
+            linkedGuideCount = int.tryParse(
+                  (decoded['linked'] ?? 0).toString(),
+                ) ??
+                0;
+          }
+        } catch (_) {}
+      } else if (guideRawResult is Map) {
+        linkedGuideCount = int.tryParse(
+              (guideRawResult['linked'] ?? 0).toString(),
+            ) ??
+            0;
+      }
+
+      // La biblioteca de OTTFOX se actualiza al pulsar "Aplicar cambios".
+      final applyResult = await controller.evaluateJavascript(source: r'''
+        (() => {
+          const button = Array.from(document.querySelectorAll('button'))
+            .find((element) =>
+              /aplicar cambios|apply changes/i.test(
+                (element.innerText || element.textContent || '').trim()
+              ));
+          if (!button || button.disabled) return false;
+          button.click();
+          return true;
+        })();
+      ''');
+      final appliedToOttfox = applyResult == true ||
+          applyResult.toString().toLowerCase() == 'true';
+      final appliedMessage = appliedToOttfox
+          ? 'La lista se aplicó a la biblioteca local.'
+          : 'Pulsa Aplicar cambios si el editor lo solicita.';
+
+      if (!mounted) return;
+      setState(() {
+        _syncMessage =
+            'OTTFOX recibió $_channelCount canales combinados de '
+            '$_playlistCount listas y $_epgCount guías XMLTV. '
+            '$linkedGuideCount guías se colocaron en los campos EPG. '
+            '$appliedMessage';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _syncMessage =
+            'No se pudo completar la importación automática: '
+            '${error.toString().replaceFirst('FormatException: ', '')}';
+      });
+    } finally {
+      if (mounted) setState(() => _syncingSources = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: appBg,
+      appBar: AppBar(
+        title: const Text(
+          'OTTFOX · IPTV / EPG',
+          style: TextStyle(
+            color: appCyan,
+            fontWeight: FontWeight.w900,
+            fontSize: 13,
+          ),
+        ),
+        actions: <Widget>[
+          IconButton(
+            tooltip: 'Recargar y volver a sincronizar',
+            onPressed: _reload,
+            icon: const Icon(Icons.refresh_rounded, color: appCyan),
+          ),
+        ],
+      ),
+      body: Column(
+        children: <Widget>[
+          if (_loading || _syncingSources)
+            LinearProgressIndicator(
+              value: _loading && !_syncingSources && _progress > 0
+                  ? _progress / 100
+                  : null,
+              minHeight: 2,
+              backgroundColor: appPanel,
+              color: appCyan,
+            ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
+            decoration: const BoxDecoration(
+              color: Color(0xFF061326),
+              border: Border(bottom: BorderSide(color: appLine)),
+            ),
+            child: Row(
+              children: <Widget>[
+                Icon(
+                  _syncingSources
+                      ? Icons.downloading_rounded
+                      : Icons.playlist_add_check_circle_rounded,
+                  color: _syncingSources ? appYellow : appGreen,
+                  size: 19,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _syncMessage,
+                    style: const TextStyle(
+                      color: appMuted,
+                      fontSize: 10,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _error != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(22),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          const Icon(Icons.wifi_off_rounded, color: appPink, size: 42),
+                          const SizedBox(height: 10),
+                          const Text(
+                            'OTTFOX NO ESTÁ DISPONIBLE',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _error!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: appMuted, height: 1.4),
+                          ),
+                          const SizedBox(height: 12),
+                          FilledButton.icon(
+                            onPressed: _reload,
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: const Text('REINTENTAR'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : InAppWebView(
+                    initialUrlRequest: URLRequest(url: WebUri(ottfoxEditorUrl)),
+                    initialSettings: InAppWebViewSettings(
+                      javaScriptEnabled: true,
+                      domStorageEnabled: true,
+                      databaseEnabled: true,
+                      thirdPartyCookiesEnabled: true,
+                      useShouldOverrideUrlLoading: true,
+                      supportMultipleWindows: true,
+                      javaScriptCanOpenWindowsAutomatically: true,
+                      mediaPlaybackRequiresUserGesture: true,
+                      allowsInlineMediaPlayback: true,
+                      safeBrowsingEnabled: true,
+                      allowFileAccess: false,
+                      allowContentAccess: true,
+                      loadsImagesAutomatically: true,
+                      cacheEnabled: true,
+                    ),
+                    onWebViewCreated: (controller) {
+                      _controller = controller;
+                    },
+                    onLoadStart: (controller, url) {
+                      if (!mounted) return;
+                      setState(() {
+                        _loading = true;
+                        _error = null;
+                        _progress = 0;
+                      });
+                    },
+                    onProgressChanged: (controller, progress) {
+                      if (!mounted) return;
+                      setState(() {
+                        _progress = progress;
+                        _loading = progress < 100;
+                      });
+                    },
+                    onLoadStop: (controller, url) async {
+                      if (!mounted) return;
+                      setState(() {
+                        _loading = false;
+                        _progress = 100;
+                      });
+                      await _syncSourcesToOttfox(controller);
+                    },
+                    shouldOverrideUrlLoading: (controller, action) async {
+                      final uri = action.request.url;
+                      if (uri == null) return NavigationActionPolicy.ALLOW;
+                      if (uri.scheme == 'https' || uri.scheme == 'http') {
+                        return NavigationActionPolicy.ALLOW;
+                      }
+                      return NavigationActionPolicy.CANCEL;
+                    },
+                    onReceivedError: (controller, request, error) {
+                      if (!(request.isForMainFrame ?? true) || !mounted) return;
+                      setState(() {
+                        _loading = false;
+                        _error = 'No se pudo cargar OTTFOX. Comprueba tu conexión e inténtalo de nuevo. Código: ${error.type}';
+                      });
+                    },
+                  ),
+          ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
+            color: const Color(0xFF020B19),
+            child: const Text(
+              'La APK descarga y combina las listas existentes y las guías XMLTV al abrir OTTFOX. '
+              'Todos los enlaces EPG se incluyen en la M3U; el editor dispone de cinco campos EPG visibles. '
+              'Las fuentes automáticas de la APK siguen actualizándose independientemente.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: appMuted, fontSize: 10, height: 1.4),
+            ),
+          ),
+        ],
       ),
     );
   }
