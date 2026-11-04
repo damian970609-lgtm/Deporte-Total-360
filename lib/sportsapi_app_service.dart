@@ -127,13 +127,13 @@ class SportsApiAppService {
   Future<List<SportsAgendaEvent>> fetchFavoriteAgendaEvents({
     DateTime? date,
   }) {
-    // SportsAPI date is a UTC calendar day. Use the phone's calendar
-    // date deliberately so the native Agenda tab stays aligned with the
-    // user's local day; returned instants are converted to local time below.
+    // SportsAPI recibe días UTC, mientras la agenda se presenta por día local.
+    // En zonas horarias negativas una jornada local puede abarcar dos fechas UTC.
     final selected = date ?? DateTime.now();
-    final day = selected.year.toString().padLeft(4, '0') + '-' +
-        selected.month.toString().padLeft(2, '0') + '-' +
-        selected.day.toString().padLeft(2, '0');
+    final localDay = DateTime(selected.year, selected.month, selected.day);
+    final day = localDay.year.toString().padLeft(4, '0') + '-' +
+        localDay.month.toString().padLeft(2, '0') + '-' +
+        localDay.day.toString().padLeft(2, '0');
     final cached = _agendaCache[day];
     final expires = _agendaCacheExpiry[day];
     if (cached != null && expires != null && DateTime.now().isBefore(expires)) {
@@ -141,11 +141,11 @@ class SportsApiAppService {
     }
     final pending = _agendaInFlight[day];
     if (pending != null) return pending;
-    final future = _fetchFavoriteAgendaEvents(day);
+    final future = _fetchFavoriteAgendaEvents(localDay);
     _agendaInFlight[day] = future;
     return future.then((events) {
       _agendaCache[day] = events;
-      _agendaCacheExpiry[day] = DateTime.now().add(const Duration(minutes: 2));
+      _agendaCacheExpiry[day] = DateTime.now().add(const Duration(minutes: 5));
       return events;
     }).whenComplete(() {
       _agendaInFlight.remove(day);
@@ -160,10 +160,34 @@ class SportsApiAppService {
         .replaceAll(RegExp(r'\s+'), ' ');
   }
 
-  Future<List<SportsAgendaEvent>> _fetchFavoriteAgendaEvents(String day) async {
-    // El catálogo publicado por el Worker es la única lista permitida.
-    // Si no puede leerse completo, se falla de forma segura y no se muestran
-    // competiciones sin verificar.
+  Future<List<SportsAgendaEvent>> _fetchFavoriteAgendaEvents(
+    DateTime localDay,
+  ) async {
+    // El proveedor trabaja con días UTC; esta ventana conserva toda la jornada
+    // del teléfono (incluidas las horas nocturnas que caen en el día UTC siguiente).
+    final localStart = DateTime(localDay.year, localDay.month, localDay.day);
+    final localEnd = DateTime(localDay.year, localDay.month, localDay.day + 1);
+    final utcStart = localStart.toUtc();
+    final utcLastInstant = localEnd.toUtc().subtract(
+      const Duration(microseconds: 1),
+    );
+    final firstUtcDay = DateTime.utc(
+      utcStart.year, utcStart.month, utcStart.day,
+    );
+    final lastUtcDay = DateTime.utc(
+      utcLastInstant.year, utcLastInstant.month, utcLastInstant.day,
+    );
+    final utcDays = <String>[];
+    for (var day = firstUtcDay;
+        !day.isAfter(lastUtcDay);
+        day = day.add(const Duration(days: 1))) {
+      utcDays.add(
+        '${day.year.toString().padLeft(4, '0')}-'
+        '${day.month.toString().padLeft(2, '0')}-'
+        '${day.day.toString().padLeft(2, '0')}',
+      );
+    }
+
     final favoriteSports = await fetchFavoriteSports();
     final favoritesById = <String, Map<String, String>>{};
     for (final sport in favoriteSports) {
@@ -185,86 +209,119 @@ class SportsApiAppService {
     }
 
     var successfulSports = 0;
+    final failures = <String, String>{};
     final results = await Future.wait(_sportNames.entries.map((entry) async {
-      try {
-        final allowed = favoritesById[entry.key] ?? <String, String>{};
-        final isRace = entry.key == 'cycling' || entry.key == 'motorsport';
-        final payload = <dynamic>[];
-        if (isRace) {
-          final raceData = await _get(
-            '/races',
-            <String, String>{'date': day, 'sport': entry.key},
-          );
-          if (raceData is! List) {
-            throw const FormatException('SportsAPI devolvió una agenda de carreras con formato inválido.');
-          }
-          payload.addAll(raceData);
-        } else {
-          // SportsAPI pagina por diez ligas. Recorrer mientras hasNextPage
-          // evita perder torneos favoritos que aparecen después de la página 0.
-          for (var page = 0; page < 100; page++) {
-            final envelope = await _getEnvelope(
-              '/fixtures',
-              <String, String>{
-                'date': day,
-                'sport': entry.key,
-                'page': page.toString(),
-              },
-            );
-            if (envelope is! Map || envelope['data'] is! List) {
-              throw const FormatException('SportsAPI devolvió una página de agenda con formato inválido.');
-            }
-            payload.addAll(envelope['data'] as List);
-            final meta = envelope['meta'] is Map
-                ? Map<String, dynamic>.from(envelope['meta'] as Map)
-                : <String, dynamic>{};
-            if (meta['hasNextPage'] != true) break;
-            if (page == 99) {
-              throw const FormatException('SportsAPI indicó más de 100 páginas para un deporte.');
-            }
-          }
-        }
-        successfulSports++;
-        return payload.whereType<Map>().map((raw) {
-          final row = Map<String, dynamic>.from(raw);
-          if (isRace) {
-            final series = row['series'] is Map
-                ? Map<String, dynamic>.from(row['series'])
-                : <String, dynamic>{};
-            // En ciclismo, la serie solo identifica el calendario masculino
-            // o femenino; la competición real es el nombre de la carrera.
-            final providerName = entry.key == 'cycling'
-                ? _text(row['name'])
-                : _text(series['name']);
-            final canonical = allowed[_competitionKey(providerName)];
-            if (canonical == null) return null;
-            if (entry.key == 'motorsport' && series.isNotEmpty) {
-              row['series'] = <String, dynamic>{...series, 'name': canonical};
-            }
-            return _raceEvent(
-              row,
-              entry.key,
-              entry.value,
-              competitionName: canonical,
-            );
-          }
+      final allowed = favoritesById[entry.key] ?? <String, String>{};
+      final isRace = entry.key == 'cycling' || entry.key == 'motorsport';
+      final payload = <dynamic>[];
+      var sportSucceeded = false;
+      Object? lastError;
 
+      // La fecha UTC siguiente solo se consulta cuando la jornada local la cruza.
+      for (final utcDay in utcDays) {
+        try {
+          if (isRace) {
+            final raceData = await _get(
+              '/races',
+              <String, String>{'date': utcDay, 'sport': entry.key},
+            );
+            if (raceData is! List) {
+              throw const FormatException(
+                'SportsAPI devolvió una agenda de carreras con formato inválido.',
+              );
+            }
+            payload.addAll(raceData);
+          } else {
+            // SportsAPI pagina por ligas. Leer cada página evita perder torneos
+            // favoritos que no aparezcan en la primera respuesta.
+            for (var page = 0; page < 100; page++) {
+              final envelope = await _getEnvelope(
+                '/fixtures',
+                <String, String>{
+                  'date': utcDay,
+                  'sport': entry.key,
+                  'page': page.toString(),
+                },
+              );
+              if (envelope is! Map || envelope['data'] is! List) {
+                throw const FormatException(
+                  'SportsAPI devolvió una página de agenda con formato inválido.',
+                );
+              }
+              payload.addAll(envelope['data'] as List);
+              final meta = envelope['meta'] is Map
+                  ? Map<String, dynamic>.from(envelope['meta'] as Map)
+                  : <String, dynamic>{};
+              if (meta['hasNextPage'] != true) break;
+              if (page == 99) {
+                throw const FormatException(
+                  'SportsAPI indicó más de 100 páginas para un deporte.',
+                );
+              }
+            }
+          }
+          sportSucceeded = true;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      if (!sportSucceeded) {
+        failures[entry.key] = lastError?.toString() ?? 'Sin respuesta del proveedor';
+        return <SportsAgendaEvent>[];
+      }
+      successfulSports++;
+
+      return payload.whereType<Map>().map((raw) {
+        final row = Map<String, dynamic>.from(raw);
+        SportsAgendaEvent? event;
+        if (isRace) {
+          final series = row['series'] is Map
+              ? Map<String, dynamic>.from(row['series'])
+              : <String, dynamic>{};
+          final providerName = entry.key == 'cycling'
+              ? _text(row['name'])
+              : _text(series['name']);
+          final canonical = allowed[_competitionKey(providerName)];
+          if (canonical == null) return null;
+          if (entry.key == 'motorsport' && series.isNotEmpty) {
+            row['series'] = <String, dynamic>{...series, 'name': canonical};
+          }
+          event = _raceEvent(
+            row,
+            entry.key,
+            entry.value,
+            competitionName: canonical,
+          );
+        } else {
           final league = row['league'] is Map
               ? Map<String, dynamic>.from(row['league'])
               : <String, dynamic>{};
           final canonical = allowed[_competitionKey(_text(league['name']))];
           if (canonical == null) return null;
           row['league'] = <String, dynamic>{...league, 'name': canonical};
-          return _fixtureEvent(row, entry.value);
-        }).whereType<SportsAgendaEvent>().toList(growable: false);
-      } catch (_) {
-        // La falta de cobertura de un deporte no bloquea los demás.
-        return <SportsAgendaEvent>[];
-      }
+          event = _fixtureEvent(row, entry.value);
+        }
+
+        if (event == null) return null;
+        final localStart = event.startsAt.toLocal();
+        if (localStart.isBefore(localStartDate(localDay)) ||
+            !localStart.isBefore(localStartDate(localDay).add(const Duration(days: 1)))) {
+          return null;
+        }
+        return event;
+      }).whereType<SportsAgendaEvent>().toList(growable: false);
     }));
 
     if (successfulSports == 0) {
-      throw const SportsApiException('No se pudo consultar ninguno de tus diez deportes favoritos en SportsAPI.');
+      final details = failures.entries
+          .map((entry) => '${_sportNames[entry.key] ?? entry.key}: ${entry.value}')
+          .join(' | ');
+      throw SportsApiException(
+        details.isEmpty
+            ? 'No se pudo consultar ninguno de tus diez deportes favoritos en SportsAPI.'
+            : 'SportsAPI no respondió para tus deportes favoritos. $details',
+      );
     }
     final unique = <String, SportsAgendaEvent>{};
     for (final event in results.expand((items) => items)) {
@@ -273,6 +330,9 @@ class SportsApiAppService {
     return unique.values.toList()
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
   }
+
+  DateTime localStartDate(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
 
   SportsAgendaEvent? _fixtureEvent(
     Map<String, dynamic> row,
