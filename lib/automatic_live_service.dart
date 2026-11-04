@@ -1031,8 +1031,11 @@ class AutomaticLiveService {
         final metadata = comma >= 0 ? line.substring(0, comma) : line;
         pendingName = comma >= 0 ? line.substring(comma + 1).trim() : '';
         final attributes = <String, String>{};
-        for (final match in RegExp(r'([\w-]+)="([^"]*)"').allMatches(metadata)) {
-          attributes[match.group(1)!.toLowerCase()] = match.group(2)!.trim();
+        final attributePattern =
+            RegExp(r"""([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')""");
+        for (final match in attributePattern.allMatches(metadata)) {
+          attributes[match.group(1)!.toLowerCase()] =
+              (match.group(2) ?? match.group(3) ?? '').trim();
         }
         pending = attributes;
         continue;
