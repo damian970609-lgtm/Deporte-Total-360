@@ -904,7 +904,7 @@ class AutomaticLiveService {
       .trim();
 
   static String _m3uSingleLine(String value) =>
-      value.replaceAll(RegExp(r'[\\r\\n]+'), ' ').trim();
+      value.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
 
   /// Combina los canales directos sin duplicados y conserva referencias EPG.
   static String buildMergedM3u(
