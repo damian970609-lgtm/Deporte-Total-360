@@ -1100,21 +1100,39 @@ class AutomaticLiveService {
     if (programme.isEmpty) return false;
     final home = normalizeText(event.homeTeam);
     final away = normalizeText(event.awayTeam);
+    final sport = normalizeText(event.sport);
+    final competition = normalizeText(event.competition);
+
+    // UFC suele anunciar el evento y no necesariamente ambos luchadores.
+    if (sport == 'mma' && competition.isNotEmpty &&
+        programme.contains(competition)) {
+      return true;
+    }
+
     if (home.isNotEmpty && away.isNotEmpty) {
       return _teamMatchesProgramme(home, programme) &&
           _teamMatchesProgramme(away, programme);
     }
+
+    // Ciclismo y motor se publican como carreras/etapas, no como partidos.
     const ignored = <String>{
       'contra', 'versus', 'partido', 'futbol', 'football', 'basket',
       'liga', 'copa', 'final', 'directo', 'vivo', 'match', 'evento',
-      'hoy', 'club', 'the',
+      'hoy', 'club', 'the', 'de', 'del', 'la', 'el', 'and',
+      'cycling', 'motorsport', 'race', 'stage', 'etapa', 'grand',
+      'prix', 'gp', 'formula', 'moto', 'tour', 'women', 'men',
+      'championship', 'series',
     };
-    final tokens = normalizeText(event.title)
+    final tokens = normalizeText(event.title + ' ' + event.competition)
         .split(' ')
-        .where((token) => token.length >= 4 && !ignored.contains(token))
+        .where((token) => token.length >= 4 &&
+            !ignored.contains(token) &&
+            int.tryParse(token) == null)
         .toSet();
-    if (tokens.length < 2) return false;
-    return tokens.where((token) => programme.contains(token)).length >= 2;
+    if (tokens.isEmpty) return false;
+    final matched = tokens.where((token) => programme.contains(token)).length;
+    final required = tokens.length == 1 ? 1 : (tokens.length * 0.5).ceil();
+    return matched >= required;
   }
 
   Future<bool> _probeMediaBytes(Uri uri) async {

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'automatic_live_service.dart';
+import 'sportsapi_app_service.dart';
 import 'web_agenda_screen.dart';
 
 const Color _agendaBg = Color(0xFF030814);
@@ -91,18 +92,24 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
       return await injectedLoader() ?? <SportsAgendaEvent>[];
     }
 
-    final published = await AutomaticLiveService().fetchPublishedSchedule();
-    if (published != null) {
-      final events = published
-          .map((item) => item.event)
-          .toList(growable: false);
-      // Una respuesta válida vacía también limpia la caché antigua.
+    // SportsAPI es la fuente principal de los diez deportes favoritos.
+    // Así la agenda nativa no queda limitada a una programación antigua.
+    try {
+      final events = await SportsApiAppService().fetchFavoriteAgendaEvents();
       await SportsAgendaStore.save(events);
       return events;
+    } catch (_) {
+      // Si la API falla, intenta el calendario agregado y luego la caché local.
+      final published = await AutomaticLiveService().fetchPublishedSchedule();
+      if (published != null) {
+        final events = published
+            .map((item) => item.event)
+            .toList(growable: false);
+        await SportsAgendaStore.save(events);
+        return events;
+      }
+      return SportsAgendaStore.load();
     }
-
-    // Si el Worker aún no responde, conserva el último calendario sincronizado.
-    return SportsAgendaStore.load();
   }
 
   Future<void> _refresh() async {

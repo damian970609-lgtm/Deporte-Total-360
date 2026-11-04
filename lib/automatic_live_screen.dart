@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'automatic_live_service.dart';
+import 'sportsapi_app_service.dart';
 import 'live_channels_screen.dart';
 
 const Color _autoBg = Color(0xFF030814);
@@ -73,31 +74,50 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     try {
       // La nube es la fuente principal: prepara los eventos y canales
       // aunque este dispositivo no sea el que ejecuta el planificador.
-      final published = await _service.fetchPublishedSchedule();
       final settings = await AutoLiveSettings.load();
       final localEvents = await SportsAgendaStore.load();
-      final events = published != null
-          ? published.map((item) => item.event).toList(growable: false)
-          : localEvents;
-      final latest = published ??
-          (settings.isConfigured && localEvents.isNotEmpty
-              ? await _service.schedule(
-                  events: localEvents,
-                  now: DateTime.now(),
-                  settings: settings,
-                  forceRefresh: force,
-                )
-              : <ScheduledLiveEvent>[]);
-
-      final refreshTime = DateTime.now();
-      for (final item in latest) {
-        _knownEventEndTimes[item.event.id] = item.removeAt;
+      List<SportsAgendaEvent> events;
+      var loadedFromSportsApi = false;
+      try {
+        // El tablero Live obtiene primero los diez deportes favoritos, aunque
+        // el usuario nunca haya abierto la pestaña Agenda.
+        events = await SportsApiAppService().fetchFavoriteAgendaEvents();
+        loadedFromSportsApi = true;
+        await SportsAgendaStore.save(events);
+      } catch (_) {
+        events = localEvents;
       }
-      _knownEventEndTimes.removeWhere(
-        (id, endAt) => refreshTime.isAfter(
-          endAt.add(const Duration(hours: 2)),
-        ),
-      );
+
+      final published = await _service.fetchPublishedSchedule();
+      List<ScheduledLiveEvent> latest;
+      if (!loadedFromSportsApi && published != null) {
+        // Respaldo del calendario compartido si SportsAPI no responde.
+        latest = published;
+      } else {
+        final publishedForCurrentAgenda = (published ?? <ScheduledLiveEvent>[])
+            .where((item) => events.any((event) => event.id == item.event.id))
+            .toList(growable: false);
+        final publishedIds = publishedForCurrentAgenda
+            .map((item) => item.event.id)
+            .toSet();
+        final eventsWithoutPublishedSources = events
+            .where((event) => !publishedIds.contains(event.id))
+            .toList(growable: false);
+        final locallyScheduled = settings.isConfigured &&
+                eventsWithoutPublishedSources.isNotEmpty
+            ? await _service.schedule(
+                events: eventsWithoutPublishedSources,
+                now: DateTime.now(),
+                settings: settings,
+                forceRefresh: force,
+              )
+            : <ScheduledLiveEvent>[];
+        final merged = <String, ScheduledLiveEvent>{
+          for (final item in publishedForCurrentAgenda) item.event.id: item,
+          for (final item in locallyScheduled) item.event.id: item,
+        };
+        latest = merged.values.toList(growable: false);
+      }
 
       if (!mounted) return;
       setState(() {
