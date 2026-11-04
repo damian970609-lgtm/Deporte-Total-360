@@ -20,6 +20,11 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: deporte-total-360-apk-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+
 defaults:
   run:
     shell: bash
