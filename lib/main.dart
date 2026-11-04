@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'app_i18n.dart';
 import 'package:flutter/services.dart';
@@ -31,6 +33,7 @@ const Color appMuted = Color(0xFFA9BDD6);
 
 const String contactUrl = 'https://wa.me/5927214741';
 const String ottfoxWebUrl = 'https://ottfox.net/es/?utm_source=chatgpt.com';
+const String ottfoxEditorUrl = 'https://ottfox.net/es/iptv-playlist-editor/';
 const String settingsPhotoAsset =
     'assets/images/file_000000006048820e9e0720f1adf548f1.png';
 
@@ -2150,17 +2153,207 @@ class OttfoxWebScreen extends StatefulWidget {
 
 class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
   InAppWebViewController? _controller;
+  final AutomaticLiveService _sourceService = AutomaticLiveService();
   bool _loading = true;
+  bool _syncingSources = false;
+  bool _syncAttempted = false;
   int _progress = 0;
+  int _playlistCount = 0;
+  int _epgCount = 0;
+  int _channelCount = 0;
+  String _syncMessage =
+      'Al abrir el editor, la APK descargará y unirá las listas y guías configuradas.';
   String? _error;
 
   Future<void> _reload() async {
+    _syncAttempted = false;
     setState(() {
       _loading = true;
       _error = null;
       _progress = 0;
+      _syncMessage = 'Recargando el editor OTTFOX…';
     });
-    await _controller?.reload();
+    await _controller?.loadUrl(
+      urlRequest: URLRequest(url: WebUri(ottfoxEditorUrl)),
+    );
+  }
+
+  Future<void> _syncSourcesToOttfox(InAppWebViewController controller) async {
+    if (_syncAttempted || _syncingSources || !mounted) return;
+    _syncAttempted = true;
+    setState(() {
+      _syncingSources = true;
+      _syncMessage = 'Descargando las listas M3U y las guías XMLTV de Deporte Total 360°…';
+      _error = null;
+    });
+
+    try {
+      final settings = await AutoLiveSettings.load();
+      _playlistCount = settings.playlistUrls.length;
+      _epgCount = settings.epgUrls.length;
+      if (!settings.isConfigured) {
+        throw const FormatException(
+          'No hay listas M3U y guías EPG válidas configuradas en este dispositivo.',
+        );
+      }
+
+      // La app descarga todas las fuentes originales y adicionales en lotes,
+      // resuelve los enlaces relativos y elimina duplicados por URL.
+      final catalog = await _sourceService.loadCatalog(
+        playlistUrl: settings.playlistUrl,
+        epgUrl: settings.epgUrl,
+        forceRefresh: true,
+      );
+      final mergedPlaylist = AutomaticLiveService.buildOttfoxM3u(
+        catalog,
+        epgUrls: settings.epgUrls,
+      );
+      _channelCount = catalog.channels.length;
+      if (_channelCount == 0 || !mergedPlaylist.startsWith('#EXTM3U')) {
+        throw const FormatException(
+          'No se encontraron canales directos compatibles para importar.',
+        );
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _syncMessage =
+            'Preparando $_channelCount canales, $_playlistCount listas y '
+            '$_epgCount guías XMLTV para OTTFOX…';
+      });
+
+      // OTTFOX admite importar un archivo/texto M3U y asociar URL XMLTV/EPG.
+      // La app fusiona las 12 listas (y las adicionales del usuario) primero,
+      // y adjunta todas las guías en las cabeceras M3U. También rellena las
+      // cinco casillas EPG visibles del editor cuando están disponibles.
+      final script = '''
+        (() => {
+          const playlist = ${jsonEncode(mergedPlaylist)};
+          const epgUrls = ${jsonEncode(settings.epgUrls)};
+          const dispatchValue = (element, value) => {
+            element.value = value;
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+          };
+
+          const epgInputs = Array.from(document.querySelectorAll('input'))
+            .filter((element) => {
+              const marker = [
+                element.placeholder || '',
+                element.name || '',
+                element.id || '',
+                element.getAttribute('aria-label') || ''
+              ].join(' ').toLowerCase();
+              return /(^|\\s)epg(\\s*\\d|\\s|$)|xmltv/.test(marker);
+            });
+          const linkedGuides = Math.min(epgInputs.length, 5, epgUrls.length);
+          for (let index = 0; index < linkedGuides; index++) {
+            dispatchValue(epgInputs[index], epgUrls[index]);
+          }
+
+          const textarea = Array.from(document.querySelectorAll('textarea'))
+            .find((element) => {
+              const marker = [
+                element.placeholder || '',
+                element.name || '',
+                element.id || '',
+                element.getAttribute('aria-label') || ''
+              ].join(' ').toLowerCase();
+              return !/buscar|search/.test(marker);
+            });
+
+          let imported = false;
+          let importMode = '';
+          if (textarea) {
+            dispatchValue(textarea, playlist);
+            let scope = textarea.closest('form') || textarea.parentElement;
+            let buttons = Array.from((scope || document).querySelectorAll(
+              'button,input[type="button"],input[type="submit"]'
+            ));
+            let loadButton = buttons.find((button) =>
+              /^(cargar|importar|load)$/i.test(
+                (button.innerText || button.value || button.textContent || '').trim()
+              )
+            );
+            if (!loadButton) {
+              loadButton = Array.from(document.querySelectorAll('button'))
+                .find((button) => /^(cargar|importar|load)$/i.test(
+                  (button.innerText || button.textContent || '').trim()
+                ));
+            }
+            if (loadButton) loadButton.click();
+            imported = true;
+            importMode = 'textarea';
+          } else {
+            const fileInputs = Array.from(
+              document.querySelectorAll('input[type="file"]')
+            );
+            const fileInput = fileInputs.find((element) =>
+              !element.accept ||
+              /m3u|playlist|text|\\.txt/i.test(element.accept)
+            );
+            if (fileInput) {
+              const transfer = new DataTransfer();
+              transfer.items.add(new File(
+                [playlist],
+                'deporte-total-360-listas-unificadas.m3u',
+                { type: 'audio/x-mpegurl' }
+              ));
+              fileInput.files = transfer.files;
+              fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+              imported = true;
+              importMode = 'file';
+            }
+          }
+
+          return JSON.stringify({
+            imported,
+            importMode,
+            guideFieldsAvailable: epgInputs.length,
+            guidesLinkedInFields: linkedGuides,
+            channelLines: (playlist.match(/^#EXTINF:/gm) || []).length,
+            playlistHeaderContainsEpg:
+              /url-tvg=/.test(playlist) && /x-tvg-url=/.test(playlist)
+          });
+        })();
+      ''';
+
+      final rawResult = await controller.evaluateJavascript(source: script);
+      Map<String, dynamic> result = <String, dynamic>{};
+      if (rawResult is String) {
+        try {
+          final decoded = jsonDecode(rawResult);
+          if (decoded is Map) result = Map<String, dynamic>.from(decoded);
+        } catch (_) {}
+      } else if (rawResult is Map) {
+        result = Map<String, dynamic>.from(rawResult);
+      }
+
+      if (result['imported'] != true) {
+        throw const FormatException(
+          'OTTFOX abrió, pero no expuso el campo de importación de M3U. '
+          'La APK sí descargó las fuentes; puedes recargar el editor e importar manualmente.',
+        );
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _syncMessage =
+            'Sincronización enviada: $_channelCount canales de '
+            '$_playlistCount listas. Se adjuntaron $_epgCount guías XMLTV '
+            'en la cabecera M3U y ${result['guidesLinkedInFields'] ?? 0} '
+            'en los campos EPG de OTTFOX. Revisa el resultado y pulsa Aplicar/Descargar en el editor.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _syncMessage =
+            'No se pudo completar la importación automática: '
+            '${error.toString().replaceFirst('FormatException: ', '')}';
+      });
+    } finally {
+      if (mounted) setState(() => _syncingSources = false);
+    }
   }
 
   @override
@@ -2178,7 +2371,7 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
         ),
         actions: <Widget>[
           IconButton(
-            tooltip: 'Recargar OTTFOX',
+            tooltip: 'Recargar y volver a sincronizar',
             onPressed: _reload,
             icon: const Icon(Icons.refresh_rounded, color: appCyan),
           ),
@@ -2186,13 +2379,45 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
       ),
       body: Column(
         children: <Widget>[
-          if (_loading)
+          if (_loading || _syncingSources)
             LinearProgressIndicator(
-              value: _progress == 0 ? null : _progress / 100,
+              value: _loading && !_syncingSources && _progress > 0
+                  ? _progress / 100
+                  : null,
               minHeight: 2,
               backgroundColor: appPanel,
               color: appCyan,
             ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
+            decoration: const BoxDecoration(
+              color: Color(0xFF061326),
+              border: Border(bottom: BorderSide(color: appLine)),
+            ),
+            child: Row(
+              children: <Widget>[
+                Icon(
+                  _syncingSources
+                      ? Icons.downloading_rounded
+                      : Icons.playlist_add_check_circle_rounded,
+                  color: _syncingSources ? appYellow : appGreen,
+                  size: 19,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _syncMessage,
+                    style: const TextStyle(
+                      color: appMuted,
+                      fontSize: 10,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: _error != null
                 ? Center(
@@ -2227,7 +2452,7 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
                     ),
                   )
                 : InAppWebView(
-                    initialUrlRequest: URLRequest(url: WebUri(ottfoxWebUrl)),
+                    initialUrlRequest: URLRequest(url: WebUri(ottfoxEditorUrl)),
                     initialSettings: InAppWebViewSettings(
                       javaScriptEnabled: true,
                       domStorageEnabled: true,
@@ -2262,12 +2487,13 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
                         _loading = progress < 100;
                       });
                     },
-                    onLoadStop: (controller, url) {
+                    onLoadStop: (controller, url) async {
                       if (!mounted) return;
                       setState(() {
                         _loading = false;
                         _progress = 100;
                       });
+                      await _syncSourcesToOttfox(controller);
                     },
                     shouldOverrideUrlLoading: (controller, action) async {
                       final uri = action.request.url;
@@ -2291,8 +2517,9 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
             padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
             color: const Color(0xFF020B19),
             child: const Text(
-              'Las listas y la EPG que importes en OTTFOX permanecen en su biblioteca del navegador. '
-              'Para que el buscador de la APK las consulte, añade sus URLs directas en el menú secreto.',
+              'La APK descarga y combina las listas configuradas antes de enviarlas al editor OTTFOX. '
+              'Las guías EPG se conservan como enlaces XMLTV en la M3U; OTTFOX guarda la lista en su biblioteca local. '
+              'La actualización automática de las listas de la APK sigue funcionando de forma independiente.',
               textAlign: TextAlign.center,
               style: TextStyle(color: appMuted, fontSize: 10, height: 1.4),
             ),
