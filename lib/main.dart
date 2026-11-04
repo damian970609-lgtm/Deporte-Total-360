@@ -1705,7 +1705,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(builder: (_) => screen),
     );
-    if (mounted) _loadSourceSummary();
+    if (mounted) await _loadSourceSummary();
   }
 
   Widget _actionCard({
