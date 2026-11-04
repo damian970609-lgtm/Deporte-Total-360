@@ -55,6 +55,16 @@ void main() {
 
     expect(find.text('DAMIÁN APK · CENTRO IPTV'), findsOneWidget);
     expect(find.text('ABRIR REPRODUCTOR Y EXTRACTOR IPTV'), findsOneWidget);
+    expect(find.text('CODOPLAYER · REPRODUCTOR WEB'), findsOneWidget);
+    expect(find.text('ABRIR CODOPLAYER EN LA APK'), findsOneWidget);
+
+    await tester.tap(find.text('ABRIR CODOPLAYER EN LA APK'));
+    await tester.pumpAndSettle();
+    expect(find.text('ANTES DE ABRIR CODOPLAYER'), findsOneWidget);
+    expect(find.textContaining('hasta un año'), findsOneWidget);
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
