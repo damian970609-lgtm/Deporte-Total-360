@@ -338,7 +338,11 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
         }
       });
       await _saveSettings();
-      if (mounted) await _refreshCatalog();
+      // Los canales ya fueron analizados y publicados en el estado local.
+      // No recargar el catálogo aquí: una segunda carga puede competir con
+      // la importación recién terminada y reemplazar la lista visible. La
+      // actualización de otras fuentes y EPG queda disponible en el botón
+      // manual de actualización.
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
