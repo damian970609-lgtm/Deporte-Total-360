@@ -671,9 +671,8 @@ class AutomaticLiveService {
     final epgUrls = _splitPlaylistUrls(epgUrl);
     if (playlistUrls.isEmpty ||
         !playlistUrls.every(isSafeHttpUrl) ||
-        epgUrls.isEmpty ||
         !epgUrls.every(isSafeHttpUrl)) {
-      throw const FormatException('Configura listas M3U y guías XMLTV/EPG con direcciones HTTP o HTTPS válidas.');
+      throw const FormatException('Configura al menos una lista M3U y utiliza direcciones HTTP o HTTPS válidas para las guías EPG.');
     }
     final playlistCacheKey = playlistUrls.join('\n');
     final epgCacheKey = epgUrls.join('\n');
@@ -723,9 +722,9 @@ class AutomaticLiveService {
       throw const FormatException('Ninguna lista M3U respondió con señales HLS, DASH o vídeo directo compatibles.');
     }
 
-    // Se fusionan varias guías. Si una EPG no responde o publica XML inválido,
-    // las demás siguen aportando programas. Las guías regionales tienen un
-    // límite menor para cuidar la memoria del teléfono.
+    // Las listas M3U pueden explorarse aunque todavía no se haya añadido EPG.
+    // Cuando existen guías, se fusionan en lotes; un fallo de una guía no
+    // impide mostrar los canales importados correctamente.
     final programmesByKey = <String, XmltvProgramme>{};
     // Descarga por lotes pequeños: varias guías pueden responder a la vez, pero
     // nunca se abren todas las descargas grandes simultáneamente.
@@ -761,10 +760,6 @@ class AutomaticLiveService {
       }
     }
     final programmes = programmesByKey.values.toList(growable: false);
-    if (programmes.isEmpty) {
-      throw const FormatException('Ninguna guía EPG/XMLTV respondió con programas legibles.');
-    }
-
     final catalog = AutoLiveCatalog(channels: channels, programmes: programmes);
     _cachedCatalog = catalog;
     _cachedAt = now;
