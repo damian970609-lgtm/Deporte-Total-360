@@ -689,7 +689,7 @@ class AutomaticLiveService {
       throw const FormatException('Configura al menos una lista M3U y utiliza direcciones HTTP o HTTPS válidas para las guías EPG.');
     }
     final int effectiveBatchSize = downloadBatchSize.clamp(1, 2).toInt();
-    final playlistCacheKey = playlistUrls.join('\\n');
+    final playlistCacheKey = playlistUrls.join('\n');
     final epgCacheKey = epgUrls.join('\n');
     final now = DateTime.now();
     final cached = _cachedCatalog;
