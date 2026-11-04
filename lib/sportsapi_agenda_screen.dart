@@ -31,10 +31,10 @@ class SportsApiAgendaScreen extends StatefulWidget {
   final AgendaEventsLoader? loadEvents;
 
   @override
-  State<MarcaAgendaScreen> createState() => _SportsApiAgendaScreenState();
+  State<SportsApiAgendaScreen> createState() => _SportsApiAgendaScreenState();
 }
 
-class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
+class _SportsApiAgendaScreenState extends State<SportsApiAgendaScreen>
     with WidgetsBindingObserver {
   List<SportsAgendaEvent> _events = <SportsAgendaEvent>[];
   Timer? _refreshTimer;
@@ -97,15 +97,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
       await SportsAgendaStore.save(events);
       return events;
     } catch (_) {
-      // Si la API falla, intenta el calendario agregado y luego la caché local.
-      final published = await AutomaticLiveService().fetchPublishedSchedule();
-      if (published != null) {
-        final events = published
-            .map((item) => item.event)
-            .toList(growable: false);
-        await SportsAgendaStore.save(events);
-        return events;
-      }
+      // Sin datos de SportsAPI se conserva la última agenda nativa guardada.
       return SportsAgendaStore.load();
     }
   }
