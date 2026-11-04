@@ -32,6 +32,23 @@ void main() {
           ]
         }), 200);
       }
+      if (request.url.path.endsWith('/fixtures') &&
+          request.url.queryParameters['sport'] == 'football' &&
+          request.url.queryParameters['page'] == '1') {
+        return http.Response(jsonEncode({
+          'data': [{
+            'id': 103,
+            'sport': 'football',
+            'startTime': '2030-01-01T14:00:00Z',
+            'status': {'type': 'scheduled', 'description': 'Not started'},
+            'home': {'id': 5, 'name': 'Team Five'},
+            'away': {'id': 6, 'name': 'Team Six'},
+            'league': {'id': 12, 'name': 'NWSL'},
+            'season': {'id': 20, 'name': '2030'}
+          }],
+          'meta': {'count': 1, 'hasNextPage': false}
+        }), 200);
+      }
       if (request.url.path.endsWith('/fixtures')) {
         if (request.url.queryParameters['sport'] != 'football') {
           return http.Response(jsonEncode({'data': [], 'meta': {'count': 0}}), 200);
@@ -60,23 +77,6 @@ void main() {
             }
           ],
           'meta': {'count': 2, 'hasNextPage': request.url.queryParameters['page'] == '0'}
-        }), 200);
-      }
-      if (request.url.path.endsWith('/fixtures') &&
-          request.url.queryParameters['sport'] == 'football' &&
-          request.url.queryParameters['page'] == '1') {
-        return http.Response(jsonEncode({
-          'data': [{
-            'id': 103,
-            'sport': 'football',
-            'startTime': '2030-01-01T14:00:00Z',
-            'status': {'type': 'scheduled', 'description': 'Not started'},
-            'home': {'id': 5, 'name': 'Team Five'},
-            'away': {'id': 6, 'name': 'Team Six'},
-            'league': {'id': 12, 'name': 'NWSL'},
-            'season': {'id': 20, 'name': '2030'}
-          }],
-          'meta': {'count': 1, 'hasNextPage': false}
         }), 200);
       }
       if (request.url.path.endsWith('/races')) {
