@@ -123,17 +123,27 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         continue;
       }
 
+      final availableCandidates = item.sources
+          .where((candidate) =>
+              candidate.available && isDirectPlayableStream(candidate.url))
+          .toList(growable: false);
       ScheduledLiveSource? selected;
-      for (final candidate in item.sources) {
-        if (candidate.available &&
-            isDirectPlayableStream(candidate.url) &&
-            !usedUrls.contains(candidate.url)) {
+      for (final candidate in availableCandidates) {
+        if (!usedUrls.contains(candidate.url)) {
           selected = candidate;
           break;
         }
       }
       if (selected == null) continue;
+      final fallbackUrls = availableCandidates
+          .where((candidate) =>
+              candidate.url != selected!.url &&
+              !usedUrls.contains(candidate.url))
+          .take(3)
+          .map((candidate) => candidate.url)
+          .toList(growable: false);
       usedUrls.add(selected.url);
+      usedUrls.addAll(fallbackUrls);
 
       final event = item.event;
       final teams = event.homeTeam.isNotEmpty && event.awayTeam.isNotEmpty
@@ -151,6 +161,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         url: selected.url,
         subtitle: details.join(' · '),
         eventId: event.id,
+        fallbackUrls: fallbackUrls,
       ));
     }
     return result;
