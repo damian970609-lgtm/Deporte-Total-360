@@ -6,11 +6,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'automatic_live_service.dart';
+import 'iptv_sources_screen.dart';
 
 const Color _ottfoxBg = Color(0xFF030814);
 const Color _ottfoxPanel = Color(0xFF071326);
 const Color _ottfoxCyan = Color(0xFF00E5FF);
 const Color _ottfoxMuted = Color(0xFFA9BDD6);
+const Color _ottfoxGreen = Color(0xFF39FF9C);
 
 /// Lee únicamente la biblioteca local del OTTFOX abierto en este WebView.
 /// No realiza peticiones a servidores externos ni intenta acceder al Chrome
@@ -582,6 +584,17 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
           icon: const Icon(Icons.arrow_back_rounded, color: _ottfoxCyan),
         ),
         actions: <Widget>[
+          IconButton(
+            tooltip: 'Descargar listas públicas y abrir el catálogo IPTV',
+            onPressed: () {
+              Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => const IptvSourcesScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.playlist_play_rounded, color: _ottfoxGreen),
+          ),
           if (_syncing)
             const Padding(
               padding: EdgeInsets.all(14),
