@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'automatic_live_screen.dart';
 import 'iptv_sources_screen.dart';
+import 'codoplayer_screen.dart';
 
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
@@ -1743,6 +1744,39 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
     }
   }
 
+  Future<void> _openCodoPlayer() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: appPanel,
+        title: const Text(
+          'ANTES DE ABRIR CODOPLAYER',
+          style: TextStyle(color: appCyan, fontWeight: FontWeight.w900),
+        ),
+        content: const Text(
+          'CodoPlayer es un servicio externo. Su política de privacidad indica que las listas abiertas mediante URL y los datos de acceso pueden guardarse en sus servidores hasta un año. Esta APK no enviará automáticamente tus listas guardadas: solo compartirás una fuente si tú mismo la introduces o la cargas dentro de CodoPlayer.',
+          style: TextStyle(color: appMuted, height: 1.45, fontSize: 12),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const CodoPlayerScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1797,6 +1831,55 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                       },
                       icon: const Icon(Icons.playlist_add_check_rounded),
                       label: const Text('ABRIR REPRODUCTOR Y EXTRACTOR IPTV'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: appCyan,
+                        side: const BorderSide(color: appCyan),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: appPanel,
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: appCyan.withAlpha(180)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      const Icon(Icons.live_tv_rounded, color: appCyan),
+                      const SizedBox(width: 9),
+                      const Expanded(
+                        child: Text(
+                          'CODOPLAYER · REPRODUCTOR WEB',
+                          style: TextStyle(
+                            color: appCyan,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 9),
+                  const Text(
+                    'Abre el reproductor web CodoPlayer dentro de Deporte Total 360°. Las listas que ya tienes guardadas en esta APK siguen cargándose gradualmente en el centro IPTV; no se envían automáticamente a un servicio externo.',
+                    style: TextStyle(color: appMuted, fontSize: 11, height: 1.45),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _openCodoPlayer,
+                      icon: const Icon(Icons.open_in_browser_rounded),
+                      label: const Text('ABRIR CODOPLAYER EN LA APK'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: appCyan,
                         side: const BorderSide(color: appCyan),
