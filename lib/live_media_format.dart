@@ -5,6 +5,36 @@ enum LiveMediaFormat {
   dash,
   smoothStreaming,
   progressive,
+  /// Endpoint HTTP de transmisión sin extensión visible.
+  other,
+}
+
+bool _isExtensionlessLiveEndpoint(Uri uri) {
+  final segments = uri.pathSegments
+      .where((segment) => segment.trim().isNotEmpty)
+      .toList(growable: false);
+  const markers = <String>{'live', 'stream', 'streams', 'channel', 'channels'};
+  final markerIndex = segments.indexWhere(
+    (segment) => markers.contains(segment.toLowerCase()),
+  );
+  if (markerIndex < 0 || markerIndex == segments.length - 1) return false;
+
+  final endpoint = segments.last.toLowerCase();
+  // No convertir páginas, listas, guías ni documentos en señales.
+  if (endpoint.isEmpty ||
+      endpoint.contains('.') ||
+      const <String>{'index', 'playlist', 'watch', 'player', 'embed'}.contains(endpoint)) {
+    return false;
+  }
+  for (final entry in uri.queryParameters.entries) {
+    final key = entry.key.toLowerCase();
+    final value = entry.value.toLowerCase();
+    if ((key == 'type' || key == 'output' || key == 'format') &&
+        (value.contains('m3u') || value.contains('xml') || value.contains('html'))) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /// Clasifica por la ruta real de la URL; Uri.path separa correctamente
@@ -41,5 +71,6 @@ LiveMediaFormat? liveMediaFormatForUrl(String value) {
   if (progressiveExtensions.any(path.endsWith)) {
     return LiveMediaFormat.progressive;
   }
+  if (_isExtensionlessLiveEndpoint(uri)) return LiveMediaFormat.other;
   return null;
 }
