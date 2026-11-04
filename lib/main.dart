@@ -2358,10 +2358,10 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
       if (!mounted) return;
       setState(() {
         _syncMessage =
-            'Sincronización enviada: $_channelCount canales de '
-            '$_playlistCount listas. Se adjuntaron $_epgCount guías XMLTV '
-            'en la cabecera M3U y ${result['guidesLinkedInFields'] ?? 0} '
-            'en los campos EPG de OTTFOX. Revisa el resultado y pulsa Aplicar/Descargar en el editor.';
+            'OTTFOX recibió $_channelCount canales combinados de '
+            '$_playlistCount listas y $_epgCount guías XMLTV. '
+            '${result['guidesLinkedInFields'] ?? 0} guías se colocaron en los campos EPG; '
+            '${appliedToOttfox ? 'la lista se aplicó a la biblioteca local.' : 'pulsa Aplicar cambios si el editor lo solicita.'}';
       });
     } catch (error) {
       if (!mounted) return;
