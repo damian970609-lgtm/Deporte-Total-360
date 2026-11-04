@@ -2259,7 +2259,7 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
       var chunkIndex = 0;
       for (var start = 0; start < mergedPlaylist.length;) {
         if (!mounted) return;
-        var end = (start + chunkSize).clamp(0, mergedPlaylist.length);
+        var end = (start + chunkSize).clamp(0, mergedPlaylist.length).toInt();
         if (end < mergedPlaylist.length && end > start) {
           final lastUnit = mergedPlaylist.codeUnitAt(end - 1);
           if (lastUnit >= 0xD800 && lastUnit <= 0xDBFF) end--;
@@ -2500,7 +2500,7 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
           if (_loading || _syncingSources)
             LinearProgressIndicator(
               value: _syncingSources && _downloadTotal > 0
-                  ? (_downloadedCount / _downloadTotal).clamp(0.0, 1.0)
+                  ? (_downloadedCount / _downloadTotal).clamp(0.0, 1.0).toDouble()
                   : (_loading && _progress > 0 ? _progress / 100 : null),
               minHeight: 2,
               backgroundColor: appPanel,
