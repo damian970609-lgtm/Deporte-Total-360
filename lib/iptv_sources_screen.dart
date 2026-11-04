@@ -186,7 +186,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
 
     final list = epg ? _epgUrls : _playlistUrls;
     final incoming = value
-        .split(RegExp(r'[\\r\\n;]+'))
+        .split(RegExp(r'[\r\n;]+'))
         .map((item) => item.trim())
         .where((item) => item.isNotEmpty);
     var added = 0;
