@@ -1,8 +1,11 @@
+import 'dart:isolate';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'automatic_live_service.dart';
 import 'live_channels_screen.dart';
+import 'ottfox_workspace_screen.dart';
 
 const Color _iptvBg = Color(0xFF030814);
 const Color _iptvPanel = Color(0xFF071326);
@@ -34,6 +37,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
 
   List<String> _playlistUrls = <String>[];
   List<String> _epgUrls = <String>[];
+  String _playlistText = '';
   List<_MergedM3uChannel> _mergedChannels = <_MergedM3uChannel>[];
   final List<M3uChannel> _multiViewQueue = <M3uChannel>[];
   AutoLiveCatalog? _catalog;
@@ -67,6 +71,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
       setState(() {
         _playlistUrls = List<String>.of(settings.playlistUrls);
         _epgUrls = List<String>.of(settings.epgUrls);
+        _playlistText = settings.playlistText;
         _loading = false;
       });
       // Carga automáticamente todas las fuentes guardadas al entrar al centro IPTV.
@@ -88,6 +93,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
         playlistUrl: _playlistUrls.join('\n'),
         epgUrl: _epgUrls.join('\n'),
         authorizationConfirmed: true,
+        playlistText: _playlistText,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -102,6 +108,157 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
       }
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+
+  Future<void> _openOttfox() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const OttfoxWorkspaceScreen(),
+      ),
+    );
+  }
+
+  Future<void> _importClipboardPlaylist() async {
+    try {
+      final data = await Clipboard.getData('text/plain');
+      final text = data?.text ?? '';
+      if (text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('El portapapeles está vacío. Copia primero la salida M3U desde OTTFOX.')),
+        );
+        return;
+      }
+      await _importPlaylistText(text);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo leer la lista copiada: $error')),
+      );
+    }
+  }
+
+  Future<void> _pastePlaylistText() async {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _iptvPanel,
+        title: const Text(
+          'Importar contenido M3U',
+          style: TextStyle(color: _iptvCyan, fontWeight: FontWeight.w900),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            minLines: 6,
+            maxLines: 12,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: const InputDecoration(
+              alignLabelWithHint: true,
+              hintText: 'Pega aquí el contenido exportado que comienza con #EXTM3U',
+            ),
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            child: const Text('Importar'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (text != null && mounted) await _importPlaylistText(text);
+  }
+
+  List<String> _epgUrlsFromM3uHeader(String text) {
+    final header = text
+        .split(RegExp(r'[\r\n]'))
+        .map((line) => line.trim())
+        .firstWhere(
+          (line) => line.toUpperCase().startsWith('#EXTM3U'),
+          orElse: () => '',
+        );
+    if (header.isEmpty) return <String>[];
+    final found = <String>{};
+    final attribute = RegExp(
+      r'''(?:url-tvg|x-tvg-url)\s*=\s*["']([^"']+)["']''',
+      caseSensitive: false,
+    );
+    for (final match in attribute.allMatches(header)) {
+      for (final raw in (match.group(1) ?? '').split(RegExp(r'[;,\s]+'))) {
+        final url = raw.trim();
+        if (url.isNotEmpty && isSafeHttpUrl(url)) found.add(url);
+      }
+    }
+    return found.toList(growable: false);
+  }
+
+  Future<void> _importPlaylistText(String rawText) async {
+    final text = rawText.trim();
+    if (text.isEmpty || !text.toUpperCase().startsWith('#EXTM3U')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('El contenido no es una lista M3U. En OTTFOX usa Convertir o Exportar y elige M3U/M3U8.')),
+      );
+      return;
+    }
+    if (text.length > 3 * 1024 * 1024) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('La lista supera 3 MB. Reduce o divide la lista en OTTFOX antes de importarla.')),
+      );
+      return;
+    }
+
+    try {
+      final channels = await Isolate.run(
+        () => AutomaticLiveService.parseM3u(
+          text,
+          sourceUrl: 'OTTFOX · lista local',
+        ),
+      );
+      if (!mounted) return;
+      if (channels.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('La M3U no contiene enlaces directos compatibles. Convierte a M3U en OTTFOX y comprueba que los canales tengan URLs HLS (.m3u8), DASH (.mpd), TS o MP4 directas.')),
+        );
+        return;
+      }
+
+      final discoveredEpg = _epgUrlsFromM3uHeader(text);
+      var addedEpg = 0;
+      setState(() {
+        _playlistText = text;
+        for (final url in discoveredEpg) {
+          if (!_epgUrls.contains(url)) {
+            _epgUrls.add(url);
+            addedEpg++;
+          }
+        }
+      });
+      await _saveSettings();
+      if (mounted) await _refreshCatalog();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'OTTFOX: ${channels.length} canales importados${addedEpg > 0 ? ' y $addedEpg guía(s) EPG añadida(s)' : ''}.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo importar la lista M3U: $error')),
+      );
     }
   }
 
@@ -175,6 +332,17 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                     .where((item) => item.isNotEmpty)
                     .toSet()
                     .toList(growable: false);
+                final ottfoxPage = urls.any((item) {
+                  final host = Uri.tryParse(item)?.host.toLowerCase() ?? '';
+                  return host == 'ottfox.net' || host.endsWith('.ottfox.net');
+                });
+                if (ottfoxPage) {
+                  setDialogState(() {
+                    validationError =
+                        'Ese enlace abre la herramienta OTTFOX, no una lista M3U ni una guía EPG. Pulsa ABRIR OTTFOX, prepara tu lista y luego importa el contenido M3U copiado.';
+                  });
+                  return;
+                }
                 if (urls.isEmpty || !urls.every(isSafeHttpUrl)) {
                   setDialogState(() {
                     validationError =
@@ -454,6 +622,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
       final catalog = await _service.loadCatalog(
         playlistUrl: _playlistUrls.join('\n'),
         epgUrl: _epgUrls.join('\n'),
+        playlistText: _playlistText,
         forceRefresh: true,
         downloadBatchSize: 4,
         batchPause: const Duration(milliseconds: 100),
@@ -804,6 +973,76 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                       fontSize: 11,
                       height: 1.5,
                     ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(13),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: _iptvPanel2,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: _iptvGreen.withAlpha(135)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      const Text(
+                        'OTTFOX · EXTRACTOR Y CONVERTIDOR',
+                        style: TextStyle(
+                          color: _iptvGreen,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
+                          letterSpacing: .35,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      const Text(
+                        'Abre OTTFOX aquí, carga una lista propia o autorizada y conviértela a M3U. Al copiar la salida, vuelve y pulsa «Importar lista copiada» para añadir sus canales al reproductor nativo.',
+                        style: TextStyle(color: _iptvMuted, fontSize: 11, height: 1.4),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: <Widget>[
+                          OutlinedButton.icon(
+                            onPressed: _openOttfox,
+                            icon: const Icon(Icons.open_in_browser_rounded),
+                            label: const Text('ABRIR OTTFOX'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _iptvCyan,
+                              side: const BorderSide(color: _iptvCyan),
+                            ),
+                          ),
+                          FilledButton.icon(
+                            onPressed: _importClipboardPlaylist,
+                            icon: const Icon(Icons.playlist_add_check_rounded),
+                            label: const Text('IMPORTAR LISTA COPIADA'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _iptvGreen,
+                              foregroundColor: _iptvBg,
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: _pastePlaylistText,
+                            icon: const Icon(Icons.content_paste_rounded),
+                            label: const Text('PEGAR TEXTO M3U'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _iptvPink,
+                              side: const BorderSide(color: _iptvPink),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_playlistText.isNotEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: Text(
+                            'Hay una lista M3U local importada y guardada en esta APK.',
+                            style: TextStyle(color: _iptvGreen, fontSize: 10),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 _sourceSection(
