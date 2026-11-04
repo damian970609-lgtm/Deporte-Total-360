@@ -25,8 +25,21 @@ class SportsApiAppService {
   Future<dynamic> _get(
     String route, [
     Map<String, String> query = const <String, String>{},
-  ], {
-    bool includeMeta = false,
+  ]) {
+    return _getResponse(route, query, includeMeta: false);
+  }
+
+  Future<dynamic> _getEnvelope(
+    String route, [
+    Map<String, String> query = const <String, String>{},
+  ]) {
+    return _getResponse(route, query, includeMeta: true);
+  }
+
+  Future<dynamic> _getResponse(
+    String route,
+    Map<String, String> query, {
+    required bool includeMeta,
   }) async {
     try {
       final response = await _client.get(
@@ -190,14 +203,13 @@ class SportsApiAppService {
           // SportsAPI pagina por diez ligas. Recorrer mientras hasNextPage
           // evita perder torneos favoritos que aparecen después de la página 0.
           for (var page = 0; page < 100; page++) {
-            final envelope = await _get(
+            final envelope = await _getEnvelope(
               '/fixtures',
               <String, String>{
                 'date': day,
                 'sport': entry.key,
                 'page': page.toString(),
               },
-              includeMeta: true,
             );
             if (envelope is! Map || envelope['data'] is! List) {
               throw const FormatException('SportsAPI devolvió una página de agenda con formato inválido.');
