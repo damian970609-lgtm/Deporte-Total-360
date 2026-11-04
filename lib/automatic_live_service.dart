@@ -12,6 +12,10 @@ import 'sports_api_service.dart';
 const String _playlistUrlKey = 'dt360_auto_live_playlist_url_v1';
 const String _epgUrlKey = 'dt360_auto_live_epg_url_v1';
 const String _authorizedKey = 'dt360_auto_live_authorized_v1';
+const String _additionalPlaylistUrlsKey =
+    'dt360_auto_live_additional_playlist_urls_v1';
+const String _additionalEpgUrlsKey =
+    'dt360_auto_live_additional_epg_urls_v1';
 
 /// Normaliza imágenes de MARCA: admite URL HTTPS absolutas, protocol-relative
 /// y rutas relativas del mismo sitio. Nunca permite esquemas no HTTPS ni
@@ -117,6 +121,16 @@ bool isSafeHttpUrl(String value) {
 bool isDirectPlayableStream(String value) =>
     liveMediaFormatForUrl(value) != null;
 
+class AutoLiveAdditionalSources {
+  const AutoLiveAdditionalSources({
+    this.playlistUrls = const <String>[],
+    this.epgUrls = const <String>[],
+  });
+
+  final List<String> playlistUrls;
+  final List<String> epgUrls;
+}
+
 class AutoLiveSettings {
   const AutoLiveSettings({
     required this.playlistUrl,
@@ -166,11 +180,85 @@ class AutoLiveSettings {
       await prefs.setString(_epgUrlKey, epg);
     }
 
+    // Las fuentes que el usuario añade desde el menú secreto se fusionan con
+    // las predeterminadas; nunca reemplazan el catálogo automático existente.
+    final additional = await loadAdditionalSources();
+    playlist = <String>{
+      ..._splitPlaylistUrls(playlist),
+      ...additional.playlistUrls,
+    }.join('\n');
+    epg = <String>{
+      ..._splitPlaylistUrls(epg),
+      ...additional.epgUrls,
+    }.join('\n');
+
     return AutoLiveSettings(
       playlistUrl: playlist,
       epgUrl: epg,
       authorizationConfirmed: true,
     );
+  }
+
+  /// Recupera las fuentes adicionales guardadas en este dispositivo.
+  static Future<AutoLiveAdditionalSources> loadAdditionalSources() async {
+    final prefs = await SharedPreferences.getInstance();
+    final playlists = _splitPlaylistUrls(
+      prefs.getString(_additionalPlaylistUrlsKey) ?? '',
+    ).where(isSafeHttpUrl).toList(growable: false);
+    final epgs = _splitPlaylistUrls(
+      prefs.getString(_additionalEpgUrlsKey) ?? '',
+    ).where(isSafeHttpUrl).toList(growable: false);
+    return AutoLiveAdditionalSources(
+      playlistUrls: playlists,
+      epgUrls: epgs,
+    );
+  }
+
+  /// Añade enlaces propios/autorizados y evita duplicados. Se admiten varias
+  /// direcciones separadas por líneas o punto y coma.
+  static Future<AutoLiveAdditionalSources> addAdditionalSources({
+    String playlistUrl = '',
+    String epgUrl = '',
+  }) async {
+    final newPlaylists = _splitPlaylistUrls(playlistUrl);
+    final newEpgs = _splitPlaylistUrls(epgUrl);
+    if (newPlaylists.isEmpty && newEpgs.isEmpty) {
+      throw const FormatException('Añade al menos una dirección M3U o EPG.');
+    }
+    if (!newPlaylists.every(isSafeHttpUrl)) {
+      throw const FormatException('Cada lista M3U debe tener una dirección HTTP o HTTPS válida.');
+    }
+    if (!newEpgs.every(isSafeHttpUrl)) {
+      throw const FormatException('Cada guía EPG debe tener una dirección HTTP o HTTPS válida.');
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final current = await loadAdditionalSources();
+    final mergedPlaylists = <String>{
+      ...current.playlistUrls,
+      ...newPlaylists,
+    };
+    final mergedEpgs = <String>{
+      ...current.epgUrls,
+      ...newEpgs,
+    };
+    await prefs.setString(
+      _additionalPlaylistUrlsKey,
+      mergedPlaylists.join('\n'),
+    );
+    await prefs.setString(
+      _additionalEpgUrlsKey,
+      mergedEpgs.join('\n'),
+    );
+    return loadAdditionalSources();
+  }
+
+  /// Elimina únicamente las fuentes añadidas manualmente. Las fuentes
+  /// automáticas originales permanecen intactas.
+  static Future<void> clearAdditionalSources() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_additionalPlaylistUrlsKey);
+    await prefs.remove(_additionalEpgUrlsKey);
   }
 
   static Future<void> save({
