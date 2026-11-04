@@ -879,4 +879,88 @@ https://media.example/offline.m3u8
     });
 
   });
+
+  group('extractor y reproductor de listas IPTV', () {
+    test('analiza M3U fuera de la interfaz y comunica el progreso', () async {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.one" group-title="Deportes",Canal deportivo
+https://media.example/live.m3u8
+''';
+      final client = MockClient((request) async {
+        if (request.url.host == 'playlist.example') {
+          return http.Response(playlist, 200);
+        }
+        return http.Response('', 404);
+      });
+      final service = AutomaticLiveService(client: client);
+      final progress = <String>[];
+      try {
+        final catalog = await service.loadCatalog(
+          playlistUrl: 'https://playlist.example/sports.m3u',
+          epgUrl: '',
+          forceRefresh: true,
+          downloadBatchSize: 1,
+          batchPause: Duration.zero,
+          onProgress: (phase, completed, total) {
+            progress.add('$phase:$completed/$total');
+          },
+        );
+
+        expect(catalog.channels, hasLength(1));
+        expect(catalog.channels.single.name, 'Canal deportivo');
+        expect(progress, <String>['M3U:1/1']);
+      } finally {
+        service.dispose();
+      }
+    });
+
+    test('exporta una sola M3U con canales únicos y todas las referencias EPG', () {
+      final catalog = AutoLiveCatalog(
+        channels: const <M3uChannel>[
+          M3uChannel(
+            name: 'Canal Uno HD',
+            url: 'https://media.example/one.m3u8',
+            tvgId: 'canal.uno',
+            tvgName: 'Canal Uno',
+            group: 'Deportes',
+            logo: 'https://img.example/uno.png',
+          ),
+          M3uChannel(
+            name: 'Canal Uno alternativo',
+            url: 'https://media.example/one.m3u8',
+            tvgId: 'canal.uno',
+          ),
+          M3uChannel(
+            name: 'Canal Dos',
+            url: 'https://media.example/two.mpd',
+          ),
+          M3uChannel(
+            name: 'Página web no reproducible',
+            url: 'https://media.example/watch?id=123',
+          ),
+        ],
+        programmes: const <XmltvProgramme>[],
+      );
+
+      final merged = AutomaticLiveService.buildMergedM3u(
+        catalog,
+        epgUrls: const <String>[
+          'https://guide.example/es.xml',
+          'https://guide.example/latam.xml.gz',
+          'javascript:alert(1)',
+        ],
+      );
+
+      expect(merged, startsWith('#EXTM3U'));
+      expect(merged, contains('url-tvg="https://guide.example/es.xml,https://guide.example/latam.xml.gz"'));
+      expect(merged, contains('tvg-id="canal.uno"'));
+      expect(merged, contains('#EXTINF:-1'));
+      expect('https://media.example/one.m3u8'.allMatches(merged), hasLength(1));
+      expect(merged, contains('https://media.example/two.mpd'));
+      expect(merged, isNot(contains('watch?id=123')));
+      expect(merged, isNot(contains('javascript:')));
+    });
+  });
+
 }
