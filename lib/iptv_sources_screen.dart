@@ -864,8 +864,8 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
   bool _isFavorite(M3uChannel channel) => _favoriteUrls.contains(channel.url);
 
   Future<void> _toggleFavorite(M3uChannel channel) async {
-    final isRemoving = !_favoriteUrls.add(channel.url);
-    if (isRemoving) _favoriteUrls.remove(channel.url);
+    final isRemoving = _favoriteUrls.remove(channel.url);
+    if (!isRemoving) _favoriteUrls.add(channel.url);
     if (mounted) setState(() {});
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -885,6 +885,12 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
       );
     } catch (error) {
       if (!mounted) return;
+      if (isRemoving) {
+        _favoriteUrls.add(channel.url);
+      } else {
+        _favoriteUrls.remove(channel.url);
+      }
+      setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo guardar el favorito: $error')),
       );
@@ -914,11 +920,11 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
         return false;
       }
       if (query.isEmpty) return true;
-      final channel = entry.primary;
-      return AutomaticLiveService.normalizeText(
-        channel.name + ' ' + channel.tvgName + ' ' +
-            channel.tvgId + ' ' + channel.group,
-      ).contains(query);
+      return entry.channels.any((channel) =>
+          AutomaticLiveService.normalizeText(
+            channel.name + ' ' + channel.tvgName + ' ' +
+                channel.tvgId + ' ' + channel.group,
+          ).contains(query));
     }).toList(growable: false);
   }
 
@@ -1468,12 +1474,14 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                   ),
                   const SizedBox(height: 5),
                   if (_showFavoritesOnly && filtered.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 18),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
                       child: Text(
-                        'Todavía no tienes favoritos. Pulsa la estrella de un canal para guardarlo aquí.',
+                        _favoriteUrls.isEmpty
+                            ? 'Todavía no tienes favoritos. Pulsa la estrella de un canal para guardarlo aquí.'
+                            : 'Ningún favorito coincide con tu búsqueda actual.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: _iptvMuted, fontSize: 11, height: 1.45),
+                        style: const TextStyle(color: _iptvMuted, fontSize: 11, height: 1.45),
                       ),
                     ),
                   for (final entry in visibleChannels)
