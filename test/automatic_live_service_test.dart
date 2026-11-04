@@ -287,35 +287,51 @@ void main() {
       expect(settings.epgUrls, hasLength(20));
     });
 
-    test('guarda y carga en el reproductor la M3U local exportada desde OTTFOX', () async {
-      const localPlaylist = '''
+    test('guarda varias listas de OTTFOX y las analiza incrementalmente fuera de la interfaz', () async {
+      const firstPlaylist = '''
 #EXTM3U
-#EXTINF:-1 tvg-id="ottfox.test" group-title="Deportes",Canal OTTFOX
-https://cdn.example/live/ottfox.m3u8
+#EXTINF:-1 tvg-id="ottfox.one" group-title="Deportes",Canal OTTFOX Uno
+https://cdn.example/live/one.m3u8
+''';
+      const secondPlaylist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="ottfox.two" group-title="Deportes",Canal OTTFOX Dos
+https://cdn.example/live/two.m3u8
 ''';
 
       await AutoLiveSettings.save(
         playlistUrl: 'https://lists.example/owned.m3u',
         epgUrl: 'https://guide.example/owned.xml',
         authorizationConfirmed: true,
-        playlistText: localPlaylist,
+        playlistTexts: <String>[firstPlaylist, secondPlaylist],
       );
       final settings = await AutoLiveSettings.load();
-      expect(settings.playlistText, localPlaylist.trim());
+      expect(settings.localPlaylistTexts, hasLength(2));
 
       final service = AutomaticLiveService(
         client: MockClient((request) async => http.Response('', 404)),
       );
       addTearDown(service.dispose);
+      final snapshots = <List<M3uChannel>>[];
+      final progress = <String>[];
       final catalog = await service.loadCatalog(
         playlistUrl: '',
         epgUrl: '',
-        playlistText: settings.playlistText,
+        playlistTexts: settings.localPlaylistTexts,
+        batchPause: Duration.zero,
+        onChannelsLoaded: snapshots.add,
+        onProgress: (phase, completed, total) {
+          progress.add('$phase:$completed/$total');
+        },
       );
 
-      expect(catalog.channels, hasLength(1));
-      expect(catalog.channels.single.name, 'Canal OTTFOX');
-      expect(catalog.channels.single.url, 'https://cdn.example/live/ottfox.m3u8');
+      expect(catalog.channels, hasLength(2));
+      expect(catalog.channels.map((channel) => channel.name).toList(),
+          <String>['Canal OTTFOX Uno', 'Canal OTTFOX Dos']);
+      expect(snapshots, hasLength(2));
+      expect(snapshots.first, hasLength(1));
+      expect(snapshots.last, hasLength(2));
+      expect(progress, <String>['OTTFOX:1/2', 'OTTFOX:2/2']);
     });
   });
 
