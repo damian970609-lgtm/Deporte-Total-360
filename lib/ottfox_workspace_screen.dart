@@ -235,24 +235,37 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
         }
       }
 
+      final settings = await AutoLiveSettings.load();
+      final savedPlaylists = <String>[...settings.localPlaylistTexts];
+      final known = savedPlaylists.toSet();
+      final epgUrls = <String>{...settings.epgUrls, ...discoveredEpg};
+
       if (candidates.isEmpty) {
+        if (epgUrls.join('\n') != settings.epgUrls.join('\n')) {
+          await AutoLiveSettings.save(
+            playlistUrl: settings.playlistUrl,
+            epgUrl: epgUrls.join('\n'),
+            authorizationConfirmed: true,
+            playlistText: '',
+            playlistTexts: savedPlaylists,
+          );
+        }
         _setSyncStatus(
-          'No se encontraron listas guardadas en este OTTFOX. Si las guardaste en Chrome, impórtalas primero desde el OTTFOX integrado en esta APK.',
+          'No se encontraron listas M3U guardadas en este OTTFOX. ' +
+          (epgUrls.length > settings.epgUrls.length
+              ? 'Se añadieron guías EPG detectadas. '
+              : '') +
+          'Si guardaste listas en Chrome, impórtalas primero desde el OTTFOX integrado en esta APK.',
         );
         if (manual && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('OTTFOX no tiene listas guardadas en el almacenamiento de esta APK.'),
+              content: Text('No hay listas M3U compatibles guardadas en el OTTFOX integrado.'),
             ),
           );
         }
         return;
       }
-
-      final settings = await AutoLiveSettings.load();
-      final savedPlaylists = <String>[...settings.localPlaylistTexts];
-      final known = savedPlaylists.toSet();
-      final epgUrls = <String>{...settings.epgUrls, ...discoveredEpg};
       var newPlaylists = 0;
       var totalChannels = 0;
       var skipped = 0;
