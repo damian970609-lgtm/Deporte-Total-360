@@ -1334,12 +1334,14 @@ class LivePlayerSource {
     required this.url,
     this.subtitle,
     this.eventId,
+    this.fallbackUrls = const <String>[],
   });
 
   final String title;
   final String url;
   final String? subtitle;
   final String? eventId;
+  final List<String> fallbackUrls;
 }
 
 class LivePlayerWaitingEvent {
@@ -1740,6 +1742,48 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
   bool _muted = false;
   bool _isFullscreen = false;
   bool _compactPlayback = false;
+  bool _handlingPlaybackError = false;
+  int _activeSourceIndex = 0;
+  int? _pendingFallbackIndex;
+
+  List<String> get _candidateUrls {
+    final unique = <String>{};
+    for (final url in <String>[
+      widget.source.url,
+      ...widget.source.fallbackUrls,
+    ]) {
+      final value = url.trim();
+      if (isSupportedAuthorizedMediaUrl(value)) unique.add(value);
+    }
+    return unique.toList(growable: false);
+  }
+
+  void _onPlayerValueChanged() {
+    final controller = _controller;
+    if (controller == null ||
+        !controller.value.hasError ||
+        _handlingPlaybackError ||
+        _loading) {
+      return;
+    }
+    final nextIndex = _activeSourceIndex + 1;
+    if (nextIndex >= _candidateUrls.length) {
+      if (mounted) {
+        setState(() {
+          _error = 'La señal dejó de responder y no quedan fuentes alternativas.';
+        });
+      }
+      return;
+    }
+    if (_isFullscreen) {
+      _pendingFallbackIndex = nextIndex;
+      return;
+    }
+    _handlingPlaybackError = true;
+    unawaited(_initialize(startAt: nextIndex).whenComplete(() {
+      _handlingPlaybackError = false;
+    }));
+  }
 
   @override
   void initState() {
@@ -1762,7 +1806,9 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
 
   @override
   void dispose() {
-    _controller?.dispose();
+    final controller = _controller;
+    controller?.removeListener(_onPlayerValueChanged);
+    controller?.dispose();
     super.dispose();
   }
 
@@ -1781,10 +1827,11 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
     }
   }
 
-  Future<void> _initialize() async {
+  Future<void> _initialize({int startAt = 0}) async {
     if (!widget.isActive) return;
     final old = _controller;
     _controller = null;
+    old?.removeListener(_onPlayerValueChanged);
     await old?.dispose();
     if (!mounted) return;
     setState(() {
@@ -1796,55 +1843,81 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
       _isFullscreen = false;
     });
 
-    final uri = Uri.tryParse(widget.source.url.trim());
-    if (uri == null || !isSupportedAuthorizedMediaUrl(uri.toString())) {
+    final candidates = _candidateUrls;
+    if (candidates.isEmpty || startAt >= candidates.length) {
       setState(() {
         _loading = false;
-        _error = 'La URL no es una señal multimedia directa válida.';
+        _error = 'No hay enlaces multimedia directos válidos para reproducir.';
       });
       return;
     }
 
-    final controller = VideoPlayerController.networkUrl(
-      uri,
-      formatHint: _videoFormatHintFor(uri),
-      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-    );
-    _controller = controller;
-    try {
-      await controller.initialize();
-      await controller.setLooping(false);
-      await controller.setVolume(_muted ? 0 : 1);
-      final tracks = await _readVideoTracks(controller);
-      if (!mounted || !widget.isActive) {
+    String? lastError;
+    for (var index = startAt; index < candidates.length; index++) {
+      if (!mounted || !widget.isActive) return;
+      final uri = Uri.tryParse(candidates[index]);
+      if (uri == null) continue;
+
+      final controller = VideoPlayerController.networkUrl(
+        uri,
+        formatHint: _videoFormatHintFor(uri),
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+      );
+      _controller = controller;
+      try {
+        await controller.initialize().timeout(const Duration(seconds: 20));
+        if (!controller.value.isInitialized || controller.value.hasError) {
+          throw StateError(
+            controller.value.errorDescription ??
+                'El reproductor no pudo inicializar la fuente.',
+          );
+        }
+        await controller.setLooping(false);
+        await controller.setVolume(_muted ? 0 : 1);
+        final tracks = await _readVideoTracks(controller);
+        if (!mounted || !widget.isActive) {
+          await controller.dispose();
+          if (identical(_controller, controller)) _controller = null;
+          return;
+        }
+        _activeSourceIndex = index;
+        setState(() {
+          _videoTracks = tracks;
+          _loading = false;
+          _error = null;
+        });
+        await controller.play();
+        if (controller.value.hasError) {
+          throw StateError(
+            controller.value.errorDescription ??
+                'La fuente no inició la reproducción.',
+          );
+        }
+        controller.addListener(_onPlayerValueChanged);
+        if (!mounted) {
+          controller.removeListener(_onPlayerValueChanged);
+          await controller.dispose();
+          if (identical(_controller, controller)) _controller = null;
+          return;
+        }
+        setState(() {});
+        return;
+      } catch (error) {
+        lastError = error.toString();
+        controller.removeListener(_onPlayerValueChanged);
         await controller.dispose();
         if (identical(_controller, controller)) _controller = null;
-        return;
       }
-      setState(() {
-        _videoTracks = tracks;
-        _loading = false;
-      });
-      await controller.play();
-      if (!mounted) {
-        await controller.dispose();
-        if (identical(_controller, controller)) _controller = null;
-        return;
-      }
-      setState(() {});
-    } catch (error) {
-      if (!mounted) {
-        await controller.dispose();
-        if (identical(_controller, controller)) _controller = null;
-        return;
-      }
-      setState(() {
-        _loading = false;
-        _error = 'No se pudo iniciar esta señal: $error';
-      });
-      await controller.dispose();
-      if (identical(_controller, controller)) _controller = null;
     }
+
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _videoTracks = <VideoTrack>[];
+      _error = candidates.length - startAt > 1
+          ? 'No respondieron la señal principal ni las alternativas. Último error: $lastError'
+          : 'No se pudo iniciar esta señal: $lastError';
+    });
   }
 
   Future<void> _togglePlayback() async {
@@ -1912,8 +1985,16 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
       // Primera pulsación de atrás: regresar a la miniatura y conservar vídeo.
       // Se marca antes de consultar las pistas para que la siguiente pulsación
       // ya quede interceptada y pueda detener el directo.
-      _compactPlayback = controller.value.isInitialized;
+      _compactPlayback = controller.value.isInitialized && !controller.value.hasError;
     });
+    final pendingFallback = _pendingFallbackIndex;
+    _pendingFallbackIndex = null;
+    if (pendingFallback != null) {
+      _handlingPlaybackError = true;
+      await _initialize(startAt: pendingFallback);
+      _handlingPlaybackError = false;
+      return;
+    }
     final tracks = await _readVideoTracks(controller);
     if (!mounted || !identical(_controller, controller)) return;
     setState(() => _videoTracks = tracks);
@@ -1927,6 +2008,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
     }
     _compactPlayback = false;
     try {
+      controller.removeListener(_onPlayerValueChanged);
       if (controller.value.isInitialized) await controller.pause();
       await controller.dispose();
     } catch (_) {
