@@ -23,6 +23,15 @@ const String _manualEpgUrlsKey = 'dt360_secret_iptv_epg_urls_v1';
 const String _manualFavoriteUrlsKey = 'dt360_secret_iptv_favorite_urls_v1';
 const String _sharedFavoriteUrlsKey = 'dt360_iptv_favorite_urls_v1';
 
+/// Separa las direcciones introducidas en el formulario manual sin alterar
+/// letras que forman parte del dominio o de la ruta de cada URL.
+List<String> parseManualSourceUrls(String rawValue) => rawValue
+    .split(RegExp(r'[\r\n;]+'))
+    .map((item) => item.trim())
+    .where((item) => item.isNotEmpty)
+    .toSet()
+    .toList(growable: false);
+
 class IptvSourcesScreen extends StatefulWidget {
   const IptvSourcesScreen({
     super.key,
@@ -391,7 +400,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                   labelText: epg
                       ? 'Direcciones de guías EPG (una por línea)'
                       : 'Direcciones de listas M3U (una por línea)',
-                  hintText: 'https://servidor-autorizado/lista.m3u\\nhttps://otro-servidor/lista.m3u8',
+                  hintText: 'https://servidor-autorizado/lista.m3u\nhttps://otro-servidor/lista.m3u8',
                   prefixIcon: const Icon(Icons.link_rounded),
                 ),
               ),
@@ -423,12 +432,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
             ),
             FilledButton(
               onPressed: () {
-                final urls = inputValue
-                    .split(RegExp(r'[\\r\\n;]+'))
-                    .map((item) => item.trim())
-                    .where((item) => item.isNotEmpty)
-                    .toSet()
-                    .toList(growable: false);
+                final urls = parseManualSourceUrls(inputValue);
                 final ottfoxPage = urls.any((item) {
                   final host = Uri.tryParse(item)?.host.toLowerCase() ?? '';
                   return host == 'ottfox.net' || host.endsWith('.ottfox.net');
@@ -447,7 +451,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                   });
                   return;
                 }
-                Navigator.pop(dialogContext, urls.join('\\n'));
+                Navigator.pop(dialogContext, urls.join('\n'));
               },
               child: const Text('Agregar'),
             ),
@@ -462,10 +466,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
 
   Future<void> _addUrls(String rawValue, {required bool epg}) async {
     final list = epg ? _epgUrls : _playlistUrls;
-    final incoming = rawValue
-        .split(RegExp(r'[\r\n;]+'))
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty);
+    final incoming = parseManualSourceUrls(rawValue);
     var added = 0;
     setState(() {
       for (final url in incoming) {
