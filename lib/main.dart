@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'automatic_live_screen.dart';
+import 'iptv_sources_screen.dart';
 
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
@@ -1914,6 +1915,26 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                   Text(
                     'Las listas de canales y guías de programación se descargan y actualizan automáticamente. Primero se priorizan señales en español; cuando no hay una señal española disponible, se prueban fuentes internacionales. Las direcciones y el catálogo permanecen ocultos en la interfaz y no requieren validación manual del usuario.',
                     style: TextStyle(color: appMuted, fontSize: 11, height: 1.45),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).push<void>(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const IptvSourcesScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.playlist_add_check_rounded),
+                      label: const Text('GESTIONAR LISTAS IPTV Y EPG'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: appCyan,
+                        side: const BorderSide(color: appCyan),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
                   ),
                 ],
               ),
