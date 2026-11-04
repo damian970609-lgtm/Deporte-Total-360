@@ -259,14 +259,14 @@ void main() {
       expect(settings.epgUrls[18], contains('teleonline/listas/main/epg.xml.gz'));
       expect(settings.epgUrls[20], contains('epg-do.xml'));
       expect(settings.epgUrls[21], contains('epg-sv.xml'));
-      expect(settings.epgUrls[22], contains('epgshare01.online/epg_ripper_ES1.xml.gz'));
-      expect(settings.epgUrls[23], contains('epgshare01.online/epg_ripper_AR1.xml.gz'));
-      expect(settings.epgUrls[24], contains('epgshare01.online/epg_ripper_MX1.xml.gz'));
-      expect(settings.epgUrls[25], contains('epgshare01.online/epg_ripper_CO1.xml.gz'));
-      expect(settings.epgUrls[26], contains('epgshare01.online/epg_ripper_CL1.xml.gz'));
-      expect(settings.epgUrls[27], contains('epgshare01.online/epg_ripper_PE1.xml.gz'));
-      expect(settings.epgUrls[28], contains('epgshare01.online/epg_ripper_DO1.xml.gz'));
-      expect(settings.epgUrls[29], contains('epgshare01.online/epg_ripper_BR1.xml.gz'));
+      expect(settings.epgUrls[22], contains('epgshare01.online/epgshare01/epg_ripper_ES1.xml.gz'));
+      expect(settings.epgUrls[23], contains('epgshare01.online/epgshare01/epg_ripper_AR1.xml.gz'));
+      expect(settings.epgUrls[24], contains('epgshare01.online/epgshare01/epg_ripper_MX1.xml.gz'));
+      expect(settings.epgUrls[25], contains('epgshare01.online/epgshare01/epg_ripper_CO1.xml.gz'));
+      expect(settings.epgUrls[26], contains('epgshare01.online/epgshare01/epg_ripper_CL1.xml.gz'));
+      expect(settings.epgUrls[27], contains('epgshare01.online/epgshare01/epg_ripper_PE1.xml.gz'));
+      expect(settings.epgUrls[28], contains('epgshare01.online/epgshare01/epg_ripper_DO1.xml.gz'));
+      expect(settings.epgUrls[29], contains('epgshare01.online/epgshare01/epg_ripper_BR1.xml.gz'));
       expect(settings.isConfigured, isTrue);
     });
 
