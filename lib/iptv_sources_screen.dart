@@ -471,7 +471,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
             _mergedChannels = _groupChannels(channels);
           });
         },
-        onSourceError: (url, error) => failedSources.add(_hostLabel(url)),
+        onSourceError: (url, _) => failedSources.add(_hostLabel(url)),
         onProgress: (phase, completed, total) {
           if (!mounted) return;
           setState(() {
