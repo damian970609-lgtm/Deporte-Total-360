@@ -149,7 +149,7 @@ class SportsApiAppService {
         successfulSports++;
         return payload.whereType<Map>().map((raw) {
           final row = Map<String, dynamic>.from(raw);
-          if (isRace) return _raceEvent(row, entry.value);
+          if (isRace) return _raceEvent(row, entry.key, entry.value);
           return _fixtureEvent(row, entry.value);
         }).whereType<SportsAgendaEvent>().toList(growable: false);
       } catch (_) {
