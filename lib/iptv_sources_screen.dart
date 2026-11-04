@@ -39,6 +39,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
   AutoLiveCatalog? _catalog;
   Map<String, List<XmltvProgramme>> _epgIndex = <String, List<XmltvProgramme>>{};
   String _progressMessage = '';
+  String? _sourceWarning;
   int _programmeCount = 0;
   int _rawChannelCount = 0;
   bool _loading = true;
@@ -68,6 +69,8 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
         _epgUrls = List<String>.of(settings.epgUrls);
         _loading = false;
       });
+      // Carga automáticamente todas las fuentes guardadas al entrar al centro IPTV.
+      await _refreshCatalog();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -212,6 +215,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
       return;
     }
     await _saveSettings();
+    if (mounted) await _refreshCatalog();
     if (mounted && added > 1) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Se agregaron $added fuentes correctamente.')),
@@ -443,16 +447,31 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
       _refreshing = true;
       _error = null;
       _progressMessage = 'Preparando las fuentes…';
+      _sourceWarning = null;
     });
+    final failedSources = <String>{};
     try {
       final catalog = await _service.loadCatalog(
         playlistUrl: _playlistUrls.join('\n'),
         epgUrl: _epgUrls.join('\n'),
         forceRefresh: true,
-        downloadBatchSize: 2,
-        batchPause: const Duration(milliseconds: 160),
+        downloadBatchSize: 4,
+        batchPause: const Duration(milliseconds: 100),
         maxPlaylistBytes: 8 * 1024 * 1024,
         maxEpgBytes: 12 * 1024 * 1024,
+        onChannelsLoaded: (channels) {
+          if (!mounted) return;
+          final partialCatalog = AutoLiveCatalog(
+            channels: channels,
+            programmes: const <XmltvProgramme>[],
+          );
+          setState(() {
+            _catalog = partialCatalog;
+            _rawChannelCount = channels.length;
+            _mergedChannels = _groupChannels(channels);
+          });
+        },
+        onSourceError: (url, error) => failedSources.add(_hostLabel(url)),
         onProgress: (phase, completed, total) {
           if (!mounted) return;
           setState(() {
@@ -471,9 +490,19 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
         _rawChannelCount = catalog.channels.length;
         _programmeCount = catalog.programmes.length;
         _mergedChannels = grouped;
+        _sourceWarning = failedSources.isEmpty
+            ? null
+            : '${failedSources.length} fuente(s) no respondieron o no contienen enlaces compatibles: ${failedSources.take(3).join(', ')}';
       });
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) {
+        setState(() {
+          _error = error.toString();
+          _sourceWarning = failedSources.isEmpty
+              ? null
+              : 'Fuentes con problemas: ${failedSources.take(3).join(', ')}';
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -706,16 +735,20 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
       ),
     );
     if (selected == null || !mounted) return;
+    await _playChannel(selected);
+  }
+
+  Future<void> _playChannel(M3uChannel channel) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => LivePlayerGridScreen(
           sources: <LivePlayerSource>[
             LivePlayerSource(
-              title: selected.name,
-              url: selected.url,
-              subtitle: selected.group.isEmpty
+              title: channel.name,
+              url: channel.url,
+              subtitle: channel.group.isEmpty
                   ? 'Canal IPTV autorizado'
-                  : selected.group,
+                  : channel.group,
             ),
           ],
         ),
@@ -925,6 +958,20 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                     ],
                   ),
                 ),
+                if (_sourceWarning != null)
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    margin: const EdgeInsets.only(bottom: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2B2412),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.orangeAccent.withAlpha(100)),
+                    ),
+                    child: Text(
+                      _sourceWarning!,
+                      style: const TextStyle(color: Colors.orangeAccent, fontSize: 10),
+                    ),
+                  ),
                 if (_error != null)
                   Container(
                     padding: const EdgeInsets.all(11),
@@ -1043,11 +1090,22 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                             fontSize: 10,
                           ),
                         ),
-                        trailing: IconButton(
-                          tooltip: 'Añadir a multivista',
-                          onPressed: () => _addToMultiview(entry.primary),
-                          icon: const Icon(Icons.add_to_photos_rounded),
-                          color: _iptvGreen,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            IconButton(
+                              tooltip: 'Reproducir con el reproductor nativo',
+                              onPressed: () => _playChannel(entry.primary),
+                              icon: const Icon(Icons.play_circle_fill_rounded),
+                              color: _iptvGreen,
+                            ),
+                            IconButton(
+                              tooltip: 'Añadir a multivista',
+                              onPressed: () => _addToMultiview(entry.primary),
+                              icon: const Icon(Icons.add_to_photos_rounded),
+                              color: _iptvCyan,
+                            ),
+                          ],
                         ),
                         onTap: () => _showAlternatives(entry),
                       ),
