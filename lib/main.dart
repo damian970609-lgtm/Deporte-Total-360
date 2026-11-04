@@ -1849,7 +1849,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
       backgroundColor: appBg,
       appBar: AppBar(
         title: Text(
-          appText('MENÚ SECRETO', 'SPORTS DATA SERVER', 'SERVIDOR E DADOS ESPORTIVOS', 'SERVEUR ET DONNÉES SPORTIVES'),
+          appText('MENÚ SECRETO', 'SECRET MENU', 'MENU SECRETO', 'MENU SECRET'),
           style: TextStyle(
             color: appCyan,
             fontWeight: FontWeight.w900,
