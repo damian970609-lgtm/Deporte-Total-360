@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:deporte_total_360/agenda_screen.dart';
 import 'package:deporte_total_360/main.dart';
-import 'package:deporte_total_360/televizo_integration_screen.dart';
+import 'package:deporte_total_360/iptv_sources_screen.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sports_statistics_screen.dart';
 
@@ -69,7 +69,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('la pantalla del menú secreto abre la integración con Televizo', (tester) async {
+  testWidgets('el menú secreto abre el reproductor IPTV integrado sin listas precargadas', (tester) async {
     Widget? destination;
     await tester.pumpWidget(
       MaterialApp(
@@ -81,10 +81,27 @@ void main() {
         ),
       ),
     );
-    expect(destination, isA<TelevizoIntegrationScreen>());
+    expect(destination, isA<IptvSourcesScreen>());
+    expect((destination as IptvSourcesScreen).manualOnly, isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+
+  testWidgets('el reproductor secreto empieza vacío y permite agregar listas manualmente', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    await tester.pumpWidget(
+      const MaterialApp(home: IptvSourcesScreen(manualOnly: true)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('IMPORTAR TUS LISTAS M3U'), findsOneWidget);
+    expect(find.text('AGREGAR LISTA M3U'), findsOneWidget);
+    expect(find.text('AGREGAR GUÍA EPG'), findsOneWidget);
+    expect(find.text('CARGAR MIS LISTAS Y CANALES'), findsOneWidget);
+    expect(find.text('0'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('Inicio conserva accesos y Explorar abre Estadísticas', (tester) async {
     var statisticsOpened = 0;
