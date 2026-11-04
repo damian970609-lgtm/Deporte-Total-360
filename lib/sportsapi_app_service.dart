@@ -44,7 +44,11 @@ class SportsApiAppService {
         throw SportsApiException(message);
       }
       final decoded = jsonDecode(response.body);
-      if (decoded is! Map || !decoded.containsKey('data')) {
+      if (decoded is! Map) {
+        throw const SportsApiException('La respuesta de SportsAPI no tiene el formato esperado.');
+      }
+      if (route == '/favorites') return decoded;
+      if (!decoded.containsKey('data')) {
         throw const SportsApiException('La respuesta de SportsAPI no contiene el campo data.');
       }
       return decoded['data'];
