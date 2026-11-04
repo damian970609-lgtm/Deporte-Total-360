@@ -693,9 +693,9 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
     setState(() {
       if (_selectedForMultiView.contains(fixture.id)) {
         _selectedForMultiView.remove(fixture.id);
-      } else if (_selectedForMultiView.length >= 4) {
+      } else if (_selectedForMultiView.length >= 8) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('La multivista admite hasta cuatro cuadros.')),
+          const SnackBar(content: Text('La multivista admite hasta ocho cuadros.')),
         );
       } else {
         _selectedForMultiView.add(fixture.id);
@@ -1219,7 +1219,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
                 children: <Widget>[
                   Expanded(
                     child: Text(
-                      '${_selectedForMultiView.length}/4 cuadros seleccionados',
+                      '${_selectedForMultiView.length}/8 cuadros seleccionados',
                       style: const TextStyle(
                         color: _liveCyan,
                         fontWeight: FontWeight.w800,
@@ -1384,18 +1384,18 @@ class LivePlayerBoard extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth > constraints.maxHeight ? 4 : 2;
-        final activeSources = sources.take(4).toList(growable: false);
+        final activeSources = sources.take(8).toList(growable: false);
         final waiting = waitingEvents
-            .take(4 - activeSources.length)
+            .take(8 - activeSources.length)
             .toList(growable: false);
         return Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 960),
             child: GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
+              shrinkWrap: false,
+              physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.all(8),
-              itemCount: 4,
+              itemCount: 8,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
                 crossAxisSpacing: 8,
@@ -1584,8 +1584,7 @@ class _WaitingLivePlayerTile extends StatelessWidget {
   }
 }
 
-/// Un reproductor de 1 a 4 cuadros. Cada cuadro administra su propio player nativo.
-/// Un reproductor de 1 a 4 cuadros. Cada cuadro administra su propio player nativo.
+/// Una multivista de hasta ocho cuadros. Cada cuadro administra su propio reproductor nativo.
 class LivePlayerGridScreen extends StatefulWidget {
   const LivePlayerGridScreen({
     super.key,
@@ -1641,7 +1640,7 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
       if (!mounted) return;
       final next = updated
           .where((source) => isSupportedAuthorizedMediaUrl(source.url))
-          .take(4)
+          .take(8)
           .toList(growable: false);
       setState(() => _sources = next);
     } catch (_) {
@@ -1661,7 +1660,7 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
   Widget build(BuildContext context) {
     final safeSources = _sources
         .where((source) => isSupportedAuthorizedMediaUrl(source.url))
-        .take(4)
+        .take(8)
         .toList(growable: false);
     final columns = safeSources.length <= 1 ? 1 : 2;
     return Scaffold(
@@ -1671,7 +1670,7 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
         title: Text(
           safeSources.length == 1
               ? 'REPRODUCTOR EN VIVO'
-              : 'MULTIVISTA · ${safeSources.length}/4 EVENTOS',
+              : 'MULTIVISTA · ${safeSources.length}/8 EVENTOS',
           style: const TextStyle(
             color: _liveCyan,
             fontSize: 13,
