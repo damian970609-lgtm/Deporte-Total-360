@@ -179,15 +179,39 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
       final text = data?.text ?? '';
       if (text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('El portapapeles está vacío. Copia primero el contenido de una lista M3U.')),
+          const SnackBar(content: Text('El portapapeles está vacío. Copia una URL M3U o el contenido completo de una lista.')),
         );
+        return;
+      }
+
+      // En Android es habitual copiar solo la dirección del archivo M3U.
+      // Antes se trataba como texto M3U y se rechazaba por no empezar en #EXTM3U.
+      final copiedUrls = text.trim()
+          .split(RegExp(r'[\r\n;]+'))
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty)
+          .toList(growable: false);
+      if (copiedUrls.isNotEmpty && copiedUrls.every(isSafeHttpUrl)) {
+        final includesWebsite = copiedUrls.any((item) {
+          final host = Uri.tryParse(item)?.host.toLowerCase() ?? '';
+          return host == 'ottfox.net' || host.endsWith('.ottfox.net');
+        });
+        if (includesWebsite) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Copiaste una página web, no una lista M3U directa. Copia el enlace del archivo M3U.'),
+            ),
+          );
+          return;
+        }
+        await _addUrls(copiedUrls.join('\n'), epg: false);
         return;
       }
       await _importPlaylistText(text);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo leer la lista copiada: $error')),
+        SnackBar(content: Text('No se pudo importar la lista copiada: $error')),
       );
     }
   }
@@ -272,12 +296,17 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
     }
 
     try {
-      final channels = await Isolate.run(
-        () => AutomaticLiveService.parseM3u(
-          text,
-          sourceUrl: 'Lista importada · local',
-        ),
-      );
+      final channels = widget.parseInBackground
+          ? await Isolate.run(
+              () => AutomaticLiveService.parseM3u(
+                text,
+                sourceUrl: 'Lista importada · local',
+              ),
+            )
+          : AutomaticLiveService.parseM3u(
+              text,
+              sourceUrl: 'Lista importada · local',
+            );
       if (!mounted) return;
       if (channels.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -415,8 +444,12 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
     controller.dispose();
     if (value == null || !mounted) return;
 
+    await _addUrls(value, epg: epg);
+  }
+
+  Future<void> _addUrls(String rawValue, {required bool epg}) async {
     final list = epg ? _epgUrls : _playlistUrls;
-    final incoming = value
+    final incoming = rawValue
         .split(RegExp(r'[\r\n;]+'))
         .map((item) => item.trim())
         .where((item) => item.isNotEmpty);
@@ -438,9 +471,14 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
     }
     await _saveSettings();
     if (mounted) await _refreshCatalog();
-    if (mounted && added > 1) {
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Se agregaron $added fuentes correctamente.')),
+        SnackBar(
+          content: Text(
+            added == 1
+                ? (epg ? 'Guía EPG agregada.' : 'Lista M3U agregada.'),
+            ),
+        ),
       );
     }
   }
@@ -1083,6 +1121,11 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
           ),
         ),
         actions: <Widget>[
+          IconButton(
+            tooltip: 'Agregar lista M3U por URL',
+            onPressed: _saving || _refreshing ? null : () => _addSource(epg: false),
+            icon: const Icon(Icons.playlist_add_rounded, color: _iptvGreen),
+          ),
           IconButton(
             tooltip: 'Actualizar catálogo unificado',
             onPressed: _refreshing ? null : _refreshCatalog,
