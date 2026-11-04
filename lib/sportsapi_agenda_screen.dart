@@ -91,15 +91,10 @@ class _SportsApiAgendaScreenState extends State<SportsApiAgendaScreen>
     }
 
     // SportsAPI es la fuente principal de los diez deportes favoritos.
-    // Así la agenda nativa no queda limitada a una programación antigua.
-    try {
-      final events = await SportsApiAppService().fetchFavoriteAgendaEvents();
-      await SportsAgendaStore.save(events);
-      return events;
-    } catch (_) {
-      // Sin datos de SportsAPI se conserva la última agenda nativa guardada.
-      return SportsAgendaStore.load();
-    }
+    // Los errores se elevan a _refresh para poder mostrar el motivo real.
+    final events = await SportsApiAppService().fetchFavoriteAgendaEvents();
+    await SportsAgendaStore.save(events);
+    return events;
   }
 
   Future<void> _refresh() async {
@@ -136,12 +131,27 @@ class _SportsApiAgendaScreenState extends State<SportsApiAgendaScreen>
         _loading = false;
         _hasLoaded = true;
       });
-    } catch (_) {
+    } catch (error) {
+      final saved = await SportsAgendaStore.load();
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final tomorrow = today.add(const Duration(days: 1));
+      final visibleById = <String, SportsAgendaEvent>{};
+      for (final event in saved) {
+        final localStart = event.startsAt.toLocal();
+        if (localStart.isBefore(today) || !localStart.isBefore(tomorrow)) {
+          continue;
+        }
+        visibleById.putIfAbsent(event.id, () => event);
+      }
+      final visible = visibleById.values.toList()
+        ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
       if (!mounted) return;
       setState(() {
+        _events = visible;
         _loading = false;
         _hasLoaded = true;
-        _error = 'No se pudo actualizar la agenda. Comprueba tu conexión e inténtalo de nuevo.';
+        _error = error.toString();
       });
     }
   }
