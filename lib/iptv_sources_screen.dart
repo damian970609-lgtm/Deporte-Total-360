@@ -38,6 +38,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
   List<String> _playlistUrls = <String>[];
   List<String> _epgUrls = <String>[];
   String _playlistText = '';
+  List<String> _playlistTexts = <String>[];
   List<_MergedM3uChannel> _mergedChannels = <_MergedM3uChannel>[];
   final List<M3uChannel> _multiViewQueue = <M3uChannel>[];
   AutoLiveCatalog? _catalog;
@@ -71,7 +72,8 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
       setState(() {
         _playlistUrls = List<String>.of(settings.playlistUrls);
         _epgUrls = List<String>.of(settings.epgUrls);
-        _playlistText = settings.playlistText;
+        _playlistText = '';
+        _playlistTexts = List<String>.of(settings.localPlaylistTexts);
         _loading = false;
       });
       // Carga automáticamente todas las fuentes guardadas al entrar al centro IPTV.
@@ -94,6 +96,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
         epgUrl: _epgUrls.join('\n'),
         authorizationConfirmed: true,
         playlistText: _playlistText,
+        playlistTexts: _playlistTexts,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -236,7 +239,8 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
       final discoveredEpg = _epgUrlsFromM3uHeader(text);
       var addedEpg = 0;
       setState(() {
-        _playlistText = text;
+        if (!_playlistTexts.contains(text)) _playlistTexts.add(text);
+        _playlistText = '';
         for (final url in discoveredEpg) {
           if (!_epgUrls.contains(url)) {
             _epgUrls.add(url);
@@ -610,7 +614,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
   }
 
   Future<void> _refreshCatalog() async {
-    if (_refreshing || _playlistUrls.isEmpty) return;
+    if (_refreshing || (_playlistUrls.isEmpty && _playlistTexts.isEmpty && _playlistText.trim().isEmpty)) return;
     setState(() {
       _refreshing = true;
       _error = null;
@@ -623,6 +627,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
         playlistUrl: _playlistUrls.join('\n'),
         epgUrl: _epgUrls.join('\n'),
         playlistText: _playlistText,
+        playlistTexts: _playlistTexts,
         forceRefresh: true,
         downloadBatchSize: 4,
         batchPause: const Duration(milliseconds: 100),
@@ -644,9 +649,11 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
         onProgress: (phase, completed, total) {
           if (!mounted) return;
           setState(() {
-            _progressMessage = phase == 'M3U'
-                ? 'Extrayendo listas M3U: $completed de $total'
-                : 'Procesando guías EPG: $completed de $total';
+            _progressMessage = phase == 'OTTFOX'
+                ? 'Importando biblioteca OTTFOX: $completed de $total listas'
+                : phase == 'M3U'
+                    ? 'Extrayendo listas M3U: $completed de $total'
+                    : 'Procesando guías EPG: $completed de $total';
           });
         },
       );
