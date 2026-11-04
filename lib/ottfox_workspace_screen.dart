@@ -99,10 +99,6 @@ const String _ottfoxLibraryExportScript = r'''
         addM3u(path, trimmed);
         return;
       }
-      if (isHttp(trimmed) && /(playlist|m3u)/i.test(path)) {
-        addPlaylistUrl(trimmed);
-        return;
-      }
       if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && trimmed.length < 12 * 1024 * 1024) {
         try { walk(JSON.parse(trimmed), path, depth + 1); } catch (_) {}
       }
@@ -111,11 +107,10 @@ const String _ottfoxLibraryExportScript = r'''
     if (!value || typeof value !== 'object' || visited.has(value)) return;
     visited.add(value);
 
-    const explicitPlaylistUrl = field(value, ['playlisturl', 'm3uurl', 'playlisturi', 'm3uuri']);
+    const explicitPlaylistUrl = field(value, [
+      'playlisturl', 'm3uurl', 'playlisturi', 'm3uuri', 'sourceurl'
+    ]);
     if (explicitPlaylistUrl) addPlaylistUrl(explicitPlaylistUrl);
-    if (/(playlist|m3u)/i.test(path)) {
-      addPlaylistUrl(field(value, ['url', 'uri', 'source']));
-    }
 
     if (Array.isArray(value)) {
       rowsToM3u(value, path);
@@ -134,7 +129,11 @@ const String _ottfoxLibraryExportScript = r'''
     try {
       for (let index = 0; index < store.length; index++) {
         const key = store.key(index) || ('entry-' + index);
-        walk(store.getItem(key), 'OTTFOX/' + key, 0);
+        const storedValue = store.getItem(key);
+        if (/(playlist|m3u)(url|uri|source)?/i.test(key) && isHttp(storedValue)) {
+          addPlaylistUrl(storedValue);
+        }
+        walk(storedValue, 'OTTFOX/' + key, 0);
       }
     } catch (_) {}
   }
