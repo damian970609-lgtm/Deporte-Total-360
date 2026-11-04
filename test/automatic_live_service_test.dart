@@ -400,6 +400,23 @@ https://media.example/teledeporte.m3u8
       expect(channel.languagePriority, 2);
     });
 
+    test('conserva la URL de origen de cada canal importado', () {
+      const sourceUrl = 'https://playlist.example/deportes.m3u';
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.source",Canal deportivo
+https://cdn.example/live.m3u8
+''';
+      final channels = AutomaticLiveService.parseM3u(
+        playlist,
+        baseUri: Uri.parse(sourceUrl),
+        sourceUrl: sourceUrl,
+      );
+
+      expect(channels, hasLength(1));
+      expect(channels.single.sourceUrl, sourceUrl);
+    });
+
     test('usa la segunda lista M3U si la primera está caída', () async {
       final start = DateTime.now().toUtc().add(const Duration(hours: 1));
       final stop = start.add(const Duration(hours: 2));
@@ -499,7 +516,7 @@ https://media.example/backup.m3u8
   });
 
   group('programación automática', () {
-    test('espera hasta diez minutos antes y elige una sola señal de mayor calidad', () async {
+    test('espera diez minutos antes y conserva alternativas verificadas por calidad', () async {
       final start = DateTime.fromMillisecondsSinceEpoch((DateTime.now().add(const Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000) * 1000);
       final stop = start.add(const Duration(hours: 2));
       final playlist = '''
@@ -551,10 +568,12 @@ https://media.example/sports-hd.m3u8
         settings: settings,
       );
       expect(prepared, hasLength(1));
-      expect(prepared.single.sources, hasLength(1));
-      expect(prepared.single.sources.single.channelName, 'Sports HD 1080p');
-      expect(prepared.single.sources.single.url, 'https://media.example/sports-hd.m3u8');
-      expect(prepared.single.sources.single.available, isTrue);
+      expect(prepared.single.sources, hasLength(2));
+      expect(prepared.single.sources.first.channelName, 'Sports HD 1080p');
+      expect(prepared.single.sources.first.url, 'https://media.example/sports-hd.m3u8');
+      expect(prepared.single.sources.last.channelName, 'Sports SD');
+      expect(prepared.single.sources.last.url, 'https://media.example/sports-sd.m3u8');
+      expect(prepared.single.sources.every((source) => source.available), isTrue);
       expect(prepared.single.removeAt, stop);
     });
 
