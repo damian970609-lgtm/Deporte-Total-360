@@ -218,7 +218,7 @@ void main() {
       expect(find.text('Fútbol · Liga de prueba'), findsOneWidget);
       expect(find.text('Equipo Azul vs Equipo Rojo'), findsOneWidget);
       expect(find.text('Comienza 19:30'), findsOneWidget);
-      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(4));
+      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(8));
     });
 
     testWidgets('muestra el evento asignado y espera en los otros tres canales', (tester) async {
