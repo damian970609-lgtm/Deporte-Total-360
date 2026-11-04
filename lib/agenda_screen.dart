@@ -161,7 +161,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
   final SportsApiService _apiService = SportsApiService();
   late final VoidCallback _apiConfigurationListener;
   List<MatchEvent> _remoteMatches = <MatchEvent>[];
-  bool _loadingApi = false;
+  bool _loadingApi = true;
   String? _apiError;
   String? _apiWarning;
   String? _apiProgress;
@@ -180,7 +180,9 @@ class _AgendaScreenState extends State<AgendaScreen> {
     _apiConfigurationListener = _onApiConfigurationChanged;
     sportsApiBaseUrl.addListener(_apiConfigurationListener);
     if (sportsApiBaseUrl.value.trim().isNotEmpty) {
-      _loadRemoteMatches();
+      _loadRemoteMatches(initial: true);
+    } else {
+      _loadingApi = false;
     }
     _scorePollingTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       // No sondear el resumen de todos los deportes continuamente: las
@@ -220,18 +222,39 @@ class _AgendaScreenState extends State<AgendaScreen> {
     _loadRemoteMatches();
   }
 
-  Future<void> _loadRemoteMatches({bool announceScoreChanges = false}) async {
-    if (sportsApiBaseUrl.value.trim().isEmpty) return;
+  Future<void> _loadRemoteMatches({
+    bool announceScoreChanges = false,
+    bool initial = false,
+  }) async {
+    if (sportsApiBaseUrl.value.trim().isEmpty) {
+      if (mounted) {
+        setState(() {
+          _loadingApi = false;
+          _apiError = appText(
+            'Configura el servidor deportivo en Ajustes para cargar la agenda.',
+            'Configure the sports server in Settings to load the schedule.',
+            'Configure o servidor esportivo em Ajustes para carregar a agenda.',
+            'Configurez le serveur sportif dans les Paramètres pour charger le calendrier.',
+          );
+        });
+      }
+      return;
+    }
     final requestVersion = ++_apiRequestVersion;
     if (mounted) {
-      setState(() {
+      void prepareLoading() {
         _loadingApi = true;
         _apiError = null;
         _apiWarning = null;
         _apiProgress = _sport == 'Todos'
             ? appText('Preparando la carga multideporte…', 'Preparing multi-sport data…', 'Preparando a carga multiesportiva…', 'Préparation des données multisports…')
             : appText('Actualizando agenda…', 'Updating schedule…', 'Atualizando agenda…', 'Mise à jour du calendrier…');
-      });
+      }
+      if (initial) {
+        prepareLoading();
+      } else {
+        setState(prepareLoading);
+      }
     }
 
     try {
@@ -1142,7 +1165,7 @@ class _MatchCard extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      event.competition,
+                      '${event.sport} · ${event.competition}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(

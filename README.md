@@ -2,12 +2,19 @@
 
 Aplicación Android en Flutter. El APK se compila en GitHub Actions; la carpeta Android se genera en el runner.
 
+Navegación principal: Inicio, Deportes en vivo, Agenda de hoy, Noticias, Mister Fantasy, Estadísticas, Resúmenes y Ajustes. Inicio, Agenda, Estadísticas y Resúmenes utilizan los diez deportes favoritos configurados en SportsAPI.app; Deportes en vivo busca señales por separado en los catálogos M3U/XMLTV. Chat, Telegram, contacto y donaciones permanecen como accesos auxiliares.
+
 Archivos principales:
-- lib/main.dart: navegación, inicio, reproductor SSH101 y ajustes.
-- lib/agenda_screen.dart: agenda nativa y eventos API-Sports.
+- lib/main.dart: navegación de ocho secciones, inicio y ajustes.
+- lib/automatic_live_service.dart y lib/automatic_live_screen.dart: captura de eventos de agenda, lectura de M3U/XMLTV, clasificación y asignación automática de señales a cuatro reproductores fijos y retiro de señales al terminar su horario EPG.
+- lib/live_media_format.dart y lib/live_channels_screen.dart: detección explícita de HLS, DASH, Smooth Streaming y vídeo progresivo, adaptación de calidad automática con ExoPlayer, selector manual por pistas y transición fullscreen/miniatura sin recrear el controlador.
+- lib/sports_summaries_screen.dart: categorías deportivas y reproducción de YouTube dentro de la app mediante WebView.
+- lib/public_chat_screen.dart: sala pública de chat compartida.
 - lib/sports_statistics_screen.dart: búsqueda de ligas y clasificaciones.
-- lib/sports_api_service.dart: conexión con el Worker sin introducir claves en la APK.
-- lib/web_agenda_screen.dart: agenda externa integrada.
+- lib/sports_api_service.dart: cliente legado de API-Sports/Worker, conservado para compatibilidad.
+- lib/sportsapi_app_service.dart y lib/sportsapi_statistics_screen.dart: conexión segura con las rutas SportsAPI.app del Worker; estadísticas de partidos y resultados de carreras sin introducir claves en la APK.
+- lib/notification_service.dart: recordatorios locales, Firebase Cloud Messaging mediante suscripción al tema de transmisiones y apertura de Deportes en vivo al tocar un aviso.
+- lib/web_agenda_screen.dart: agenda MARCA integrada y captura de eventos visibles.
 - lib/news_screen.dart: feed RSS y lector de noticias.
 - lib/web_protection_policy.dart: reglas compartidas de protección web.
 - lib/fantasy_screen.dart: módulo Fantasy.
@@ -15,15 +22,20 @@ Archivos principales:
 
 Recursos:
 - assets/images/app_icon.png: icono y recurso gráfico reutilizado en Inicio.
-- assets/images/home_reference.png: referencia visual conservada en GitHub; no se incluye en la APK porque Inicio se construye con widgets Flutter.
+- assets/images/home_reference.png: referencia visual declarada como asset; Inicio se construye con widgets Flutter, no como captura estática.
 - assets/images/file_000000006048820e9e0720f1adf548f1.png: fondo de ajustes.
 
 API deportiva:
-La app usa el Worker público deporte-total-360-api para no incluir la clave API-Sports dentro del APK. La clave debe guardarse únicamente como secreto APISPORTS_KEY del repositorio del Worker:
+La agenda, los diez deportes favoritos y las estadísticas nuevas usan SportsAPI.app a través del Worker público deporte-total-360-api. La clave SPORTAPI_API_KEY debe guardarse en los secretos Actions del repositorio del Worker y se publica como secreto del Worker mediante Wrangler; nunca se incluye en el APK. Las rutas API-Sports existentes siguen en el Worker por compatibilidad. Su clave APISPORTS_KEY es independiente y solo es necesaria para esas rutas antiguas:
 https://github.com/damian970609-lgtm/Deporte-Total-360-
 
 Compilación:
 El workflow configura Java y Flutter, genera Android en el runner, prepara permisos de red e icono, ejecuta flutter analyze y flutter test, compila el APK release y publica deporte-total-360-apk durante 30 días.
 
-Límites:
-La reproducción SSH101 requiere un identificador de canal activo y una emisión HLS disponible. El bloqueo web filtra dominios publicitarios conocidos, pero no puede garantizar eliminar todos los anuncios ni interceptar todas las redirecciones de terceros.
+Límites y funcionamiento:
+SportsAPI.app es la fuente principal de Agenda de hoy para Fútbol, Baloncesto, Béisbol, Hockey sobre hielo, Voleibol, MMA, Fútbol sala, Ciclismo, Deportes de motor y Balonmano, filtrados por las competiciones masculinas y femeninas elegidas. El Worker consulta los ocho deportes de partidos y los dos deportes de carreras; descarga páginas adicionales de ligas escalonadamente y refresca los marcadores globales cada 30 minutos. Las horas UTC del proveedor se convierten a la hora local del teléfono. MARCA queda como respaldo anterior cuando SPORTAPI_API_KEY no está configurada; no se utiliza como proveedor principal cuando SportsAPI está activo. El planificador central de Cloudflare descarga doce listas M3U y veinte guías XMLTV cada cinco minutos, de forma independiente de cualquier teléfono. Así continúa aunque el teléfono del propietario esté apagado o su APK esté desinstalada, una vez que el Worker esté desplegado. Las direcciones y los catálogos no se muestran en la interfaz. La selección prioriza señales identificadas como español (idioma, país y metadatos); solo prueba otros idiomas cuando no hay una señal española comprobada. Las fuentes incluyen listas públicas de Teleonline, iptv-org, freecasthub y catálogos existentes, además de EPG regionales de España, Latinoamérica y el Caribe y guías globales de respaldo. Diez minutos antes del evento busca una programación XMLTV coincidente y prueba la disponibilidad del manifiesto y de un segmento de vídeo. La pestaña Deportes en vivo mantiene cuatro cuadros fijos sin desplazamiento; cada cuadro muestra el deporte, la competición y los equipos asociados. Al comenzar un evento, una señal directa y comprobada ocupa un canal libre; el usuario pulsa Play para reproducirla. Los canales 2, 3 y 4 empiezan silenciados. La calidad Automática deja que ExoPlayer adapte la resolución al ancho de banda real de la conexión; el selector permite fijar cualquier resolución publicada por el manifiesto HLS/DASH. Al pulsar Play se abre pantalla completa reutilizando el mismo controlador; el primer atrás regresa a la miniatura sin detener el vídeo y el siguiente atrás detiene y libera el controlador. Los cuadros libres muestran el próximo evento y su horario con el estado ESPERANDO TRANSMISIÓN hasta que una señal comprobada esté en directo. Al detectar un estado final en la agenda o alcanzar la hora de finalización del evento/EPG, se detiene y libera el cuadro para el siguiente evento. La nueva fuente utiliza un almacén de eventos separado para no recuperar datos antiguos de la agenda anterior. Las APK instaladas consultan GET /api/live/auto/schedule cada 45 segundos mientras la aplicación está abierta en primer plano, incluso al cambiar de pestaña; al volver a primer plano se fuerza otra comprobación. Si el endpoint central todavía no está disponible, la búsqueda local anterior permanece como respaldo. Firebase Cloud Messaging puede avisar a los dispositivos registrados que tengan las notificaciones activadas y abrir la pestaña Deportes en vivo al tocar el aviso. Android no permite forzar la reproducción de vídeo con la aplicación cerrada: el usuario debe abrir el aviso y pulsar Play. Se aceptan señales multimedia directas HLS (.m3u8), DASH (.mpd), Smooth Streaming y contenedores progresivos compatibles como MP4, MPEG-TS, WebM, Matroska y FLV; los enlaces relativos dentro de las playlists se resuelven usando la URL de la lista. Las páginas HTML, RTMP, DRM, credenciales y geobloqueos no se eluden. La disponibilidad depende del proveedor, la región, la conexión y la correspondencia de horarios y nombres, por lo que no se garantiza una señal para cada evento. Los resúmenes de YouTube se reproducen dentro de WebView.
+
+
+## Activar notificaciones push
+
+En Firebase crea una aplicación Android para el paquete de esta APK y copia los valores de configuración. Añade estos cuatro GitHub Actions Secrets en el repositorio de la APK: `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, `FIREBASE_MESSAGING_SENDER_ID` y `FIREBASE_PROJECT_ID`. En el Worker configura el secreto `FCM_SERVICE_ACCOUNT_JSON` con el JSON de una cuenta de servicio de Firebase que tenga permiso para enviar mensajes FCM. La APK suscribe los dispositivos que activan los avisos al tema `deporte_total_360_live`; el Worker envía una sola notificación al tema, sin almacenar tokens personales. El secreto se guarda en Cloudflare, nunca en GitHub ni en el APK. Después de compilar e instalar la APK, cada usuario debe activar Notificaciones en Ajustes y conceder el permiso Android. El Worker registra el token del dispositivo y envía un aviso cuando una señal directa queda verificada. Tocar el aviso abre Deportes en vivo; el usuario inicia el vídeo con Play. Sin los secretos Firebase y Cloudflare, las notificaciones locales existentes siguen funcionando, pero no se envían avisos push.

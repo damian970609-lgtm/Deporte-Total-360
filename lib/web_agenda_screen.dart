@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'web_protection_policy.dart';
 import 'app_i18n.dart';
+import 'automatic_live_service.dart';
 
 const Color _brandBg = Color(0xFF030814);
 const Color _brandPanel = Color(0xFF071326);
@@ -16,12 +19,20 @@ const Color _brandRed = Color(0xFFFF3155);
 /// Web de agenda dentro de la identidad visual de Deporte Total 360°.
 /// El contenido de la web y sus reproductores siguen perteneciendo al proveedor.
 class WebAgendaScreen extends StatefulWidget {
-  const WebAgendaScreen({super.key, required this.onExit, required this.onOpenLive});
+  const WebAgendaScreen({
+    super.key,
+    required this.onExit,
+    required this.onOpenLive,
+    this.pageTitle = 'AGENDA DEPORTIVA',
+    this.showLiveButton = true,
+  });
 
   final VoidCallback onExit;
   final VoidCallback onOpenLive;
+  final String pageTitle;
+  final bool showLiveButton;
 
-  static const String initialUrl = 'https://futbol-libre.cam/';
+  static const String initialUrl = 'https://www.marca.com/programacion-tv.html';
 
   @override
   State<WebAgendaScreen> createState() => WebAgendaScreenState();
@@ -33,7 +44,10 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
   bool _loading = true;
   bool _canGoBack = false;
   bool _canGoForward = false;
-  bool _blockKnownTrackers = true;
+  // MARCA carga módulos de programación desde varios dominios. Se deja la
+  // protección opcional desactivada inicialmente para no ocultar el calendario.
+  bool _blockKnownTrackers = false;
+  Timer? _loadTimeoutTimer;
   String? _errorMessage;
   String? _noticeMessage;
 
@@ -42,6 +56,12 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
   bool _isHttpUrl(WebUri uri) {
     final scheme = uri.scheme.toLowerCase();
     return (scheme == 'https' || scheme == 'http') && uri.host.isNotEmpty;
+  }
+
+  @override
+  void dispose() {
+    _loadTimeoutTimer?.cancel();
+    super.dispose();
   }
 
   void _showNotice(String message) {
@@ -103,6 +123,388 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
       ''');
     } catch (_) {
       // La WebView permanece funcional si el sitio impide la limpieza DOM.
+    }
+  }
+
+
+  Future<void> _installAgendaEventScanner(InAppWebViewController controller) async {
+    try {
+      await controller.evaluateJavascript(source: r'''
+        (() => {
+          const scan = () => {
+            const nodes = Array.from(document.querySelectorAll(
+              'article,li,tr,[data-event],[class*="match"],[class*="fixture"],[class*="event"],[class*="program"],[class*="guide"],[class*="schedule"],[class*="tv-item"],a[href]'
+            ));
+            const found = [];
+            const seen = new Set();
+            const now = new Date();
+            // MARCA publica la programación en hora peninsular española.
+            // Convertimos esa hora a un instante absoluto para mostrarla
+            // correctamente en la zona horaria local del teléfono.
+            const madridParts = new Intl.DateTimeFormat('en-GB', {
+              timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit',
+              day: '2-digit'
+            }).formatToParts(now);
+            const madridFields = Object.fromEntries(
+              madridParts.map((part) => [part.type, part.value])
+            );
+            const madridToday = {
+              year: Number(madridFields.year),
+              month: Number(madridFields.month) - 1,
+              day: Number(madridFields.day)
+            };
+            const madridDate = (year, month, day, hour, minute) => {
+              const target = Date.UTC(year, month, day, hour, minute, 0);
+              let candidate = new Date(target);
+              for (let pass = 0; pass < 3; pass++) {
+                const parts = new Intl.DateTimeFormat('en-GB', {
+                  timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit',
+                  day: '2-digit', hour: '2-digit', minute: '2-digit',
+                  second: '2-digit', hourCycle: 'h23'
+                }).formatToParts(candidate);
+                const fields = Object.fromEntries(
+                  parts.map((part) => [part.type, Number(part.value)])
+                );
+                const represented = Date.UTC(
+                  fields.year, fields.month - 1, fields.day,
+                  fields.hour, fields.minute, fields.second
+                );
+                candidate = new Date(candidate.getTime() + target - represented);
+              }
+              return candidate;
+            };
+            const timePattern = /\b(2[0-3]|[01]?\d):([0-5]\d)\b|\b(1[0-2]|0?[1-9]):([0-5]\d)\s*(AM|PM)\b/i;
+            for (const sourceNode of nodes) {
+              let node = sourceNode;
+              // Algunos listados colocan la hora fuera del enlace del evento.
+              // En ese caso se inspeccionan hasta cuatro contenedores padres.
+              if (sourceNode.matches('a[href]')) {
+                let parent = sourceNode.parentElement;
+                for (let depth = 0; parent && depth < 4; depth++, parent = parent.parentElement) {
+                  const parentText = (parent.innerText || parent.textContent || '')
+                    .replace(/\s+/g, ' ').trim();
+                  const hasTimeElement = !!(parent.querySelector &&
+                    parent.querySelector('time[datetime],time'));
+                  if (parentText.length >= 12 && parentText.length <= 500 &&
+                      (timePattern.test(parentText) || hasTimeElement)) {
+                    node = parent;
+                    break;
+                  }
+                }
+              }
+              const rawText = (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim();
+              if (rawText.length < 12 || rawText.length > 500) continue;
+              const timeNode = node.querySelector('time');
+              const timeText = timeNode
+                ? [timeNode.textContent, timeNode.getAttribute('datetime')]
+                    .filter(Boolean).join(' ')
+                : '';
+              const timeMatch = (rawText + ' ' + timeText).match(timePattern);
+              if (!timeMatch) continue;
+              const anchor = node.matches('a[href]') ? node : node.querySelector('a[href]');
+              const eventContainer = node.matches(
+                'article,li,[data-event],[class*="match"],[class*="fixture"],[class*="event"]'
+              );
+              const eventUrl = anchor && anchor.href ? anchor.href : location.href;
+              if (!eventContainer && !anchor) continue;
+              if (!/^https?:/i.test(eventUrl)) continue;
+              if (anchor && /\/canal\/|\/channel\//i.test(new URL(eventUrl).pathname)) continue;
+              const heading = node.querySelector('h1,h2,h3,h4,[class*="title"],[class*="team"]');
+              let title = (heading && heading.textContent || rawText).replace(/\s+/g, ' ').trim();
+              if (title.length < 5) title = rawText;
+              title = title.replace(/\b(EN VIVO|VER PARTIDO|VER AHORA|DETALLES)\b/ig, '').replace(timePattern, '').trim();
+              const pair = title.split(/\s+(?:vs?\.?|versus|contra|[-–—])\s+/i);
+              const textLower = rawText.toLowerCase();
+              let sport = 'Fútbol';
+              if (/table tennis|tenis de mesa|ping\s?pong/.test(textLower)) sport = 'Tenis de mesa';
+              else if (/nba|basquet|basketball|baloncesto/.test(textLower)) sport = 'Básquet';
+              else if (/tenis|tennis|wta|atp/.test(textLower)) sport = 'Tenis';
+              else if (/formula\s?1|f1\b/.test(textLower)) sport = 'Fórmula 1';
+              else if (/motogp|moto\s?gp|motociclismo/.test(textLower)) sport = 'Motociclismo';
+              else if (/nascar|rally|motorsport|automovilismo/.test(textLower)) sport = 'Automovilismo';
+              else if (/beisbol|baseball|mlb\b/.test(textLower)) sport = 'Béisbol';
+              else if (/futbol americano|american football|nfl\b|gridiron/.test(textLower)) sport = 'Fútbol americano';
+              else if (/rugby/.test(textLower)) sport = 'Rugby';
+              else if (/voleibol|volleyball/.test(textLower)) sport = 'Voleibol';
+              else if (/cricket|críquet/.test(textLower)) sport = 'Críquet';
+              else if (/hockey|nhl\b/.test(textLower)) sport = 'Hockey';
+              else if (/boxeo|boxing|kickboxing/.test(textLower)) sport = 'Boxeo';
+              else if (/mma\b|ufc\b|artes marciales mixtas/.test(textLower)) sport = 'MMA';
+              else if (/wrestling|lucha libre/.test(textLower)) sport = 'Lucha libre';
+              else if (/ciclismo|cycling/.test(textLower)) sport = 'Ciclismo';
+              else if (/golf/.test(textLower)) sport = 'Golf';
+              else if (/balonmano|handball/.test(textLower)) sport = 'Balonmano';
+              else if (/atletismo|athletics/.test(textLower)) sport = 'Atletismo';
+              else if (/natacion|swimming/.test(textLower)) sport = 'Natación';
+              else if (/surf|skateboarding|snowboard|esports|e-sports/.test(textLower)) sport = 'Otros deportes';
+              const individualSports = new Set([
+                'Fórmula 1', 'Motociclismo', 'Automovilismo', 'Ciclismo',
+                'Golf', 'Atletismo', 'Natación', 'Otros deportes'
+              ]);
+              if (pair.length < 2 && !individualSports.has(sport)) continue;
+              let hour = parseInt(timeMatch[1] || timeMatch[3], 10);
+              const minute = parseInt(timeMatch[2] || timeMatch[4], 10);
+              if (timeMatch[5]) {
+                if (timeMatch[5].toUpperCase() === 'PM' && hour < 12) hour += 12;
+                if (timeMatch[5].toUpperCase() === 'AM' && hour === 12) hour = 0;
+              }
+              const parseDateHint = (raw) => {
+                const value = (raw || '').toLowerCase().replace(/\s+/g, ' ').trim();
+                if (!value) return null;
+                if (/\b(mañana|tomorrow)\b/.test(value)) {
+                  const next = new Date(Date.UTC(madridToday.year, madridToday.month, madridToday.day + 1));
+                  return { year: next.getUTCFullYear(), month: next.getUTCMonth(), day: next.getUTCDate() };
+                }
+                if (/\b(hoy|today)\b/.test(value)) {
+                  return madridToday;
+                }
+                let match = value.match(/\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/);
+                if (match) return { year: Number(match[1]), month: Number(match[2]) - 1, day: Number(match[3]) };
+                match = value.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/);
+                if (match) {
+                  let year = Number(match[3] || madridToday.year);
+                  if (year < 100) year += 2000;
+                  return { year, month: Number(match[2]) - 1, day: Number(match[1]) };
+                }
+                const months = {
+                  enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5,
+                  julio: 6, agosto: 7, septiembre: 8, setiembre: 8,
+                  octubre: 9, noviembre: 10, diciembre: 11
+                };
+                match = value.match(/\b(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\s+de\s+(20\d{2}))?\b/);
+                if (match) {
+                  let year = Number(match[3] || madridToday.year);
+                  const month = months[match[2]];
+                  if (!match[3] && month < madridToday.month - 5) year++;
+                  return { year, month, day: Number(match[1]) };
+                }
+                return null;
+              };
+              let dateHint = null;
+              let contextNode = node;
+              for (let depth = 0; depth < 5 && contextNode && !dateHint; depth++) {
+                const heading = contextNode.querySelector
+                  ? contextNode.querySelector('h1,h2,h3,h4,[class*="date"],[class*="day"]')
+                  : null;
+                const contextText = [
+                  contextNode.getAttribute && contextNode.getAttribute('data-date'),
+                  contextNode.getAttribute && contextNode.getAttribute('data-day'),
+                  contextNode.getAttribute && contextNode.getAttribute('datetime'),
+                  heading && heading.textContent,
+                  depth === 0 ? contextNode.innerText : null
+                ].filter(Boolean).join(' ');
+                dateHint = parseDateHint(contextText);
+                contextNode = contextNode.parentElement;
+              }
+              let start = null;
+              const dateValue = (timeNode && timeNode.getAttribute('datetime')) ||
+                node.getAttribute('datetime') ||
+                node.getAttribute('data-start') ||
+                node.getAttribute('data-date') ||
+                (node.dataset && (node.dataset.start || node.dataset.datetime || node.dataset.date));
+              if (dateValue) {
+                const parsed = new Date(dateValue);
+                if (!Number.isNaN(parsed.getTime())) {
+                  if (/T|\d{1,2}:\d{2}/i.test(dateValue)) {
+                    const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(dateValue);
+                    start = hasZone ? parsed : madridDate(
+                      parsed.getFullYear(), parsed.getMonth(), parsed.getDate(),
+                      parsed.getHours(), parsed.getMinutes()
+                    );
+                  } else {
+                    const explicit = parseDateHint(dateValue) || dateHint;
+                    if (explicit) start = madridDate(explicit.year, explicit.month, explicit.day, hour, minute);
+                  }
+                }
+              }
+              if (!start && dateHint) {
+                start = madridDate(dateHint.year, dateHint.month, dateHint.day, hour, minute);
+              }
+              if (!start) {
+                start = madridDate(madridToday.year, madridToday.month, madridToday.day, hour, minute);
+                // Sin fecha explícita no se reutilizan horarios claramente caducados.
+                if (start.getTime() < now.getTime() - 6 * 60 * 60 * 1000) continue;
+              }
+              let end = null;
+              const endValue = node.getAttribute('data-end') ||
+                (node.dataset && (node.dataset.end || node.dataset.endTime));
+              if (endValue) {
+                const parsedEnd = new Date(endValue);
+                if (!Number.isNaN(parsedEnd.getTime())) {
+                  const hasEndZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(endValue);
+                  end = hasEndZone ? parsedEnd : madridDate(
+                    parsedEnd.getFullYear(), parsedEnd.getMonth(), parsedEnd.getDate(),
+                    parsedEnd.getHours(), parsedEnd.getMinutes()
+                  );
+                }
+              }
+              const statusNode = node.querySelector(
+                '[data-status],[class*="status"],[class*="state"]'
+              );
+              const statusText = (statusNode && statusNode.textContent || '')
+                .replace(/\s+/g, ' ').trim().toLowerCase();
+              if (/\b(?:finalizado|finalizada|terminado|terminada|finished|full time|ft)\b/.test(statusText) ||
+                  /\b(?:FINALIZADO|TERMINADO|FULL TIME|FT)\b/i.test(rawText)) {
+                end = now;
+              }
+              if (/\b(?:cancelado|cancelada|suspendido|suspendida)\b/.test(statusText)) continue;
+              const iso = start.toISOString();
+              const endIso = end ? end.toISOString() : null;
+              const key = eventUrl + '|' + title + '|' + iso;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              const rawId = node.dataset && (node.dataset.eventId || node.dataset.fixtureId);
+              const eventId = String(rawId || key);
+              const competitionNode = node.querySelector(
+                '[class*="competition"],[class*="league"],[data-league]'
+              );
+              const competition = (competitionNode && competitionNode.textContent || '').replace(/\s+/g, ' ').trim();
+              const homeTeam = pair.length > 1 ? pair[0].trim() : '';
+              const awayTeam = pair.length > 1 ? pair.slice(1).join(' vs ').trim() : '';
+              const normalizeLabel = (value) => String(value || '')
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+              const imageNodes = Array.from(node.querySelectorAll('img'));
+              const resolveImage = (image) => {
+                if (!image) return '';
+                const source = image.currentSrc ||
+                  image.getAttribute('src') ||
+                  image.getAttribute('data-src') ||
+                  image.getAttribute('data-lazy-src') ||
+                  image.getAttribute('data-original') ||
+                  (image.getAttribute('srcset') || '').split(',')[0].trim().split(/\s+/)[0];
+                if (!source || /^data:/i.test(source)) return '';
+                try {
+                  const url = new URL(source, location.href);
+                  return url.protocol === 'https:' && !url.username && !url.password
+                    ? url.href : '';
+                } catch (_) {
+                  return '';
+                }
+              };
+              const teamLogo = (teamName, fallbackIndex) => {
+                if (!teamName) return '';
+                const wanted = normalizeLabel(teamName);
+                const labelled = imageNodes.find((image) => {
+                  const label = normalizeLabel([
+                    image.alt, image.title, image.getAttribute('aria-label'),
+                    image.getAttribute('data-team'), image.getAttribute('data-name')
+                  ].filter(Boolean).join(' '));
+                  return label && (label.includes(wanted) || wanted.includes(label));
+                });
+                return resolveImage(labelled || imageNodes[fallbackIndex]);
+              };
+              const homeTeamLogo = teamLogo(homeTeam, 0);
+              const awayTeamLogo = teamLogo(awayTeam, 1);
+              const venueNode = node.querySelector(
+                '[class*="venue"],[class*="stadium"],[data-venue]'
+              );
+              const venue = (venueNode && venueNode.textContent || '')
+                .replace(/\s+/g, ' ').trim();
+              const participants = pair.length > 1 ? [
+                { name: homeTeam, imageUrl: homeTeamLogo, country: '', role: 'home' },
+                { name: awayTeam, imageUrl: awayTeamLogo, country: '', role: 'away' }
+              ] : [];
+              found.push({
+                id: String(eventId),
+                title: title,
+                sport: sport,
+                competition: competition,
+                homeTeam: homeTeam,
+                awayTeam: awayTeam,
+                homeTeamLogo: homeTeamLogo,
+                awayTeamLogo: awayTeamLogo,
+                participants: participants,
+                imageUrl: pair.length > 1 ? '' : resolveImage(imageNodes[0]),
+                venue: venue,
+                startsAt: iso,
+                endsAt: endIso,
+                detailUrl: eventUrl
+              });
+            }
+            if (window.flutter_inappwebview) {
+              window.flutter_inappwebview.callHandler('dt360AgendaEvents', found);
+            }
+          };
+          if (!window.__dt360AgendaScanner) {
+            window.__dt360AgendaScanner = true;
+            const run = () => { try { scan(); } catch (_) {} };
+            run();
+            window.setInterval(run, 15000);
+            if (document.documentElement) {
+              new MutationObserver(run).observe(document.documentElement, {
+                childList: true, subtree: true, characterData: true
+              });
+            }
+          } else {
+            scan();
+          }
+        })();
+      ''');
+    } catch (_) {
+      // No se interrumpe la agenda si el proveedor no permite inyección.
+    }
+  }
+
+  Future<void> _installAgendaOnlyMode(InAppWebViewController controller) async {
+    // La pestaña Agenda solo conserva los datos del calendario. Se ocultan y
+    // detienen reproductores incrustados y se impide abrir páginas de partidos.
+    try {
+      await controller.evaluateJavascript(source: r'''
+        (() => {
+          const removeEmbeddedPlayers = () => {
+            const selectors = [
+              'video', 'audio', 'object', 'embed',
+              'iframe[src*="player"]', 'iframe[src*="embed"]',
+              'iframe[src*="stream"]', 'iframe[src*="live"]',
+              'iframe[src*="m3u8"]'
+            ];
+            document.querySelectorAll(selectors.join(',')).forEach((element) => {
+              try { element.pause?.(); } catch (_) {}
+              try { element.remove(); } catch (_) {}
+            });
+          };
+          removeEmbeddedPlayers();
+          if (!window.__dt360AgendaPlayerObserver && document.documentElement) {
+            window.__dt360AgendaPlayerObserver = true;
+            new MutationObserver(removeEmbeddedPlayers).observe(document.documentElement, {
+              childList: true, subtree: true
+            });
+          }
+
+          if (!window.__dt360AgendaOnlyClickGuard) {
+            window.__dt360AgendaOnlyClickGuard = true;
+            document.addEventListener('click', (event) => {
+              const target = event.target instanceof Element
+                ? event.target : event.target?.parentElement;
+              const anchor = target?.closest('a[href]');
+              if (!anchor) return;
+
+              const card = anchor.closest(
+                'article,li,[data-event],[class*="match"],[class*="fixture"],[class*="event"]'
+              ) || anchor.parentElement;
+              const cardText = (card?.innerText || card?.textContent || '')
+                .replace(/\s+/g, ' ').trim();
+              const eventCard = /\b(?:2[0-3]|[01]?\d):[0-5]\d\b/.test(cardText) &&
+                /\b(?:vs?\.?|versus|contra)\b/i.test(cardText);
+              const path = new URL(anchor.href, location.href).pathname;
+              const playerPath = /(?:^|\/)(?:canal|channel|player|watch|stream|live|embed|partido|match)(?:\/|$)/i
+                .test(path);
+              const actionText = (anchor.innerText || anchor.textContent || '').trim();
+              const playerAction = /VER\s+(?:PARTIDO|AHORA|EN\s+VIVO)|EN\s+VIVO|WATCH|PLAY|REPRODUCIR/i
+                .test(actionText);
+              if (!eventCard && !playerPath && !playerAction) return;
+
+              event.preventDefault();
+              event.stopPropagation();
+              event.stopImmediatePropagation();
+              window.flutter_inappwebview?.callHandler('dt360AgendaOnlyNotice');
+            }, true);
+          }
+        })();
+      ''');
+    } catch (_) {
+      // Un fallo de inyección no debe interrumpir la lectura de la agenda.
     }
   }
 
@@ -251,11 +653,11 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
           onPressed: _handleToolbarBack,
           icon: const Icon(Icons.arrow_back_rounded, color: _brandCyan),
         ),
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'AGENDA DEPORTIVA',
+              widget.pageTitle,
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w900,
@@ -274,11 +676,12 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
           ],
         ),
         actions: <Widget>[
-          TextButton.icon(
-            onPressed: widget.onOpenLive,
-            icon: const Icon(Icons.play_circle_fill_rounded, color: _brandGreen, size: 17),
-            label: Text(appText('VIVO AQUÍ', 'WATCH LIVE', 'AO VIVO AQUI', 'REGARDER EN DIRECT'), style: const TextStyle(color: _brandGreen, fontSize: 10, fontWeight: FontWeight.w900)),
-          ),
+          if (widget.showLiveButton)
+            TextButton.icon(
+              onPressed: widget.onOpenLive,
+              icon: const Icon(Icons.play_circle_fill_rounded, color: _brandGreen, size: 17),
+              label: Text(appText('VIVO AQUÍ', 'WATCH LIVE', 'AO VIVO AQUI', 'REGARDER EN DIRECT'), style: const TextStyle(color: _brandGreen, fontSize: 10, fontWeight: FontWeight.w900)),
+            ),
           IconButton(
             tooltip: 'Página siguiente',
             onPressed: _canGoForward ? _goForward : null,
@@ -424,8 +827,39 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                       ),
                       onWebViewCreated: (controller) {
                         _controller = controller;
+                        controller.addJavaScriptHandler(
+                          handlerName: 'dt360AgendaOnlyNotice',
+                          callback: (arguments) async {
+                            _showNotice(
+                              'Agenda: solo datos deportivos. No se reproducen vídeos incrustados; la APK busca las señales por separado en listas M3U y guías EPG.',
+                            );
+                            return true;
+                          },
+                        );
+                        controller.addJavaScriptHandler(
+                          handlerName: 'dt360AgendaEvents',
+                          callback: (arguments) async {
+                            if (arguments.isEmpty || arguments.first is! List) {
+                              return 0;
+                            }
+                            final events = (arguments.first as List)
+                                .map(SportsAgendaEvent.fromJson)
+                                .whereType<SportsAgendaEvent>()
+                                .toList(growable: false);
+                            await SportsAgendaStore.save(events);
+                            return events.length;
+                          },
+                        );
                       },
                       onLoadStart: (controller, url) {
+                        _loadTimeoutTimer?.cancel();
+                        _loadTimeoutTimer = Timer(const Duration(seconds: 25), () {
+                          if (!mounted || !_loading) return;
+                          setState(() {
+                            _loading = false;
+                            _errorMessage = 'MARCA está tardando demasiado en responder. Comprueba tu conexión y pulsa Recargar.';
+                          });
+                        });
                         if (!mounted) return;
                         setState(() {
                           _loading = true;
@@ -442,12 +876,15 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         });
                       },
                       onLoadStop: (controller, url) async {
+                        _loadTimeoutTimer?.cancel();
                         if (!mounted) return;
                         setState(() {
                           _loading = false;
                           _progress = 1;
                         });
                         await _installAdElementCleanup(controller);
+                        await _installAgendaEventScanner(controller);
+                        await _installAgendaOnlyMode(controller);
                         await _refreshNavigationState();
                       },
                       onUpdateVisitedHistory:
@@ -484,6 +921,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         if (!(request.isForMainFrame ?? true) || !mounted) {
                           return;
                         }
+                        _loadTimeoutTimer?.cancel();
                         setState(() {
                           _loading = false;
                           _errorMessage =
@@ -496,6 +934,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                         }
                         final statusCode = response.statusCode ?? 0;
                         if (statusCode >= 400) {
+                          _loadTimeoutTimer?.cancel();
                           setState(() {
                             _loading = false;
                             _errorMessage =
@@ -511,7 +950,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
             padding: const EdgeInsets.fromLTRB(10, 5, 10, 7),
             color: const Color(0xFF020B19),
             child: const Text(
-              'La agenda y sus reproductores son servicios de terceros. '
+              'La programación de MARCA es un servicio externo; sus reproductores no se utilizan. '
               'La protección detiene dominios conocidos, pero no garantiza '
               'eliminar todos los anuncios ni que cada señal sea compatible.',
               textAlign: TextAlign.center,

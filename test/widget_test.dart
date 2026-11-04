@@ -46,7 +46,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Servidor de estadísticas y agenda'), findsOneWidget);
+    expect(find.text('Servidor de estadísticas'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -81,5 +81,20 @@ void main() {
     expect(statisticsOpened, 1);
     expect(wrongTabSelected, -1);
   });
+
+  testWidgets('muestra las ocho secciones principales y deja Chat como acceso auxiliar', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: MainShell()));
+
+    expect(find.text('Deportes en vivo'), findsOneWidget);
+    expect(find.text('Agenda de hoy'), findsOneWidget);
+    expect(find.text('Noticias'), findsWidgets);
+    expect(find.text('Mister Fantasy'), findsOneWidget);
+    expect(find.text('Estadísticas'), findsWidgets);
+    expect(find.text('Resúmenes'), findsOneWidget);
+    expect(find.text('Ajustes'), findsOneWidget);
+    expect(find.text('Chat'), findsNothing);
+    expect(find.text('CHAT PÚBLICO'), findsOneWidget);
+  });
+
 
 }

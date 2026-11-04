@@ -1,4 +1,9 @@
+import 'dart:async';
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,6 +19,27 @@ class NotificationService {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
+  static bool _pushInitialized = false;
+  static StreamSubscription<RemoteMessage>? _foregroundSubscription;
+  static StreamSubscription<RemoteMessage>? _openedSubscription;
+  static final ValueNotifier<String?> liveEventNotification =
+      ValueNotifier<String?>(null);
+
+  static const String _liveTopic = 'deporte_total_360_live';
+  static const String _firebaseApiKey =
+      String.fromEnvironment('FIREBASE_API_KEY');
+  static const String _firebaseAppId =
+      String.fromEnvironment('FIREBASE_APP_ID');
+  static const String _firebaseSenderId =
+      String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID');
+  static const String _firebaseProjectId =
+      String.fromEnvironment('FIREBASE_PROJECT_ID');
+
+  static bool get _firebaseConfigured =>
+      _firebaseApiKey.isNotEmpty &&
+      _firebaseAppId.isNotEmpty &&
+      _firebaseSenderId.isNotEmpty &&
+      _firebaseProjectId.isNotEmpty;
   static const int _matchNotificationFloor = 1000000000;
 
   static Future<void> initialize() async {
@@ -32,8 +58,20 @@ class NotificationService {
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
         iOS: DarwinInitializationSettings(),
       ),
+      onDidReceiveNotificationResponse: _handleLocalNotificationResponse,
     );
     _initialized = true;
+    final androidNotifications = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    await androidNotifications?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'sports_live_events',
+        'Transmisiones deportivas',
+        description: 'Avisos de transmisiones deportivas disponibles.',
+        importance: Importance.max,
+      ),
+    );
+    await _initializeFirebasePush();
   }
 
   static Future<bool> requestPermission() async {
@@ -41,7 +79,116 @@ class NotificationService {
     if (!Platform.isAndroid) return true;
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
-    return await android?.requestNotificationsPermission() ?? false;
+    final localGranted =
+        await android?.requestNotificationsPermission() ?? false;
+    if (!_firebaseConfigured || Firebase.apps.isEmpty) return localGranted;
+    final settings = await FirebaseMessaging.instance.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    final pushGranted =
+        settings.authorizationStatus == AuthorizationStatus.authorized ||
+        settings.authorizationStatus == AuthorizationStatus.provisional;
+    return localGranted && pushGranted;
+  }
+
+
+  static Future<void> _initializeFirebasePush() async {
+    if (_pushInitialized || !_firebaseConfigured) return;
+    try {
+      final options = FirebaseOptions(
+        apiKey: _firebaseApiKey,
+        appId: _firebaseAppId,
+        messagingSenderId: _firebaseSenderId,
+        projectId: _firebaseProjectId,
+      );
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(options: options);
+      }
+      FirebaseMessaging.onBackgroundMessage(
+        deporteTotalFirebaseMessagingBackgroundHandler,
+      );
+      final messaging = FirebaseMessaging.instance;
+      _foregroundSubscription ??=
+          FirebaseMessaging.onMessage.listen(_showRemoteNotification);
+      _openedSubscription ??=
+          FirebaseMessaging.onMessageOpenedApp.listen(_handleRemoteOpen);
+      final initialMessage = await messaging.getInitialMessage();
+      if (initialMessage != null) _handleRemoteOpen(initialMessage);
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('notifications_enabled') ?? false) {
+        await messaging.subscribeToTopic(_liveTopic);
+      }
+      _pushInitialized = true;
+    } catch (_) {
+      // Sin los datos Firebase del proyecto, las notificaciones locales
+      // existentes siguen funcionando y la app no se bloquea.
+    }
+  }
+
+  static Future<void> registerCurrentDevice() async {
+    if (!_firebaseConfigured || Firebase.apps.isEmpty) return;
+    try {
+      await FirebaseMessaging.instance.subscribeToTopic(_liveTopic);
+    } catch (_) {}
+  }
+
+  static Future<void> unregisterCurrentDevice() async {
+    if (!_firebaseConfigured || Firebase.apps.isEmpty) return;
+    try {
+      await FirebaseMessaging.instance.unsubscribeFromTopic(_liveTopic);
+    } catch (_) {}
+  }
+
+  static void _handleRemoteOpen(RemoteMessage message) {
+    final eventId = message.data['eventId']?.toString();
+    if (eventId != null && eventId.isNotEmpty) {
+      liveEventNotification.value = eventId;
+    }
+  }
+
+  static void _handleLocalNotificationResponse(
+    NotificationResponse response,
+  ) {
+    final eventId = response.payload;
+    if (eventId != null && eventId.isNotEmpty) {
+      liveEventNotification.value = eventId;
+    }
+  }
+
+  static Future<void> _showRemoteNotification(RemoteMessage message) async {
+    final title = message.notification?.title ?? tr('title');
+    final body = message.notification?.body ??
+        appText(
+          'Hay una transmisión deportiva disponible.',
+          'A sports stream is available.',
+          'Há uma transmissão esportiva disponível.',
+          'Une diffusion sportive est disponible.',
+        );
+    await _plugin.show(
+      id: _stableId('fcm:${message.data['eventId'] ?? message.messageId ?? body}'),
+      title: title,
+      body: body,
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          'sports_live_events',
+          appText('Transmisiones deportivas', 'Sports streams',
+              'Transmissões esportivas', 'Diffusions sportives'),
+          channelDescription: appText(
+            'Avisos de transmisiones deportivas disponibles.',
+            'Alerts when sports streams become available.',
+            'Avisos de transmissões esportivas disponíveis.',
+            'Alertes de diffusions sportives disponibles.',
+          ),
+          importance: Importance.max,
+          priority: Priority.high,
+          category: AndroidNotificationCategory.event,
+        ),
+        iOS: const DarwinNotificationDetails(),
+      ),
+      payload: message.data['eventId']?.toString(),
+    );
   }
 
   static int _stableId(String value) {
@@ -194,4 +341,14 @@ class NotificationService {
       ),
     );
   }
+}
+
+
+/// Firebase invoca este punto de entrada en el isolate de segundo plano.
+/// Los mensajes llevan un bloque notification para que Android los presente.
+@pragma('vm:entry-point')
+Future<void> deporteTotalFirebaseMessagingBackgroundHandler(
+  RemoteMessage message,
+) async {
+  // No se inicia reproducción desde segundo plano: Android exige interacción.
 }

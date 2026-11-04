@@ -17,7 +17,11 @@ class SportsApiService {
 
   // Reduce las solicitudes repetidas desde este dispositivo.
   // El límite final también depende del uso de otros dispositivos.
-  static const Duration _minimumRequestInterval = Duration(seconds: 10);
+  static const Duration _defaultMinimumRequestInterval = Duration(seconds: 10);
+
+  @visibleForTesting
+  static Duration minimumRequestIntervalForTesting =
+      _defaultMinimumRequestInterval;
 
   static final http.Client _defaultHttpClient = http.Client();
   @visibleForTesting
@@ -29,6 +33,7 @@ class SportsApiService {
     _cache.clear();
     _inFlight.clear();
     _lastRequestAt = null;
+    minimumRequestIntervalForTesting = _defaultMinimumRequestInterval;
     _requestQueue = Future<void>.value();
   }
 
@@ -190,7 +195,7 @@ class SportsApiService {
       }
       if (decoded['provider_configured'] != true) {
         throw const SportsApiException(
-          'El Worker está disponible, pero no tiene configurada la clave APISPORTS_KEY.',
+          'El Worker está disponible, pero no tiene configurada SPORTAPI_API_KEY ni la clave heredada APISPORTS_KEY.',
         );
       }
     } on TimeoutException {
@@ -212,6 +217,62 @@ class SportsApiService {
       sport: 'Fútbol',
       dateFilter: 'Todos',
     );
+  }
+
+  /// Lee el catálogo de señales autorizado del Worker.
+  /// Es independiente de API-Sports y no rastrea ni extrae páginas web.
+  Future<List<Map<String, dynamic>>> fetchAuthorizedLiveSources({
+    required String sport,
+    required String dateFilter,
+  }) async {
+    final base = normalizeBaseUrl(sportsApiBaseUrl.value);
+    final sportId = supportedSports[sport];
+    if (base == null || sportId == null) return <Map<String, dynamic>>[];
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final end = dateFilter == 'Todos'
+        ? today.add(const Duration(days: 6))
+        : today;
+    final uri = Uri.parse('$base/api/live/sources').replace(
+      queryParameters: <String, String>{
+        'sport': sportId,
+        'from': _dateParam(today),
+        'to': _dateParam(end),
+        'timezone': 'America/Guyana',
+      },
+    );
+
+    try {
+      final response = await _httpClient
+          .get(uri, headers: const <String, String>{'Accept': 'application/json'})
+          .timeout(const Duration(seconds: 10));
+
+      // Compatibilidad con un Worker anterior que aún no tenga esta ruta.
+      if (response.statusCode == 404 || response.statusCode == 204) {
+        return <Map<String, dynamic>>[];
+      }
+      if (response.statusCode != 200) {
+        throw SportsApiException(
+          'El catálogo de señales respondió HTTP ${response.statusCode}.',
+        );
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) return <Map<String, dynamic>>[];
+      final payload = decoded['sources'] ?? decoded['response'] ?? decoded['data'];
+      if (payload is! List) return <Map<String, dynamic>>[];
+      return payload
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList(growable: false);
+    } on TimeoutException {
+      throw const SportsApiException('El catálogo de señales tardó demasiado en responder.');
+    } on SportsApiException {
+      rethrow;
+    } catch (_) {
+      throw const SportsApiException('No se pudo consultar el catálogo de señales.');
+    }
   }
 
   /// Consulta el deporte y la fecha seleccionados en la agenda.
@@ -480,9 +541,9 @@ class SportsApiService {
       if (last != null) {
         final elapsed = DateTime.now().difference(last);
 
-        if (elapsed < _minimumRequestInterval) {
+        if (elapsed < minimumRequestIntervalForTesting) {
           await Future<void>.delayed(
-            _minimumRequestInterval - elapsed,
+            minimumRequestIntervalForTesting - elapsed,
           );
         }
       }
