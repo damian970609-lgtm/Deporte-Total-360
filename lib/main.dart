@@ -1902,9 +1902,9 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const <Widget>[
+                children: <Widget>[
                   Row(children: <Widget>[
-                    Icon(Icons.auto_awesome_rounded, color: appPink),
+                    const Icon(Icons.auto_awesome_rounded, color: appPink),
                     SizedBox(width: 9),
                     Expanded(child: Text(
                       'FUENTES DEPORTIVAS AUTOMÁTICAS',
