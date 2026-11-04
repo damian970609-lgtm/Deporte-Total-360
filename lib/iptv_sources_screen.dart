@@ -444,7 +444,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
     });
     try {
       final catalog = await _service.loadCatalog(
-        playlistUrl: _playlistUrls.join('\\n'),
+        playlistUrl: _playlistUrls.join('\n'),
         epgUrl: _epgUrls.join('\\n'),
         forceRefresh: true,
         downloadBatchSize: 2,
