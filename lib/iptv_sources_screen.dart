@@ -468,7 +468,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
 
   Future<void> _showAlternatives(_MergedM3uChannel entry) async {
     final sorted = List<M3uChannel>.of(entry.channels)
-      ..sort((a, b) => _qualityLabel(b).compareTo(_qualityLabel(a)));
+      ..sort((a, b) => _qualityRank(b).compareTo(_qualityRank(a)));
     final selected = await showModalBottomSheet<M3uChannel>(
       context: context,
       backgroundColor: _iptvPanel,
