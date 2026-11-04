@@ -1238,7 +1238,13 @@ class _ActionTile extends StatelessWidget {
 
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({
+    super.key,
+    this.secretMenuBuilder,
+  });
+
+  /// Permite probar la navegación secreta sin inicializar un WebView nativo.
+  final WidgetBuilder? secretMenuBuilder;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -1319,7 +1325,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _signatureTapCount = 0;
       Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
-          builder: (_) => const DeveloperSettingsScreen(),
+          builder: widget.secretMenuBuilder ??
+              (_) => const DeveloperSettingsScreen(),
         ),
       );
     }
