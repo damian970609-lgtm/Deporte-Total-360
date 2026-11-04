@@ -134,10 +134,42 @@ class SportsApiAppService {
     });
   }
 
+  String _competitionKey(String value) {
+    return value
+        .toLowerCase()
+        .trim()
+        .replaceAll(RegExp(r'[^a-z0-9áéíóúüñ]+'), ' ')
+        .replaceAll(RegExp(r'\\s+'), ' ');
+  }
+
   Future<List<SportsAgendaEvent>> _fetchFavoriteAgendaEvents(String day) async {
+    // El catálogo publicado por el Worker es la única lista permitida.
+    // Si no puede leerse completo, se falla de forma segura y no se muestran
+    // competiciones sin verificar.
+    final favoriteSports = await fetchFavoriteSports();
+    final favoritesById = <String, Map<String, String>>{};
+    for (final sport in favoriteSports) {
+      final id = _text(sport['id']);
+      final rawCompetitions = sport['competitions'];
+      if (id.isEmpty || rawCompetitions is! List) continue;
+      final allowed = <String, String>{};
+      for (final rawName in rawCompetitions) {
+        final name = _text(rawName);
+        if (name.isNotEmpty) allowed[_competitionKey(name)] = name;
+      }
+      favoritesById[id] = allowed;
+    }
+    if (!_sportNames.keys.every(favoritesById.containsKey) ||
+        favoritesById.values.any((items) => items.isEmpty)) {
+      throw const SportsApiException(
+        'El catálogo de competiciones favoritas está incompleto en el Worker.',
+      );
+    }
+
     var successfulSports = 0;
     final results = await Future.wait(_sportNames.entries.map((entry) async {
       try {
+        final allowed = favoritesById[entry.key] ?? <String, String>{};
         final isRace = entry.key == 'cycling' || entry.key == 'motorsport';
         final payload = await _get(
           isRace ? '/races' : '/fixtures',
@@ -149,7 +181,34 @@ class SportsApiAppService {
         successfulSports++;
         return payload.whereType<Map>().map((raw) {
           final row = Map<String, dynamic>.from(raw);
-          if (isRace) return _raceEvent(row, entry.key, entry.value);
+          if (isRace) {
+            final series = row['series'] is Map
+                ? Map<String, dynamic>.from(row['series'])
+                : <String, dynamic>{};
+            // En ciclismo, la serie solo identifica el calendario masculino
+            // o femenino; la competición real es el nombre de la carrera.
+            final providerName = entry.key == 'cycling'
+                ? _text(row['name'])
+                : _text(series['name']);
+            final canonical = allowed[_competitionKey(providerName)];
+            if (canonical == null) return null;
+            if (entry.key == 'motorsport' && series.isNotEmpty) {
+              row['series'] = <String, dynamic>{...series, 'name': canonical};
+            }
+            return _raceEvent(
+              row,
+              entry.key,
+              entry.value,
+              competitionName: canonical,
+            );
+          }
+
+          final league = row['league'] is Map
+              ? Map<String, dynamic>.from(row['league'])
+              : <String, dynamic>{};
+          final canonical = allowed[_competitionKey(_text(league['name']))];
+          if (canonical == null) return null;
+          row['league'] = <String, dynamic>{...league, 'name': canonical};
           return _fixtureEvent(row, entry.value);
         }).whereType<SportsAgendaEvent>().toList(growable: false);
       } catch (_) {
@@ -227,8 +286,9 @@ class SportsApiAppService {
   SportsAgendaEvent? _raceEvent(
     Map<String, dynamic> row,
     String sportId,
-    String sportName,
-  ) {
+    String sportName, {
+    String? competitionName,
+  }) {
     final id = int.tryParse(_text(row['id']));
     if (id == null) return null;
     final sessions = row['sessions'] is List
@@ -260,7 +320,7 @@ class SportsApiAppService {
       id: 'sportsapi-race-$id-$sessionId',
       title: _text(row['name']).isEmpty ? sportName : _text(row['name']),
       sport: sportName,
-      competition: _text(series['name']),
+      competition: competitionName ?? _text(series['name']),
       participants: winnerName.isEmpty
           ? const <SportsAgendaParticipant>[]
           : <SportsAgendaParticipant>[SportsAgendaParticipant(name: winnerName, imageUrl: _image(winner['image']))],
