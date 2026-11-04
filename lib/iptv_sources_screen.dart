@@ -2,6 +2,7 @@ import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'automatic_live_service.dart';
 import 'live_channels_screen.dart';
@@ -15,8 +16,15 @@ const Color _iptvGreen = Color(0xFF39FF9C);
 const Color _iptvPink = Color(0xFFFF28CF);
 const Color _iptvMuted = Color(0xFFA9BDD6);
 
+const String _manualPlaylistUrlsKey = 'dt360_secret_iptv_playlist_urls_v1';
+const String _manualPlaylistTextsKey = 'dt360_secret_iptv_playlist_texts_v1';
+const String _manualEpgUrlsKey = 'dt360_secret_iptv_epg_urls_v1';
+
 class IptvSourcesScreen extends StatefulWidget {
-  const IptvSourcesScreen({super.key});
+  const IptvSourcesScreen({super.key, this.manualOnly = false});
+
+  /// Usa una biblioteca independiente sin listas públicas precargadas.
+  final bool manualOnly;
 
   @override
   State<IptvSourcesScreen> createState() => _IptvSourcesScreenState();
@@ -66,17 +74,32 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
 
   Future<void> _loadSettings() async {
     try {
-      final settings = await AutoLiveSettings.load();
-      if (!mounted) return;
-      setState(() {
-        _playlistUrls = List<String>.of(settings.playlistUrls);
-        _epgUrls = List<String>.of(settings.epgUrls);
-        _playlistText = '';
-        _playlistTexts = List<String>.of(settings.localPlaylistTexts);
-        _loading = false;
-      });
-      // Carga automáticamente todas las fuentes guardadas al entrar al centro IPTV.
-      await _refreshCatalog();
+      if (widget.manualOnly) {
+        final prefs = await SharedPreferences.getInstance();
+        if (!mounted) return;
+        setState(() {
+          _playlistUrls = (prefs.getStringList(_manualPlaylistUrlsKey) ?? <String>[])
+              .where(isSafeHttpUrl)
+              .toList(growable: true);
+          _epgUrls = (prefs.getStringList(_manualEpgUrlsKey) ?? <String>[])
+              .where(isSafeHttpUrl)
+              .toList(growable: true);
+          _playlistTexts = prefs.getStringList(_manualPlaylistTextsKey) ?? <String>[];
+          _playlistText = '';
+          _loading = false;
+        });
+      } else {
+        final settings = await AutoLiveSettings.load();
+        if (!mounted) return;
+        setState(() {
+          _playlistUrls = List<String>.of(settings.playlistUrls);
+          _epgUrls = List<String>.of(settings.epgUrls);
+          _playlistText = '';
+          _playlistTexts = List<String>.of(settings.localPlaylistTexts);
+          _loading = false;
+        });
+      }
+      if (mounted) await _refreshCatalog();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -90,16 +113,29 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
     if (_saving) return;
     setState(() => _saving = true);
     try {
-      await AutoLiveSettings.save(
-        playlistUrl: _playlistUrls.join('\n'),
-        epgUrl: _epgUrls.join('\n'),
-        authorizationConfirmed: true,
-        playlistText: _playlistText,
-        playlistTexts: _playlistTexts,
-      );
+      if (widget.manualOnly) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList(_manualPlaylistUrlsKey, _playlistUrls);
+        await prefs.setStringList(_manualEpgUrlsKey, _epgUrls);
+        await prefs.setStringList(_manualPlaylistTextsKey, _playlistTexts);
+      } else {
+        await AutoLiveSettings.save(
+          playlistUrl: _playlistUrls.join('\\n'),
+          epgUrl: _epgUrls.join('\\n'),
+          authorizationConfirmed: true,
+          playlistText: _playlistText,
+          playlistTexts: _playlistTexts,
+        );
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Listas M3U y guías EPG guardadas.')),
+          SnackBar(
+            content: Text(
+              widget.manualOnly
+                  ? 'Tus listas del reproductor quedaron guardadas.'
+                  : 'Listas M3U y guías EPG guardadas.',
+            ),
+          ),
         );
       }
     } catch (error) {
@@ -112,6 +148,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
       if (mounted) setState(() => _saving = false);
     }
   }
+
 
 
   Future<void> _importClipboardPlaylist() async {
@@ -388,7 +425,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
 
   Future<void> _removeSource({required bool epg, required int index}) async {
     final list = epg ? _epgUrls : _playlistUrls;
-    if (list.length <= 1) {
+    if (list.length <= 1 && !widget.manualOnly) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -402,7 +439,9 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
     }
     setState(() => list.removeAt(index));
     await _saveSettings();
+    if (mounted && !epg) await _refreshCatalog();
   }
+
 
   Future<void> _moveSource({
     required bool epg,
@@ -605,7 +644,23 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
   }
 
   Future<void> _refreshCatalog() async {
-    if (_refreshing || (_playlistUrls.isEmpty && _playlistTexts.isEmpty && _playlistText.trim().isEmpty)) return;
+    if (_refreshing) return;
+    if (_playlistUrls.isEmpty &&
+        _playlistTexts.isEmpty &&
+        _playlistText.trim().isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _catalog = null;
+        _mergedChannels = <_MergedM3uChannel>[];
+        _epgIndex = <String, List<XmltvProgramme>>{};
+        _programmeCount = 0;
+        _rawChannelCount = 0;
+        _sourceWarning = null;
+        _error = null;
+        _progressMessage = '';
+      });
+      return;
+    }
     setState(() {
       _refreshing = true;
       _error = null;
@@ -964,9 +1019,11 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: _iptvCyan.withAlpha(150)),
                   ),
-                  child: const Text(
-                    'Gestiona listas M3U/M3U8 y guías XMLTV/EPG desde un único centro. El extractor combina fuentes, elimina duplicados y conserva alternativas. El reproductor nativo abre canales directos compatibles con controles de calidad y pantalla completa; los ocho espacios multivista de la app se mantienen. El análisis pesado se procesa fuera de la interfaz.',
-                    style: TextStyle(
+                  child: Text(
+                    widget.manualOnly
+                        ? 'Agrega manualmente tus listas IPTV. Se guardan en este dispositivo y no se carga ninguna lista pública automáticamente. Busca tus canales y reprodúcelos aquí mismo con el reproductor integrado, controles de calidad y pantalla completa.'
+                        : 'Gestiona listas M3U/M3U8 y guías XMLTV/EPG desde un único centro. El extractor combina fuentes, elimina duplicados y conserva alternativas. El reproductor nativo abre canales directos compatibles con controles de calidad y pantalla completa; los ocho espacios multivista de la app se mantienen. El análisis pesado se procesa fuera de la interfaz.',
+                    style: const TextStyle(
                       color: _iptvMuted,
                       fontSize: 11,
                       height: 1.5,
@@ -994,9 +1051,11 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                         ),
                       ),
                       const SizedBox(height: 5),
-                      const Text(
-                        'Las listas públicas se descargan automáticamente al abrir esta pantalla. También puedes añadir direcciones M3U/M3U8 propias o importar contenido copiado; los canales aparecerán en el catálogo nativo.',
-                        style: TextStyle(color: _iptvMuted, fontSize: 11, height: 1.4),
+                      Text(
+                        widget.manualOnly
+                            ? 'Añade una URL M3U/M3U8 o pega el contenido de una lista que ya tengas. Puedes agregar varias, guardarlas y reproducir sus canales en el reproductor integrado.'
+                            : 'Las listas públicas se descargan automáticamente al abrir esta pantalla. También puedes añadir direcciones M3U/M3U8 propias o importar contenido copiado; los canales aparecerán en el catálogo nativo.',
+                        style: const TextStyle(color: _iptvMuted, fontSize: 11, height: 1.4),
                       ),
                       const SizedBox(height: 10),
                       Wrap(
@@ -1036,8 +1095,9 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                 ),
                 _sourceSection(
                   title: 'LISTAS DE CANALES M3U / M3U8',
-                  description:
-                      'Las listas se descargan en lotes pequeños. Puedes cambiar el orden de prioridad o quitar una fuente sin borrar las demás.',
+                  description: widget.manualOnly
+                      ? 'Tus listas añadidas manualmente. Puedes cambiar su prioridad o eliminar cualquiera cuando quieras.'
+                      : 'Las listas se descargan en lotes pequeños. Puedes cambiar el orden de prioridad o quitar una fuente sin borrar las demás.',
                   urls: _playlistUrls,
                   epg: false,
                 ),
@@ -1101,9 +1161,11 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                         ),
                       ),
                       const SizedBox(height: 7),
-                      const Text(
-                        'Descarga y combina todas las listas. Las guías EPG se incorporan cuando responden; los canales no desaparecen si una guía falla. Los canales repetidos se agrupan por tvg-id o nombre y conservan sus alternativas.',
-                        style: TextStyle(
+                      Text(
+                        widget.manualOnly
+                            ? 'Combina únicamente las listas que agregaste. Los canales repetidos se agrupan y conservan sus alternativas. La guía EPG es opcional.'
+                            : 'Descarga y combina todas las listas. Las guías EPG se incorporan cuando responden; los canales no desaparecen si una guía falla. Los canales repetidos se agrupan por tvg-id o nombre y conservan sus alternativas.',
+                        style: const TextStyle(
                           color: _iptvMuted,
                           fontSize: 11,
                           height: 1.4,
@@ -1158,8 +1220,10 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                               : const Icon(Icons.sync_rounded),
                           label: Text(
                             _refreshing
-                                ? 'EXTRAYENDO LISTAS Y EPG…'
-                                : 'EXTRAER Y FUSIONAR TODAS LAS FUENTES',
+                                ? 'CARGANDO TUS LISTAS…'
+                                : widget.manualOnly
+                                    ? 'CARGAR MIS LISTAS Y CANALES'
+                                    : 'EXTRAER Y FUSIONAR TODAS LAS FUENTES',
                           ),
                           style: FilledButton.styleFrom(
                             backgroundColor: _iptvGreen,
