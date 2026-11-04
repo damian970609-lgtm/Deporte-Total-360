@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'automatic_live_screen.dart';
-import 'ottfox_workspace_screen.dart';
+import 'iptv_sources_screen.dart';
 
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
@@ -1673,7 +1673,7 @@ class DeveloperSettingsScreen extends StatelessWidget {
   const DeveloperSettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => const OttfoxWorkspaceScreen();
+  Widget build(BuildContext context) => const IptvSourcesScreen();
 }
 
 class DonationsScreen extends StatelessWidget {

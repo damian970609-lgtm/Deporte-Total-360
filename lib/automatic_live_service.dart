@@ -15,6 +15,7 @@ const String _playlistTextKey = 'dt360_auto_live_playlist_text_v1';
 const String _playlistTextsKey = 'dt360_auto_live_playlist_texts_v2';
 const String _epgUrlKey = 'dt360_auto_live_epg_url_v1';
 const String _authorizedKey = 'dt360_auto_live_authorized_v1';
+const String _defaultSourcesMigratedKey = 'dt360_auto_live_default_sources_migrated_v1';
 
 /// Normaliza imágenes de MARCA: admite URL HTTPS absolutas, protocol-relative
 /// y rutas relativas del mismo sitio. Nunca permite esquemas no HTTPS ni
@@ -104,9 +105,9 @@ const String previousDefaultAutoLiveEpgUrl =
 // Listas públicas: deportes y canales abiertos de repositorios GitHub
 // mantenidos por comunidad, conservando las fuentes regionales en español.
 const String defaultAutoLivePlaylistUrls =
-    previousDefaultAutoLivePlaylistUrls + '\n'
-    'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8\n'
-    'https://biskyt.github.io/legalFreeIPTVplaylist/live.m3u';
+    'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8\n' +
+    previousDefaultAutoLivePlaylistUrls +
+    '\nhttps://biskyt.github.io/legalFreeIPTVplaylist/live.m3u';
 
 // EPG regional en español y Caribe. Los XML se procesan en lotes limitados.
 const String defaultAutoLiveEpgUrl =
@@ -137,6 +138,11 @@ bool isSafeHttpUrl(String value) {
 
 bool isDirectPlayableStream(String value) =>
     liveMediaFormatForUrl(value) != null;
+
+bool _isLegacyOttfoxWebUrl(String value) {
+  final host = Uri.tryParse(value.trim())?.host.toLowerCase() ?? '';
+  return host == 'ottfox.net' || host.endsWith('.ottfox.net');
+}
 
 class AutoLiveSettings {
   const AutoLiveSettings({
@@ -176,48 +182,56 @@ class AutoLiveSettings {
     final playlistText = prefs.getString(_playlistTextKey) ?? '';
     final playlistTexts = prefs.getStringList(_playlistTextsKey) ?? <String>[];
 
-    // Migra las versiones antiguas y amplía los valores predeterminados
-    // guardados en el dispositivo. Se conservan las fuentes personalizadas y
-    // el orden que el usuario haya elegido.
-    if (playlist.trim() == legacyDefaultAutoLivePlaylistUrls.trim()) {
-      playlist = defaultAutoLivePlaylistUrls;
+    // Actualiza una sola vez las instalaciones anteriores: incorpora las
+    // fuentes públicas incluidas, conserva URLs personales y descarta la
+    // dirección de la antigua página OTTFOX (no era una lista M3U).
+    final sourcesMigrated = prefs.getBool(_defaultSourcesMigratedKey) ?? false;
+    if (!sourcesMigrated) {
+      final defaults = _splitPlaylistUrls(defaultAutoLivePlaylistUrls);
+      final savedPlaylists = _splitPlaylistUrls(playlist)
+          .where((url) => isSafeHttpUrl(url) && !_isLegacyOttfoxWebUrl(url));
+      final prioritySources = defaults.where(
+        (url) => url.contains('raw.githubusercontent.com/Free-TV/IPTV/'),
+      );
+      playlist = <String>{
+        ...prioritySources,
+        ...savedPlaylists,
+        ...defaults,
+      }.join('\n');
+
+      final savedEpg = _splitPlaylistUrls(epg)
+          .where((url) => isSafeHttpUrl(url) && !_isLegacyOttfoxWebUrl(url));
+      epg = <String>{
+        ..._splitPlaylistUrls(defaultAutoLiveEpgUrl),
+        ...savedEpg,
+      }.join('\n');
+
       await prefs.setString(_playlistUrlKey, playlist);
-    } else {
-      final stored = _splitPlaylistUrls(playlist);
-      final previous = _splitPlaylistUrls(previousDefaultAutoLivePlaylistUrls);
-      if (previous.every(stored.contains)) {
-        final merged = <String>{...stored, ..._splitPlaylistUrls(defaultAutoLivePlaylistUrls)};
-        if (merged.length != stored.length) {
-          playlist = merged.join('\n');
-          await prefs.setString(_playlistUrlKey, playlist);
-        }
-      }
-    }
-    if (epg.trim() == legacyDefaultAutoLiveEpgUrl.trim()) {
-      epg = defaultAutoLiveEpgUrl;
       await prefs.setString(_epgUrlKey, epg);
-    } else {
-      final stored = _splitPlaylistUrls(epg);
-      final previous = _splitPlaylistUrls(previousDefaultAutoLiveEpgUrl);
-      if (previous.every(stored.contains)) {
-        final merged = <String>{...stored, ..._splitPlaylistUrls(defaultAutoLiveEpgUrl)};
-        if (merged.length != stored.length) {
-          epg = merged.join('\n');
-          await prefs.setString(_epgUrlKey, epg);
-        }
-      }
+      await prefs.setBool(_defaultSourcesMigratedKey, true);
     }
 
-    // Recupera automáticamente la configuración integrada si una versión
-    // anterior dejó valores vacíos, incompletos o con URLs inválidas.
-    if (playlist.trim().isEmpty ||
-        !_splitPlaylistUrls(playlist).every(isSafeHttpUrl)) {
+    // Elimina páginas web e URLs inválidas, pero mantiene todas las fuentes
+    // M3U/EPG personales que sí sean direcciones HTTP/HTTPS.
+    final safePlaylists = _splitPlaylistUrls(playlist)
+        .where((url) => isSafeHttpUrl(url) && !_isLegacyOttfoxWebUrl(url))
+        .toList(growable: false);
+    if (safePlaylists.isEmpty) {
       playlist = defaultAutoLivePlaylistUrls;
       await prefs.setString(_playlistUrlKey, playlist);
+    } else if (safePlaylists.length != _splitPlaylistUrls(playlist).length) {
+      playlist = safePlaylists.join('\n');
+      await prefs.setString(_playlistUrlKey, playlist);
     }
-    if (epg.trim().isEmpty ||
-        !_splitPlaylistUrls(epg).every(isSafeHttpUrl)) {
+
+    final safeEpg = _splitPlaylistUrls(epg)
+        .where((url) => isSafeHttpUrl(url) && !_isLegacyOttfoxWebUrl(url))
+        .toList(growable: false);
+    if (safeEpg.isEmpty) {
       epg = defaultAutoLiveEpgUrl;
+      await prefs.setString(_epgUrlKey, epg);
+    } else if (safeEpg.length != _splitPlaylistUrls(epg).length) {
+      epg = safeEpg.join('\n');
       await prefs.setString(_epgUrlKey, epg);
     }
 
@@ -800,7 +814,7 @@ class AutomaticLiveService {
     final playlistFailures = <String>[];
     for (var localIndex = 0; localIndex < localPlaylistTexts.length; localIndex++) {
       final localText = localPlaylistTexts[localIndex];
-      final sourceLabel = 'OTTFOX · lista ${localIndex + 1}';
+      final sourceLabel = 'Lista local ${localIndex + 1}';
       try {
         if (localText.length > maxPlaylistBytes ||
             !localText.toUpperCase().startsWith('#EXTM3U')) {
@@ -820,7 +834,7 @@ class AutomaticLiveService {
         playlistFailures.add(sourceLabel);
         onSourceError?.call(sourceLabel, error);
       }
-      onProgress?.call('OTTFOX', localIndex + 1, localPlaylistTexts.length);
+      onProgress?.call('LOCAL', localIndex + 1, localPlaylistTexts.length);
       if (batchPause > Duration.zero) await Future<void>.delayed(batchPause);
     }
     for (var batchStart = 0; batchStart < playlistUrls.length; batchStart += effectiveBatchSize) {
