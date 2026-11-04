@@ -440,7 +440,7 @@ class _SportsApiAgendaScreenState extends State<SportsApiAgendaScreen>
               decoration: BoxDecoration(
                 color: _agendaPanel,
                 borderRadius: BorderRadius.circular(9),
-                border: Border.all(color: _agendaYellow.withAlpha(150)),
+                border: Border.all(color: _agendaPink.withAlpha(150)),
               ),
               child: Text(
                 'Mostrando la última agenda guardada. SportsAPI: $_error',
