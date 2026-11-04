@@ -103,7 +103,7 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
                 });
               },
               onReceivedError: (controller, request, error) {
-                if (!mounted || !request.isForMainFrame) return;
+                if (!mounted || request.isForMainFrame != true) return;
                 setState(() {
                   _error = 'No se pudo cargar OTTFOX. Comprueba la conexión y pulsa Recargar.';
                   _progress = 1;
