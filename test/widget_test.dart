@@ -39,7 +39,7 @@ void main() {
     sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
   });
 
-  testWidgets('Ajustes oculta el antiguo servicio y el menú Damián APK abre el centro IPTV', (tester) async {
+  testWidgets('el menú oculto DAMIAN.APK abre directamente OTTFOX y elimina los paneles antiguos', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await tester.pumpWidget(
       const MaterialApp(home: SettingsScreen()),
@@ -51,19 +51,12 @@ void main() {
     for (var tap = 0; tap < 10; tap++) {
       await tester.tap(find.text('DAMIAN.APK'));
     }
-    await tester.pumpAndSettle();
+    await tester.pump();
 
-    expect(find.text('DAMIÁN APK · CENTRO IPTV'), findsOneWidget);
-    expect(find.text('ABRIR REPRODUCTOR Y EXTRACTOR IPTV'), findsOneWidget);
-    expect(find.text('CODOPLAYER · REPRODUCTOR WEB'), findsOneWidget);
-    expect(find.text('ABRIR CODOPLAYER EN LA APK'), findsOneWidget);
-
-    await tester.tap(find.text('ABRIR CODOPLAYER EN LA APK'));
-    await tester.pumpAndSettle();
-    expect(find.text('ANTES DE ABRIR CODOPLAYER'), findsOneWidget);
-    expect(find.textContaining('hasta un año'), findsOneWidget);
-    await tester.tap(find.text('Cancelar'));
-    await tester.pumpAndSettle();
+    expect(find.text('OTTFOX · EDITOR IPTV'), findsOneWidget);
+    expect(find.text('ABRIR REPRODUCTOR Y EXTRACTOR IPTV'), findsNothing);
+    expect(find.text('CODOPLAYER · REPRODUCTOR WEB'), findsNothing);
+    expect(find.text('ABRIR CODOPLAYER EN LA APK'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
