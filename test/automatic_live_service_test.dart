@@ -176,8 +176,8 @@ void main() {
     });
   });
 
-  group('tablero fijo de transmisiones', () {
-    testWidgets('mantiene cuatro cuadros visibles sin desplazamiento', (tester) async {
+  group('tablero de ocho reproductores', () {
+    testWidgets('mantiene ocho cuadros visibles y permite desplazarse', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -186,15 +186,15 @@ void main() {
         ),
       );
 
-      for (var channel = 1; channel <= 4; channel++) {
+      for (var channel = 1; channel <= 8; channel++) {
         expect(
           find.text('DEPORTE TOTAL 360° CANAL $channel'),
           findsOneWidget,
         );
       }
-      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(4));
+      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(8));
       final grid = tester.widget<GridView>(find.byType(GridView));
-      expect(grid.physics, isA<NeverScrollableScrollPhysics>());
+      expect(grid.physics, isA<BouncingScrollPhysics>());
     });
 
     testWidgets('muestra el próximo evento con su horario mientras espera la señal', (tester) async {
@@ -239,7 +239,7 @@ void main() {
       expect(find.text('DEPORTE TOTAL 360° CANAL 1'), findsOneWidget);
       expect(find.text('Fútbol · Liga · Tigres vs Atlas'), findsOneWidget);
       expect(find.byTooltip('Reproducir en pantalla completa'), findsOneWidget);
-      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(3));
+      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(7));
     });
   });
 
