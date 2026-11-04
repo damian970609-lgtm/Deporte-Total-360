@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'automatic_live_screen.dart';
 import 'automatic_live_service.dart';
+import 'iptv_test_player_screen.dart';
 
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
@@ -2153,6 +2154,7 @@ class OttfoxWebScreen extends StatefulWidget {
 class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
   InAppWebViewController? _controller;
   final AutomaticLiveService _sourceService = AutomaticLiveService();
+  AutoLiveCatalog? _loadedCatalog;
   bool _loading = true;
   bool _syncingSources = false;
   bool _syncAttempted = false;
@@ -2228,6 +2230,7 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
           });
         },
       );
+      _loadedCatalog = catalog;
       final mergedPlaylist = AutomaticLiveService.buildOttfoxM3u(
         catalog,
         epgUrls: settings.epgUrls,
@@ -2488,6 +2491,17 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
           ),
         ),
         actions: <Widget>[
+          IconButton(
+            tooltip: 'Abrir reproductor para probar canales',
+            onPressed: () => Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(
+                builder: (_) => IptvTestPlayerScreen(
+                  initialCatalog: _loadedCatalog,
+                ),
+              ),
+            ),
+            icon: const Icon(Icons.play_circle_fill_rounded, color: appGreen),
+          ),
           IconButton(
             tooltip: 'Recargar y volver a sincronizar',
             onPressed: _reload,
