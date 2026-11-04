@@ -259,6 +259,51 @@ void main() {
       expect(settings.isConfigured, isTrue);
     });
 
+    test('añade fuentes M3U y EPG adicionales sin reemplazar ni duplicar las automáticas', () async {
+      await AutoLiveSettings.addAdditionalSources(
+        playlistUrl: 'https://custom.example/sports.m3u\\n'
+            'https://custom.example/backup.m3u8',
+        epgUrl: 'https://custom.example/guide.xml.gz',
+      );
+      await AutoLiveSettings.addAdditionalSources(
+        playlistUrl: 'https://custom.example/sports.m3u',
+        epgUrl: 'https://custom.example/guide.xml.gz',
+      );
+
+      final settings = await AutoLiveSettings.load();
+      final additional = await AutoLiveSettings.loadAdditionalSources();
+
+      expect(settings.playlistUrls, hasLength(14));
+      expect(settings.epgUrls, hasLength(21));
+      expect(settings.playlistUrls, contains('https://custom.example/sports.m3u'));
+      expect(settings.playlistUrls, contains('https://custom.example/backup.m3u8'));
+      expect(settings.epgUrls, contains('https://custom.example/guide.xml.gz'));
+      expect(additional.playlistUrls, hasLength(2));
+      expect(additional.epgUrls, hasLength(1));
+      expect(settings.isConfigured, isTrue);
+    });
+
+    test('rechaza esquemas no web y borra solo las fuentes adicionales', () async {
+      await expectLater(
+        AutoLiveSettings.addAdditionalSources(
+          playlistUrl: 'javascript:alert(1)',
+        ),
+        throwsFormatException,
+      );
+
+      await AutoLiveSettings.addAdditionalSources(
+        playlistUrl: 'https://custom.example/extra.m3u',
+        epgUrl: 'https://custom.example/extra.xml',
+      );
+      await AutoLiveSettings.clearAdditionalSources();
+
+      final settings = await AutoLiveSettings.load();
+      expect(settings.playlistUrls, hasLength(12));
+      expect(settings.epgUrls, hasLength(20));
+      expect(settings.playlistUrls, isNot(contains('https://custom.example/extra.m3u')));
+      expect(settings.epgUrls, isNot(contains('https://custom.example/extra.xml')));
+    });
+
     test('migra las listas antiguas sin pedir autorización manual', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'dt360_auto_live_playlist_url_v1': legacyDefaultAutoLivePlaylistUrls,
