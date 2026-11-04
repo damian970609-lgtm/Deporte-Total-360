@@ -98,7 +98,7 @@ void main() {
     expect(find.text('AGREGAR LISTA M3U'), findsOneWidget);
     expect(find.text('AGREGAR GUÍA EPG'), findsOneWidget);
     expect(find.text('CARGAR MIS LISTAS Y CANALES'), findsOneWidget);
-    expect(find.text('0'), findsNothing);
+    expect(find.textContaining('ninguna lista pública automáticamente'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
