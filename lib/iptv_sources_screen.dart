@@ -445,15 +445,24 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
     }).toList(growable: false);
   }
 
-  String _qualityLabel(M3uChannel channel) {
+  int _qualityRank(M3uChannel channel) {
     final text = AutomaticLiveService.normalizeText(
       channel.name + ' ' + channel.tvgName,
     );
     if (text.contains('4k') || text.contains('uhd') || text.contains('2160')) {
-      return '4K';
+      return 500;
     }
-    if (text.contains('1080') || text.contains('fhd')) return '1080p';
-    if (text.contains('720') || text.contains('hd')) return 'HD';
+    if (text.contains('1080') || text.contains('fhd')) return 400;
+    if (text.contains('720') || text.contains('hd')) return 300;
+    if (text.contains('576') || text.contains('480')) return 200;
+    return 100;
+  }
+
+  String _qualityLabel(M3uChannel channel) {
+    final rank = _qualityRank(channel);
+    if (rank >= 500) return '4K';
+    if (rank >= 400) return '1080p';
+    if (rank >= 300) return 'HD';
     return 'Directo';
   }
 
