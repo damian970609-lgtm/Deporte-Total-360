@@ -488,6 +488,41 @@ https://media.example/backup.m3u8
       );
     });
 
+    test('descarga listas y EPG en lotes pequeños e informa cada avance', () async {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.one",Sports One HD
+https://media.example/sports-one.m3u8
+''';
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('.m3u')) {
+          return http.Response(playlist, 200);
+        }
+        return http.Response('EPG temporalmente no disponible', 503);
+      });
+      final progress = <String>[];
+
+      final catalog = await AutomaticLiveService(client: client).loadCatalog(
+        playlistUrl: 'https://playlist.example/one.m3u\n'
+            'https://playlist.example/two.m3u',
+        epgUrl: 'https://epg.example/one.xml\n'
+            'https://epg.example/two.xml',
+        allowEmptyEpg: true,
+        downloadBatchSize: 1,
+        onProgress: (phase, completed, total) {
+          progress.add('$phase:$completed/$total');
+        },
+      );
+
+      expect(catalog.channels, hasLength(1));
+      expect(progress, <String>[
+        'M3U:1/2',
+        'M3U:2/2',
+        'EPG:1/2',
+        'EPG:2/2',
+      ]);
+    });
+
     test('asocia el ID XMLTV con el nombre publicado del canal', () {
       final start = DateTime.utc(2026, 11, 3, 14);
       final stop = start.add(const Duration(hours: 2));
