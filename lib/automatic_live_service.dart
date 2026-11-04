@@ -180,7 +180,7 @@ class AutoLiveSettings {
       if (previous.every(stored.contains)) {
         final merged = <String>{...stored, ..._splitPlaylistUrls(defaultAutoLivePlaylistUrls)};
         if (merged.length != stored.length) {
-          playlist = merged.join('\\n');
+          playlist = merged.join('\n');
           await prefs.setString(_playlistUrlKey, playlist);
         }
       }
@@ -194,7 +194,7 @@ class AutoLiveSettings {
       if (previous.every(stored.contains)) {
         final merged = <String>{...stored, ..._splitPlaylistUrls(defaultAutoLiveEpgUrl)};
         if (merged.length != stored.length) {
-          epg = merged.join('\\n');
+          epg = merged.join('\n');
           await prefs.setString(_epgUrlKey, epg);
         }
       }
