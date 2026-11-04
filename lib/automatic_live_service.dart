@@ -775,6 +775,7 @@ class AutomaticLiveService {
     String playlistText = '',
     List<String> playlistTexts = const <String>[],
     bool forceRefresh = false,
+    bool parseInBackground = true,
     int downloadBatchSize = 2,
     Duration batchPause = const Duration(milliseconds: 160),
     int maxPlaylistBytes = 8 * 1024 * 1024,
@@ -820,9 +821,11 @@ class AutomaticLiveService {
             !localText.toUpperCase().startsWith('#EXTM3U')) {
           throw const FormatException('La entrada guardada no es M3U o supera el tamaño permitido.');
         }
-        final localChannels = await Isolate.run(
-          () => parseM3u(localText, sourceUrl: sourceLabel),
-        );
+        final localChannels = parseInBackground
+            ? await Isolate.run(
+                () => parseM3u(localText, sourceUrl: sourceLabel),
+              )
+            : parseM3u(localText, sourceUrl: sourceLabel);
         if (localChannels.isEmpty) {
           throw const FormatException('La M3U no contiene enlaces directos HLS, DASH, TS o MP4 compatibles.');
         }
