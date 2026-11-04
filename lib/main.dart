@@ -2477,6 +2477,14 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
     }
   }
 
+  Future<void> _openChannelPlayer() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => IptvTestPlayerScreen(initialCatalog: _loadedCatalog),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2492,14 +2500,8 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
         ),
         actions: <Widget>[
           IconButton(
-            tooltip: 'Abrir reproductor para probar canales',
-            onPressed: () => Navigator.of(context).push<void>(
-              MaterialPageRoute<void>(
-                builder: (_) => IptvTestPlayerScreen(
-                  initialCatalog: _loadedCatalog,
-                ),
-              ),
-            ),
+            tooltip: 'Buscar canales y reproducir',
+            onPressed: _openChannelPlayer,
             icon: const Icon(Icons.play_circle_fill_rounded, color: appGreen),
           ),
           IconButton(
@@ -2548,6 +2550,23 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
                   ),
                 ),
               ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _openChannelPlayer,
+                icon: const Icon(Icons.search_rounded),
+                label: const Text('BUSCAR CANALES Y ABRIR REPRODUCTOR'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: appGreen,
+                  foregroundColor: appBg,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+                ),
+              ),
             ),
           ),
           Expanded(
