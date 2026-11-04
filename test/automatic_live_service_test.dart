@@ -159,6 +159,51 @@ void main() {
       expect(settings.isConfigured, isTrue);
     });
 
+    test('añade fuentes M3U y EPG adicionales sin reemplazar ni duplicar las automáticas', () async {
+      await AutoLiveSettings.addAdditionalSources(
+        playlistUrl: 'https://custom.example/sports.m3u;'
+            'https://custom.example/backup.m3u8',
+        epgUrl: 'https://custom.example/guide.xml.gz',
+      );
+      await AutoLiveSettings.addAdditionalSources(
+        playlistUrl: 'https://custom.example/sports.m3u',
+        epgUrl: 'https://custom.example/guide.xml.gz',
+      );
+
+      final settings = await AutoLiveSettings.load();
+      final additional = await AutoLiveSettings.loadAdditionalSources();
+
+      expect(settings.playlistUrls, hasLength(14));
+      expect(settings.epgUrls, hasLength(21));
+      expect(settings.playlistUrls, contains('https://custom.example/sports.m3u'));
+      expect(settings.playlistUrls, contains('https://custom.example/backup.m3u8'));
+      expect(settings.epgUrls, contains('https://custom.example/guide.xml.gz'));
+      expect(additional.playlistUrls, hasLength(2));
+      expect(additional.epgUrls, hasLength(1));
+      expect(settings.isConfigured, isTrue);
+    });
+
+    test('rechaza esquemas no web y borra solo las fuentes adicionales', () async {
+      await expectLater(
+        AutoLiveSettings.addAdditionalSources(
+          playlistUrl: 'javascript:alert(1)',
+        ),
+        throwsFormatException,
+      );
+
+      await AutoLiveSettings.addAdditionalSources(
+        playlistUrl: 'https://custom.example/extra.m3u',
+        epgUrl: 'https://custom.example/extra.xml',
+      );
+      await AutoLiveSettings.clearAdditionalSources();
+
+      final settings = await AutoLiveSettings.load();
+      expect(settings.playlistUrls, hasLength(12));
+      expect(settings.epgUrls, hasLength(20));
+      expect(settings.playlistUrls, isNot(contains('https://custom.example/extra.m3u')));
+      expect(settings.epgUrls, isNot(contains('https://custom.example/extra.xml')));
+    });
+
     test('migra las listas antiguas sin pedir autorización manual', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'dt360_auto_live_playlist_url_v1': legacyDefaultAutoLivePlaylistUrls,
@@ -331,6 +376,29 @@ https://media.example/backup.m3u8
       expect(catalog.programmes, hasLength(1));
     });
 
+    test('exporta canales aunque todas las EPG estén temporalmente fuera de línea', () async {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.one" group-title="Deportes",Sports One HD
+https://media.example/sports-one.m3u8
+''';
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('.m3u')) {
+          return http.Response(playlist, 200);
+        }
+        return http.Response('EPG temporalmente no disponible', 503);
+      });
+
+      final catalog = await AutomaticLiveService(client: client).loadCatalog(
+        playlistUrl: 'https://playlist.example/sports.m3u',
+        epgUrl: 'https://epg-offline.example/guide.xml',
+        allowEmptyEpg: true,
+      );
+
+      expect(catalog.channels, hasLength(1));
+      expect(catalog.programmes, isEmpty);
+    });
+
     test('combina programas de varias guías EPG y sigue si una falla', () async {
       final start = DateTime.now().toUtc().add(const Duration(hours: 1));
       final stop = start.add(const Duration(hours: 2));
@@ -370,6 +438,53 @@ https://media.example/backup.m3u8
           'Equipo Azul vs Equipo Rojo',
           'Equipo Verde vs Equipo Blanco',
         ]),
+      );
+    });
+
+    test('genera una M3U unificada con todos los enlaces XMLTV y canales sin duplicados', () {
+      final guides = List<String>.generate(
+        20,
+        (index) => 'https://epg.example/guide-$index.xml.gz?region=es&v=1',
+      );
+      final catalog = AutoLiveCatalog(
+        channels: const <M3uChannel>[
+          M3uChannel(
+            name: 'Sports HD',
+            url: 'https://media.example/sports-hd.m3u8',
+            tvgId: 'sports.hd',
+            tvgName: 'Sports HD',
+            group: 'Deportes',
+            logo: 'https://img.example/logo.png?size=2&fit=cover',
+          ),
+          M3uChannel(
+            name: 'Sports HD duplicado',
+            url: 'https://media.example/sports-hd.m3u8',
+            tvgId: 'sports.hd',
+          ),
+          M3uChannel(
+            name: 'Página HTML',
+            url: 'https://media.example/watch?id=4',
+          ),
+        ],
+        programmes: const <XmltvProgramme>[],
+      );
+
+      final exported = AutomaticLiveService.buildOttfoxM3u(
+        catalog,
+        epgUrls: guides,
+      );
+
+      expect(exported, startsWith('#EXTM3U url-tvg='));
+      expect(exported, contains('x-tvg-url='));
+      for (final guide in guides) {
+        expect(exported, contains(guide));
+      }
+      expect(exported, contains('tvg-id="sports.hd"'));
+      expect(exported, contains('logo.png?size=2&fit=cover'));
+      expect(RegExp(r'^#EXTINF:', multiLine: true).allMatches(exported), hasLength(1));
+      expect(
+        AutomaticLiveService.parseM3u(exported),
+        hasLength(1),
       );
     });
 
