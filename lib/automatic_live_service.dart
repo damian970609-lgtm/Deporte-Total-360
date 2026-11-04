@@ -701,8 +701,9 @@ class AutomaticLiveService {
       return cached;
     }
 
-    // Se descargan una o dos listas a la vez para limitar memoria y conexiones.
-    // El análisis M3U se ejecuta en un isolate y no bloquea la interfaz.
+    // Se descargan hasta cuatro listas a la vez. Los canales se publican
+    // por lote antes de procesar EPG, para que la pantalla no espere a las guías.
+    // El análisis M3U/XMLTV se ejecuta en isolates y no bloquea la interfaz.
     final channelsByUrl = <String, M3uChannel>{};
     final playlistFailures = <String>[];
     for (var batchStart = 0; batchStart < playlistUrls.length; batchStart += effectiveBatchSize) {
