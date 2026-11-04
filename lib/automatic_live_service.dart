@@ -752,6 +752,7 @@ class AutomaticLiveService {
   Future<AutoLiveCatalog> loadCatalog({
     required String playlistUrl, required String epgUrl,
     bool forceRefresh = false,
+    bool allowEmptyEpg = false,
   }) async {
     final playlistUrls = _splitPlaylistUrls(playlistUrl);
     final epgUrls = _splitPlaylistUrls(epgUrl);
@@ -843,7 +844,7 @@ class AutomaticLiveService {
       }
     }
     final programmes = programmesByKey.values.toList(growable: false);
-    if (programmes.isEmpty) {
+    if (programmes.isEmpty && !allowEmptyEpg) {
       throw const FormatException('Ninguna guía EPG/XMLTV respondió con programas legibles.');
     }
 
