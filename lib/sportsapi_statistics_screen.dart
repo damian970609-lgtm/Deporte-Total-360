@@ -324,7 +324,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     } catch (error) {
       if (!mounted) return;
       if (retryRateLimit && error is SportsApiException && error.statusCode == 429) {
-        final seconds = (error.retryAfterSeconds ?? 60).clamp(1, 120);
+        final seconds = (error.retryAfterSeconds ?? 60).clamp(1, 120).toInt();
         setState(() {
           _loadingStats = false;
           _statsError = 'SportsAPI está aplicando su límite de consultas. '
