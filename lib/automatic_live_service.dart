@@ -599,6 +599,7 @@ class AutomaticLiveService {
         !epgUrls.every(isSafeHttpUrl)) {
       throw const FormatException('Configura listas M3U y guías XMLTV/EPG con direcciones HTTP o HTTPS válidas.');
     }
+    final int effectiveBatchSize = downloadBatchSize.clamp(1, 3).toInt();
     final playlistCacheKey = playlistUrls.join('\n');
     final epgCacheKey = epgUrls.join('\n');
     final now = DateTime.now();
@@ -609,7 +610,7 @@ class AutomaticLiveService {
       return cached;
     }
 
-    // Se descargan tres listas a la vez para limitar memoria y conexiones.
+    // Descargas limitadas al tamaño de lote solicitado para evitar picos de memoria.
     // Una lista caída no bloquea el resto del catálogo.
     final channelsByUrl = <String, M3uChannel>{};
     for (var batchStart = 0; batchStart < playlistUrls.length; batchStart += effectiveBatchSize) {
@@ -649,8 +650,7 @@ class AutomaticLiveService {
     // las demás siguen aportando programas. Las guías regionales tienen un
     // límite menor para cuidar la memoria del teléfono.
     final programmesByKey = <String, XmltvProgramme>{};
-    // Descarga por lotes pequeños: varias guías pueden responder a la vez, pero
-    // nunca se abren todas las descargas grandes simultáneamente.
+    // Descarga XMLTV en lotes pequeños y analiza cada guía en un isolate separado.
     for (var batchStart = 0; batchStart < epgUrls.length; batchStart += effectiveBatchSize) {
       final batch = epgUrls.skip(batchStart).take(effectiveBatchSize).toList(growable: false);
       final bodies = await Future.wait<String?>(
