@@ -822,22 +822,37 @@ class AutomaticLiveService {
       compressed.add(chunk);
     }
     final bytes = compressed.takeBytes();
-    return Isolate.run(() {
+    return Isolate.run(() async {
       try {
         List<int> decodedBytes = bytes;
-        if (decodedBytes.length >= 2 && decodedBytes[0] == 0x1f && decodedBytes[1] == 0x8b) {
-          decodedBytes = gzip.decoder.convert(decodedBytes);
-          if (decodedBytes.length > maxBytes) {
-            throw const FormatException('El XML descomprimido supera el límite permitido.');
+        if (decodedBytes.length >= 2 &&
+            decodedBytes[0] == 0x1f &&
+            decodedBytes[1] == 0x8b) {
+          final expanded = BytesBuilder(copy: false);
+          var expandedLength = 0;
+          await for (final chunk in gzip.decoder
+              .bind(Stream<List<int>>.value(decodedBytes))) {
+            expandedLength += chunk.length;
+            if (expandedLength > maxBytes) {
+              throw const FormatException(
+                'El archivo descomprimido supera el límite permitido.',
+              );
+            }
+            expanded.add(chunk);
           }
+          decodedBytes = expanded.takeBytes();
         }
         final body = utf8.decode(decodedBytes, allowMalformed: true);
-        if (body.trim().isEmpty) throw const FormatException('La fuente está vacía.');
+        if (body.trim().isEmpty) {
+          throw const FormatException('La fuente está vacía.');
+        }
         return body;
       } on FormatException {
         rethrow;
       } catch (_) {
-        throw const FormatException('No se pudo descomprimir o decodificar la fuente.');
+        throw const FormatException(
+          'No se pudo descomprimir o decodificar la fuente.',
+        );
       }
     });
   }
