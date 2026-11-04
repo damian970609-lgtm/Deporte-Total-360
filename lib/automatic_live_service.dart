@@ -824,7 +824,7 @@ class AutomaticLiveService {
     final bytes = compressed.takeBytes();
     return Isolate.run(() {
       try {
-        var decodedBytes = bytes;
+        List<int> decodedBytes = bytes;
         if (decodedBytes.length >= 2 && decodedBytes[0] == 0x1f && decodedBytes[1] == 0x8b) {
           decodedBytes = gzip.decoder.convert(decodedBytes);
           if (decodedBytes.length > maxBytes) {
