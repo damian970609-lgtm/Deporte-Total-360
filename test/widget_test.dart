@@ -103,6 +103,8 @@ void main() {
   });
 
   testWidgets('el reproductor IPTV permite guardar favoritos y buscar canales', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 1800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     SharedPreferences.setMockInitialValues(<String, Object>{
       'dt360_secret_iptv_playlist_texts_v1': <String>[
         '#EXTM3U\n#EXTINF:-1 group-title="Deportes",Prueba TV\nhttps://media.example/prueba.m3u8',
@@ -131,6 +133,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('MIS CANALES FAVORITOS (0)'), findsOneWidget);
     expect(find.textContaining('Ningún favorito coincide con tu búsqueda'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(
+      const MaterialApp(home: IptvSourcesScreen(manualOnly: true)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('FAVORITOS (1)'), findsOneWidget);
+    await tester.tap(find.text('FAVORITOS (1)'));
+    await tester.pumpAndSettle();
+    expect(find.text('MIS CANALES FAVORITOS (1)'), findsOneWidget);
+    expect(find.text('Prueba TV'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
