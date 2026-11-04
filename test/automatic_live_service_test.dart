@@ -244,7 +244,7 @@ void main() {
   });
 
   group('configuración internacional', () {
-    test('carga siete listas automáticamente y diecinueve EPG sin pedir validación', () async {
+    test('carga doce listas automáticamente y veinte EPG sin pedir validación', () async {
       final settings = await AutoLiveSettings.load();
 
       expect(settings.playlistUrls, hasLength(12));
@@ -261,7 +261,7 @@ void main() {
 
     test('añade fuentes M3U y EPG adicionales sin reemplazar ni duplicar las automáticas', () async {
       await AutoLiveSettings.addAdditionalSources(
-        playlistUrl: 'https://custom.example/sports.m3u\\n'
+        playlistUrl: 'https://custom.example/sports.m3u;'
             'https://custom.example/backup.m3u8',
         epgUrl: 'https://custom.example/guide.xml.gz',
       );
