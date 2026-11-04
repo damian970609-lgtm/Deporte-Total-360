@@ -114,6 +114,12 @@ void main() {
       const MaterialApp(home: IptvSourcesScreen(manualOnly: true)),
     );
     await tester.pumpAndSettle();
+    // El catálogo analiza cada M3U local en un isolate; pumpAndSettle no
+    // espera por sí solo futures que todavía no han solicitado otro frame.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 700)),
+    );
+    await tester.pumpAndSettle();
 
     expect(find.text('Prueba TV'), findsOneWidget);
     expect(find.byTooltip('Agregar a favoritos'), findsOneWidget);
@@ -137,6 +143,10 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(
       const MaterialApp(home: IptvSourcesScreen(manualOnly: true)),
+    );
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 700)),
     );
     await tester.pumpAndSettle();
     expect(find.text('FAVORITOS (1)'), findsOneWidget);
