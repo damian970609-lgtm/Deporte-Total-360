@@ -56,6 +56,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
   String? _error;
   String? _statsError;
   bool _catalogExpanded = false;
+  DateTime _selectedDate = DateTime.now();
 
   _FavouriteSport get _sport =>
       _sports.firstWhere((item) => item.id == _sportId, orElse: () => _sports.first);
@@ -84,7 +85,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     try {
       final results = await Future.wait<dynamic>(<Future<dynamic>>[
         _api.fetchFavoriteSports(),
-        _api.fetchFavoriteAgendaEvents(),
+        _api.fetchFavoriteAgendaEvents(date: _selectedDate),
       ]);
       final catalog = results[0] as List<Map<String, dynamic>>;
       final events = results[1] as List<SportsAgendaEvent>;
@@ -93,9 +94,8 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
         _catalog = catalog;
         _events = events;
         _loading = false;
-        if (events.isEmpty) {
-          _error = 'SportsAPI no devolvió eventos para hoy. Comprueba la conexión, la fecha UTC y la cobertura de tus competiciones favoritas.';
-        }
+        // Una jornada sin encuentros no es un fallo de API: el usuario puede
+        // consultar días anteriores para abrir partidos ya finalizados.
       });
     } catch (error) {
       if (!mounted) return;
@@ -106,8 +106,10 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     }
   }
 
-  Future<void> _refresh() async {
+  Future<void> _loadDate(DateTime value) async {
+    final date = DateTime(value.year, value.month, value.day);
     setState(() {
+      _selectedDate = date;
       _loading = true;
       _error = null;
       _selectedEvent = null;
@@ -115,7 +117,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       _statsError = null;
     });
     try {
-      final events = await _api.fetchFavoriteAgendaEvents();
+      final events = await _api.fetchFavoriteAgendaEvents(date: date);
       if (!mounted) return;
       setState(() {
         _events = events;
@@ -129,6 +131,25 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       });
     }
   }
+
+  Future<void> _refresh() => _loadDate(_selectedDate);
+
+  Future<void> _pickDate() async {
+    final today = DateTime.now();
+    final chosen = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(today.year - 2, today.month, today.day),
+      lastDate: DateTime(today.year, today.month, today.day + 30),
+      helpText: 'ELIGE EL DÍA DE LOS EVENTOS',
+    );
+    if (chosen != null && mounted) await _loadDate(chosen);
+  }
+
+  String get _dateLabel =>
+      '${_selectedDate.day.toString().padLeft(2, '0')}/'
+      '${_selectedDate.month.toString().padLeft(2, '0')}/'
+      '${_selectedDate.year}';
 
   List<SportsAgendaEvent> get _visibleEvents {
     final expected = _sport.name.toLowerCase();
@@ -408,11 +429,53 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
             ),
           ),
           const SizedBox(height: 13),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+            decoration: BoxDecoration(
+              color: _apiStatsPanel,
+              border: Border.all(color: _apiStatsLine),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: <Widget>[
+                IconButton(
+                  tooltip: 'Día anterior',
+                  onPressed: _loading
+                      ? null
+                      : () => _loadDate(_selectedDate.subtract(const Duration(days: 1))),
+                  icon: const Icon(Icons.chevron_left_rounded, color: _apiStatsCyan),
+                ),
+                Expanded(
+                  child: Column(
+                    children: <Widget>[
+                      const Text('AGENDA DEL DÍA',
+                          style: TextStyle(color: _apiStatsMuted, fontSize: 8, fontWeight: FontWeight.w800)),
+                      Text(_dateLabel,
+                          style: const TextStyle(color: _apiStatsCyan, fontSize: 13, fontWeight: FontWeight.w900)),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Día siguiente',
+                  onPressed: _loading
+                      ? null
+                      : () => _loadDate(_selectedDate.add(const Duration(days: 1))),
+                  icon: const Icon(Icons.chevron_right_rounded, color: _apiStatsCyan),
+                ),
+                IconButton(
+                  tooltip: 'Elegir fecha',
+                  onPressed: _loading ? null : _pickDate,
+                  icon: const Icon(Icons.calendar_month_rounded, color: _apiStatsPink),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
           Row(
             children: <Widget>[
-              const Expanded(
-                child: Text('EVENTOS DE HOY',
-                    style: TextStyle(color: _apiStatsCyan, fontSize: 11, fontWeight: FontWeight.w900)),
+              Expanded(
+                child: Text('EVENTOS DEL ${_dateLabel}',
+                    style: const TextStyle(color: _apiStatsCyan, fontSize: 11, fontWeight: FontWeight.w900)),
               ),
               Text('${events.length} eventos',
                   style: const TextStyle(color: _apiStatsMuted, fontSize: 9)),
@@ -427,7 +490,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
           else if (_error != null)
             _message(_error!)
           else if (events.isEmpty)
-            _message('No hay eventos publicados hoy para ${_sport.name}. La agenda se actualiza automáticamente desde el Worker.')
+            _message('No hay eventos publicados para ${_sport.name} en esta fecha. Cambia de día para consultar encuentros anteriores o próximos.')
           else
             ...events.map((event) => _eventCard(event)),
           if (_selectedEvent != null) ...<Widget>[
