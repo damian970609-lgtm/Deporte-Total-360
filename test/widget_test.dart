@@ -127,6 +127,14 @@ void main() {
     await tester.tap(find.text('Importar'));
     await tester.pumpAndSettle();
 
+    // La pantalla contiene varias secciones antes del catálogo. La lista es
+    // perezosa y no construye la tarjeta hasta que se desplaza a la vista.
+    await tester.scrollUntilVisible(
+      find.text('Canal Importado'),
+      400,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
     expect(find.text('Canal Importado'), findsOneWidget);
     final prefs = await SharedPreferences.getInstance();
     expect(
