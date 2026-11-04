@@ -449,9 +449,18 @@ https://cdn.example/live/two.m3u8
     test('no confunde una lista M3U o una página HTML con una señal de vídeo', () {
       expect(liveMediaFormatForUrl('https://cdn.example/channels.m3u'), isNull);
       expect(liveMediaFormatForUrl('https://cdn.example/watch?id=22'), isNull);
+      expect(liveMediaFormatForUrl('https://cdn.example/live/playlist.m3u'), isNull);
+      expect(liveMediaFormatForUrl('https://cdn.example/live/watch.php'), isNull);
       expect(liveMediaFormatForUrl('https://cdn.example/live.m3u8'), LiveMediaFormat.hls);
       expect(liveMediaFormatForUrl('rtmp://cdn.example/live/channel'), isNull);
       expect(liveMediaFormatForUrl('https://user:pass@cdn.example/live.m3u8'), isNull);
+    });
+
+    test('acepta endpoints IPTV sin extensión dentro de rutas live o stream', () {
+      expect(liveMediaFormatForUrl('https://cdn.example/live/12345?token=abc'), LiveMediaFormat.other);
+      expect(liveMediaFormatForUrl('https://cdn.example/stream/abc123'), LiveMediaFormat.other);
+      expect(liveMediaFormatForUrl('https://cdn.example/live'), isNull);
+      expect(liveMediaFormatForUrl('https://cdn.example/channels/'), isNull);
     });
 
     test('resuelve enlaces relativos de una playlist M3U contra su URL', () {
@@ -492,6 +501,20 @@ https://media.example/watch?id=123
       expect(channels, hasLength(1));
       expect(channels.single.tvgId, 'sports.hd');
       expect(channels.single.name, 'Sports HD 1080p');
+    });
+
+    test('importa M3U con enlaces directos sin extensión y descarta páginas', () {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.endpoint" group-title="Deportes",Canal de transmisión
+https://media.example/live/98765?token=abc
+#EXTINF:-1 group-title="Deportes",Página web
+https://media.example/watch?id=22
+''';
+      final channels = AutomaticLiveService.parseM3u(playlist);
+      expect(channels, hasLength(1));
+      expect(channels.single.name, 'Canal de transmisión');
+      expect(channels.single.url, 'https://media.example/live/98765?token=abc');
     });
 
     test('lee idioma y país del canal para priorizar el español', () {
