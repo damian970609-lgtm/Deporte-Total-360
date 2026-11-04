@@ -38,9 +38,9 @@ SportsAPI.app es la fuente principal de Agenda de hoy para Fútbol, Baloncesto, 
 
 ## OTTFOX y fuentes IPTV adicionales
 
-El menú secreto se abre con diez toques sobre DAMIAN.APK en Ajustes. Allí se puede abrir OTTFOX dentro de la APK y registrar URLs directas de listas M3U/M3U8 y guías XMLTV/EPG. Las direcciones se guardan localmente y se añaden a las fuentes ya integradas; quitarlas no modifica el catálogo automático original. La pantalla de transmisión vuelve a cargar las fuentes guardadas en su ciclo de actualización.
+El menú secreto se abre con diez toques sobre DAMIAN.APK en Ajustes. Al abrir OTTFOX desde ahí, la APK descarga automáticamente las 12 listas M3U y las 20 guías XMLTV integradas, además de las fuentes adicionales guardadas por el usuario. La app combina los canales directos compatibles en una sola M3U, elimina URLs duplicadas y añade todas las direcciones EPG en los atributos `url-tvg` y `x-tvg-url`. También rellena hasta cinco campos EPG del editor cuando están disponibles. La pantalla del editor intenta aplicar la lista a su biblioteca local después de importarla; el botón Descargar de OTTFOX queda disponible para exportar el resultado. Las actualizaciones automáticas del catálogo nativo de la APK siguen funcionando independientemente.
 
-OTTFOX es un editor/conversor local: no proporciona canales, listas, suscripciones ni streams. La biblioteca que se importa en OTTFOX permanece en el almacenamiento del navegador; para que el buscador Flutter consulte una fuente, debe añadirse su URL directa al menú secreto. Usa únicamente listas y guías que tengas derecho a utilizar. Una exportación descargada como archivo local no se importa automáticamente desde la biblioteca de OTTFOX.
+OTTFOX es un editor/conversor local: no proporciona canales, listas, suscripciones ni streams. Su biblioteca permanece en el almacenamiento del navegador/WebView de ese dispositivo. El envío automático desde la APK usa las listas y guías que la propia app ya descarga; las direcciones nuevas se pueden añadir en el menú secreto. Usa únicamente listas y guías que tengas derecho a utilizar.
 
 ## Activar notificaciones push
 
