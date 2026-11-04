@@ -518,6 +518,53 @@ https://media.example/backup.m3u8
       );
     });
 
+    test('genera una M3U unificada con todos los enlaces XMLTV y canales sin duplicados', () {
+      final guides = List<String>.generate(
+        20,
+        (index) => 'https://epg.example/guide-$index.xml.gz?region=es&v=1',
+      );
+      final catalog = AutoLiveCatalog(
+        channels: const <M3uChannel>[
+          M3uChannel(
+            name: 'Sports HD',
+            url: 'https://media.example/sports-hd.m3u8',
+            tvgId: 'sports.hd',
+            tvgName: 'Sports HD',
+            group: 'Deportes',
+            logo: 'https://img.example/logo.png?size=2&fit=cover',
+          ),
+          M3uChannel(
+            name: 'Sports HD duplicado',
+            url: 'https://media.example/sports-hd.m3u8',
+            tvgId: 'sports.hd',
+          ),
+          M3uChannel(
+            name: 'Página HTML',
+            url: 'https://media.example/watch?id=4',
+          ),
+        ],
+        programmes: const <XmltvProgramme>[],
+      );
+
+      final exported = AutomaticLiveService.buildOttfoxM3u(
+        catalog,
+        epgUrls: guides,
+      );
+
+      expect(exported, startsWith('#EXTM3U url-tvg='));
+      expect(exported, contains('x-tvg-url='));
+      for (final guide in guides) {
+        expect(exported, contains(guide));
+      }
+      expect(exported, contains('tvg-id="sports.hd"'));
+      expect(exported, contains('logo.png?size=2&fit=cover'));
+      expect(RegExp(r'^#EXTINF:', multiLine: true).allMatches(exported), hasLength(1));
+      expect(
+        AutomaticLiveService.parseM3u(exported),
+        hasLength(1),
+      );
+    });
+
     test('asocia el ID XMLTV con el nombre publicado del canal', () {
       final start = DateTime.utc(2026, 11, 3, 14);
       final stop = start.add(const Duration(hours: 2));
