@@ -149,8 +149,8 @@ class SportsApiAppService {
         successfulSports++;
         return payload.whereType<Map>().map((raw) {
           final row = Map<String, dynamic>.from(raw);
-          if (isRace) return _raceEvent(row, entry.key, entry.value);
-          return _fixtureEvent(row, entry.key, entry.value);
+          if (isRace) return _raceEvent(row, entry.value);
+          return _fixtureEvent(row, entry.value);
         }).whereType<SportsAgendaEvent>().toList(growable: false);
       } catch (_) {
         // La falta de cobertura de un deporte no bloquea los demás.
@@ -171,7 +171,6 @@ class SportsApiAppService {
 
   SportsAgendaEvent? _fixtureEvent(
     Map<String, dynamic> row,
-    String sportId,
     String sportName,
   ) {
     final id = int.tryParse(_text(row['id']));
