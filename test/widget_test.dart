@@ -39,14 +39,22 @@ void main() {
     sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
   });
 
-  testWidgets('Ajustes expone un acceso visible al servidor deportivo', (tester) async {
+  testWidgets('Ajustes oculta el antiguo servicio y el menú Damián APK abre el centro IPTV', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await tester.pumpWidget(
       const MaterialApp(home: SettingsScreen()),
     );
     await tester.pump();
 
-    expect(find.text('Servidor de estadísticas'), findsOneWidget);
+    expect(find.text('Servidor de estadísticas'), findsNothing);
+    expect(find.text('DAMIAN.APK'), findsOneWidget);
+    for (var tap = 0; tap < 10; tap++) {
+      await tester.tap(find.text('DAMIAN.APK'));
+    }
+    await tester.pumpAndSettle();
+
+    expect(find.text('DAMIÁN APK · CENTRO IPTV'), findsOneWidget);
+    expect(find.text('GESTIONAR LISTAS IPTV Y EPG'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
