@@ -161,7 +161,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
             FilledButton(
               onPressed: () {
                 final urls = controller.text
-                    .split(RegExp(r'[\r\n;]+))
+                    .split(RegExp(r'[\r\n;]+'))
                     .map((item) => item.trim())
                     .where((item) => item.isNotEmpty)
                     .toSet()
