@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'automatic_live_service.dart';
@@ -175,6 +176,59 @@ const String _ottfoxLibraryExportScript = r'''
 })()
 ''';
 
+/// Detecta cuándo OTTFOX guarda o modifica su biblioteca en el WebView.
+/// Así no dependemos únicamente del primer onLoadStop de la página.
+const String _ottfoxStorageWatcherScript = r'''
+(() => {
+  const marker = '__dt360OttfoxStorageWatcher';
+  if (window[marker]) return true;
+  let pending;
+  const notify = () => {
+    clearTimeout(pending);
+    pending = setTimeout(() => {
+      try {
+        const bridge = window.flutter_inappwebview;
+        if (bridge && typeof bridge.callHandler === 'function') {
+          bridge.callHandler('ottfoxStorageChanged').catch(() => {});
+        }
+      } catch (_) {}
+    }, 650);
+  };
+  const wrapStorage = (method) => {
+    const original = Storage.prototype[method];
+    if (typeof original !== 'function') return;
+    try {
+      Storage.prototype[method] = function(...args) {
+        const result = original.apply(this, args);
+        notify();
+        return result;
+      };
+    } catch (_) {}
+  };
+  ['setItem', 'removeItem', 'clear'].forEach(wrapStorage);
+
+  const storePrototype = window.IDBObjectStore && IDBObjectStore.prototype;
+  if (storePrototype) {
+    ['put', 'add', 'delete', 'clear'].forEach((method) => {
+      const original = storePrototype[method];
+      if (typeof original !== 'function') return;
+      try {
+        storePrototype[method] = function(...args) {
+          const transaction = this.transaction;
+          const result = original.apply(this, args);
+          if (transaction) transaction.addEventListener('complete', notify, {once: true});
+          return result;
+        };
+      } catch (_) {}
+    });
+  }
+  try {
+    Object.defineProperty(window, marker, {value: true, configurable: false});
+  } catch (_) { window[marker] = true; }
+  return true;
+})()
+''';
+
 /// OTTFOX integrado a pantalla completa. Después de cargar la página, sincroniza
 /// gradualmente las listas que OTTFOX haya guardado en el almacenamiento local
 /// de este mismo WebView con el catálogo nativo de Deporte Total 360°.
@@ -193,10 +247,107 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
   String? _error;
   String _syncStatus = '';
   bool _syncing = false;
+  bool _autoSyncScheduled = false;
+  bool _syncAgain = false;
 
   void _setSyncStatus(String value) {
     if (!mounted) return;
     setState(() => _syncStatus = value);
+  }
+
+  void _queueAutomaticSync() {
+    if (!mounted) return;
+    if (_syncing) {
+      _syncAgain = true;
+      return;
+    }
+    if (_autoSyncScheduled) return;
+    _autoSyncScheduled = true;
+    Future<void>.delayed(const Duration(milliseconds: 800), () async {
+      _autoSyncScheduled = false;
+      if (!mounted) return;
+      final controller = _controller;
+      if (controller != null) {
+        await _syncOttfoxLibrary(controller: controller);
+      }
+      if (mounted && _syncAgain) {
+        _syncAgain = false;
+        _queueAutomaticSync();
+      }
+    });
+  }
+
+  Future<void> _importClipboardPlaylist() async {
+    try {
+      final data = await Clipboard.getData('text/plain');
+      final text = data?.text?.trim() ?? '';
+      if (text.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('El portapapeles está vacío. Copia primero la lista M3U de OTTFOX.')),
+          );
+        }
+        return;
+      }
+
+      final settings = await AutoLiveSettings.load();
+      if (text.toUpperCase().startsWith('#EXTM3U')) {
+        final channels = await Isolate.run(
+          () => AutomaticLiveService.parseM3u(text, sourceUrl: 'OTTFOX · Portapapeles'),
+        );
+        if (channels.isEmpty) {
+          throw const FormatException('La M3U copiada no contiene enlaces directos compatibles.');
+        }
+        final playlists = <String>[...settings.localPlaylistTexts];
+        final isNew = !playlists.contains(text);
+        if (isNew) playlists.add(text);
+        final epg = <String>{...settings.epgUrls, ..._epgUrlsFromM3u(text)};
+        await AutoLiveSettings.save(
+          playlistUrl: settings.playlistUrls.join('\\n'),
+          epgUrl: epg.join('\\n'),
+          authorizationConfirmed: true,
+          playlistText: '',
+          playlistTexts: playlists,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(isNew
+                ? 'OTTFOX: lista importada con ${channels.length} canales.'
+                : 'Esta lista ya estaba guardada (${channels.length} canales).')),
+          );
+        }
+        return;
+      }
+
+      if (isSafeHttpUrl(text)) {
+        final uri = Uri.parse(text);
+        if (uri.host.toLowerCase() == 'ottfox.net' || uri.host.toLowerCase().endsWith('.ottfox.net')) {
+          throw const FormatException('Copia el contenido M3U de la lista, no la dirección de la página OTTFOX.');
+        }
+        final urls = <String>{...settings.playlistUrls, text};
+        await AutoLiveSettings.save(
+          playlistUrl: urls.join('\\n'),
+          epgUrl: settings.epgUrls.join('\\n'),
+          authorizationConfirmed: true,
+          playlistText: '',
+          playlistTexts: settings.localPlaylistTexts,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Fuente M3U añadida. Se descargará al actualizar el catálogo.')),
+          );
+        }
+        return;
+      }
+
+      throw const FormatException('El portapapeles no contiene una M3U ni una URL HTTP/HTTPS de lista.');
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo importar desde el portapapeles: $error')),
+        );
+      }
+    }
   }
 
   List<String> _epgUrlsFromM3u(String text) {
@@ -401,7 +552,13 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _syncing = false);
+      if (mounted) {
+        setState(() => _syncing = false);
+        if (_syncAgain) {
+          _syncAgain = false;
+          _queueAutomaticSync();
+        }
+      }
     }
   }
 
@@ -436,7 +593,7 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
             )
           else
             IconButton(
-              tooltip: 'Importar biblioteca de OTTFOX',
+              tooltip: 'Importar biblioteca de OTTFOX ahora',
               onPressed: _controller == null
                   ? null
                   : () => _syncOttfoxLibrary(
@@ -445,6 +602,11 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
                       ),
               icon: const Icon(Icons.sync_rounded, color: _ottfoxCyan),
             ),
+          IconButton(
+            tooltip: 'Importar lista M3U o URL copiada desde Chrome',
+            onPressed: _importClipboardPlaylist,
+            icon: const Icon(Icons.content_paste_rounded, color: _ottfoxCyan),
+          ),
           IconButton(
             tooltip: 'Recargar OTTFOX',
             onPressed: () => _controller?.reload(),
@@ -499,6 +661,13 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
               ),
               onWebViewCreated: (controller) {
                 _controller = controller;
+                controller.addJavaScriptHandler(
+                  handlerName: 'ottfoxStorageChanged',
+                  callback: (_) {
+                    _queueAutomaticSync();
+                    return true;
+                  },
+                );
               },
               onLoadStart: (controller, url) {
                 if (!mounted) return;
@@ -518,7 +687,10 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
                   _error = null;
                 });
                 await Future<void>.delayed(const Duration(milliseconds: 450));
-                if (mounted) {
+                if (!mounted) return;
+                final host = url?.host.toLowerCase() ?? '';
+                if (host == 'ottfox.net' || host.endsWith('.ottfox.net')) {
+                  await controller.evaluateJavascript(source: _ottfoxStorageWatcherScript);
                   await _syncOttfoxLibrary(controller: controller);
                 }
               },
@@ -539,9 +711,8 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
               border: Border(top: BorderSide(color: Color(0xFF123D65))),
             ),
             child: const Text(
-              'OTTFOX abre directamente dentro de Deporte Total 360°. '
-              'Las listas guardadas aquí se incorporan una por una al catálogo nativo. '
-              'La biblioteca de Chrome no se comparte automáticamente con este WebView.',
+              'Las listas que guardes aquí se sincronizan automáticamente con el catálogo nativo. '
+              'Para listas guardadas en Chrome, copia su salida M3U y pulsa el icono de portapapeles arriba.',
               style: TextStyle(
                 color: _ottfoxMuted,
                 fontSize: 10,
