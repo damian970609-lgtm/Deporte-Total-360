@@ -10,6 +10,7 @@ on:
       - main
       - integration/zona-live-catalog-20261103
       - feature/iptv-source-manager-failover
+      - feature/televizo-integration-20261104
     paths:
       - 'lib/**'
       - 'test/**'
