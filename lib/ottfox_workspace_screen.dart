@@ -210,9 +210,13 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
     _setSyncStatus('Buscando listas guardadas en OTTFOX…');
 
     try {
-      final raw = await controller.evaluateJavascript(
-        source: _ottfoxLibraryExportScript,
+      final jsResult = await controller.callAsyncJavaScript(
+        functionBody: 'return await ' + _ottfoxLibraryExportScript + ';',
       );
+      if (jsResult?.error != null) {
+        throw FormatException('OTTFOX no pudo leer su biblioteca local: ${jsResult!.error}');
+      }
+      final raw = jsResult?.value;
       if (raw == null) {
         throw const FormatException('OTTFOX no devolvió su biblioteca local.');
       }
