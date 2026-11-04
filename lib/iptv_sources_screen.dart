@@ -37,6 +37,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
   List<_MergedM3uChannel> _mergedChannels = <_MergedM3uChannel>[];
   final List<M3uChannel> _multiViewQueue = <M3uChannel>[];
   AutoLiveCatalog? _catalog;
+  Map<String, List<XmltvProgramme>> _epgIndex = <String, List<XmltvProgramme>>{};
   String _progressMessage = '';
   int _programmeCount = 0;
   int _rawChannelCount = 0;
@@ -462,9 +463,11 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
         },
       );
       final grouped = _groupChannels(catalog.channels);
+      final epgIndex = _buildEpgIndex(catalog.programmes);
       if (!mounted) return;
       setState(() {
         _catalog = catalog;
+        _epgIndex = epgIndex;
         _rawChannelCount = catalog.channels.length;
         _programmeCount = catalog.programmes.length;
         _mergedChannels = grouped;
@@ -506,21 +509,39 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
     }
   }
 
-  String _programmeLabel(M3uChannel channel) {
-    final programmes = _catalog?.programmes;
-    if (programmes == null || programmes.isEmpty) return '';
-    final channelKeys = <String>{
-      AutomaticLiveService.normalizeText(channel.tvgId),
-      AutomaticLiveService.normalizeText(channel.tvgName),
-      AutomaticLiveService.normalizeText(channel.name),
-    }..removeWhere((value) => value.isEmpty);
-    final matching = programmes.where((programme) {
+  Map<String, List<XmltvProgramme>> _buildEpgIndex(
+    List<XmltvProgramme> programmes,
+  ) {
+    final index = <String, List<XmltvProgramme>>{};
+    for (final programme in programmes) {
       final id = AutomaticLiveService.normalizeText(programme.channelId);
       final name = AutomaticLiveService.normalizeText(programme.channelName);
-      return channelKeys.contains(id) || (name.isNotEmpty && channelKeys.contains(name));
-    }).toList(growable: false)
-      ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
-    if (matching.isEmpty) return '';
+      if (id.isNotEmpty) index.putIfAbsent(id, () => <XmltvProgramme>[]).add(programme);
+      if (name.isNotEmpty && name != id) {
+        index.putIfAbsent(name, () => <XmltvProgramme>[]).add(programme);
+      }
+    }
+    for (final rows in index.values) {
+      rows.sort((a, b) => a.startsAt.compareTo(b.startsAt));
+    }
+    return index;
+  }
+
+  String _programmeLabel(M3uChannel channel) {
+    final keys = <String>[
+      channel.tvgId,
+      channel.tvgName,
+      channel.name,
+    ].map(AutomaticLiveService.normalizeText).where((key) => key.isNotEmpty);
+    List<XmltvProgramme>? matching;
+    for (final key in keys) {
+      final rows = _epgIndex[key];
+      if (rows != null && rows.isNotEmpty) {
+        matching = rows;
+        break;
+      }
+    }
+    if (matching == null) return '';
     final now = DateTime.now();
     XmltvProgramme? current;
     XmltvProgramme? next;
@@ -1014,7 +1035,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                                 ' fuente(s)',
                             if (_programmeLabel(entry.primary).isNotEmpty)
                               _programmeLabel(entry.primary),
-                          ].join('\\n'),
+                          ].join('\n'),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
