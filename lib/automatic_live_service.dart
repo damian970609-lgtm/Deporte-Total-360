@@ -919,7 +919,7 @@ class AutomaticLiveService {
         ? ''
         : ' url-tvg="${_m3uAttribute(guides.join(','))}"'
           ' x-tvg-url="${_m3uAttribute(guides.join(','))}"';
-    final output = StringBuffer('#EXTM3U$guideHeader\\n');
+    final output = StringBuffer('#EXTM3U$guideHeader\n');
     final seen = <String>{};
     for (final channel in catalog.channels) {
       if (!isDirectPlayableStream(channel.url) || !seen.add(channel.url)) continue;
