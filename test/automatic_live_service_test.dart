@@ -55,7 +55,7 @@ void main() {
         ],
         venue: 'Estadio de prueba',
         startsAt: DateTime.now().add(const Duration(hours: 1)),
-        detailUrl: 'https://www.marca.com/programacion-tv.html',
+        detailUrl: 'https://sportsapi.app',
       );
 
       await SportsAgendaStore.save(<SportsAgendaEvent>[event]);
@@ -68,7 +68,7 @@ void main() {
       expect(saved.single.participants.single.name, 'Carlos Alcaraz');
       expect(saved.single.participants.single.imageUrl, 'https://img.example/alcaraz.png');
       expect(saved.single.venue, 'Estadio de prueba');
-      expect(saved.single.detailUrl, 'https://www.marca.com/programacion-tv.html');
+      expect(saved.single.detailUrl, 'https://sportsapi.app');
     });
   });
 
@@ -110,7 +110,7 @@ void main() {
                 'venue': 'Estadio de prueba',
                 'startsAt': start.toUtc().toIso8601String(),
                 'endsAt': stop.toUtc().toIso8601String(),
-                'detailUrl': 'https://www.marca.com/programacion-tv.html',
+                'detailUrl': 'https://sportsapi.app',
               },
               'removeAt': stop.toUtc().toIso8601String(),
               'state': 'verified',
@@ -297,7 +297,7 @@ void main() {
         title: 'Equipo $id vs Rival $id',
         sport: 'Fútbol',
         startsAt: now.add(const Duration(hours: 1)),
-        detailUrl: 'https://www.marca.com/programacion-tv.html$id',
+        detailUrl: 'https://sportsapi.app$id',
       );
 
       await SportsAgendaStore.save(<SportsAgendaEvent>[event('anterior')]);
@@ -535,7 +535,7 @@ https://media.example/sports-hd.m3u8
         homeTeam: 'Equipo Azul',
         awayTeam: 'Equipo Rojo',
         startsAt: start,
-        detailUrl: 'https://www.marca.com/programacion-tv.html',
+        detailUrl: 'https://sportsapi.app',
       );
 
       final tooEarly = await service.schedule(
@@ -595,7 +595,7 @@ https://media.example/sports.mpd
         homeTeam: 'Equipo Azul',
         awayTeam: 'Equipo Rojo',
         startsAt: start,
-        detailUrl: 'https://www.marca.com/programacion-tv.html',
+        detailUrl: 'https://sportsapi.app',
       );
 
       final result = await AutomaticLiveService(client: client).schedule(
@@ -643,7 +643,7 @@ https://media.example/spanish.m3u8
         homeTeam: 'Equipo Azul',
         awayTeam: 'Equipo Rojo',
         startsAt: start,
-        detailUrl: 'https://www.marca.com/programacion-tv.html',
+        detailUrl: 'https://sportsapi.app',
       );
       final result = await AutomaticLiveService(client: client).schedule(
         events: <SportsAgendaEvent>[event],
@@ -691,7 +691,7 @@ https://media.example/international.m3u8
         homeTeam: 'Equipo Azul',
         awayTeam: 'Equipo Rojo',
         startsAt: start,
-        detailUrl: 'https://www.marca.com/programacion-tv.html',
+        detailUrl: 'https://sportsapi.app',
       );
       final result = await AutomaticLiveService(client: client).schedule(
         events: <SportsAgendaEvent>[event],
@@ -715,7 +715,7 @@ https://media.example/international.m3u8
         homeTeam: 'Manchester United',
         awayTeam: 'Paris Saint-Germain',
         startsAt: DateTime.now().add(const Duration(hours: 1)),
-        detailUrl: 'https://www.marca.com/programacion-tv.html',
+        detailUrl: 'https://sportsapi.app',
       );
 
       expect(
@@ -750,12 +750,12 @@ https://media.example/two.m3u8
       final events = <SportsAgendaEvent>[
         SportsAgendaEvent(
           id: 'one', title: 'Azul vs Rojo', sport: 'Fútbol',
-          startsAt: start, detailUrl: 'https://www.marca.com/programacion-tv.html',
+          startsAt: start, detailUrl: 'https://sportsapi.app',
         ),
         SportsAgendaEvent(
           id: 'two', title: 'Verde vs Blanco', sport: 'Fútbol',
           startsAt: start,
-          detailUrl: 'https://www.marca.com/programacion-tv.html',
+          detailUrl: 'https://sportsapi.app',
         ),
       ];
       final result = await AutomaticLiveService(client: client).schedule(
@@ -794,7 +794,7 @@ https://media.example/offline.m3u8
         title: 'Azul vs Rojo',
         sport: 'Fútbol',
         startsAt: start,
-        detailUrl: 'https://www.marca.com/programacion-tv.html',
+        detailUrl: 'https://sportsapi.app',
       );
       final result = await AutomaticLiveService(client: client).schedule(
         events: <SportsAgendaEvent>[event],
@@ -815,7 +815,7 @@ https://media.example/offline.m3u8
         title: 'Equipo Azul vs Equipo Rojo',
         sport: 'Fútbol',
         startsAt: DateTime.now().add(const Duration(hours: 1)),
-        detailUrl: 'https://www.marca.com/programacion-tv.html',
+        detailUrl: 'https://sportsapi.app',
       );
       expect(
         AutomaticLiveService.programmeMatchesEvent(
