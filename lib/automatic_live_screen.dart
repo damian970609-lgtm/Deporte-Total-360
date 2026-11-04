@@ -72,52 +72,27 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     if (mounted) setState(() {});
 
     try {
-      // La nube es la fuente principal: prepara los eventos y canales
-      // aunque este dispositivo no sea el que ejecuta el planificador.
+      // La pestaña Live obtiene los diez deportes favoritos directamente
+      // desde SportsAPI y conserva la última agenda nativa si falla la red.
       final settings = await AutoLiveSettings.load();
-      final localEvents = await SportsAgendaStore.load();
       List<SportsAgendaEvent> events;
-      var loadedFromSportsApi = false;
       try {
-        // El tablero Live obtiene primero los diez deportes favoritos, aunque
-        // el usuario nunca haya abierto la pestaña Agenda.
         events = await SportsApiAppService().fetchFavoriteAgendaEvents();
-        loadedFromSportsApi = true;
         await SportsAgendaStore.save(events);
       } catch (_) {
-        events = localEvents;
+        events = await SportsAgendaStore.load();
       }
 
-      final published = await _service.fetchPublishedSchedule();
-      List<ScheduledLiveEvent> latest;
-      if (!loadedFromSportsApi && published != null) {
-        // Respaldo del calendario compartido si SportsAPI no responde.
-        latest = published;
-      } else {
-        final publishedForCurrentAgenda = (published ?? <ScheduledLiveEvent>[])
-            .where((item) => events.any((event) => event.id == item.event.id))
-            .toList(growable: false);
-        final publishedIds = publishedForCurrentAgenda
-            .map((item) => item.event.id)
-            .toSet();
-        final eventsWithoutPublishedSources = events
-            .where((event) => !publishedIds.contains(event.id))
-            .toList(growable: false);
-        final locallyScheduled = settings.isConfigured &&
-                eventsWithoutPublishedSources.isNotEmpty
-            ? await _service.schedule(
-                events: eventsWithoutPublishedSources,
-                now: DateTime.now(),
-                settings: settings,
-                forceRefresh: force,
-              )
-            : <ScheduledLiveEvent>[];
-        final merged = <String, ScheduledLiveEvent>{
-          for (final item in publishedForCurrentAgenda) item.event.id: item,
-          for (final item in locallyScheduled) item.event.id: item,
-        };
-        latest = merged.values.toList(growable: false);
-      }
+      // La agenda viene de SportsAPI; diez minutos antes de cada inicio,
+      // schedule() cruza las emisiones XMLTV con todas las listas M3U del usuario.
+      final latest = settings.isConfigured && events.isNotEmpty
+          ? await _service.schedule(
+              events: events,
+              now: DateTime.now(),
+              settings: settings,
+              forceRefresh: force,
+            )
+          : <ScheduledLiveEvent>[];
 
       if (!mounted) return;
       setState(() {
@@ -143,7 +118,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     final result = <LivePlayerSource>[];
 
     for (final item in ordered) {
-      if (result.length == 4) break;
+      if (result.length == 8) break;
       if (now.isBefore(item.event.startsAt) || !now.isBefore(item.removeAt)) {
         continue;
       }
@@ -201,7 +176,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
 
     return upcoming
-        .take(4 - activeSources.length)
+        .take(8 - activeSources.length)
         .map((event) {
           final teams = event.homeTeam.isNotEmpty && event.awayTeam.isNotEmpty
               ? '${event.homeTeam} vs ${event.awayTeam}'
