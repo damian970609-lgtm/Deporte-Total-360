@@ -1584,6 +1584,10 @@ class AutomaticLiveService {
           // Incluye MP4 y MPEG-TS directo. En HLS, los segmentos .ts
           // se entregan al motor a través del manifiesto .m3u8.
           available = await _probeMediaBytes(uri);
+        case LiveMediaFormat.other:
+          // Endpoints IPTV sin extensión: comprueba la respuesta HTTP
+          // sin intentar interpretar la ruta como manifiesto HLS o DASH.
+          available = await _probeMediaBytes(uri);
         case null:
           available = false;
       }
