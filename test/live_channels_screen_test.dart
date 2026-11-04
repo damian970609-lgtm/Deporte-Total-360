@@ -28,8 +28,8 @@ void main() {
   });
 
   testWidgets('la pantalla principal reserva ocho canales de transmisión', (tester) async {
-    await tester.view.setPhysicalSize(const Size(430, 620));
-    await tester.view.setDevicePixelRatio(1);
+    await tester.view.physicalSize = const Size(430, 620);
+    await tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
