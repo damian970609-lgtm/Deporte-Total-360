@@ -108,6 +108,7 @@ class SportsApiAppService {
         utc.month.toString().padLeft(2, '0') + '-' +
         utc.day.toString().padLeft(2, '0');
 
+    var successfulSports = 0;
     final results = await Future.wait(_sportNames.entries.map((entry) async {
       try {
         final isRace = entry.key == 'cycling' || entry.key == 'motorsport';
@@ -115,7 +116,8 @@ class SportsApiAppService {
           isRace ? '/races' : '/fixtures',
           <String, String>{'date': day, 'sport': entry.key, 'page': '0'},
         );
-        if (payload is! List) return <SportsAgendaEvent>[];
+        if (payload is! List) throw const FormatException('SportsAPI devolvió una agenda con formato inválido.');
+        successfulSports++;
         return payload.whereType<Map>().map((raw) {
           final row = Map<String, dynamic>.from(raw);
           if (isRace) return _raceEvent(row, entry.key, entry.value);
@@ -127,6 +129,9 @@ class SportsApiAppService {
       }
     }));
 
+    if (successfulSports == 0) {
+      throw const SportsApiException('No se pudo consultar ninguno de tus diez deportes favoritos en SportsAPI.');
+    }
     final unique = <String, SportsAgendaEvent>{};
     for (final event in results.expand((items) => items)) {
       unique[event.id] = event;
