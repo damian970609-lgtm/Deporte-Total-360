@@ -77,42 +77,47 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
       final settings = await AutoLiveSettings.load();
       final localEvents = await SportsAgendaStore.load();
       List<SportsAgendaEvent> events;
+      var loadedFromSportsApi = false;
       try {
         // El tablero Live obtiene primero los diez deportes favoritos, aunque
         // el usuario nunca haya abierto la pestaña Agenda.
         events = await SportsApiAppService().fetchFavoriteAgendaEvents();
+        loadedFromSportsApi = true;
         await SportsAgendaStore.save(events);
       } catch (_) {
         events = localEvents;
       }
 
       final published = await _service.fetchPublishedSchedule();
-      final publishedIds = published
-          ?.map((item) => item.event.id)
-          .toSet() ?? <String>{};
-      final publishedMatchesCurrentAgenda = published != null &&
-          events.any((event) => publishedIds.contains(event.id));
-
-      final latest = publishedMatchesCurrentAgenda
-          ? published!
-          : (settings.isConfigured && events.isNotEmpty
-              ? await _service.schedule(
-                  events: events,
-                  now: DateTime.now(),
-                  settings: settings,
-                  forceRefresh: force,
-                )
-              : <ScheduledLiveEvent>[]);
-
-      final refreshTime = DateTime.now();
-      for (final item in latest) {
-        _knownEventEndTimes[item.event.id] = item.removeAt;
+      List<ScheduledLiveEvent> latest;
+      if (!loadedFromSportsApi && published != null) {
+        // Respaldo del calendario compartido si SportsAPI no responde.
+        latest = published;
+      } else {
+        final publishedForCurrentAgenda = (published ?? <ScheduledLiveEvent>[])
+            .where((item) => events.any((event) => event.id == item.event.id))
+            .toList(growable: false);
+        final publishedIds = publishedForCurrentAgenda
+            .map((item) => item.event.id)
+            .toSet();
+        final eventsWithoutPublishedSources = events
+            .where((event) => !publishedIds.contains(event.id))
+            .toList(growable: false);
+        final locallyScheduled = settings.isConfigured &&
+                eventsWithoutPublishedSources.isNotEmpty
+            ? await _service.schedule(
+                events: eventsWithoutPublishedSources,
+                now: DateTime.now(),
+                settings: settings,
+                forceRefresh: force,
+              )
+            : <ScheduledLiveEvent>[];
+        final merged = <String, ScheduledLiveEvent>{
+          for (final item in publishedForCurrentAgenda) item.event.id: item,
+          for (final item in locallyScheduled) item.event.id: item,
+        };
+        latest = merged.values.toList(growable: false);
       }
-      _knownEventEndTimes.removeWhere(
-        (id, endAt) => refreshTime.isAfter(
-          endAt.add(const Duration(hours: 2)),
-        ),
-      );
 
       if (!mounted) return;
       setState(() {
