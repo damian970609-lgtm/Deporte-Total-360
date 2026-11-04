@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:deporte_total_360/agenda_screen.dart';
 import 'package:deporte_total_360/main.dart';
-import 'package:deporte_total_360/iptv_sources_screen.dart';
+import 'package:deporte_total_360/televizo_integration_screen.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sports_statistics_screen.dart';
 
@@ -69,7 +69,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('la pantalla del menú secreto construye el gestor IPTV nativo', (tester) async {
+  testWidgets('la pantalla del menú secreto abre la integración con Televizo', (tester) async {
     Widget? destination;
     await tester.pumpWidget(
       MaterialApp(
@@ -81,7 +81,7 @@ void main() {
         ),
       ),
     );
-    expect(destination, isA<IptvSourcesScreen>());
+    expect(destination, isA<TelevizoIntegrationScreen>());
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
