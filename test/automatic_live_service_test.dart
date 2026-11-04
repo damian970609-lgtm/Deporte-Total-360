@@ -476,6 +476,29 @@ https://media.example/backup.m3u8
       expect(catalog.programmes, hasLength(1));
     });
 
+    test('exporta canales aunque todas las EPG estén temporalmente fuera de línea', () async {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.one" group-title="Deportes",Sports One HD
+https://media.example/sports-one.m3u8
+''';
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('.m3u')) {
+          return http.Response(playlist, 200);
+        }
+        return http.Response('EPG temporalmente no disponible', 503);
+      });
+
+      final catalog = await AutomaticLiveService(client: client).loadCatalog(
+        playlistUrl: 'https://playlist.example/sports.m3u',
+        epgUrl: 'https://epg-offline.example/guide.xml',
+        allowEmptyEpg: true,
+      );
+
+      expect(catalog.channels, hasLength(1));
+      expect(catalog.programmes, isEmpty);
+    });
+
     test('combina programas de varias guías EPG y sigue si una falla', () async {
       final start = DateTime.now().toUtc().add(const Duration(hours: 1));
       final stop = start.add(const Duration(hours: 2));
