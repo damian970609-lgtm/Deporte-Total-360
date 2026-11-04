@@ -1004,9 +1004,12 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                           fontSize: 10,
                         ),
                       ),
-                      trailing: const Icon(
-                        Icons.play_circle_fill_rounded,
-                        color: _iptvGreen,
+                      trailing: IconButton(
+                        tooltip: 'Copiar URL directa',
+                        onPressed: () => _copyChannelUrl(channel),
+                        icon: const Icon(Icons.copy_rounded),
+                        color: _iptvCyan,
+                        visualDensity: VisualDensity.compact,
                       ),
                       onTap: () => Navigator.pop(sheetContext, channel),
                     );
@@ -1043,6 +1046,12 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
   @override
   Widget build(BuildContext context) {
     final filtered = _filteredChannels;
+    final favoriteCount = _mergedChannels
+        .where((entry) => entry.channels.any(_isFavorite))
+        .length;
+    final visibleChannels = _showAllChannels
+        ? filtered
+        : filtered.take(250).toList(growable: false);
     return Scaffold(
       backgroundColor: _iptvBg,
       appBar: AppBar(
@@ -1357,6 +1366,41 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                     ),
                   ),
                 if (_mergedChannels.isNotEmpty) ...<Widget>[
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      ChoiceChip(
+                        avatar: const Icon(Icons.grid_view_rounded, size: 16),
+                        label: Text('TODOS LOS CANALES (${_mergedChannels.length})'),
+                        selected: !_showFavoritesOnly,
+                        onSelected: (_) => setState(() => _showFavoritesOnly = false),
+                        selectedColor: _iptvCyan.withAlpha(35),
+                        labelStyle: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      ChoiceChip(
+                        avatar: Icon(
+                          Icons.star_rounded,
+                          size: 16,
+                          color: _showFavoritesOnly ? _iptvBg : _iptvYellow,
+                        ),
+                        label: Text('FAVORITOS ($favoriteCount)'),
+                        selected: _showFavoritesOnly,
+                        onSelected: (_) => setState(() => _showFavoritesOnly = true),
+                        selectedColor: _iptvGreen,
+                        labelStyle: TextStyle(
+                          color: _showFavoritesOnly ? _iptvBg : Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 9),
                   TextField(
                     controller: _searchController,
                     onChanged: (_) => setState(() {}),
@@ -1412,7 +1456,9 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                     ),
                   const SizedBox(height: 8),
                   Text(
-                    'CANALES (' + filtered.length.toString() + ')',
+                    _showFavoritesOnly
+                        ? 'MIS CANALES FAVORITOS (' + filtered.length.toString() + ')'
+                        : 'TODOS LOS CANALES (' + filtered.length.toString() + ')',
                     style: const TextStyle(
                       color: _iptvCyan,
                       fontSize: 11,
@@ -1420,7 +1466,16 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                     ),
                   ),
                   const SizedBox(height: 5),
-                  for (final entry in filtered.take(250))
+                  if (_showFavoritesOnly && filtered.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 18),
+                      child: Text(
+                        'Todavía no tienes favoritos. Pulsa la estrella de un canal para guardarlo aquí.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: _iptvMuted, fontSize: 11, height: 1.45),
+                      ),
+                    ),
+                  for (final entry in visibleChannels)
                     Card(
                       color: _iptvPanel,
                       margin: const EdgeInsets.only(bottom: 5),
@@ -1473,16 +1528,46 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
                             IconButton(
+                              tooltip: _isFavorite(entry.primary)
+                                  ? 'Quitar de favoritos'
+                                  : 'Agregar a favoritos',
+                              onPressed: () => _toggleFavorite(entry.primary),
+                              icon: Icon(
+                                _isFavorite(entry.primary)
+                                    ? Icons.star_rounded
+                                    : Icons.star_border_rounded,
+                              ),
+                              color: _isFavorite(entry.primary) ? _iptvYellow : _iptvMuted,
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints.tightFor(width: 32, height: 36),
+                            ),
+                            IconButton(
+                              tooltip: 'Copiar URL del canal',
+                              onPressed: () => _copyChannelUrl(entry.primary),
+                              icon: const Icon(Icons.link_rounded),
+                              color: _iptvCyan,
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints.tightFor(width: 32, height: 36),
+                            ),
+                            IconButton(
                               tooltip: 'Reproducir con el reproductor nativo',
                               onPressed: () => _playChannel(entry.primary),
                               icon: const Icon(Icons.play_circle_fill_rounded),
                               color: _iptvGreen,
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints.tightFor(width: 32, height: 36),
                             ),
                             IconButton(
                               tooltip: 'Añadir a multivista',
                               onPressed: () => _addToMultiview(entry.primary),
                               icon: const Icon(Icons.add_to_photos_rounded),
                               color: _iptvCyan,
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints.tightFor(width: 32, height: 36),
                             ),
                           ],
                         ),
@@ -1490,12 +1575,21 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                       ),
                     ),
                   if (filtered.length > 250)
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Text(
-                        'Se muestran los primeros 250 resultados. Usa el buscador para encontrar otros canales.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: _iptvMuted, fontSize: 10),
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () => setState(() => _showAllChannels = !_showAllChannels),
+                        icon: Icon(
+                          _showAllChannels
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.expand_more_rounded,
+                        ),
+                        label: Text(
+                          _showAllChannels
+                              ? 'MOSTRAR MENOS CANALES'
+                              : 'VER TODOS LOS CANALES (${filtered.length})',
+                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10),
+                        ),
+                        style: TextButton.styleFrom(foregroundColor: _iptvCyan),
                       ),
                     ),
                 ],
