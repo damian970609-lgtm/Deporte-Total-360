@@ -582,6 +582,8 @@ class AutomaticLiveService {
   final Map<String, ({bool available, int quality, DateTime checkedAt})> _probeCache =
       <String, ({bool available, int quality, DateTime checkedAt})>{};
 
+  void dispose() => _client.close();
+
   Future<AutoLiveCatalog> loadCatalog({
     required String playlistUrl, required String epgUrl,
     bool forceRefresh = false,
