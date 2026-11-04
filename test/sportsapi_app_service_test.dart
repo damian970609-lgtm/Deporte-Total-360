@@ -19,7 +19,7 @@ void main() {
       if (request.url.path.endsWith('/favorites')) {
         return http.Response(jsonEncode({
           'sports': [
-            {'id': 'football', 'name': 'Fútbol', 'competitions': ['Premier League']},
+            {'id': 'football', 'name': 'Fútbol', 'competitions': ['Premier League', 'NWSL']},
             {'id': 'basketball', 'name': 'Baloncesto', 'competitions': ['NBA']},
             {'id': 'baseball', 'name': 'Béisbol', 'competitions': ['Major League Baseball']},
             {'id': 'ice-hockey', 'name': 'Hockey sobre hielo', 'competitions': ['NHL']},
