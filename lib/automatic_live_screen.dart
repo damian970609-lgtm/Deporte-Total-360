@@ -143,7 +143,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     final result = <LivePlayerSource>[];
 
     for (final item in ordered) {
-      if (result.length == 4) break;
+      if (result.length == 8) break;
       if (now.isBefore(item.event.startsAt) || !now.isBefore(item.removeAt)) {
         continue;
       }
@@ -213,7 +213,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
 
     return upcoming
-        .take(4 - activeSources.length)
+        .take(8 - activeSources.length)
         .map((event) {
           final teams = event.homeTeam.isNotEmpty && event.awayTeam.isNotEmpty
               ? '${event.homeTeam} vs ${event.awayTeam}'
