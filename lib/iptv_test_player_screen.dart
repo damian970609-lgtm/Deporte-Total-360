@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import 'automatic_live_service.dart';
+import 'live_channels_screen.dart';
 
 const Color _iptvBg = Color(0xFF030814);
 const Color _iptvPanel = Color(0xFF071326);
@@ -30,6 +31,7 @@ class IptvTestPlayerScreen extends StatefulWidget {
 
 class _IptvTestPlayerScreenState extends State<IptvTestPlayerScreen> {
   final AutomaticLiveService _service = AutomaticLiveService();
+  final TextEditingController _searchController = TextEditingController();
   AutoLiveCatalog? _catalog;
   VideoPlayerController? _controller;
   M3uChannel? _selectedChannel;
@@ -58,6 +60,7 @@ class _IptvTestPlayerScreenState extends State<IptvTestPlayerScreen> {
   void dispose() {
     _requestVersion++;
     _controller?.dispose();
+    _searchController.dispose();
     _service.dispose();
     super.dispose();
   }
@@ -240,11 +243,89 @@ class _IptvTestPlayerScreenState extends State<IptvTestPlayerScreen> {
       setState(() {
         _loading = false;
         _playing = false;
-        _playerError = 'No se pudo reproducir este canal: $error';
+        _playerError = _friendlyPlaybackError(error);
       });
     }
   }
 
+  String _friendlyPlaybackError(Object error) {
+    final raw = error.toString();
+    final lower = raw.toLowerCase();
+    if (lower.contains('403') || lower.contains('451') || lower.contains('geoblock') || lower.contains('geo-block') || lower.contains('region') || lower.contains('country') || lower.contains('forbidden')) {
+      return 'Acceso denegado o posible geobloqueo. Esta señal puede no estar autorizada en tu región. Deporte Total 360° no elimina restricciones regionales; prueba otra señal autorizada disponible en tus listas.';
+    }
+    if (lower.contains('401') || lower.contains('unauthorized') || lower.contains('token')) {
+      return 'El proveedor rechazó la autorización de esta señal. Comprueba tu suscripción o actualiza la URL/token con el proveedor.';
+    }
+    if (lower.contains('404') || lower.contains('410') || lower.contains('not found') || lower.contains('gone')) {
+      return 'La URL de esta señal ya no está disponible o caducó. Prueba otra entrada de la lista.';
+    }
+    if (lower.contains('format') || lower.contains('decoder') || lower.contains('unsupported')) {
+      return 'El formato de esta transmisión no es compatible con este reproductor. Prueba la misma señal en otra calidad o usa el reproductor avanzado.';
+    }
+    return 'No se pudo reproducir este canal. Comprueba la conexión y que la URL siga activa. Detalle: $raw';
+  }
+
+  Future<void> _openAdvancedPlayer(M3uChannel channel) async {
+    if (!isDirectPlayableStream(channel.url)) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => LivePlayerGridScreen(
+          sources: <LivePlayerSource>[
+            LivePlayerSource(title: channel.name, subtitle: channel.group, url: channel.url),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showAlternativeChannels() async {
+    final selected = _selectedChannel;
+    final all = _catalog?.channels ?? const <M3uChannel>[];
+    final available = all.where((channel) => channel.url != selected?.url && isDirectPlayableStream(channel.url)).toList(growable: false);
+    final sameGroup = selected == null ? <M3uChannel>[] : available.where((channel) => channel.group == selected.group).toList();
+    final suggestions = (sameGroup.isNotEmpty ? sameGroup : available).take(30).toList(growable: false);
+    if (!mounted) return;
+    if (suggestions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No hay otra señal directa compatible en las listas cargadas.')));
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: _iptvPanel,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 4, 16, 10),
+              child: Text('OTRAS SEÑALES DE TUS LISTAS', style: TextStyle(color: _iptvCyan, fontWeight: FontWeight.w900, fontSize: 12)),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: suggestions.length,
+                itemBuilder: (context, index) {
+                  final channel = suggestions[index];
+                  return ListTile(
+                    leading: const Icon(Icons.live_tv_rounded, color: _iptvCyan),
+                    title: Text(channel.name, style: const TextStyle(color: Colors.white)),
+                    subtitle: Text(channel.group.isEmpty ? 'Otra lista' : channel.group, style: const TextStyle(color: _iptvMuted, fontSize: 10)),
+                    trailing: const Icon(Icons.play_circle_outline_rounded, color: _iptvGreen),
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      unawaited(_playChannel(channel));
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
   Future<void> _togglePlayback() async {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
@@ -383,19 +464,31 @@ class _IptvTestPlayerScreenState extends State<IptvTestPlayerScreen> {
               style: const TextStyle(color: _iptvMuted, fontSize: 9),
             ),
             const SizedBox(height: 4),
-            if (_playerError != null)
-              Text(
-                _playerError!,
-                style: const TextStyle(
-                  color: _iptvPink,
-                  fontSize: 10,
-                  height: 1.35,
+            if (_playerError != null) ...<Widget>[
+              Text(_playerError!, style: const TextStyle(color: _iptvPink, fontSize: 10, height: 1.35)),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _showAlternativeChannels,
+                  icon: const Icon(Icons.swap_horiz_rounded, size: 17),
+                  label: const Text('BUSCAR OTRA SEÑAL DE MIS LISTAS'),
+                  style: TextButton.styleFrom(foregroundColor: _iptvCyan),
                 ),
-              )
-            else ...<Widget>[
+              ),
+            ] else ...<Widget>[
               _programmeLine('AHORA', _nowNext(channel).current),
               _programmeLine('SIGUIENTE', _nowNext(channel).next),
             ],
+            const SizedBox(height: 7),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _openAdvancedPlayer(channel),
+                icon: const Icon(Icons.fullscreen_rounded, size: 18),
+                label: const Text('ABRIR REPRODUCTOR AVANZADO'),
+                style: OutlinedButton.styleFrom(foregroundColor: _iptvCyan, side: const BorderSide(color: _iptvCyan), visualDensity: VisualDensity.compact),
+              ),
+            ),
           ],
         ],
       ),
@@ -572,13 +665,19 @@ class _IptvTestPlayerScreenState extends State<IptvTestPlayerScreen> {
                 ),
                 const SizedBox(height: 7),
                 TextField(
+                  controller: _searchController,
                   onChanged: (value) => setState(() => _query = value),
                   style: const TextStyle(color: Colors.white, fontSize: 11),
-                  decoration: const InputDecoration(
-                    hintText: 'Buscar canal, equipo o categoría…',
-                    prefixIcon: Icon(Icons.search_rounded, color: _iptvCyan),
+                  decoration: InputDecoration(
+                    hintText: 'Buscar canal por nombre, equipo o categoría…',
+                    prefixIcon: const Icon(Icons.search_rounded, color: _iptvCyan),
+                    suffixIcon: _query.isEmpty ? null : IconButton(
+                      tooltip: 'Limpiar búsqueda',
+                      onPressed: () { _searchController.clear(); setState(() => _query = ''); },
+                      icon: const Icon(Icons.close_rounded, color: _iptvMuted),
+                    ),
                     isDense: true,
-                    contentPadding: EdgeInsets.symmetric(vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
                   ),
                 ),
                 const SizedBox(height: 7),
