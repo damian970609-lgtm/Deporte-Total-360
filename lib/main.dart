@@ -2325,23 +2325,6 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
       ''';
 
       final rawResult = await controller.evaluateJavascript(source: script);
-      // La biblioteca de OTTFOX se actualiza al pulsar "Aplicar cambios".
-      // Espera a que termine de leer el M3U antes de intentar guardar.
-      await Future<void>.delayed(const Duration(seconds: 3));
-      final applyResult = await controller.evaluateJavascript(source: r'''
-        (() => {
-          const button = Array.from(document.querySelectorAll('button'))
-            .find((element) =>
-              /aplicar cambios|apply changes/i.test(
-                (element.innerText || element.textContent || '').trim()
-              ));
-          if (!button || button.disabled) return false;
-          button.click();
-          return true;
-        })();
-      ''');
-      final appliedToOttfox = applyResult == true ||
-          applyResult.toString().toLowerCase() == 'true';
       Map<String, dynamic> result = <String, dynamic>{};
       if (rawResult is String) {
         try {
@@ -2359,12 +2342,71 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
         );
       }
 
+      // Después de cargar el M3U, vuelve a rellenar la EPG: el editor puede
+      // reconstruir sus controles al procesar la lista. Se pasan cinco URLs a
+      // los campos visibles y todas las demás ya viajan en la cabecera M3U.
+      await Future<void>.delayed(const Duration(seconds: 3));
+      final guideFillScript = '''
+        (() => {
+          const urls = ${jsonEncode(settings.epgUrls)};
+          const fields = Array.from(document.querySelectorAll('input'))
+            .filter((element) => /epg|xmltv/i.test([
+              element.placeholder || '',
+              element.name || '',
+              element.id || '',
+              element.getAttribute('aria-label') || ''
+            ].join(' ')));
+          const linked = Math.min(fields.length, 5, urls.length);
+          for (let index = 0; index < linked; index++) {
+            fields[index].value = urls[index];
+            fields[index].dispatchEvent(new Event('input', { bubbles: true }));
+            fields[index].dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          return JSON.stringify({ linked, available: fields.length });
+        })();
+      ''';
+      final guideRawResult =
+          await controller.evaluateJavascript(source: guideFillScript);
+      var linkedGuideCount = 0;
+      if (guideRawResult is String) {
+        try {
+          final decoded = jsonDecode(guideRawResult);
+          if (decoded is Map) {
+            linkedGuideCount = int.tryParse(
+                  (decoded['linked'] ?? 0).toString(),
+                ) ??
+                0;
+          }
+        } catch (_) {}
+      } else if (guideRawResult is Map) {
+        linkedGuideCount = int.tryParse(
+              (guideRawResult['linked'] ?? 0).toString(),
+            ) ??
+            0;
+      }
+
+      // La biblioteca de OTTFOX se actualiza al pulsar "Aplicar cambios".
+      final applyResult = await controller.evaluateJavascript(source: r'''
+        (() => {
+          const button = Array.from(document.querySelectorAll('button'))
+            .find((element) =>
+              /aplicar cambios|apply changes/i.test(
+                (element.innerText || element.textContent || '').trim()
+              ));
+          if (!button || button.disabled) return false;
+          button.click();
+          return true;
+        })();
+      ''');
+      final appliedToOttfox = applyResult == true ||
+          applyResult.toString().toLowerCase() == 'true';
+
       if (!mounted) return;
       setState(() {
         _syncMessage =
             'OTTFOX recibió $_channelCount canales combinados de '
             '$_playlistCount listas y $_epgCount guías XMLTV. '
-            '${result['guidesLinkedInFields'] ?? 0} guías se colocaron en los campos EPG; '
+            '$linkedGuideCount guías se colocaron en los campos EPG; '
             '${appliedToOttfox ? 'la lista se aplicó a la biblioteca local.' : 'pulsa Aplicar cambios si el editor lo solicita.'}';
       });
     } catch (error) {
