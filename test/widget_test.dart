@@ -98,6 +98,41 @@ void main() {
     expect(find.text('AGREGAR LISTA M3U'), findsOneWidget);
     expect(find.text('AGREGAR GUÍA EPG'), findsOneWidget);
     expect(find.textContaining('ninguna lista pública automáticamente'), findsOneWidget);
+    expect(find.byTooltip('Agregar lista M3U por URL'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Agregar lista M3U por URL'));
+    await tester.pumpAndSettle();
+    expect(find.text('Agregar lista M3U / M3U8'), findsOneWidget);
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('el reproductor secreto importa una lista M3U pegada y muestra sus canales', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: IptvSourcesScreen(manualOnly: true, parseInBackground: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('PEGAR CONTENIDO M3U'));
+    await tester.pumpAndSettle();
+    const playlist = '#EXTM3U\\n'
+        '#EXTINF:-1 group-title="Deportes",Canal Importado\\n'
+        'https://media.example/live/98765?token=abc';
+    await tester.enterText(find.byType(TextField).last, playlist);
+    await tester.tap(find.text('Importar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Canal Importado'), findsOneWidget);
+    final prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getStringList('dt360_secret_iptv_playlist_texts_v1'),
+      contains(playlist),
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
