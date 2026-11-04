@@ -64,9 +64,9 @@ const String legacyDefaultAutoLivePlaylistUrls =
 const String legacyDefaultAutoLiveEpgUrl =
     'https://dearbulut.github.io/iptv/epg/guide.xml.gz';
 
-// Fuentes automáticas: primero catálogos en español y emisoras públicas;
-// después directorios deportivos internacionales como respaldo.
-const String defaultAutoLivePlaylistUrls =
+// Snapshot de los valores predeterminados de la versión anterior. Se usa
+// para ampliar las instalaciones ya existentes sin borrar fuentes personales.
+const String previousDefaultAutoLivePlaylistUrls =
     'https://teleonline.github.io/listas/tv.m3u8\n'
     'https://iptv-org.github.io/iptv/languages/spa.m3u\n'
     'https://iptv-org.github.io/iptv/countries/es.m3u\n'
@@ -79,10 +79,7 @@ const String defaultAutoLivePlaylistUrls =
     'https://dearbulut.github.io/iptv/playlists/category/sports.m3u\n'
     'https://dearbulut.github.io/iptv/playlists/online.m3u\n'
     'https://dearbulut.github.io/iptv/playlists/best.m3u';
-
-// Guías priorizadas en español (España y Latinoamérica/Caribe), con una
-// guía global al final como último respaldo.
-const String defaultAutoLiveEpgUrl =
+const String previousDefaultAutoLiveEpgUrl =
     'https://iptv-epg.org/files/epg-es.xml\n'
     'https://iptv-epg.org/files/epg-ar.xml\n'
     'https://iptv-epg.org/files/epg-mx.xml\n'
@@ -103,6 +100,19 @@ const String defaultAutoLiveEpgUrl =
     'https://iptv-epg.org/files/epg-br.xml\n'
     'https://raw.githubusercontent.com/teleonline/listas/main/epg.xml.gz\n'
     'https://dearbulut.github.io/iptv/epg/guide.xml.gz';
+
+// Listas públicas: deportes y canales abiertos de repositorios GitHub
+// mantenidos por comunidad, conservando las fuentes regionales en español.
+const String defaultAutoLivePlaylistUrls =
+    previousDefaultAutoLivePlaylistUrls + '\n'
+    'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8\n'
+    'https://biskyt.github.io/legalFreeIPTVplaylist/live.m3u';
+
+// EPG regional en español y Caribe. Los XML se procesan en lotes limitados.
+const String defaultAutoLiveEpgUrl =
+    previousDefaultAutoLiveEpgUrl + '\n'
+    'https://iptv-epg.org/files/epg-do.xml\n'
+    'https://iptv-epg.org/files/epg-sv.xml';
 
 List<String> _splitPlaylistUrls(String value) => value
     .split(RegExp(r'[\r\n;]+'))
@@ -158,15 +168,36 @@ class AutoLiveSettings {
     final playlistText = prefs.getString(_playlistTextKey) ?? '';
     final playlistTexts = prefs.getStringList(_playlistTextsKey) ?? <String>[];
 
-    // Migra la configuración predeterminada anterior sin sobrescribir listas
-    // o guías personalizadas que el usuario haya guardado.
+    // Migra las versiones antiguas y amplía los valores predeterminados
+    // guardados en el dispositivo. Se conservan las fuentes personalizadas y
+    // el orden que el usuario haya elegido.
     if (playlist.trim() == legacyDefaultAutoLivePlaylistUrls.trim()) {
       playlist = defaultAutoLivePlaylistUrls;
       await prefs.setString(_playlistUrlKey, playlist);
+    } else {
+      final stored = _splitPlaylistUrls(playlist);
+      final previous = _splitPlaylistUrls(previousDefaultAutoLivePlaylistUrls);
+      if (previous.every(stored.contains)) {
+        final merged = <String>{...stored, ..._splitPlaylistUrls(defaultAutoLivePlaylistUrls)};
+        if (merged.length != stored.length) {
+          playlist = merged.join('\\n');
+          await prefs.setString(_playlistUrlKey, playlist);
+        }
+      }
     }
     if (epg.trim() == legacyDefaultAutoLiveEpgUrl.trim()) {
       epg = defaultAutoLiveEpgUrl;
       await prefs.setString(_epgUrlKey, epg);
+    } else {
+      final stored = _splitPlaylistUrls(epg);
+      final previous = _splitPlaylistUrls(previousDefaultAutoLiveEpgUrl);
+      if (previous.every(stored.contains)) {
+        final merged = <String>{...stored, ..._splitPlaylistUrls(defaultAutoLiveEpgUrl)};
+        if (merged.length != stored.length) {
+          epg = merged.join('\\n');
+          await prefs.setString(_epgUrlKey, epg);
+        }
+      }
     }
 
     // Recupera automáticamente la configuración integrada si una versión
