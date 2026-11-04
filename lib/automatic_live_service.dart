@@ -940,9 +940,9 @@ class AutomaticLiveService {
         ..write(metadata.isEmpty ? '' : ' $metadata')
         ..write(',')
         ..write(name.isEmpty ? 'Canal' : name)
-        ..write('\\n')
+        ..write('\n')
         ..write(channel.url.trim())
-        ..write('\\n');
+        ..write('\n');
     }
     return output.toString();
   }
