@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'automatic_live_service.dart';
@@ -55,6 +57,8 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
   bool _loadingStats = false;
   String? _error;
   String? _statsError;
+  String? _warning;
+  Timer? _agendaMergeTimer;
   bool _catalogExpanded = false;
   DateTime _selectedDate = DateTime.now();
 
@@ -77,41 +81,87 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     _loadInitial();
   }
 
+  @override
+  void dispose() {
+    _agendaMergeTimer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleMergedAgendaRefresh(DateTime date) {
+    _agendaMergeTimer?.cancel();
+    final expectedDate = DateTime(date.year, date.month, date.day);
+    _agendaMergeTimer = Timer(const Duration(seconds: 75), () {
+      if (!mounted ||
+          _selectedDate.year != expectedDate.year ||
+          _selectedDate.month != expectedDate.month ||
+          _selectedDate.day != expectedDate.day) {
+        return;
+      }
+      unawaited(_loadDate(expectedDate, fromDelayedMerge: true));
+    });
+  }
+
+  Future<List<SportsAgendaEvent>> _savedEventsForDate(DateTime date) async {
+    final saved = await SportsAgendaStore.load();
+    final start = DateTime(date.year, date.month, date.day);
+    final end = start.add(const Duration(days: 1));
+    return saved.where((event) {
+      final local = event.startsAt.toLocal();
+      return !local.isBefore(start) && local.isBefore(end);
+    }).toList(growable: false);
+  }
+
   Future<void> _loadInitial() async {
     setState(() {
       _loading = true;
       _error = null;
+      _warning = null;
     });
     try {
-      final results = await Future.wait<dynamic>(<Future<dynamic>>[
-        _api.fetchFavoriteSports(),
-        _api.fetchFavoriteAgendaEvents(date: _selectedDate),
-      ]);
-      final catalog = results[0] as List<Map<String, dynamic>>;
-      final events = results[1] as List<SportsAgendaEvent>;
+      final catalog = await _api.fetchFavoriteSports();
+      List<SportsAgendaEvent> events;
+      String? warning;
+      try {
+        events = await _api.fetchFavoriteAgendaEvents(date: _selectedDate);
+        await SportsAgendaStore.save(events);
+      } catch (error) {
+        events = await _savedEventsForDate(_selectedDate);
+        warning = 'No se pudo actualizar desde SportsAPI: ' + error.toString();
+      }
       if (!mounted) return;
       setState(() {
         _catalog = catalog;
         _events = events;
         _loading = false;
-        // Una jornada sin encuentros no es un fallo de API: el usuario puede
-        // consultar días anteriores para abrir partidos ya finalizados.
+        _warning = events.isEmpty ? null : warning;
+        _error = events.isEmpty ? warning : null;
       });
+      _scheduleMergedAgendaRefresh(_selectedDate);
     } catch (error) {
       if (!mounted) return;
+      final saved = await _savedEventsForDate(_selectedDate);
+      if (!mounted) return;
       setState(() {
+        _events = saved;
         _loading = false;
-        _error = error.toString();
+        _warning = saved.isEmpty ? null : 'Se muestra la agenda guardada. ' + error.toString();
+        _error = saved.isEmpty ? error.toString() : null;
       });
+      _scheduleMergedAgendaRefresh(_selectedDate);
     }
   }
 
-  Future<void> _loadDate(DateTime value, {bool forceRefresh = false}) async {
+  Future<void> _loadDate(
+    DateTime value, {
+    bool forceRefresh = false,
+    bool fromDelayedMerge = false,
+  }) async {
     final date = DateTime(value.year, value.month, value.day);
     setState(() {
       _selectedDate = date;
       _loading = true;
       _error = null;
+      _warning = null;
       _selectedEvent = null;
       _statistics = <MapEntry<String, String>>[];
       _statsError = null;
@@ -121,18 +171,23 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
         date: date,
         forceRefresh: forceRefresh,
       );
+      await SportsAgendaStore.save(events);
       if (!mounted) return;
       setState(() {
         _events = events;
         _loading = false;
       });
     } catch (error) {
+      final saved = await _savedEventsForDate(date);
       if (!mounted) return;
       setState(() {
+        _events = saved;
         _loading = false;
-        _error = error.toString();
+        _warning = saved.isEmpty ? null : 'Se muestra la agenda guardada. ' + error.toString();
+        _error = saved.isEmpty ? error.toString() : null;
       });
     }
+    if (!fromDelayedMerge) _scheduleMergedAgendaRefresh(date);
   }
 
   Future<void> _refresh() => _loadDate(_selectedDate, forceRefresh: true);
@@ -485,6 +540,10 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
             ],
           ),
           const SizedBox(height: 7),
+          if (_warning != null) ...<Widget>[
+            _message(_warning!),
+            const SizedBox(height: 8),
+          ],
           if (_loading)
             const Padding(
               padding: EdgeInsets.all(25),
