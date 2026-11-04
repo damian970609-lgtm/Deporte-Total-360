@@ -135,14 +135,15 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         }
       }
       if (selected == null) continue;
+      final primary = selected;
       final fallbackUrls = availableCandidates
           .where((candidate) =>
-              candidate.url != selected!.url &&
+              candidate.url != primary.url &&
               !usedUrls.contains(candidate.url))
           .take(3)
           .map((candidate) => candidate.url)
           .toList(growable: false);
-      usedUrls.add(selected.url);
+      usedUrls.add(primary.url);
       usedUrls.addAll(fallbackUrls);
 
       final event = item.event;
