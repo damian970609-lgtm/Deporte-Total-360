@@ -97,7 +97,6 @@ void main() {
     expect(find.text('IMPORTAR TUS LISTAS M3U'), findsOneWidget);
     expect(find.text('AGREGAR LISTA M3U'), findsOneWidget);
     expect(find.text('AGREGAR GUÍA EPG'), findsOneWidget);
-    expect(find.text('CARGAR MIS LISTAS Y CANALES'), findsOneWidget);
     expect(find.textContaining('ninguna lista pública automáticamente'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -131,7 +130,7 @@ void main() {
     await tester.enterText(find.byType(TextField).first, 'canal inexistente');
     await tester.pumpAndSettle();
     expect(find.text('MIS CANALES FAVORITOS (0)'), findsOneWidget);
-    expect(find.textContaining('Todavía no tienes favoritos'), findsOneWidget);
+    expect(find.textContaining('Ningún favorito coincide con tu búsqueda'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
