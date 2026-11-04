@@ -250,10 +250,10 @@ void main() {
       expect(settings.playlistUrls.every(isSafeHttpUrl), isTrue);
       expect(settings.epgUrls, hasLength(30));
       expect(settings.epgUrls.every(isSafeHttpUrl), isTrue);
-      expect(settings.playlistUrls.first, contains('teleonline'));
-      expect(settings.playlistUrls[1], contains('languages/spa.m3u'));
-      expect(settings.playlistUrls[2], contains('countries/es.m3u'));
-      expect(settings.playlistUrls[12], contains('Free-TV/IPTV'));
+      expect(settings.playlistUrls.first, contains('Free-TV/IPTV'));
+      expect(settings.playlistUrls[1], contains('teleonline'));
+      expect(settings.playlistUrls[2], contains('languages/spa.m3u'));
+      expect(settings.playlistUrls[3], contains('countries/es.m3u'));
       expect(settings.playlistUrls[13], contains('legalFreeIPTVplaylist/live.m3u'));
       expect(settings.epgUrls.first, contains('epg-es.xml'));
       expect(settings.epgUrls[18], contains('teleonline/listas/main/epg.xml.gz'));
@@ -304,6 +304,36 @@ void main() {
       expect(settings.epgUrls, contains('https://iptv-epg.org/files/epg-do.xml'));
     });
 
+    test('recupera listas automáticas si antes se guardó la página OTTFOX y conserva fuentes propias', () async {
+      const customPlaylist = 'https://listas.example/mi-lista.m3u';
+      const customEpg = 'https://guias.example/mi-guia.xml';
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'dt360_auto_live_playlist_url_v1':
+            'https://ottfox.net/es/iptv-playlist-editor/\n$customPlaylist',
+        'dt360_auto_live_epg_url_v1':
+            'https://ottfox.net/es/\n$customEpg',
+        'dt360_auto_live_authorized_v1': true,
+      });
+
+      final settings = await AutoLiveSettings.load();
+
+      expect(settings.playlistUrls, hasLength(15));
+      expect(settings.epgUrls, hasLength(31));
+      expect(settings.playlistUrls, contains(customPlaylist));
+      expect(settings.epgUrls, contains(customEpg));
+      expect(settings.playlistUrls.any((url) => url.contains('ottfox.net')), isFalse);
+      expect(settings.epgUrls.any((url) => url.contains('ottfox.net')), isFalse);
+
+      // Una vez migrada, una edición posterior del usuario no vuelve a
+      // añadir todas las listas predeterminadas automáticamente.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('dt360_auto_live_playlist_url_v1', customPlaylist);
+      await prefs.setString('dt360_auto_live_epg_url_v1', customEpg);
+      final edited = await AutoLiveSettings.load();
+      expect(edited.playlistUrls, <String>[customPlaylist]);
+      expect(edited.epgUrls, <String>[customEpg]);
+    });
+
     test('restaura fuentes automáticas cuando una versión anterior dejó las listas vacías', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'dt360_auto_live_playlist_url_v1': '',
@@ -318,7 +348,7 @@ void main() {
       expect(settings.epgUrls, hasLength(30));
     });
 
-    test('guarda varias listas de OTTFOX y las analiza incrementalmente fuera de la interfaz', () async {
+    test('guarda varias listas importadas y las analiza incrementalmente fuera de la interfaz', () async {
       const firstPlaylist = '''
 #EXTM3U
 #EXTINF:-1 tvg-id="ottfox.one" group-title="Deportes",Canal OTTFOX Uno
@@ -362,7 +392,7 @@ https://cdn.example/live/two.m3u8
       expect(snapshots, hasLength(2));
       expect(snapshots.first, hasLength(1));
       expect(snapshots.last, hasLength(2));
-      expect(progress, <String>['OTTFOX:1/2', 'OTTFOX:2/2']);
+      expect(progress, <String>['LOCAL:1/2', 'LOCAL:2/2']);
     });
   });
 
@@ -991,6 +1021,20 @@ https://media.example/live.m3u8
       } finally {
         service.dispose();
       }
+    });
+
+    test('analiza metadatos M3U con comillas simples y dobles', () {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id='sports.one' group-title="Deportes",Canal deportivo
+https://media.example/live.m3u8
+''';
+      final channels = AutomaticLiveService.parseM3u(playlist);
+
+      expect(channels, hasLength(1));
+      expect(channels.single.tvgId, 'sports.one');
+      expect(channels.single.group, 'Deportes');
+      expect(channels.single.name, 'Canal deportivo');
     });
 
     test('publica los canales M3U mediante el callback incremental', () async {
