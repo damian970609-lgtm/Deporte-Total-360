@@ -323,7 +323,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       });
     } catch (error) {
       if (!mounted) return;
-      if (retryRateLimit && error is SportsApiException && error.statusCode == 429) {
+      if (retryRateLimit && error is SportsApiException && error.statusCode == 429 && error.code == 'rate_limited') {
         final seconds = (error.retryAfterSeconds ?? 60).clamp(1, 120).toInt();
         setState(() {
           _loadingStats = false;
@@ -377,7 +377,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       });
     } catch (error) {
       if (!mounted) return;
-      if (retryRateLimit && error is SportsApiException && error.statusCode == 429) {
+      if (retryRateLimit && error is SportsApiException && error.statusCode == 429 && error.code == 'rate_limited') {
         final seconds = (error.retryAfterSeconds ?? 60).clamp(1, 120);
         setState(() {
           _loadingStats = false;
