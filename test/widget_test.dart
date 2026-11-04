@@ -45,9 +45,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: SettingsScreen(
-          secretMenuBuilder: (_) => const Scaffold(
-            appBar: AppBar(title: Text('OTTFOX · EDITOR IPTV')),
-            body: Text('ÚNICO ACCESO DEL MENÚ SECRETO'),
+          secretMenuBuilder: (_) => Scaffold(
+            appBar: AppBar(title: const Text('OTTFOX · EDITOR IPTV')),
+            body: const Text('ÚNICO ACCESO DEL MENÚ SECRETO'),
           ),
         ),
       ),
