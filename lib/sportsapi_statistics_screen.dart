@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'automatic_live_service.dart';
 import 'sportsapi_app_service.dart';
+import 'sports_api_service.dart';
 
 const Color _apiStatsBg = Color(0xFF030814);
 const Color _apiStatsPanel = Color(0xFF071326);
@@ -290,7 +291,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     return _flatten(value);
   }
 
-  Future<void> _loadStatistics(SportsAgendaEvent event) async {
+  Future<void> _loadStatistics(SportsAgendaEvent event, {bool retryRateLimit = true}) async {
     setState(() {
       _selectedEvent = event;
       _loadingStats = true;
@@ -322,6 +323,18 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       });
     } catch (error) {
       if (!mounted) return;
+      if (retryRateLimit && error is SportsApiException && error.statusCode == 429) {
+        final seconds = (error.retryAfterSeconds ?? 60).clamp(1, 120);
+        setState(() {
+          _loadingStats = false;
+          _statsError = 'SportsAPI está aplicando su límite de consultas. '
+              'Reintentaré automáticamente en $seconds segundos…';
+        });
+        await Future<void>.delayed(Duration(seconds: seconds + 1));
+        if (!mounted || _selectedEvent?.id != event.id) return;
+        await _loadStatistics(event, retryRateLimit: false);
+        return;
+      }
       setState(() {
         _loadingStats = false;
         _statsError = error.toString();
@@ -329,7 +342,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     }
   }
 
-  Future<void> _loadStandings(SportsAgendaEvent event) async {
+  Future<void> _loadStandings(SportsAgendaEvent event, {bool retryRateLimit = true}) async {
     setState(() {
       _selectedEvent = event;
       _loadingStats = true;
@@ -364,6 +377,18 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       });
     } catch (error) {
       if (!mounted) return;
+      if (retryRateLimit && error is SportsApiException && error.statusCode == 429) {
+        final seconds = (error.retryAfterSeconds ?? 60).clamp(1, 120);
+        setState(() {
+          _loadingStats = false;
+          _statsError = 'SportsAPI está aplicando su límite de consultas. '
+              'Reintentaré la clasificación automáticamente en $seconds segundos…';
+        });
+        await Future<void>.delayed(Duration(seconds: seconds + 1));
+        if (!mounted || _selectedEvent?.id != event.id) return;
+        await _loadStandings(event, retryRateLimit: false);
+        return;
+      }
       setState(() {
         _loadingStats = false;
         _statsError = error.toString();
