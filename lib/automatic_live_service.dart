@@ -418,9 +418,11 @@ class M3uChannel {
     this.logo = '',
     this.language = '',
     this.country = '',
+    this.sourceUrl = '',
   });
   final String name;
   final String url;
+  final String sourceUrl;
   final String tvgId;
   final String tvgName;
   final String group;
