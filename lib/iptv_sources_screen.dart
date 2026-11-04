@@ -114,17 +114,13 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
   }
 
 
-  void _openOttfox() {
-    Navigator.of(context).maybePop();
-  }
-
   Future<void> _importClipboardPlaylist() async {
     try {
       final data = await Clipboard.getData('text/plain');
       final text = data?.text ?? '';
       if (text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('El portapapeles está vacío. Copia primero la salida M3U desde OTTFOX.')),
+          const SnackBar(content: Text('El portapapeles está vacío. Copia primero el contenido de una lista M3U.')),
         );
         return;
       }
@@ -158,7 +154,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
             enableSuggestions: false,
             decoration: const InputDecoration(
               alignLabelWithHint: true,
-              hintText: 'Pega aquí el contenido exportado que comienza con #EXTM3U',
+              hintText: 'Pega aquí el contenido de la lista que comienza con #EXTM3U',
             ),
           ),
         ),
@@ -205,13 +201,13 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
     final text = rawText.trim();
     if (text.isEmpty || !text.toUpperCase().startsWith('#EXTM3U')) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('El contenido no es una lista M3U. En OTTFOX usa Convertir o Exportar y elige M3U/M3U8.')),
+        const SnackBar(content: Text('El contenido no es una lista M3U válida. Debe comenzar con #EXTM3U.')),
       );
       return;
     }
     if (text.length > 3 * 1024 * 1024) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('La lista supera 3 MB. Reduce o divide la lista en OTTFOX antes de importarla.')),
+        const SnackBar(content: Text('La lista supera 3 MB. Divídela en varias listas antes de importarla.')),
       );
       return;
     }
@@ -220,13 +216,13 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
       final channels = await Isolate.run(
         () => AutomaticLiveService.parseM3u(
           text,
-          sourceUrl: 'OTTFOX · lista local',
+          sourceUrl: 'Lista importada · local',
         ),
       );
       if (!mounted) return;
       if (channels.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('La M3U no contiene enlaces directos compatibles. Convierte a M3U en OTTFOX y comprueba que los canales tengan URLs HLS (.m3u8), DASH (.mpd), TS o MP4 directas.')),
+          const SnackBar(content: Text('La M3U no contiene enlaces directos compatibles. Comprueba que tenga URLs HLS (.m3u8), DASH (.mpd), TS o MP4 directas.')),
         );
         return;
       }
@@ -249,7 +245,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'OTTFOX: ${channels.length} canales importados${addedEpg > 0 ? ' y $addedEpg guía(s) EPG añadida(s)' : ''}.',
+            'Lista importada: ${channels.length} canales${addedEpg > 0 ? ' y $addedEpg guía(s) EPG añadida(s)' : ''}.',
           ),
         ),
       );
@@ -338,7 +334,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                 if (ottfoxPage) {
                   setDialogState(() {
                     validationError =
-                        'Ese enlace abre la herramienta OTTFOX, no una lista M3U ni una guía EPG. Pulsa ABRIR OTTFOX, prepara tu lista y luego importa el contenido M3U copiado.';
+                        'Ese enlace abre una página web, no un archivo M3U ni una guía EPG. Añade la dirección directa de tu lista o guía.';
                   });
                   return;
                 }
@@ -644,8 +640,8 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
         onProgress: (phase, completed, total) {
           if (!mounted) return;
           setState(() {
-            _progressMessage = phase == 'OTTFOX'
-                ? 'Importando biblioteca OTTFOX: $completed de $total listas'
+            _progressMessage = phase == 'LOCAL'
+                ? 'Analizando listas guardadas: $completed de $total'
                 : phase == 'M3U'
                     ? 'Extrayendo listas M3U: $completed de $total'
                     : 'Procesando guías EPG: $completed de $total';
@@ -935,7 +931,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF020B19),
         title: const Text(
-          'GESTOR IPTV · LISTAS Y EPG',
+          'REPRODUCTOR IPTV · LISTAS Y CANALES',
           style: TextStyle(
             color: _iptvCyan,
             fontSize: 13,
@@ -989,7 +985,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       const Text(
-                        'OTTFOX · EXTRACTOR Y CONVERTIDOR',
+                        'IMPORTAR TUS LISTAS M3U',
                         style: TextStyle(
                           color: _iptvGreen,
                           fontWeight: FontWeight.w900,
@@ -999,7 +995,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                       ),
                       const SizedBox(height: 5),
                       const Text(
-                        'Abre OTTFOX aquí, carga una lista propia o autorizada y conviértela a M3U. Al copiar la salida, vuelve y pulsa «Importar lista copiada» para añadir sus canales al reproductor nativo.',
+                        'Las listas públicas se descargan automáticamente al abrir esta pantalla. También puedes añadir direcciones M3U/M3U8 propias o importar contenido copiado; los canales aparecerán en el catálogo nativo.',
                         style: TextStyle(color: _iptvMuted, fontSize: 11, height: 1.4),
                       ),
                       const SizedBox(height: 10),
@@ -1007,15 +1003,6 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                         spacing: 8,
                         runSpacing: 8,
                         children: <Widget>[
-                          OutlinedButton.icon(
-                            onPressed: _openOttfox,
-                            icon: const Icon(Icons.open_in_browser_rounded),
-                            label: const Text('VOLVER A OTTFOX'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: _iptvCyan,
-                              side: const BorderSide(color: _iptvCyan),
-                            ),
-                          ),
                           FilledButton.icon(
                             onPressed: _importClipboardPlaylist,
                             icon: const Icon(Icons.playlist_add_check_rounded),
@@ -1028,7 +1015,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                           OutlinedButton.icon(
                             onPressed: _pastePlaylistText,
                             icon: const Icon(Icons.content_paste_rounded),
-                            label: const Text('PEGAR TEXTO M3U'),
+                            label: const Text('PEGAR CONTENIDO M3U'),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: _iptvPink,
                               side: const BorderSide(color: _iptvPink),
@@ -1036,12 +1023,12 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                           ),
                         ],
                       ),
-                      if (_playlistText.isNotEmpty)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 8),
+                      if (_playlistTexts.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
                           child: Text(
-                            'Hay una lista M3U local importada y guardada en esta APK.',
-                            style: TextStyle(color: _iptvGreen, fontSize: 10),
+                            'Listas guardadas en este dispositivo: \${_playlistTexts.length}',
+                            style: const TextStyle(color: _iptvGreen, fontSize: 10),
                           ),
                         ),
                     ],
@@ -1229,6 +1216,20 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                       ),
                     ),
                   ),
+                if (_mergedChannels.isEmpty && !_refreshing && _error == null)
+                  Container(
+                    padding: const EdgeInsets.all(13),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: _iptvPanel,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _iptvLine),
+                    ),
+                    child: const Text(
+                      'No se encontraron canales en las fuentes actuales. Comprueba la conexión o agrega una URL M3U autorizada y vuelve a actualizar.',
+                      style: TextStyle(color: _iptvMuted, fontSize: 11, height: 1.4),
+                    ),
+                  ),
                 if (_mergedChannels.isNotEmpty) ...<Widget>[
                   TextField(
                     controller: _searchController,
@@ -1299,10 +1300,21 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                       margin: const EdgeInsets.only(bottom: 5),
                       child: ListTile(
                         dense: true,
-                        leading: const Icon(
-                          Icons.live_tv_rounded,
-                          color: _iptvCyan,
-                        ),
+                        leading: entry.primary.logo.isEmpty
+                            ? const Icon(Icons.live_tv_rounded, color: _iptvCyan)
+                            : ClipRRect(
+                                borderRadius: BorderRadius.circular(7),
+                                child: Image.network(
+                                  entry.primary.logo,
+                                  width: 38,
+                                  height: 38,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, __, ___) => const Icon(
+                                    Icons.live_tv_rounded,
+                                    color: _iptvCyan,
+                                  ),
+                                ),
+                              ),
                         title: Text(
                           entry.primary.name,
                           maxLines: 1,
