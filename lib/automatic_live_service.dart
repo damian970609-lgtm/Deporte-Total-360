@@ -1103,8 +1103,7 @@ class AutomaticLiveService {
     final sport = normalizeText(event.sport);
     final competition = normalizeText(event.competition);
 
-    // Los eventos UFC suelen anunciarse por el nombre del evento, no por los
-    // dos luchadores. La competición es una señal fiable para esa disciplina.
+    // UFC suele anunciar el evento y no necesariamente ambos luchadores.
     if (sport == 'mma' && competition.isNotEmpty &&
         programme.contains(competition)) {
       return true;
@@ -1115,20 +1114,26 @@ class AutomaticLiveService {
           _teamMatchesProgramme(away, programme);
     }
 
-    // En ciclismo y motor la API devuelve carreras, etapas y grandes premios,
-    // no dos equipos. Se cotejan tokens distintivos del evento y su serie.
+    // Ciclismo y motor se publican como carreras/etapas, no como partidos.
     const ignored = <String>{
       'contra', 'versus', 'partido', 'futbol', 'football', 'basket',
       'liga', 'copa', 'final', 'directo', 'vivo', 'match', 'evento',
-      'hoy', 'club', 'the', 'de', 'del', 'la', 'el', 'and', 'the',
+      'hoy', 'club', 'the', 'de', 'del', 'la', 'el', 'and',
       'cycling', 'motorsport', 'race', 'stage', 'etapa', 'grand',
       'prix', 'gp', 'formula', 'moto', 'tour', 'women', 'men',
       'championship', 'series',
     };
-    final tokens = normalizeText('${event.title} ${event.competition}')
+    final tokens = normalizeText(event.title + ' ' + event.competition)
         .split(' ')
-        .where((token) => token.length >= 4 && !ignored.contains(token) &&
-            !RegExp(r'^\\d+
+        .where((token) => token.length >= 4 &&
+            !ignored.contains(token) &&
+            int.tryParse(token) == null)
+        .toSet();
+    if (tokens.isEmpty) return false;
+    final matched = tokens.where((token) => programme.contains(token)).length;
+    final required = tokens.length == 1 ? 1 : (tokens.length * 0.5).ceil();
+    return matched >= required;
+  }
 
   Future<bool> _probeMediaBytes(Uri uri) async {
     try {
