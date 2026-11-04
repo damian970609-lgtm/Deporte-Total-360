@@ -248,7 +248,7 @@ void main() {
 
       expect(settings.playlistUrls, hasLength(14));
       expect(settings.playlistUrls.every(isSafeHttpUrl), isTrue);
-      expect(settings.epgUrls, hasLength(22));
+      expect(settings.epgUrls, hasLength(30));
       expect(settings.epgUrls.every(isSafeHttpUrl), isTrue);
       expect(settings.playlistUrls.first, contains('teleonline'));
       expect(settings.playlistUrls[1], contains('languages/spa.m3u'));
@@ -259,6 +259,14 @@ void main() {
       expect(settings.epgUrls[18], contains('teleonline/listas/main/epg.xml.gz'));
       expect(settings.epgUrls[20], contains('epg-do.xml'));
       expect(settings.epgUrls[21], contains('epg-sv.xml'));
+      expect(settings.epgUrls[22], contains('epgshare01.online/epg_ripper_ES1.xml.gz'));
+      expect(settings.epgUrls[23], contains('epgshare01.online/epg_ripper_AR1.xml.gz'));
+      expect(settings.epgUrls[24], contains('epgshare01.online/epg_ripper_MX1.xml.gz'));
+      expect(settings.epgUrls[25], contains('epgshare01.online/epg_ripper_CO1.xml.gz'));
+      expect(settings.epgUrls[26], contains('epgshare01.online/epg_ripper_CL1.xml.gz'));
+      expect(settings.epgUrls[27], contains('epgshare01.online/epg_ripper_PE1.xml.gz'));
+      expect(settings.epgUrls[28], contains('epgshare01.online/epg_ripper_DO1.xml.gz'));
+      expect(settings.epgUrls[29], contains('epgshare01.online/epg_ripper_BR1.xml.gz'));
       expect(settings.isConfigured, isTrue);
     });
 
@@ -272,7 +280,7 @@ void main() {
       final settings = await AutoLiveSettings.load();
 
       expect(settings.playlistUrls, hasLength(14));
-      expect(settings.epgUrls, hasLength(22));
+      expect(settings.epgUrls, hasLength(30));
       expect(settings.authorizationConfirmed, isTrue);
       expect(settings.isConfigured, isTrue);
     });
@@ -291,7 +299,7 @@ void main() {
       expect(settings.playlistUrls, hasLength(15));
       expect(settings.playlistUrls, contains('https://user.example/custom.m3u'));
       expect(settings.playlistUrls, contains('https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8'));
-      expect(settings.epgUrls, hasLength(23));
+      expect(settings.epgUrls, hasLength(31));
       expect(settings.epgUrls, contains('https://user.example/custom.xml'));
       expect(settings.epgUrls, contains('https://iptv-epg.org/files/epg-do.xml'));
     });
@@ -307,7 +315,7 @@ void main() {
 
       expect(settings.isConfigured, isTrue);
       expect(settings.playlistUrls, hasLength(14));
-      expect(settings.epgUrls, hasLength(22));
+      expect(settings.epgUrls, hasLength(30));
     });
 
     test('guarda varias listas de OTTFOX y las analiza incrementalmente fuera de la interfaz', () async {
