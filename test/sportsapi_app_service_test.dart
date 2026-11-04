@@ -59,7 +59,24 @@ void main() {
               'season': {'id': 20, 'name': '2030'}
             }
           ],
-          'meta': {'count': 2}
+          'meta': {'count': 2, 'hasNextPage': request.url.queryParameters['page'] == '0'}
+        }), 200);
+      }
+      if (request.url.path.endsWith('/fixtures') &&
+          request.url.queryParameters['sport'] == 'football' &&
+          request.url.queryParameters['page'] == '1') {
+        return http.Response(jsonEncode({
+          'data': [{
+            'id': 103,
+            'sport': 'football',
+            'startTime': '2030-01-01T14:00:00Z',
+            'status': {'type': 'scheduled', 'description': 'Not started'},
+            'home': {'id': 5, 'name': 'Team Five'},
+            'away': {'id': 6, 'name': 'Team Six'},
+            'league': {'id': 12, 'name': 'NWSL'},
+            'season': {'id': 20, 'name': '2030'}
+          }],
+          'meta': {'count': 1, 'hasNextPage': false}
         }), 200);
       }
       if (request.url.path.endsWith('/races')) {
@@ -109,7 +126,15 @@ void main() {
       expect(events.map((event) => event.id), isNot(contains('sportsapi-race-203-304')));
       expect(events.firstWhere((event) => event.id == 'sportsapi-race-202-303').competition, 'Tour de France');
       expect(events.firstWhere((event) => event.id == 'sportsapi-fixture-101').homeTeam, 'Team One');
-      expect(requested.where((uri) => uri.path.endsWith('/fixtures')), hasLength(8));
+      expect(requested.where((uri) => uri.path.endsWith('/fixtures')), hasLength(9));
+      expect(
+        requested.where((uri) =>
+            uri.path.endsWith('/fixtures') &&
+            uri.queryParameters['sport'] == 'football' &&
+            uri.queryParameters['page'] == '1'),
+        hasLength(1),
+      );
+      expect(events.map((event) => event.id), contains('sportsapi-fixture-103'));
       expect(requested.where((uri) => uri.path.endsWith('/races')), hasLength(2));
       expect(requested.where((uri) => uri.path.endsWith('/favorites')), hasLength(2));
     } finally {
