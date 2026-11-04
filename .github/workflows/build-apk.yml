@@ -256,6 +256,34 @@ jobs:
           echo "ERROR: No se pudo instalar el NDK después de 3 intentos."
           exit 1
 
+      - name: Comprobar conexión real con SportsAPI (diagnóstico)
+        continue-on-error: true
+        run: |
+          set -Eeuo pipefail
+          BASE="https://deporte-total-360-api.damian970609.workers.dev"
+          DAY="$(date -u +'%F')"
+          HTTP_CODE="$(curl --silent --show-error --output /tmp/sportsapi-smoke.json --write-out '%{http_code}' --retry 1 --retry-delay 2 "$BASE/api/sportsapi/fixtures?date=$DAY&sport=football&page=0")"
+          echo "SportsAPI Worker respondió HTTP $HTTP_CODE"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path('/tmp/sportsapi-smoke.json').read_text())
+          if isinstance(payload, dict) and 'error' in payload:
+              error = payload['error']
+              if isinstance(error, dict):
+                  print('SportsAPI error code:', error.get('code', 'desconocido'))
+                  print('SportsAPI error message:', error.get('message', 'sin detalle'))
+              else:
+                  print('SportsAPI error:', error)
+              raise SystemExit('La consulta real de SportsAPI no se completó.')
+          if not isinstance(payload, dict) or not isinstance(payload.get('data'), list):
+              raise SystemExit('SportsAPI no devolvió data[] en el formato esperado.')
+          meta = payload.get('meta') or {}
+          print('SportsAPI respondió correctamente. Eventos:', len(payload['data']))
+          print('Cobertura de ligas completa:', meta.get('complete', meta.get('hasNextPage', 'no indicado')))
+          PY
+
       - name: Descargar dependencias
         run: flutter pub get
 
