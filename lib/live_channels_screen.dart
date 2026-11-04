@@ -1386,18 +1386,18 @@ class LivePlayerBoard extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth > constraints.maxHeight ? 4 : 2;
-        final activeSources = sources.take(4).toList(growable: false);
+        final activeSources = sources.take(8).toList(growable: false);
         final waiting = waitingEvents
-            .take(4 - activeSources.length)
+            .take(8 - activeSources.length)
             .toList(growable: false);
         return Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 960),
             child: GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
+              shrinkWrap: false,
+              physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.all(8),
-              itemCount: 4,
+              itemCount: 8,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
                 crossAxisSpacing: 8,
