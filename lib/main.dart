@@ -1766,6 +1766,53 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
               decoration: BoxDecoration(
                 color: appPanel,
                 borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: appPink.withAlpha(180)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(children: <Widget>[
+                    const Icon(Icons.auto_awesome_rounded, color: appPink),
+                    SizedBox(width: 9),
+                    Expanded(child: Text(
+                      'CENTRO DE LISTAS Y CANALES IPTV',
+                      style: TextStyle(color: appPink, fontWeight: FontWeight.w900, fontSize: 12),
+                    )),
+                  ]),
+                  SizedBox(height: 9),
+                  Text(
+                    'Administra tus propias listas M3U/M3U8 y guías EPG/XMLTV. Combina varias fuentes, consulta el catálogo unificado, busca canales, revisa sus alternativas y conserva los ocho reproductores de Deporte Total 360°. Pega varias direcciones de una vez, una por línea.',
+                    style: TextStyle(color: appMuted, fontSize: 11, height: 1.45),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).push<void>(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const IptvSourcesScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.playlist_add_check_rounded),
+                      label: const Text('GESTIONAR LISTAS IPTV Y EPG'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: appCyan,
+                        side: const BorderSide(color: appCyan),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: appPanel,
+                borderRadius: BorderRadius.circular(15),
                 border: Border.all(color: appCyan.withAlpha(180)),
               ),
               child: Column(
@@ -1851,52 +1898,6 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: appPanel,
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: appPink.withAlpha(180)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Row(children: <Widget>[
-                    const Icon(Icons.auto_awesome_rounded, color: appPink),
-                    SizedBox(width: 9),
-                    Expanded(child: Text(
-                      'CENTRO DE LISTAS Y CANALES IPTV',
-                      style: TextStyle(color: appPink, fontWeight: FontWeight.w900, fontSize: 12),
-                    )),
-                  ]),
-                  SizedBox(height: 9),
-                  Text(
-                    'Administra tus propias listas M3U/M3U8 y guías EPG/XMLTV. Combina varias fuentes, consulta el catálogo unificado, busca canales, revisa sus alternativas y conserva los ocho reproductores de Deporte Total 360°. Pega varias direcciones de una vez, una por línea.',
-                    style: TextStyle(color: appMuted, fontSize: 11, height: 1.45),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).push<void>(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const IptvSourcesScreen(),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.playlist_add_check_rounded),
-                      label: const Text('GESTIONAR LISTAS IPTV Y EPG'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: appCyan,
-                        side: const BorderSide(color: appCyan),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
             const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.all(14),
