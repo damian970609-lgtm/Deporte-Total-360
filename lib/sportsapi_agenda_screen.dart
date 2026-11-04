@@ -432,6 +432,25 @@ class _SportsApiAgendaScreenState extends State<SportsApiAgendaScreen>
               ],
             ),
           ),
+          if (_error != null && events.isNotEmpty)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                color: _agendaPanel,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: _agendaYellow.withAlpha(150)),
+              ),
+              child: Text(
+                'Mostrando la última agenda guardada. SportsAPI: $_error',
+                style: const TextStyle(
+                  color: _agendaMuted,
+                  fontSize: 9,
+                  height: 1.4,
+                ),
+              ),
+            ),
           Expanded(
             child: _loading && !_hasLoaded
                 ? const Center(
