@@ -120,7 +120,7 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
         await prefs.setStringList(_manualPlaylistTextsKey, _playlistTexts);
       } else {
         await AutoLiveSettings.save(
-          playlistUrl: _playlistUrls.join('\\n'),
+          playlistUrl: _playlistUrls.join('\n'),
           epgUrl: _epgUrls.join('\\n'),
           authorizationConfirmed: true,
           playlistText: _playlistText,
