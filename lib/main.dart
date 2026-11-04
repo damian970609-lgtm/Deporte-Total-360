@@ -2274,13 +2274,13 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
               'button,input[type="button"],input[type="submit"]'
             ));
             let loadButton = buttons.find((button) =>
-              /^(cargar|importar|load)$/i.test(
+              /^(cargar|importar|load)\$/i.test(
                 (button.innerText || button.value || button.textContent || '').trim()
               )
             );
             if (!loadButton) {
               loadButton = Array.from(document.querySelectorAll('button'))
-                .find((button) => /^(cargar|importar|load)$/i.test(
+                .find((button) => /^(cargar|importar|load)\$/i.test(
                   (button.innerText || button.textContent || '').trim()
                 ));
             }
