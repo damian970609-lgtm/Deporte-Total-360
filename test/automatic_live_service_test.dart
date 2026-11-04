@@ -825,12 +825,6 @@ https://media.example/offline.m3u8
         isFalse,
       );
     });
-  });
-}
-
-
-void main() {
-  group('SportsAPI multi-sport EPG matching', () {
     test('matches a motorsport race using its race name and series', () {
       final event = SportsAgendaEvent(
         id: 'sportsapi-race-10-20',
@@ -849,7 +843,7 @@ void main() {
       );
     });
 
-    test('matches UFC broadcasts by the competition when fighter names are absent', () {
+    test('matches UFC broadcasts by competition when fighter names are absent', () {
       final event = SportsAgendaEvent(
         id: 'sportsapi-fixture-20',
         title: 'Fighter One vs Fighter Two',
@@ -865,5 +859,6 @@ void main() {
         isTrue,
       );
     });
+
   });
 }
