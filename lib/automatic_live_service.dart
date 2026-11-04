@@ -7,19 +7,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xml/xml.dart';
 
 import 'live_media_format.dart';
-import 'sports_api_service.dart';
 
 const String _playlistUrlKey = 'dt360_auto_live_playlist_url_v1';
 const String _epgUrlKey = 'dt360_auto_live_epg_url_v1';
 const String _authorizedKey = 'dt360_auto_live_authorized_v1';
 
-/// Normaliza imágenes de MARCA: admite URL HTTPS absolutas, protocol-relative
-/// y rutas relativas del mismo sitio. Nunca permite esquemas no HTTPS ni
-/// URLs con credenciales.
-String _marcaImageUrl(dynamic value) {
+/// Normaliza imágenes absolutas seguras de SportsAPI y de los equipos.
+/// Las rutas relativas se descartan: nunca se resuelven contra un sitio externo.
+String _sportsImageUrl(dynamic value) {
   if (value is List) {
     for (final item in value) {
-      final candidate = _marcaImageUrl(item);
+      final candidate = _sportsImageUrl(item);
       if (candidate.isNotEmpty) return candidate;
     }
     return '';
@@ -29,7 +27,7 @@ String _marcaImageUrl(dynamic value) {
       'url', 'contentUrl', 'thumbnailUrl', 'src', 'image',
       'logo', 'crest', 'badge', 'photo', 'picture', 'avatar', 'href',
     ]) {
-      final candidate = _marcaImageUrl(value[key]);
+      final candidate = _sportsImageUrl(value[key]);
       if (candidate.isNotEmpty) return candidate;
     }
     return '';
@@ -38,14 +36,11 @@ String _marcaImageUrl(dynamic value) {
   final raw = value.trim();
   if (raw.isEmpty || raw.toLowerCase().startsWith('data:')) return '';
   try {
+    if (raw.startsWith('/') && !raw.startsWith('//')) return '';
     var uri = Uri.parse(raw.startsWith('//') ? 'https:$raw' : raw);
-    if (!uri.hasScheme) {
-      uri = Uri.parse('https://www.marca.com/').resolveUri(uri);
-    } else if (uri.scheme == 'http') {
-      uri = uri.replace(scheme: 'https');
-    }
-    if (uri.scheme != 'https' || !uri.hasAuthority ||
-        uri.userInfo.isNotEmpty) return '';
+    if (!uri.hasScheme || !uri.hasAuthority) return '';
+    if (uri.scheme == 'http') uri = uri.replace(scheme: 'https');
+    if (uri.scheme != 'https' || uri.userInfo.isNotEmpty) return '';
     return uri.toString();
   } catch (_) {
     return '';
@@ -233,7 +228,7 @@ class SportsAgendaParticipant {
     final row = Map<String, dynamic>.from(value);
     final name = (row['name'] ?? row['title'] ?? '').toString().trim();
     if (name.isEmpty) return null;
-    final imageUrl = _marcaImageUrl(
+    final imageUrl = _sportsImageUrl(
       row['imageUrl'] ?? row['logo'] ?? row['image'] ??
       row['thumbnailUrl'] ?? row['photo'] ?? row['picture'] ?? row['avatar'],
     );
@@ -335,13 +330,13 @@ class SportsAgendaEvent {
         : <SportsAgendaParticipant>[];
     final homeTeam = (row['homeTeam'] ?? '').toString();
     final awayTeam = (row['awayTeam'] ?? '').toString();
-    final homeLogo = _marcaImageUrl(
+    final homeLogo = _sportsImageUrl(
       row['homeTeamLogo'] ?? row['homeTeamLogoUrl'] ?? row['homeLogo'],
     );
-    final awayLogo = _marcaImageUrl(
+    final awayLogo = _sportsImageUrl(
       row['awayTeamLogo'] ?? row['awayTeamLogoUrl'] ?? row['awayLogo'],
     );
-    final eventImage = _marcaImageUrl(
+    final eventImage = _sportsImageUrl(
       row['imageUrl'] ?? row['image'] ?? row['thumbnailUrl'] ?? row['photo'],
     );
     String participantImage(String name) => participants
@@ -504,162 +499,6 @@ class AutomaticLiveService {
   String? _cachedEpg;
   final Map<String, ({bool available, int quality, DateTime checkedAt})> _probeCache =
       <String, ({bool available, int quality, DateTime checkedAt})>{};
-
-  /// Lee las asignaciones compartidas por el planificador Cloudflare.
-  /// Devuelve null solo cuando el endpoint todavía no está disponible; una
-  /// respuesta válida sin eventos devuelve una lista vacía y evita reutilizar
-  /// partidos antiguos del almacenamiento local.
-  Future<List<ScheduledLiveEvent>?> fetchPublishedSchedule() async {
-    final base = SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value);
-    if (base == null) return null;
-    final uri = Uri.parse('$base/api/live/auto/schedule');
-    try {
-      final response = await _client.get(
-        uri,
-        headers: const <String, String>{'Accept': 'application/json'},
-      ).timeout(const Duration(seconds: 12));
-      if (response.statusCode == 404 || response.statusCode == 503) {
-        return null;
-      }
-      if (response.statusCode != 200) return null;
-
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map) return null;
-      final status = (decoded['status'] ?? '').toString();
-      if (status != 'ok' && status != 'stale') return null;
-      final rows = decoded['events'];
-      if (rows is! List) return null;
-
-      final now = DateTime.now();
-      final result = <ScheduledLiveEvent>[];
-      for (final raw in rows) {
-        if (raw is! Map) continue;
-        final row = Map<String, dynamic>.from(raw);
-        final eventRaw = row['event'];
-        if (eventRaw is! Map) continue;
-        final eventData = Map<String, dynamic>.from(eventRaw);
-        final startsAt = DateTime.tryParse(
-          (eventData['startsAt'] ?? '').toString(),
-        );
-        final endsAt = DateTime.tryParse(
-          (eventData['endsAt'] ?? '').toString(),
-        );
-        final id = (eventData['id'] ?? '').toString().trim();
-        final title = (eventData['title'] ?? '').toString().trim();
-        if (id.isEmpty || title.isEmpty || startsAt == null) continue;
-        final detailUrl = (eventData['detailUrl'] ?? '').toString().trim();
-        final rawParticipants = eventData['participants'];
-        final participants = rawParticipants is List
-            ? rawParticipants
-                .map(SportsAgendaParticipant.fromJson)
-                .whereType<SportsAgendaParticipant>()
-                .toList(growable: false)
-            : <SportsAgendaParticipant>[];
-        String safeLogo(dynamic value) => _marcaImageUrl(value);
-        final homeTeam = (eventData['homeTeam'] ?? '').toString();
-        final awayTeam = (eventData['awayTeam'] ?? '').toString();
-        String participantLogo(String name) => participants
-            .where((item) => item.name.toLowerCase() == name.toLowerCase())
-            .map((item) => item.imageUrl)
-            .firstWhere((url) => url.isNotEmpty, orElse: () => '');
-        final event = SportsAgendaEvent(
-          id: id,
-          title: title,
-          sport: (eventData['sport'] ?? 'Deporte').toString(),
-          competition: (eventData['competition'] ?? '').toString(),
-          homeTeam: homeTeam,
-          awayTeam: awayTeam,
-          homeTeamLogo: safeLogo(
-            eventData['homeTeamLogo'] ??
-            eventData['homeTeamLogoUrl'] ??
-            eventData['homeLogo'],
-          ).isNotEmpty
-              ? safeLogo(
-                  eventData['homeTeamLogo'] ??
-                  eventData['homeTeamLogoUrl'] ??
-                  eventData['homeLogo'],
-                )
-              : participantLogo(homeTeam),
-          awayTeamLogo: safeLogo(
-            eventData['awayTeamLogo'] ??
-            eventData['awayTeamLogoUrl'] ??
-            eventData['awayLogo'],
-          ).isNotEmpty
-              ? safeLogo(
-                  eventData['awayTeamLogo'] ??
-                  eventData['awayTeamLogoUrl'] ??
-                  eventData['awayLogo'],
-                )
-              : participantLogo(awayTeam),
-          participants: participants,
-          imageUrl: safeLogo(
-            eventData['imageUrl'] ??
-            eventData['image'] ??
-            eventData['thumbnailUrl'] ??
-            eventData['photo'],
-          ),
-          venue: (eventData['venue'] ?? '').toString(),
-          status: (eventData['status'] ?? 'scheduled').toString(),
-          statusLabel: (eventData['statusLabel'] ?? '').toString(),
-          homeScore: (eventData['homeScore'] ?? '').toString(),
-          awayScore: (eventData['awayScore'] ?? '').toString(),
-          providerLeagueId: int.tryParse((eventData['providerLeagueId'] ?? '').toString()),
-          providerSeasonId: int.tryParse((eventData['providerSeasonId'] ?? '').toString()),
-          providerSeriesId: int.tryParse((eventData['providerSeriesId'] ?? '').toString()),
-          startsAt: startsAt.toLocal(),
-          endsAt: endsAt?.toLocal(),
-          detailUrl: isSafeHttpUrl(detailUrl)
-              ? detailUrl
-              : 'https://sportsapi.app',
-        );
-
-        final removeAt = DateTime.tryParse(
-          (row['removeAt'] ?? '').toString(),
-        ) ?? endsAt ?? startsAt.add(const Duration(hours: 3));
-        if (!removeAt.isAfter(now)) continue;
-
-        final sourcesRaw = row['sources'];
-        final sources = <ScheduledLiveSource>[];
-        if (sourcesRaw is List) {
-          for (final sourceValue in sourcesRaw) {
-            if (sourceValue is! Map) continue;
-            final source = Map<String, dynamic>.from(sourceValue);
-            final url = (source['url'] ?? '').toString().trim();
-            final programmeEnd = DateTime.tryParse(
-              (source['programmeEndsAt'] ?? '').toString(),
-            ) ?? removeAt;
-            if (source['available'] != true || !isDirectPlayableStream(url)) {
-              continue;
-            }
-            sources.add(ScheduledLiveSource(
-              channelName: (source['channelName'] ?? '').toString(),
-              url: url,
-              programmeTitle: (source['programmeTitle'] ?? '').toString(),
-              programmeEndsAt: programmeEnd.toLocal(),
-              qualityScore: int.tryParse(
-                (source['qualityScore'] ?? 0).toString(),
-              ) ?? 0,
-              languagePriority: int.tryParse(
-                (source['languagePriority'] ?? 0).toString(),
-              ) ?? 0,
-              available: true,
-            ));
-          }
-        }
-        result.add(ScheduledLiveEvent(
-          event: event,
-          sources: sources,
-          removeAt: removeAt.toLocal(),
-        ));
-      }
-      result.sort((a, b) => a.event.startsAt.compareTo(b.event.startsAt));
-      return result;
-    } catch (_) {
-      // El cliente puede seguir usando la búsqueda local si el Worker está
-      // temporalmente inaccesible o todavía no tiene instalado el cron nuevo.
-      return null;
-    }
-  }
 
   Future<AutoLiveCatalog> loadCatalog({
     required String playlistUrl, required String epgUrl,
