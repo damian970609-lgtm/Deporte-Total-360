@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main
+      - integration/zona-live-catalog-20261103
     paths:
       - 'lib/**'
       - 'test/**'
