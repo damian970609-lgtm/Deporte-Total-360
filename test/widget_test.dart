@@ -57,7 +57,7 @@ void main() {
     expect(find.text('CENTRO DE LISTAS, GUÍAS Y CANALES'), findsOneWidget);
     expect(find.textContaining('ADMINISTRAR FUENTES'), findsOneWidget);
     expect(find.textContaining('EXPLORAR Y PROBAR CANALES'), findsOneWidget);
-    expect(find.textContaining('SINCRONIZAR CON OTTFOX'), findsOneWidget);
+    expect(find.textContaining('EDITAR / PREPARAR EN OTTFOX'), findsOneWidget);
     expect(find.text('CONEXIÓN DEL SERVIDOR DEPORTIVO'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
