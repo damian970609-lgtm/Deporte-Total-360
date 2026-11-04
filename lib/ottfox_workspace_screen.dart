@@ -19,6 +19,7 @@ const String _ottfoxLibraryExportScript = r'''
   const found = [];
   const seenM3u = new Set();
   const epgUrls = new Set();
+  const playlistUrls = new Set();
   const visited = new WeakSet();
   let totalChars = 0;
 
@@ -42,6 +43,12 @@ const String _ottfoxLibraryExportScript = r'''
     const values = Array.isArray(value) ? value : [value];
     for (const item of values) {
       if (isHttp(item)) epgUrls.add(item.trim());
+    }
+  };
+
+  const addPlaylistUrl = value => {
+    if (isHttp(value) && playlistUrls.size < 60) {
+      playlistUrls.add(value.trim());
     }
   };
 
@@ -100,6 +107,9 @@ const String _ottfoxLibraryExportScript = r'''
     if (!value || typeof value !== 'object' || visited.has(value)) return;
     visited.add(value);
 
+    const explicitPlaylistUrl = field(value, ['playlisturl', 'm3uurl', 'playlisturi', 'm3uuri']);
+    if (explicitPlaylistUrl) addPlaylistUrl(explicitPlaylistUrl);
+
     if (Array.isArray(value)) {
       rowsToM3u(value, path);
       for (let index = 0; index < value.length; index++) walk(value[index], path + '[' + index + ']', depth + 1);
@@ -108,6 +118,7 @@ const String _ottfoxLibraryExportScript = r'''
 
     for (const [key, item] of Object.entries(value)) {
       addEpg(key, item);
+      if (/(playlist|m3u)(url|uri|source)?/i.test(key)) addPlaylistUrl(item);
       walk(item, path + '/' + key, depth + 1);
     }
   };
@@ -150,7 +161,11 @@ const String _ottfoxLibraryExportScript = r'''
     }
   } catch (_) {}
 
-  return JSON.stringify({playlists: found, epgUrls: Array.from(epgUrls).slice(0, 40)});
+  return JSON.stringify({
+    playlists: found,
+    playlistUrls: Array.from(playlistUrls).slice(0, 60),
+    epgUrls: Array.from(epgUrls).slice(0, 40)
+  });
 })()
 ''';
 
@@ -226,9 +241,16 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
       }
 
       final records = decoded['playlists'];
+      final urlRecords = decoded['playlistUrls'];
       final epgRecords = decoded['epgUrls'];
       final candidates = records is List ? records : const <dynamic>[];
+      final discoveredPlaylistUrls = <String>{};
       final discoveredEpg = <String>{};
+      if (urlRecords is List) {
+        for (final value in urlRecords) {
+          if (value is String && isSafeHttpUrl(value)) discoveredPlaylistUrls.add(value);
+        }
+      }
       if (epgRecords is List) {
         for (final value in epgRecords) {
           if (value is String && isSafeHttpUrl(value)) discoveredEpg.add(value);
@@ -238,12 +260,14 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
       final settings = await AutoLiveSettings.load();
       final savedPlaylists = <String>[...settings.localPlaylistTexts];
       final known = savedPlaylists.toSet();
+      final playlistUrls = <String>{...settings.playlistUrls, ...discoveredPlaylistUrls};
       final epgUrls = <String>{...settings.epgUrls, ...discoveredEpg};
 
       if (candidates.isEmpty) {
-        if (epgUrls.join('\n') != settings.epgUrls.join('\n')) {
+        if (playlistUrls.join('\n') != settings.playlistUrls.join('\n') ||
+            epgUrls.join('\n') != settings.epgUrls.join('\n')) {
           await AutoLiveSettings.save(
-            playlistUrl: settings.playlistUrl,
+            playlistUrl: playlistUrls.join('\n'),
             epgUrl: epgUrls.join('\n'),
             authorizationConfirmed: true,
             playlistText: '',
@@ -251,11 +275,13 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
           );
         }
         _setSyncStatus(
-          'No se encontraron listas M3U guardadas en este OTTFOX. ' +
+          (discoveredPlaylistUrls.isNotEmpty
+              ? 'Se añadieron ' + discoveredPlaylistUrls.length.toString() + ' fuente(s) M3U por URL. '
+              : 'No se encontraron listas M3U locales en OTTFOX. ') +
           (epgUrls.length > settings.epgUrls.length
               ? 'Se añadieron guías EPG detectadas. '
               : '') +
-          'Si guardaste listas en Chrome, impórtalas primero desde el OTTFOX integrado en esta APK.',
+          'Las fuentes se cargarán gradualmente en el catálogo nativo.',
         );
         if (manual && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -310,7 +336,7 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
         // Guarda una lista cada vez. Si una lista posterior falla, las
         // anteriores ya quedan disponibles en la búsqueda automática.
         await AutoLiveSettings.save(
-          playlistUrl: settings.playlistUrl,
+          playlistUrl: playlistUrls.join('\n'),
           epgUrl: epgUrls.join('\n'),
           authorizationConfirmed: true,
           playlistText: '',
@@ -325,11 +351,12 @@ class _OttfoxWorkspaceScreenState extends State<OttfoxWorkspaceScreen> {
         await Future<void>.delayed(const Duration(milliseconds: 120));
       }
 
-      if (epgUrls.join('\n') != settings.epgUrls.join('\n')) {
+      if (playlistUrls.join('\n') != settings.playlistUrls.join('\n') ||
+          epgUrls.join('\n') != settings.epgUrls.join('\n')) {
         // Guarda también las guías detectadas cuando todas las listas ya
         // estaban importadas y no hubo ninguna M3U nueva que persistir.
         await AutoLiveSettings.save(
-          playlistUrl: settings.playlistUrl,
+          playlistUrl: playlistUrls.join('\n'),
           epgUrl: epgUrls.join('\n'),
           authorizationConfirmed: true,
           playlistText: '',
