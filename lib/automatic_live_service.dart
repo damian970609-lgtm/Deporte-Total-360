@@ -610,7 +610,7 @@ class AutomaticLiveService {
           endsAt: endsAt?.toLocal(),
           detailUrl: isSafeHttpUrl(detailUrl)
               ? detailUrl
-              : 'https://www.marca.com/programacion-tv.html',
+              : 'https://sportsapi.app',
         );
 
         final removeAt = DateTime.tryParse(
