@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'automatic_live_service.dart';
+import 'sportsapi_app_service.dart';
 import 'live_channels_screen.dart';
 
 const Color _autoBg = Color(0xFF030814);
@@ -76,13 +77,25 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
       final published = await _service.fetchPublishedSchedule();
       final settings = await AutoLiveSettings.load();
       final localEvents = await SportsAgendaStore.load();
-      final events = published != null
+      var events = published != null
           ? published.map((item) => item.event).toList(growable: false)
           : localEvents;
+
+      // El tablero Live también obtiene la agenda SportsAPI por sí solo:
+      // no depende de que el usuario abra primero la pestaña Agenda.
+      if (published == null) {
+        try {
+          events = await SportsApiAppService().fetchFavoriteAgendaEvents();
+          await SportsAgendaStore.save(events);
+        } catch (_) {
+          // Conserva el calendario local si SportsAPI falla temporalmente.
+        }
+      }
+
       final latest = published ??
-          (settings.isConfigured && localEvents.isNotEmpty
+          (settings.isConfigured && events.isNotEmpty
               ? await _service.schedule(
-                  events: localEvents,
+                  events: events,
                   now: DateTime.now(),
                   settings: settings,
                   forceRefresh: force,
