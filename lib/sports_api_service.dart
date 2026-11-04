@@ -733,9 +733,17 @@ class _CachedRows {
 }
 
 class SportsApiException implements Exception {
-  const SportsApiException(this.message);
+  const SportsApiException(
+    this.message, {
+    this.statusCode,
+    this.code,
+    this.retryAfterSeconds,
+  });
 
   final String message;
+  final int? statusCode;
+  final String? code;
+  final int? retryAfterSeconds;
 
   @override
   String toString() => message;

@@ -20,6 +20,11 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: deporte-total-360-apk-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+
 defaults:
   run:
     shell: bash
@@ -255,6 +260,49 @@ jobs:
 
           echo "ERROR: No se pudo instalar el NDK después de 3 intentos."
           exit 1
+
+      - name: Comprobar conexión real con SportsAPI (diagnóstico)
+        run: |
+          set -uo pipefail
+          BASE="https://deporte-total-360-api.damian970609.workers.dev"
+          DAY="$(date -u +'%F')"
+          HTTP_CODE="$(curl --silent --show-error --max-time 25 --output /tmp/sportsapi-smoke.json --write-out '%{http_code}' "$BASE/api/sportsapi/fixtures?date=$DAY&sport=football&page=0")"
+          CURL_STATUS=$?
+          echo "SPORTSAPI_SMOKE_HTTP=$HTTP_CODE"
+          echo "SPORTSAPI_SMOKE_CURL_EXIT=$CURL_STATUS"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          try:
+              payload = json.loads(Path('/tmp/sportsapi-smoke.json').read_text())
+          except Exception as error:
+              print('SPORTSAPI_SMOKE_RESULT=CONNECTION_OR_INVALID_JSON')
+              print('SPORTSAPI_SMOKE_DETAIL=' + str(error))
+              raise SystemExit(0)
+
+          if isinstance(payload, dict) and 'error' in payload:
+              error = payload['error']
+              if isinstance(error, dict):
+                  print('SPORTSAPI_SMOKE_RESULT=PROVIDER_ERROR')
+                  print('SPORTSAPI_SMOKE_CODE=' + str(error.get('code', 'unknown')))
+                  print('SPORTSAPI_SMOKE_DETAIL=' + str(error.get('message', 'no message')))
+              else:
+                  print('SPORTSAPI_SMOKE_RESULT=PROVIDER_ERROR')
+                  print('SPORTSAPI_SMOKE_DETAIL=' + str(error))
+              raise SystemExit(0)
+
+          if not isinstance(payload, dict) or not isinstance(payload.get('data'), list):
+              print('SPORTSAPI_SMOKE_RESULT=INVALID_RESPONSE_SHAPE')
+              print('SPORTSAPI_SMOKE_DETAIL=Expected JSON data[]')
+              raise SystemExit(0)
+
+          meta = payload.get('meta') or {}
+          print('SPORTSAPI_SMOKE_RESULT=OK')
+          print('SPORTSAPI_SMOKE_EVENTS=' + str(len(payload['data'])))
+          print('SPORTSAPI_SMOKE_COMPLETE=' + str(meta.get('complete', 'not reported')))
+          print('SPORTSAPI_SMOKE_HAS_NEXT_PAGE=' + str(meta.get('hasNextPage', 'not reported')))
+          PY
 
       - name: Descargar dependencias
         run: flutter pub get

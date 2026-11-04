@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io' show gzip;
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -7,19 +8,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xml/xml.dart';
 
 import 'live_media_format.dart';
-import 'sports_api_service.dart';
 
 const String _playlistUrlKey = 'dt360_auto_live_playlist_url_v1';
 const String _epgUrlKey = 'dt360_auto_live_epg_url_v1';
 const String _authorizedKey = 'dt360_auto_live_authorized_v1';
+const String _additionalPlaylistUrlsKey =
+    'dt360_auto_live_additional_playlist_urls_v1';
+const String _additionalEpgUrlsKey =
+    'dt360_auto_live_additional_epg_urls_v1';
 
-/// Normaliza imágenes de MARCA: admite URL HTTPS absolutas, protocol-relative
-/// y rutas relativas del mismo sitio. Nunca permite esquemas no HTTPS ni
-/// URLs con credenciales.
-String _marcaImageUrl(dynamic value) {
+/// Normaliza imágenes absolutas seguras de SportsAPI y de los equipos.
+/// Las rutas relativas se descartan: nunca se resuelven contra un sitio externo.
+String _sportsImageUrl(dynamic value) {
   if (value is List) {
     for (final item in value) {
-      final candidate = _marcaImageUrl(item);
+      final candidate = _sportsImageUrl(item);
       if (candidate.isNotEmpty) return candidate;
     }
     return '';
@@ -29,7 +32,7 @@ String _marcaImageUrl(dynamic value) {
       'url', 'contentUrl', 'thumbnailUrl', 'src', 'image',
       'logo', 'crest', 'badge', 'photo', 'picture', 'avatar', 'href',
     ]) {
-      final candidate = _marcaImageUrl(value[key]);
+      final candidate = _sportsImageUrl(value[key]);
       if (candidate.isNotEmpty) return candidate;
     }
     return '';
@@ -38,14 +41,11 @@ String _marcaImageUrl(dynamic value) {
   final raw = value.trim();
   if (raw.isEmpty || raw.toLowerCase().startsWith('data:')) return '';
   try {
+    if (raw.startsWith('/') && !raw.startsWith('//')) return '';
     var uri = Uri.parse(raw.startsWith('//') ? 'https:$raw' : raw);
-    if (!uri.hasScheme) {
-      uri = Uri.parse('https://www.marca.com/').resolveUri(uri);
-    } else if (uri.scheme == 'http') {
-      uri = uri.replace(scheme: 'https');
-    }
-    if (uri.scheme != 'https' || !uri.hasAuthority ||
-        uri.userInfo.isNotEmpty) return '';
+    if (!uri.hasScheme || !uri.hasAuthority) return '';
+    if (uri.scheme == 'http') uri = uri.replace(scheme: 'https');
+    if (uri.scheme != 'https' || uri.userInfo.isNotEmpty) return '';
     return uri.toString();
   } catch (_) {
     return '';
@@ -117,6 +117,16 @@ bool isSafeHttpUrl(String value) {
 bool isDirectPlayableStream(String value) =>
     liveMediaFormatForUrl(value) != null;
 
+class AutoLiveAdditionalSources {
+  const AutoLiveAdditionalSources({
+    this.playlistUrls = const <String>[],
+    this.epgUrls = const <String>[],
+  });
+
+  final List<String> playlistUrls;
+  final List<String> epgUrls;
+}
+
 class AutoLiveSettings {
   const AutoLiveSettings({
     required this.playlistUrl,
@@ -166,11 +176,104 @@ class AutoLiveSettings {
       await prefs.setString(_epgUrlKey, epg);
     }
 
+    // Las fuentes añadidas desde el menú secreto se fusionan con las originales.
+    final additional = await loadAdditionalSources();
+    playlist = <String>{..._splitPlaylistUrls(playlist), ...additional.playlistUrls}.join('\n');
+    epg = <String>{..._splitPlaylistUrls(epg), ...additional.epgUrls}.join('\n');
+
     return AutoLiveSettings(
       playlistUrl: playlist,
       epgUrl: epg,
       authorizationConfirmed: true,
     );
+  }
+
+  /// Recupera las fuentes adicionales guardadas en este dispositivo.
+  static Future<AutoLiveAdditionalSources> loadAdditionalSources() async {
+    final prefs = await SharedPreferences.getInstance();
+    final playlists = _splitPlaylistUrls(
+      prefs.getString(_additionalPlaylistUrlsKey) ?? '',
+    ).where(isSafeHttpUrl).toList(growable: false);
+    final epgs = _splitPlaylistUrls(
+      prefs.getString(_additionalEpgUrlsKey) ?? '',
+    ).where(isSafeHttpUrl).toList(growable: false);
+    return AutoLiveAdditionalSources(
+      playlistUrls: playlists,
+      epgUrls: epgs,
+    );
+  }
+
+  /// Reemplaza todas las fuentes gestionadas y elimina las preferencias
+  /// adicionales antiguas para que las URLs borradas no reaparezcan.
+  static Future<void> replaceAllSources({
+    required String playlistUrl,
+    required String epgUrl,
+  }) async {
+    final playlists = <String>{..._splitPlaylistUrls(playlistUrl)};
+    final epgs = <String>{..._splitPlaylistUrls(epgUrl)};
+    if (playlists.isEmpty || !playlists.every(isSafeHttpUrl)) {
+      throw const FormatException(
+        'Añade al menos una lista M3U/M3U8 con una dirección HTTP o HTTPS válida.',
+      );
+    }
+    if (epgs.isEmpty || !epgs.every(isSafeHttpUrl)) {
+      throw const FormatException(
+        'Añade al menos una guía XMLTV/EPG con una dirección HTTP o HTTPS válida.',
+      );
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_playlistUrlKey, playlists.join('\n'));
+    await prefs.setString(_epgUrlKey, epgs.join('\n'));
+    await prefs.setBool(_authorizedKey, true);
+    await prefs.remove(_additionalPlaylistUrlsKey);
+    await prefs.remove(_additionalEpgUrlsKey);
+  }
+
+  /// Añade enlaces propios/autorizados y evita duplicados. Se admiten varias
+  /// direcciones separadas por líneas o punto y coma.
+  static Future<AutoLiveAdditionalSources> addAdditionalSources({
+    String playlistUrl = '',
+    String epgUrl = '',
+  }) async {
+    final newPlaylists = _splitPlaylistUrls(playlistUrl);
+    final newEpgs = _splitPlaylistUrls(epgUrl);
+    if (newPlaylists.isEmpty && newEpgs.isEmpty) {
+      throw const FormatException('Añade al menos una dirección M3U o EPG.');
+    }
+    if (!newPlaylists.every(isSafeHttpUrl)) {
+      throw const FormatException('Cada lista M3U debe tener una dirección HTTP o HTTPS válida.');
+    }
+    if (!newEpgs.every(isSafeHttpUrl)) {
+      throw const FormatException('Cada guía EPG debe tener una dirección HTTP o HTTPS válida.');
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final current = await loadAdditionalSources();
+    final mergedPlaylists = <String>{
+      ...current.playlistUrls,
+      ...newPlaylists,
+    };
+    final mergedEpgs = <String>{
+      ...current.epgUrls,
+      ...newEpgs,
+    };
+    await prefs.setString(
+      _additionalPlaylistUrlsKey,
+      mergedPlaylists.join('\n'),
+    );
+    await prefs.setString(
+      _additionalEpgUrlsKey,
+      mergedEpgs.join('\n'),
+    );
+    return loadAdditionalSources();
+  }
+
+  /// Elimina únicamente las fuentes añadidas manualmente. Las fuentes
+  /// automáticas originales permanecen intactas.
+  static Future<void> clearAdditionalSources() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_additionalPlaylistUrlsKey);
+    await prefs.remove(_additionalEpgUrlsKey);
   }
 
   static Future<void> save({
@@ -233,7 +336,7 @@ class SportsAgendaParticipant {
     final row = Map<String, dynamic>.from(value);
     final name = (row['name'] ?? row['title'] ?? '').toString().trim();
     if (name.isEmpty) return null;
-    final imageUrl = _marcaImageUrl(
+    final imageUrl = _sportsImageUrl(
       row['imageUrl'] ?? row['logo'] ?? row['image'] ??
       row['thumbnailUrl'] ?? row['photo'] ?? row['picture'] ?? row['avatar'],
     );
@@ -335,13 +438,13 @@ class SportsAgendaEvent {
         : <SportsAgendaParticipant>[];
     final homeTeam = (row['homeTeam'] ?? '').toString();
     final awayTeam = (row['awayTeam'] ?? '').toString();
-    final homeLogo = _marcaImageUrl(
+    final homeLogo = _sportsImageUrl(
       row['homeTeamLogo'] ?? row['homeTeamLogoUrl'] ?? row['homeLogo'],
     );
-    final awayLogo = _marcaImageUrl(
+    final awayLogo = _sportsImageUrl(
       row['awayTeamLogo'] ?? row['awayTeamLogoUrl'] ?? row['awayLogo'],
     );
-    final eventImage = _marcaImageUrl(
+    final eventImage = _sportsImageUrl(
       row['imageUrl'] ?? row['image'] ?? row['thumbnailUrl'] ?? row['photo'],
     );
     String participantImage(String name) => participants
@@ -375,7 +478,7 @@ class SportsAgendaEvent {
 }
 
 class SportsAgendaStore {
-  static const String _key = 'dt360_sports_agenda_events_v2';
+  static const String _key = 'dt360_sports_agenda_events_v3';
 
   /// Sustituye la captura anterior por el contenido visible más reciente.
   /// Así los eventos retirados de la agenda no quedan programados.
@@ -418,9 +521,11 @@ class M3uChannel {
     this.logo = '',
     this.language = '',
     this.country = '',
+    this.sourceUrl = '',
   });
   final String name;
   final String url;
+  final String sourceUrl;
   final String tvgId;
   final String tvgName;
   final String group;
@@ -505,165 +610,16 @@ class AutomaticLiveService {
   final Map<String, ({bool available, int quality, DateTime checkedAt})> _probeCache =
       <String, ({bool available, int quality, DateTime checkedAt})>{};
 
-  /// Lee las asignaciones compartidas por el planificador Cloudflare.
-  /// Devuelve null solo cuando el endpoint todavía no está disponible; una
-  /// respuesta válida sin eventos devuelve una lista vacía y evita reutilizar
-  /// partidos antiguos del almacenamiento local.
-  Future<List<ScheduledLiveEvent>?> fetchPublishedSchedule() async {
-    final base = SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value);
-    if (base == null) return null;
-    final uri = Uri.parse('$base/api/live/auto/schedule');
-    try {
-      final response = await _client.get(
-        uri,
-        headers: const <String, String>{'Accept': 'application/json'},
-      ).timeout(const Duration(seconds: 12));
-      if (response.statusCode == 404 || response.statusCode == 503) {
-        return null;
-      }
-      if (response.statusCode != 200) return null;
-
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map) return null;
-      final status = (decoded['status'] ?? '').toString();
-      if (status != 'ok' && status != 'stale') return null;
-      final rows = decoded['events'];
-      if (rows is! List) return null;
-
-      final now = DateTime.now();
-      final result = <ScheduledLiveEvent>[];
-      for (final raw in rows) {
-        if (raw is! Map) continue;
-        final row = Map<String, dynamic>.from(raw);
-        final eventRaw = row['event'];
-        if (eventRaw is! Map) continue;
-        final eventData = Map<String, dynamic>.from(eventRaw);
-        final startsAt = DateTime.tryParse(
-          (eventData['startsAt'] ?? '').toString(),
-        );
-        final endsAt = DateTime.tryParse(
-          (eventData['endsAt'] ?? '').toString(),
-        );
-        final id = (eventData['id'] ?? '').toString().trim();
-        final title = (eventData['title'] ?? '').toString().trim();
-        if (id.isEmpty || title.isEmpty || startsAt == null) continue;
-        final detailUrl = (eventData['detailUrl'] ?? '').toString().trim();
-        final rawParticipants = eventData['participants'];
-        final participants = rawParticipants is List
-            ? rawParticipants
-                .map(SportsAgendaParticipant.fromJson)
-                .whereType<SportsAgendaParticipant>()
-                .toList(growable: false)
-            : <SportsAgendaParticipant>[];
-        String safeLogo(dynamic value) => _marcaImageUrl(value);
-        final homeTeam = (eventData['homeTeam'] ?? '').toString();
-        final awayTeam = (eventData['awayTeam'] ?? '').toString();
-        String participantLogo(String name) => participants
-            .where((item) => item.name.toLowerCase() == name.toLowerCase())
-            .map((item) => item.imageUrl)
-            .firstWhere((url) => url.isNotEmpty, orElse: () => '');
-        final event = SportsAgendaEvent(
-          id: id,
-          title: title,
-          sport: (eventData['sport'] ?? 'Deporte').toString(),
-          competition: (eventData['competition'] ?? '').toString(),
-          homeTeam: homeTeam,
-          awayTeam: awayTeam,
-          homeTeamLogo: safeLogo(
-            eventData['homeTeamLogo'] ??
-            eventData['homeTeamLogoUrl'] ??
-            eventData['homeLogo'],
-          ).isNotEmpty
-              ? safeLogo(
-                  eventData['homeTeamLogo'] ??
-                  eventData['homeTeamLogoUrl'] ??
-                  eventData['homeLogo'],
-                )
-              : participantLogo(homeTeam),
-          awayTeamLogo: safeLogo(
-            eventData['awayTeamLogo'] ??
-            eventData['awayTeamLogoUrl'] ??
-            eventData['awayLogo'],
-          ).isNotEmpty
-              ? safeLogo(
-                  eventData['awayTeamLogo'] ??
-                  eventData['awayTeamLogoUrl'] ??
-                  eventData['awayLogo'],
-                )
-              : participantLogo(awayTeam),
-          participants: participants,
-          imageUrl: safeLogo(
-            eventData['imageUrl'] ??
-            eventData['image'] ??
-            eventData['thumbnailUrl'] ??
-            eventData['photo'],
-          ),
-          venue: (eventData['venue'] ?? '').toString(),
-          status: (eventData['status'] ?? 'scheduled').toString(),
-          statusLabel: (eventData['statusLabel'] ?? '').toString(),
-          homeScore: (eventData['homeScore'] ?? '').toString(),
-          awayScore: (eventData['awayScore'] ?? '').toString(),
-          providerLeagueId: int.tryParse((eventData['providerLeagueId'] ?? '').toString()),
-          providerSeasonId: int.tryParse((eventData['providerSeasonId'] ?? '').toString()),
-          providerSeriesId: int.tryParse((eventData['providerSeriesId'] ?? '').toString()),
-          startsAt: startsAt.toLocal(),
-          endsAt: endsAt?.toLocal(),
-          detailUrl: isSafeHttpUrl(detailUrl)
-              ? detailUrl
-              : 'https://www.marca.com/programacion-tv.html',
-        );
-
-        final removeAt = DateTime.tryParse(
-          (row['removeAt'] ?? '').toString(),
-        ) ?? endsAt ?? startsAt.add(const Duration(hours: 3));
-        if (!removeAt.isAfter(now)) continue;
-
-        final sourcesRaw = row['sources'];
-        final sources = <ScheduledLiveSource>[];
-        if (sourcesRaw is List) {
-          for (final sourceValue in sourcesRaw) {
-            if (sourceValue is! Map) continue;
-            final source = Map<String, dynamic>.from(sourceValue);
-            final url = (source['url'] ?? '').toString().trim();
-            final programmeEnd = DateTime.tryParse(
-              (source['programmeEndsAt'] ?? '').toString(),
-            ) ?? removeAt;
-            if (source['available'] != true || !isDirectPlayableStream(url)) {
-              continue;
-            }
-            sources.add(ScheduledLiveSource(
-              channelName: (source['channelName'] ?? '').toString(),
-              url: url,
-              programmeTitle: (source['programmeTitle'] ?? '').toString(),
-              programmeEndsAt: programmeEnd.toLocal(),
-              qualityScore: int.tryParse(
-                (source['qualityScore'] ?? 0).toString(),
-              ) ?? 0,
-              languagePriority: int.tryParse(
-                (source['languagePriority'] ?? 0).toString(),
-              ) ?? 0,
-              available: true,
-            ));
-          }
-        }
-        result.add(ScheduledLiveEvent(
-          event: event,
-          sources: sources,
-          removeAt: removeAt.toLocal(),
-        ));
-      }
-      result.sort((a, b) => a.event.startsAt.compareTo(b.event.startsAt));
-      return result;
-    } catch (_) {
-      // El cliente puede seguir usando la búsqueda local si el Worker está
-      // temporalmente inaccesible o todavía no tiene instalado el cron nuevo.
-      return null;
-    }
-  }
+  void dispose() => _client.close();
 
   Future<AutoLiveCatalog> loadCatalog({
     required String playlistUrl, required String epgUrl,
     bool forceRefresh = false,
+    bool allowEmptyEpg = false,
+    int downloadBatchSize = 3,
+    Duration batchPause = Duration.zero,
+    int maxEpgBytes = 20 * 1024 * 1024,
+    void Function(String phase, int completed, int total)? onProgress,
   }) async {
     final playlistUrls = _splitPlaylistUrls(playlistUrl);
     final epgUrls = _splitPlaylistUrls(epgUrl);
@@ -673,6 +629,7 @@ class AutomaticLiveService {
         !epgUrls.every(isSafeHttpUrl)) {
       throw const FormatException('Configura listas M3U y guías XMLTV/EPG con direcciones HTTP o HTTPS válidas.');
     }
+    final int effectiveBatchSize = downloadBatchSize.clamp(1, 3).toInt();
     final playlistCacheKey = playlistUrls.join('\n');
     final epgCacheKey = epgUrls.join('\n');
     final now = DateTime.now();
@@ -683,11 +640,11 @@ class AutomaticLiveService {
       return cached;
     }
 
-    // Se descargan tres listas a la vez para limitar memoria y conexiones.
+    // Descargas limitadas al tamaño de lote solicitado para evitar picos de memoria.
     // Una lista caída no bloquea el resto del catálogo.
     final channelsByUrl = <String, M3uChannel>{};
-    for (var batchStart = 0; batchStart < playlistUrls.length; batchStart += 3) {
-      final batch = playlistUrls.skip(batchStart).take(3).toList(growable: false);
+    for (var batchStart = 0; batchStart < playlistUrls.length; batchStart += effectiveBatchSize) {
+      final batch = playlistUrls.skip(batchStart).take(effectiveBatchSize).toList(growable: false);
       final playlistBodies = await Future.wait<String?>(
         batch.map((url) async {
           try {
@@ -707,10 +664,16 @@ class AutomaticLiveService {
         // Algunas M3U contienen rutas relativas; se resuelven contra la
         // dirección de la propia lista antes de pasar la URL al reproductor.
         final baseUri = Uri.tryParse(batch[index]);
-        for (final channel in parseM3u(body, baseUri: baseUri)) {
+        for (final channel in parseM3u(
+          body,
+          baseUri: baseUri,
+          sourceUrl: batch[index],
+        )) {
           channelsByUrl.putIfAbsent(channel.url, () => channel);
         }
       }
+      onProgress?.call('M3U', batchStart + batch.length, playlistUrls.length);
+      if (batchPause > Duration.zero) await Future<void>.delayed(batchPause);
     }
     final channels = channelsByUrl.values.toList(growable: false);
     if (channels.isEmpty) {
@@ -721,16 +684,15 @@ class AutomaticLiveService {
     // las demás siguen aportando programas. Las guías regionales tienen un
     // límite menor para cuidar la memoria del teléfono.
     final programmesByKey = <String, XmltvProgramme>{};
-    // Descarga por lotes pequeños: varias guías pueden responder a la vez, pero
-    // nunca se abren todas las descargas grandes simultáneamente.
-    for (var batchStart = 0; batchStart < epgUrls.length; batchStart += 3) {
-      final batch = epgUrls.skip(batchStart).take(3).toList(growable: false);
+    // Descarga XMLTV en lotes pequeños y analiza cada guía en un isolate separado.
+    for (var batchStart = 0; batchStart < epgUrls.length; batchStart += effectiveBatchSize) {
+      final batch = epgUrls.skip(batchStart).take(effectiveBatchSize).toList(growable: false);
       final bodies = await Future.wait<String?>(
         batch.map((url) async {
           try {
             return await _downloadText(
               url,
-              maxBytes: 20 * 1024 * 1024,
+              maxBytes: maxEpgBytes,
               timeout: const Duration(seconds: 12),
             );
           } catch (_) {
@@ -740,7 +702,10 @@ class AutomaticLiveService {
       );
       for (final epgBody in bodies.whereType<String>()) {
         try {
-          for (final programme in parseXmltv(epgBody)) {
+          final parsedProgrammes = await Isolate.run(
+            () => parseXmltv(epgBody),
+          );
+          for (final programme in parsedProgrammes) {
             final key = <String>[
               programme.channelId.toLowerCase(),
               programme.title.toLowerCase().trim(),
@@ -753,9 +718,11 @@ class AutomaticLiveService {
           // Una guía inválida no interrumpe las siguientes fuentes.
         }
       }
+      onProgress?.call('EPG', batchStart + batch.length, epgUrls.length);
+      if (batchPause > Duration.zero) await Future<void>.delayed(batchPause);
     }
     final programmes = programmesByKey.values.toList(growable: false);
-    if (programmes.isEmpty) {
+    if (programmes.isEmpty && !allowEmptyEpg) {
       throw const FormatException('Ninguna guía EPG/XMLTV respondió con programas legibles.');
     }
 
@@ -822,7 +789,11 @@ class AutomaticLiveService {
     return body;
   }
 
-  static List<M3uChannel> parseM3u(String body, {Uri? baseUri}) {
+  static List<M3uChannel> parseM3u(
+    String body, {
+    Uri? baseUri,
+    String sourceUrl = '',
+  }) {
     final lines = body.replaceAll('\r', '').split('\n');
     final result = <M3uChannel>[];
     Map<String, String>? pending;
@@ -864,6 +835,7 @@ class AutomaticLiveService {
         logo: data['tvg-logo'] ?? '',
         language: data['tvg-language'] ?? data['language'] ?? '',
         country: data['tvg-country'] ?? data['country'] ?? '',
+        sourceUrl: sourceUrl,
       ));
       pending = null;
       pendingName = '';
@@ -898,6 +870,63 @@ class AutomaticLiveService {
       ));
     }
     return result;
+  }
+
+  static String _m3uSingleLine(String value) =>
+      value.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+
+  static String _m3uAttribute(String value) =>
+      _m3uSingleLine(value).replaceAll('"', '%22');
+
+  /// Construye una lista única con todos los canales directos descargados por
+  /// el catálogo nativo. Las guías XMLTV se anuncian en ambas cabeceras M3U
+  /// habituales para que OTTFOX y otros editores puedan detectarlas.
+  static String buildOttfoxM3u(
+    AutoLiveCatalog catalog, {
+    List<String> epgUrls = const <String>[],
+  }) {
+    final guides = <String>{
+      for (final url in epgUrls)
+        if (isSafeHttpUrl(url)) url.trim(),
+    }.toList(growable: false);
+    final guideHeader = guides.isEmpty
+        ? ''
+        : ' url-tvg="${_m3uAttribute(guides.join(','))}"'
+          ' x-tvg-url="${_m3uAttribute(guides.join(','))}"';
+    final output = StringBuffer('#EXTM3U$guideHeader\n');
+    final seen = <String>{};
+
+    for (final channel in catalog.channels) {
+      if (!isDirectPlayableStream(channel.url) || !seen.add(channel.url)) {
+        continue;
+      }
+      final attributes = <String, String>{
+        if (channel.tvgId.trim().isNotEmpty) 'tvg-id': channel.tvgId,
+        if (channel.tvgName.trim().isNotEmpty) 'tvg-name': channel.tvgName,
+        if (channel.logo.trim().isNotEmpty) 'tvg-logo': channel.logo,
+        'group-title': channel.group.trim().isNotEmpty
+            ? channel.group
+            : 'Deportes',
+        if (channel.language.trim().isNotEmpty)
+          'tvg-language': channel.language,
+        if (channel.country.trim().isNotEmpty)
+          'tvg-country': channel.country,
+      };
+      final metadata = attributes.entries
+          .map((entry) =>
+              '${entry.key}="${_m3uAttribute(entry.value)}"')
+          .join(' ');
+      final name = _m3uSingleLine(channel.name);
+      output
+        ..write('#EXTINF:-1')
+        ..write(metadata.isEmpty ? '' : ' $metadata')
+        ..write(',')
+        ..write(name.isEmpty ? 'Canal deportivo' : name)
+        ..write('\n')
+        ..write(channel.url.trim())
+        ..write('\n');
+    }
+    return output.toString();
   }
 
   static DateTime? parseXmltvDate(String? value) {
@@ -1025,15 +1054,15 @@ class AutomaticLiveService {
       // Solo se programa una fuente cuya lista de reproducción respondió
       // correctamente a la comprobación. No se asignan señales no verificadas.
       if (verifiedCandidates.isEmpty) continue;
-      // Entre las señales disponibles, se conserva una sola: la de mayor
-      // calidad anunciada y confirmada por la lista HLS.
+      // Se conserva la señal principal y hasta tres alternativas que
+      // también superaron la comprobación de disponibilidad.
       verifiedCandidates.sort((a, b) {
         final language = b.languagePriority.compareTo(a.languagePriority);
         return language != 0
             ? language
             : b.qualityScore.compareTo(a.qualityScore);
       });
-      final sources = <ScheduledLiveSource>[verifiedCandidates.first];
+      final sources = verifiedCandidates.take(4).toList(growable: false);
       final programmeEnd = sources.map((s) => s.programmeEndsAt).reduce(
         (a, b) => a.isAfter(b) ? a : b,
       );

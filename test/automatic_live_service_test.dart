@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -24,7 +23,7 @@ void main() {
     sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
   });
 
-  group('agenda deportiva MARCA', () {
+  group('agenda deportiva SportsAPI', () {
     test('no reutiliza eventos persistidos por la agenda anterior', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'dt360_futbol_libre_events_v1':
@@ -38,7 +37,7 @@ void main() {
 
     test('guarda y recupera eventos de la agenda nueva', () async {
       final event = SportsAgendaEvent(
-        id: 'marca-event-1',
+        id: 'sportsapi-event-1',
         title: 'Equipo Azul vs Equipo Rojo',
         sport: 'Fútbol',
         competition: 'Liga de prueba',
@@ -55,129 +54,51 @@ void main() {
         ],
         venue: 'Estadio de prueba',
         startsAt: DateTime.now().add(const Duration(hours: 1)),
-        detailUrl: 'https://www.marca.com/programacion-tv.html',
+        detailUrl: 'https://sportsapi.app',
       );
 
       await SportsAgendaStore.save(<SportsAgendaEvent>[event]);
       final saved = await SportsAgendaStore.load();
 
       expect(saved, hasLength(1));
-      expect(saved.single.id, 'marca-event-1');
+      expect(saved.single.id, 'sportsapi-event-1');
       expect(saved.single.homeTeamLogo, 'https://img.example/azul.png');
       expect(saved.single.awayTeamLogo, 'https://img.example/rojo.png');
       expect(saved.single.participants.single.name, 'Carlos Alcaraz');
       expect(saved.single.participants.single.imageUrl, 'https://img.example/alcaraz.png');
       expect(saved.single.venue, 'Estadio de prueba');
-      expect(saved.single.detailUrl, 'https://www.marca.com/programacion-tv.html');
+      expect(saved.single.detailUrl, 'https://sportsapi.app');
     });
   });
 
-  group('agenda y transmisiones publicadas desde Cloudflare', () {
-    test('recibe eventos y señales verificadas desde el endpoint central', () async {
-      final start = DateTime.now().add(const Duration(minutes: 5));
-      final stop = start.add(const Duration(hours: 2));
-      sportsApiBaseUrl.value = 'https://worker.example';
-      final client = MockClient((request) async {
-        expect(request.url.path, '/api/live/auto/schedule');
-        return http.Response(jsonEncode(<String, dynamic>{
-          'status': 'ok',
-          'source': 'marca',
-          'events': <Map<String, dynamic>>[
-            <String, dynamic>{
-              'event': <String, dynamic>{
-                'id': 'cloud-event-1',
-                'title': 'Equipo Azul vs Equipo Rojo',
-                'sport': 'Fútbol',
-                'competition': 'Liga de prueba',
-                'homeTeam': 'Equipo Azul',
-                'awayTeam': 'Equipo Rojo',
-                'homeTeamLogo': <String, dynamic>{
-                  'url': '//img.example/azul.png',
-                },
-                'awayTeamLogo': <String, dynamic>{
-                  'contentUrl': '/assets/escudos/rojo.svg',
-                },
-                'participants': <Map<String, dynamic>>[
-                  <String, dynamic>{
-                    'name': 'Equipo Azul',
-                    'imageUrl': <String, dynamic>{
-                      'src': '//img.example/azul.png',
-                    },
-                    'country': 'España',
-                    'role': 'home',
-                  },
-                ],
-                'venue': 'Estadio de prueba',
-                'startsAt': start.toUtc().toIso8601String(),
-                'endsAt': stop.toUtc().toIso8601String(),
-                'detailUrl': 'https://www.marca.com/programacion-tv.html',
-              },
-              'removeAt': stop.toUtc().toIso8601String(),
-              'state': 'verified',
-              'sources': <Map<String, dynamic>>[
-                <String, dynamic>{
-                  'channelName': 'Canal Deportes ES',
-                  'url': 'https://media.example/live.m3u8',
-                  'programmeTitle': 'Equipo Azul vs Equipo Rojo',
-                  'programmeEndsAt': stop.toUtc().toIso8601String(),
-                  'qualityScore': 400,
-                  'languagePriority': 2,
-                  'available': true,
-                },
-              ],
-            },
-          ],
-        }), 200);
-      });
 
-      final result = await AutomaticLiveService(client: client)
-          .fetchPublishedSchedule();
 
-      expect(result, hasLength(1));
-      expect(result!.single.event.id, 'cloud-event-1');
-      expect(result.single.event.homeTeamLogo, 'https://img.example/azul.png');
-      expect(result.single.event.awayTeamLogo,
-          'https://www.marca.com/assets/escudos/rojo.svg');
-      expect(result.single.event.participants.single.name, 'Equipo Azul');
-      expect(result.single.event.participants.single.country, 'España');
-      expect(result.single.event.venue, 'Estadio de prueba');
-      expect(result.single.sources.single.channelName, 'Canal Deportes ES');
-      expect(result.single.sources.single.languagePriority, 2);
-      expect(result.single.sources.single.available, isTrue);
-    });
+  group('origen de listas IPTV', () {
+    test('conserva la URL de la lista que proporcionó cada canal', () {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.one" group-title="Deportes",Canal deportivo
+https://media.example/live.m3u8
+''';
+      final channels = AutomaticLiveService.parseM3u(
+        playlist,
+        baseUri: Uri.parse('https://lists.example/sports/main.m3u'),
+        sourceUrl: 'https://lists.example/sports/main.m3u',
+      );
 
-    test('una respuesta remota válida sin eventos no reutiliza la agenda local antigua', () async {
-      sportsApiBaseUrl.value = 'https://worker.example';
-      final client = MockClient((request) async => http.Response(
-        jsonEncode(<String, dynamic>{
-          'status': 'ok',
-          'source': 'marca',
-          'events': <dynamic>[],
-        }),
-        200,
-      ));
-
-      final result = await AutomaticLiveService(client: client)
-          .fetchPublishedSchedule();
-
-      expect(result, isEmpty);
-    });
-
-    test('usa la agenda local si el Worker todavía no publica el nuevo endpoint', () async {
-      sportsApiBaseUrl.value = 'https://worker.example';
-      final client = MockClient((request) async =>
-          http.Response('{"error":"not found"}', 404));
-
-      final result = await AutomaticLiveService(client: client)
-          .fetchPublishedSchedule();
-
-      expect(result, isNull);
-      sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
+      expect(channels, hasLength(1));
+      expect(channels.single.name, 'Canal deportivo');
+      expect(
+        channels.single.sourceUrl,
+        'https://lists.example/sports/main.m3u',
+      );
     });
   });
 
-  group('tablero fijo de transmisiones', () {
-    testWidgets('mantiene cuatro cuadros visibles sin desplazamiento', (tester) async {
+  group('tablero de ocho canales de transmisiones', () {
+    testWidgets('mantiene ocho canales numerados y permite desplazarse', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(430, 620));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -185,16 +106,18 @@ void main() {
           ),
         ),
       );
+      await tester.pump();
 
-      for (var channel = 1; channel <= 4; channel++) {
-        expect(
-          find.text('DEPORTE TOTAL 360° CANAL $channel'),
-          findsOneWidget,
-        );
-      }
-      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(4));
+      expect(find.text('DEPORTE TOTAL 360° CANAL 1'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('DEPORTE TOTAL 360° CANAL 8'),
+        420,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('DEPORTE TOTAL 360° CANAL 8'), findsOneWidget);
       final grid = tester.widget<GridView>(find.byType(GridView));
-      expect(grid.physics, isA<NeverScrollableScrollPhysics>());
+      expect(grid.physics, isA<BouncingScrollPhysics>());
+      await tester.pumpWidget(const SizedBox.shrink());
     });
 
     testWidgets('muestra el próximo evento con su horario mientras espera la señal', (tester) async {
@@ -218,10 +141,10 @@ void main() {
       expect(find.text('Fútbol · Liga de prueba'), findsOneWidget);
       expect(find.text('Equipo Azul vs Equipo Rojo'), findsOneWidget);
       expect(find.text('Comienza 19:30'), findsOneWidget);
-      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(4));
+      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(8));
     });
 
-    testWidgets('muestra el evento asignado y espera en los otros tres canales', (tester) async {
+    testWidgets('muestra el evento asignado y espera en los otros siete canales', (tester) async {
       const source = LivePlayerSource(
         title: 'DEPORTE TOTAL 360° CANAL 1',
         url: 'https://media.example/evento.m3u8',
@@ -239,7 +162,7 @@ void main() {
       expect(find.text('DEPORTE TOTAL 360° CANAL 1'), findsOneWidget);
       expect(find.text('Fútbol · Liga · Tigres vs Atlas'), findsOneWidget);
       expect(find.byTooltip('Reproducir en pantalla completa'), findsOneWidget);
-      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(3));
+      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(7));
     });
   });
 
@@ -257,6 +180,71 @@ void main() {
       expect(settings.epgUrls.first, contains('epg-es.xml'));
       expect(settings.epgUrls[18], contains('teleonline/listas/main/epg.xml.gz'));
       expect(settings.isConfigured, isTrue);
+    });
+
+    test('añade fuentes M3U y EPG adicionales sin reemplazar ni duplicar las automáticas', () async {
+      await AutoLiveSettings.addAdditionalSources(
+        playlistUrl: 'https://custom.example/sports.m3u;'
+            'https://custom.example/backup.m3u8',
+        epgUrl: 'https://custom.example/guide.xml.gz',
+      );
+      await AutoLiveSettings.addAdditionalSources(
+        playlistUrl: 'https://custom.example/sports.m3u',
+        epgUrl: 'https://custom.example/guide.xml.gz',
+      );
+
+      final settings = await AutoLiveSettings.load();
+      final additional = await AutoLiveSettings.loadAdditionalSources();
+
+      expect(settings.playlistUrls, hasLength(14));
+      expect(settings.epgUrls, hasLength(21));
+      expect(settings.playlistUrls, contains('https://custom.example/sports.m3u'));
+      expect(settings.playlistUrls, contains('https://custom.example/backup.m3u8'));
+      expect(settings.epgUrls, contains('https://custom.example/guide.xml.gz'));
+      expect(additional.playlistUrls, hasLength(2));
+      expect(additional.epgUrls, hasLength(1));
+      expect(settings.isConfigured, isTrue);
+    });
+
+    test('rechaza esquemas no web y borra solo las fuentes adicionales', () async {
+      await expectLater(
+        AutoLiveSettings.addAdditionalSources(
+          playlistUrl: 'javascript:alert(1)',
+        ),
+        throwsFormatException,
+      );
+
+      await AutoLiveSettings.addAdditionalSources(
+        playlistUrl: 'https://custom.example/extra.m3u',
+        epgUrl: 'https://custom.example/extra.xml',
+      );
+      await AutoLiveSettings.clearAdditionalSources();
+
+      final settings = await AutoLiveSettings.load();
+      expect(settings.playlistUrls, hasLength(12));
+      expect(settings.epgUrls, hasLength(20));
+      expect(settings.playlistUrls, isNot(contains('https://custom.example/extra.m3u')));
+      expect(settings.epgUrls, isNot(contains('https://custom.example/extra.xml')));
+    });
+
+
+    test('reemplaza el conjunto administrado y no vuelve a cargar fuentes eliminadas', () async {
+      await AutoLiveSettings.addAdditionalSources(
+        playlistUrl: 'https://old.example/old.m3u',
+        epgUrl: 'https://old.example/old.xml',
+      );
+
+      await AutoLiveSettings.replaceAllSources(
+        playlistUrl: 'https://managed.example/sports.m3u',
+        epgUrl: 'https://managed.example/guide.xml',
+      );
+
+      final settings = await AutoLiveSettings.load();
+      final additional = await AutoLiveSettings.loadAdditionalSources();
+      expect(settings.playlistUrls, <String>['https://managed.example/sports.m3u']);
+      expect(settings.epgUrls, <String>['https://managed.example/guide.xml']);
+      expect(additional.playlistUrls, isEmpty);
+      expect(additional.epgUrls, isEmpty);
     });
 
     test('migra las listas antiguas sin pedir autorización manual', () async {
@@ -297,7 +285,7 @@ void main() {
         title: 'Equipo $id vs Rival $id',
         sport: 'Fútbol',
         startsAt: now.add(const Duration(hours: 1)),
-        detailUrl: 'https://www.marca.com/programacion-tv.html$id',
+        detailUrl: 'https://sportsapi.app$id',
       );
 
       await SportsAgendaStore.save(<SportsAgendaEvent>[event('anterior')]);
@@ -431,6 +419,29 @@ https://media.example/backup.m3u8
       expect(catalog.programmes, hasLength(1));
     });
 
+    test('exporta canales aunque todas las EPG estén temporalmente fuera de línea', () async {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.one" group-title="Deportes",Sports One HD
+https://media.example/sports-one.m3u8
+''';
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('.m3u')) {
+          return http.Response(playlist, 200);
+        }
+        return http.Response('EPG temporalmente no disponible', 503);
+      });
+
+      final catalog = await AutomaticLiveService(client: client).loadCatalog(
+        playlistUrl: 'https://playlist.example/sports.m3u',
+        epgUrl: 'https://epg-offline.example/guide.xml',
+        allowEmptyEpg: true,
+      );
+
+      expect(catalog.channels, hasLength(1));
+      expect(catalog.programmes, isEmpty);
+    });
+
     test('combina programas de varias guías EPG y sigue si una falla', () async {
       final start = DateTime.now().toUtc().add(const Duration(hours: 1));
       final stop = start.add(const Duration(hours: 2));
@@ -471,6 +482,88 @@ https://media.example/backup.m3u8
           'Equipo Verde vs Equipo Blanco',
         ]),
       );
+    });
+
+    test('genera una M3U unificada con todos los enlaces XMLTV y canales sin duplicados', () {
+      final guides = List<String>.generate(
+        20,
+        (index) => 'https://epg.example/guide-$index.xml.gz?region=es&v=1',
+      );
+      final catalog = AutoLiveCatalog(
+        channels: const <M3uChannel>[
+          M3uChannel(
+            name: 'Sports HD',
+            url: 'https://media.example/sports-hd.m3u8',
+            tvgId: 'sports.hd',
+            tvgName: 'Sports HD',
+            group: 'Deportes',
+            logo: 'https://img.example/logo.png?size=2&fit=cover',
+          ),
+          M3uChannel(
+            name: 'Sports HD duplicado',
+            url: 'https://media.example/sports-hd.m3u8',
+            tvgId: 'sports.hd',
+          ),
+          M3uChannel(
+            name: 'Página HTML',
+            url: 'https://media.example/watch?id=4',
+          ),
+        ],
+        programmes: const <XmltvProgramme>[],
+      );
+
+      final exported = AutomaticLiveService.buildOttfoxM3u(
+        catalog,
+        epgUrls: guides,
+      );
+
+      expect(exported, startsWith('#EXTM3U url-tvg='));
+      expect(exported, contains('x-tvg-url='));
+      for (final guide in guides) {
+        expect(exported, contains(guide));
+      }
+      expect(exported, contains('tvg-id="sports.hd"'));
+      expect(exported, contains('logo.png?size=2&fit=cover'));
+      expect(RegExp(r'^#EXTINF:', multiLine: true).allMatches(exported), hasLength(1));
+      expect(
+        AutomaticLiveService.parseM3u(exported),
+        hasLength(1),
+      );
+    });
+
+    test('descarga listas y EPG en lotes pequeños e informa cada avance', () async {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.one",Sports One HD
+https://media.example/sports-one.m3u8
+''';
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('.m3u')) {
+          return http.Response(playlist, 200);
+        }
+        return http.Response('EPG temporalmente no disponible', 503);
+      });
+      final progress = <String>[];
+
+      final catalog = await AutomaticLiveService(client: client).loadCatalog(
+        playlistUrl: 'https://playlist.example/one.m3u\n'
+            'https://playlist.example/two.m3u',
+        epgUrl: 'https://epg.example/one.xml\n'
+            'https://epg.example/two.xml',
+        allowEmptyEpg: true,
+        downloadBatchSize: 1,
+        onProgress: (phase, completed, total) {
+          progress.add('$phase:$completed/$total');
+        },
+      );
+
+      expect(catalog.channels, hasLength(1));
+      expect(progress, <String>[
+        'M3U:1/2',
+        'M3U:2/2',
+        'EPG:1/2',
+        'EPG:2/2',
+      ]);
     });
 
     test('asocia el ID XMLTV con el nombre publicado del canal', () {
@@ -535,7 +628,7 @@ https://media.example/sports-hd.m3u8
         homeTeam: 'Equipo Azul',
         awayTeam: 'Equipo Rojo',
         startsAt: start,
-        detailUrl: 'https://www.marca.com/programacion-tv.html',
+        detailUrl: 'https://sportsapi.app',
       );
 
       final tooEarly = await service.schedule(
@@ -595,7 +688,7 @@ https://media.example/sports.mpd
         homeTeam: 'Equipo Azul',
         awayTeam: 'Equipo Rojo',
         startsAt: start,
-        detailUrl: 'https://www.marca.com/programacion-tv.html',
+        detailUrl: 'https://sportsapi.app',
       );
 
       final result = await AutomaticLiveService(client: client).schedule(
@@ -643,7 +736,7 @@ https://media.example/spanish.m3u8
         homeTeam: 'Equipo Azul',
         awayTeam: 'Equipo Rojo',
         startsAt: start,
-        detailUrl: 'https://www.marca.com/programacion-tv.html',
+        detailUrl: 'https://sportsapi.app',
       );
       final result = await AutomaticLiveService(client: client).schedule(
         events: <SportsAgendaEvent>[event],
@@ -691,7 +784,7 @@ https://media.example/international.m3u8
         homeTeam: 'Equipo Azul',
         awayTeam: 'Equipo Rojo',
         startsAt: start,
-        detailUrl: 'https://www.marca.com/programacion-tv.html',
+        detailUrl: 'https://sportsapi.app',
       );
       final result = await AutomaticLiveService(client: client).schedule(
         events: <SportsAgendaEvent>[event],
@@ -715,7 +808,7 @@ https://media.example/international.m3u8
         homeTeam: 'Manchester United',
         awayTeam: 'Paris Saint-Germain',
         startsAt: DateTime.now().add(const Duration(hours: 1)),
-        detailUrl: 'https://www.marca.com/programacion-tv.html',
+        detailUrl: 'https://sportsapi.app',
       );
 
       expect(
@@ -750,12 +843,12 @@ https://media.example/two.m3u8
       final events = <SportsAgendaEvent>[
         SportsAgendaEvent(
           id: 'one', title: 'Azul vs Rojo', sport: 'Fútbol',
-          startsAt: start, detailUrl: 'https://www.marca.com/programacion-tv.html',
+          startsAt: start, detailUrl: 'https://sportsapi.app',
         ),
         SportsAgendaEvent(
           id: 'two', title: 'Verde vs Blanco', sport: 'Fútbol',
           startsAt: start,
-          detailUrl: 'https://www.marca.com/programacion-tv.html',
+          detailUrl: 'https://sportsapi.app',
         ),
       ];
       final result = await AutomaticLiveService(client: client).schedule(
@@ -794,7 +887,7 @@ https://media.example/offline.m3u8
         title: 'Azul vs Rojo',
         sport: 'Fútbol',
         startsAt: start,
-        detailUrl: 'https://www.marca.com/programacion-tv.html',
+        detailUrl: 'https://sportsapi.app',
       );
       final result = await AutomaticLiveService(client: client).schedule(
         events: <SportsAgendaEvent>[event],
@@ -815,7 +908,7 @@ https://media.example/offline.m3u8
         title: 'Equipo Azul vs Equipo Rojo',
         sport: 'Fútbol',
         startsAt: DateTime.now().add(const Duration(hours: 1)),
-        detailUrl: 'https://www.marca.com/programacion-tv.html',
+        detailUrl: 'https://sportsapi.app',
       );
       expect(
         AutomaticLiveService.programmeMatchesEvent(

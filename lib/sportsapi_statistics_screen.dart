@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'automatic_live_service.dart';
 import 'sportsapi_app_service.dart';
+import 'sports_api_service.dart';
 
 const Color _apiStatsBg = Color(0xFF030814);
 const Color _apiStatsPanel = Color(0xFF071326);
@@ -55,7 +58,10 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
   bool _loadingStats = false;
   String? _error;
   String? _statsError;
+  String? _warning;
+  Timer? _agendaMergeTimer;
   bool _catalogExpanded = false;
+  DateTime _selectedDate = DateTime.now();
 
   _FavouriteSport get _sport =>
       _sports.firstWhere((item) => item.id == _sportId, orElse: () => _sports.first);
@@ -76,59 +82,133 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     _loadInitial();
   }
 
+  @override
+  void dispose() {
+    _agendaMergeTimer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleMergedAgendaRefresh(DateTime date) {
+    _agendaMergeTimer?.cancel();
+    final expectedDate = DateTime(date.year, date.month, date.day);
+    _agendaMergeTimer = Timer(const Duration(seconds: 75), () {
+      if (!mounted ||
+          _selectedDate.year != expectedDate.year ||
+          _selectedDate.month != expectedDate.month ||
+          _selectedDate.day != expectedDate.day) {
+        return;
+      }
+      unawaited(_loadDate(expectedDate, fromDelayedMerge: true));
+    });
+  }
+
+  Future<List<SportsAgendaEvent>> _savedEventsForDate(DateTime date) async {
+    final saved = await SportsAgendaStore.load();
+    final start = DateTime(date.year, date.month, date.day);
+    final end = start.add(const Duration(days: 1));
+    return saved.where((event) {
+      final local = event.startsAt.toLocal();
+      return !local.isBefore(start) && local.isBefore(end);
+    }).toList(growable: false);
+  }
+
   Future<void> _loadInitial() async {
     setState(() {
       _loading = true;
       _error = null;
+      _warning = null;
     });
     try {
-      final results = await Future.wait<dynamic>(<Future<dynamic>>[
-        _api.fetchFavoriteSports(),
-        _api.fetchFavoriteAgendaEvents(),
-      ]);
-      final catalog = results[0] as List<Map<String, dynamic>>;
-      final events = results[1] as List<SportsAgendaEvent>;
+      final catalog = await _api.fetchFavoriteSports();
+      List<SportsAgendaEvent> events;
+      String? warning;
+      try {
+        events = await _api.fetchFavoriteAgendaEvents(date: _selectedDate);
+        await SportsAgendaStore.save(events);
+      } catch (error) {
+        events = await _savedEventsForDate(_selectedDate);
+        warning = 'No se pudo actualizar desde SportsAPI: ' + error.toString();
+      }
       if (!mounted) return;
       setState(() {
         _catalog = catalog;
         _events = events;
         _loading = false;
-        if (events.isEmpty) {
-          _error = 'SportsAPI no devolvió eventos para hoy. Comprueba la conexión, la fecha UTC y la cobertura de tus competiciones favoritas.';
-        }
+        _warning = events.isEmpty ? null : warning;
+        _error = events.isEmpty ? warning : null;
       });
+      _scheduleMergedAgendaRefresh(_selectedDate);
     } catch (error) {
       if (!mounted) return;
+      final saved = await _savedEventsForDate(_selectedDate);
+      if (!mounted) return;
       setState(() {
+        _events = saved;
         _loading = false;
-        _error = error.toString();
+        _warning = saved.isEmpty ? null : 'Se muestra la agenda guardada. ' + error.toString();
+        _error = saved.isEmpty ? error.toString() : null;
       });
+      _scheduleMergedAgendaRefresh(_selectedDate);
     }
   }
 
-  Future<void> _refresh() async {
+  Future<void> _loadDate(
+    DateTime value, {
+    bool forceRefresh = false,
+    bool fromDelayedMerge = false,
+  }) async {
+    final date = DateTime(value.year, value.month, value.day);
     setState(() {
+      _selectedDate = date;
       _loading = true;
       _error = null;
+      _warning = null;
       _selectedEvent = null;
       _statistics = <MapEntry<String, String>>[];
       _statsError = null;
     });
     try {
-      final events = await _api.fetchFavoriteAgendaEvents();
+      final events = await _api.fetchFavoriteAgendaEvents(
+        date: date,
+        forceRefresh: forceRefresh,
+      );
+      await SportsAgendaStore.save(events);
       if (!mounted) return;
       setState(() {
         _events = events;
         _loading = false;
       });
     } catch (error) {
+      final saved = await _savedEventsForDate(date);
       if (!mounted) return;
       setState(() {
+        _events = saved;
         _loading = false;
-        _error = error.toString();
+        _warning = saved.isEmpty ? null : 'Se muestra la agenda guardada. ' + error.toString();
+        _error = saved.isEmpty ? error.toString() : null;
       });
     }
+    if (!fromDelayedMerge) _scheduleMergedAgendaRefresh(date);
   }
+
+  Future<void> _refresh() => _loadDate(_selectedDate, forceRefresh: true);
+
+  Future<void> _pickDate() async {
+    final today = DateTime.now();
+    final chosen = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(today.year - 2, today.month, today.day),
+      lastDate: DateTime(today.year, today.month, today.day + 30),
+      helpText: 'ELIGE EL DÍA DE LOS EVENTOS',
+    );
+    if (chosen != null && mounted) await _loadDate(chosen);
+  }
+
+  String get _dateLabel =>
+      '${_selectedDate.day.toString().padLeft(2, '0')}/'
+      '${_selectedDate.month.toString().padLeft(2, '0')}/'
+      '${_selectedDate.year}';
 
   List<SportsAgendaEvent> get _visibleEvents {
     final expected = _sport.name.toLowerCase();
@@ -211,7 +291,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     return _flatten(value);
   }
 
-  Future<void> _loadStatistics(SportsAgendaEvent event) async {
+  Future<void> _loadStatistics(SportsAgendaEvent event, {bool retryRateLimit = true}) async {
     setState(() {
       _selectedEvent = event;
       _loadingStats = true;
@@ -243,6 +323,18 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       });
     } catch (error) {
       if (!mounted) return;
+      if (retryRateLimit && error is SportsApiException && error.statusCode == 429 && error.code == 'rate_limited') {
+        final seconds = (error.retryAfterSeconds ?? 60).clamp(1, 120).toInt();
+        setState(() {
+          _loadingStats = false;
+          _statsError = 'SportsAPI está aplicando su límite de consultas. '
+              'Reintentaré automáticamente en $seconds segundos…';
+        });
+        await Future<void>.delayed(Duration(seconds: seconds + 1));
+        if (!mounted || _selectedEvent?.id != event.id) return;
+        await _loadStatistics(event, retryRateLimit: false);
+        return;
+      }
       setState(() {
         _loadingStats = false;
         _statsError = error.toString();
@@ -250,7 +342,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     }
   }
 
-  Future<void> _loadStandings(SportsAgendaEvent event) async {
+  Future<void> _loadStandings(SportsAgendaEvent event, {bool retryRateLimit = true}) async {
     setState(() {
       _selectedEvent = event;
       _loadingStats = true;
@@ -285,6 +377,18 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       });
     } catch (error) {
       if (!mounted) return;
+      if (retryRateLimit && error is SportsApiException && error.statusCode == 429 && error.code == 'rate_limited') {
+        final seconds = (error.retryAfterSeconds ?? 60).clamp(1, 120);
+        setState(() {
+          _loadingStats = false;
+          _statsError = 'SportsAPI está aplicando su límite de consultas. '
+              'Reintentaré la clasificación automáticamente en $seconds segundos…';
+        });
+        await Future<void>.delayed(Duration(seconds: seconds + 1));
+        if (!mounted || _selectedEvent?.id != event.id) return;
+        await _loadStandings(event, retryRateLimit: false);
+        return;
+      }
       setState(() {
         _loadingStats = false;
         _statsError = error.toString();
@@ -408,17 +512,63 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
             ),
           ),
           const SizedBox(height: 13),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+            decoration: BoxDecoration(
+              color: _apiStatsPanel,
+              border: Border.all(color: _apiStatsLine),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: <Widget>[
+                IconButton(
+                  tooltip: 'Día anterior',
+                  onPressed: _loading
+                      ? null
+                      : () => _loadDate(_selectedDate.subtract(const Duration(days: 1))),
+                  icon: const Icon(Icons.chevron_left_rounded, color: _apiStatsCyan),
+                ),
+                Expanded(
+                  child: Column(
+                    children: <Widget>[
+                      const Text('AGENDA DEL DÍA',
+                          style: TextStyle(color: _apiStatsMuted, fontSize: 8, fontWeight: FontWeight.w800)),
+                      Text(_dateLabel,
+                          style: const TextStyle(color: _apiStatsCyan, fontSize: 13, fontWeight: FontWeight.w900)),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Día siguiente',
+                  onPressed: _loading
+                      ? null
+                      : () => _loadDate(_selectedDate.add(const Duration(days: 1))),
+                  icon: const Icon(Icons.chevron_right_rounded, color: _apiStatsCyan),
+                ),
+                IconButton(
+                  tooltip: 'Elegir fecha',
+                  onPressed: _loading ? null : _pickDate,
+                  icon: const Icon(Icons.calendar_month_rounded, color: _apiStatsPink),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
           Row(
             children: <Widget>[
-              const Expanded(
-                child: Text('EVENTOS DE HOY',
-                    style: TextStyle(color: _apiStatsCyan, fontSize: 11, fontWeight: FontWeight.w900)),
+              Expanded(
+                child: Text('EVENTOS DEL ${_dateLabel}',
+                    style: const TextStyle(color: _apiStatsCyan, fontSize: 11, fontWeight: FontWeight.w900)),
               ),
               Text('${events.length} eventos',
                   style: const TextStyle(color: _apiStatsMuted, fontSize: 9)),
             ],
           ),
           const SizedBox(height: 7),
+          if (_warning != null) ...<Widget>[
+            _message(_warning!),
+            const SizedBox(height: 8),
+          ],
           if (_loading)
             const Padding(
               padding: EdgeInsets.all(25),
@@ -427,7 +577,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
           else if (_error != null)
             _message(_error!)
           else if (events.isEmpty)
-            _message('No hay eventos publicados hoy para ${_sport.name}. La agenda se actualiza automáticamente desde el Worker.')
+            _message('No hay eventos publicados para ${_sport.name} en esta fecha. Cambia de día para consultar encuentros anteriores o próximos.')
           else
             ...events.map((event) => _eventCard(event)),
           if (_selectedEvent != null) ...<Widget>[

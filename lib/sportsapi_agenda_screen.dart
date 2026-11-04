@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import 'automatic_live_service.dart';
 import 'sportsapi_app_service.dart';
-import 'web_agenda_screen.dart';
 
 const Color _agendaBg = Color(0xFF030814);
 const Color _agendaPanel = Color(0xFF071326);
@@ -17,10 +16,9 @@ const Color _agendaRed = Color(0xFFFF3155);
 
 typedef AgendaEventsLoader = Future<List<SportsAgendaEvent>?> Function();
 
-/// Agenda nativa: muestra el calendario publicado por el Worker sin depender
-/// de que la página de MARCA pueda renderizarse dentro de Android WebView.
-class MarcaAgendaScreen extends StatefulWidget {
-  const MarcaAgendaScreen({
+/// Agenda nativa basada exclusivamente en el calendario de SportsAPI.app.
+class SportsApiAgendaScreen extends StatefulWidget {
+  const SportsApiAgendaScreen({
     super.key,
     required this.onOpenLive,
     this.isActive = true,
@@ -33,10 +31,10 @@ class MarcaAgendaScreen extends StatefulWidget {
   final AgendaEventsLoader? loadEvents;
 
   @override
-  State<MarcaAgendaScreen> createState() => _MarcaAgendaScreenState();
+  State<SportsApiAgendaScreen> createState() => _SportsApiAgendaScreenState();
 }
 
-class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
+class _SportsApiAgendaScreenState extends State<SportsApiAgendaScreen>
     with WidgetsBindingObserver {
   List<SportsAgendaEvent> _events = <SportsAgendaEvent>[];
   Timer? _refreshTimer;
@@ -53,7 +51,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
   }
 
   @override
-  void didUpdateWidget(covariant MarcaAgendaScreen oldWidget) {
+  void didUpdateWidget(covariant SportsApiAgendaScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isActive != widget.isActive) {
       _syncRefreshTimer();
@@ -93,23 +91,10 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
     }
 
     // SportsAPI es la fuente principal de los diez deportes favoritos.
-    // Así la agenda nativa no queda limitada a una programación antigua.
-    try {
-      final events = await SportsApiAppService().fetchFavoriteAgendaEvents();
-      await SportsAgendaStore.save(events);
-      return events;
-    } catch (_) {
-      // Si la API falla, intenta el calendario agregado y luego la caché local.
-      final published = await AutomaticLiveService().fetchPublishedSchedule();
-      if (published != null) {
-        final events = published
-            .map((item) => item.event)
-            .toList(growable: false);
-        await SportsAgendaStore.save(events);
-        return events;
-      }
-      return SportsAgendaStore.load();
-    }
+    // Los errores se elevan a _refresh para poder mostrar el motivo real.
+    final events = await SportsApiAppService().fetchFavoriteAgendaEvents();
+    await SportsAgendaStore.save(events);
+    return events;
   }
 
   Future<void> _refresh() async {
@@ -124,10 +109,9 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
     try {
       final loaded = await _loadEvents();
       final now = DateTime.now();
-      // MARCA publica jornadas de varios días en una sola captura. La pestaña
-      // Agenda de hoy solo presenta eventos cuya fecha local de inicio coincide
-      // con la fecha del teléfono; el caché conserva la captura completa para
-      // que el planificador de transmisiones no pierda los próximos eventos.
+      // La pestaña Agenda de hoy presenta los eventos cuya fecha local de
+      // inicio coincide con la fecha del teléfono; el almacén conserva todos
+      // los eventos recibidos para que el planificador encuentre los próximos.
       final today = DateTime(now.year, now.month, now.day);
       final tomorrow = today.add(const Duration(days: 1));
       final visibleById = <String, SportsAgendaEvent>{};
@@ -147,12 +131,27 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
         _loading = false;
         _hasLoaded = true;
       });
-    } catch (_) {
+    } catch (error) {
+      final saved = await SportsAgendaStore.load();
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final tomorrow = today.add(const Duration(days: 1));
+      final visibleById = <String, SportsAgendaEvent>{};
+      for (final event in saved) {
+        final localStart = event.startsAt.toLocal();
+        if (localStart.isBefore(today) || !localStart.isBefore(tomorrow)) {
+          continue;
+        }
+        visibleById.putIfAbsent(event.id, () => event);
+      }
+      final visible = visibleById.values.toList()
+        ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
       if (!mounted) return;
       setState(() {
+        _events = visible;
         _loading = false;
         _hasLoaded = true;
-        _error = 'No se pudo actualizar la agenda. Comprueba tu conexión e inténtalo de nuevo.';
+        _error = error.toString();
       });
     }
   }
@@ -345,20 +344,6 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
     );
   }
 
-  Future<void> _openMarcaWeb() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => WebAgendaScreen(
-          pageTitle: 'PROGRAMACIÓN MARCA',
-          onExit: () => Navigator.of(context).pop(),
-          onOpenLive: () {
-            Navigator.of(context).pop();
-            widget.onOpenLive();
-          },
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -396,11 +381,6 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
               Icons.refresh_rounded,
               color: _loading ? _agendaMuted : _agendaCyan,
             ),
-          ),
-          IconButton(
-            tooltip: 'Abrir agenda web de respaldo',
-            onPressed: _openMarcaWeb,
-            icon: const Icon(Icons.open_in_browser_rounded, color: _agendaGreen),
           ),
         ],
       ),
@@ -452,6 +432,25 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
               ],
             ),
           ),
+          if (_error != null && events.isNotEmpty)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                color: _agendaPanel,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: _agendaPink.withAlpha(150)),
+              ),
+              child: Text(
+                'Mostrando la última agenda guardada. SportsAPI: $_error',
+                style: const TextStyle(
+                  color: _agendaMuted,
+                  fontSize: 9,
+                  height: 1.4,
+                ),
+              ),
+            ),
           Expanded(
             child: _loading && !_hasLoaded
                 ? const Center(
@@ -544,17 +543,15 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                                               Column(
                                                 crossAxisAlignment: CrossAxisAlignment.end,
                                                 children: <Widget>[
-                                                  Text(
-                                                    event.homeScore.isNotEmpty || event.awayScore.isNotEmpty
-                                                        ? '${event.homeScore.isEmpty ? '-' : event.homeScore} : ${event.awayScore.isEmpty ? '-' : event.awayScore}'
-                                                        : _timeLabel(event.startsAt),
-                                                    style: TextStyle(
-                                                      color: live ? _agendaRed : _agendaGreen,
-                                                      fontSize: 12,
-                                                      fontWeight: FontWeight.w900,
+                                                  if (event.homeScore.isNotEmpty || event.awayScore.isNotEmpty)
+                                                    Text(
+                                                      '${event.homeScore.isEmpty ? '-' : event.homeScore} : ${event.awayScore.isEmpty ? '-' : event.awayScore}',
+                                                      style: TextStyle(
+                                                        color: live ? _agendaRed : _agendaGreen,
+                                                        fontSize: 12,
+                                                        fontWeight: FontWeight.w900,
+                                                      ),
                                                     ),
-                                                  ),
-                                                  const SizedBox(height: 2),
                                                   Text(
                                                     live ? '● EN VIVO' :
                                                       (event.statusLabel.isNotEmpty
@@ -564,6 +561,15 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                                                       color: live ? _agendaRed : _agendaMuted,
                                                       fontSize: 8,
                                                       fontWeight: FontWeight.w800,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 3),
+                                                  Text(
+                                                    'INICIO ${_timeLabel(event.startsAt)} · HORA LOCAL',
+                                                    style: const TextStyle(
+                                                      color: _agendaGreen,
+                                                      fontSize: 8,
+                                                      fontWeight: FontWeight.w900,
                                                     ),
                                                   ),
                                                 ],
@@ -766,15 +772,6 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _agendaCyan,
                       side: const BorderSide(color: _agendaCyan),
-                    ),
-                  ),
-                  FilledButton.icon(
-                    onPressed: _openMarcaWeb,
-                    icon: const Icon(Icons.open_in_browser_rounded),
-                    label: const Text('ABRIR MARCA'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: _agendaGreen,
-                      foregroundColor: _agendaBg,
                     ),
                   ),
                 ],

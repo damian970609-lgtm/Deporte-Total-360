@@ -12,7 +12,7 @@ class SportsApiAppService {
   SportsApiAppService({http.Client? client}) : _client = client ?? http.Client();
 
   final http.Client _client;
-  static const Duration _timeout = Duration(seconds: 15);
+  static const Duration _timeout = Duration(seconds: 25);
 
   Uri _uri(String route, [Map<String, String> query = const <String, String>{}]) {
     final base = SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value);
@@ -22,32 +22,85 @@ class SportsApiAppService {
     return Uri.parse('$base/api/sportsapi$route').replace(queryParameters: query.isEmpty ? null : query);
   }
 
-  Future<dynamic> _get(String route, [Map<String, String> query = const <String, String>{}]) async {
+  Future<dynamic> _get(
+    String route, [
+    Map<String, String> query = const <String, String>{},
+  ]) {
+    return _getResponse(route, query, includeMeta: false);
+  }
+
+  Future<dynamic> _getEnvelope(
+    String route, [
+    Map<String, String> query = const <String, String>{},
+  ]) {
+    return _getResponse(route, query, includeMeta: true);
+  }
+
+  Future<dynamic> _getResponse(
+    String route,
+    Map<String, String> query, {
+    required bool includeMeta,
+  }) async {
     try {
       final response = await _client.get(
         _uri(route, query),
         headers: const <String, String>{'Accept': 'application/json'},
       ).timeout(_timeout);
       if (response.statusCode != 200) {
-        String message = 'El servidor SportsAPI respondió HTTP ${response.statusCode}.';
+        final statusCode = response.statusCode;
+        final retryAfter = int.tryParse(response.headers['retry-after'] ?? '');
+        var message = 'El servidor SportsAPI respondió HTTP ' + statusCode.toString() + '.';
+        String? providerCode;
         try {
           final error = jsonDecode(response.body);
           if (error is Map && error['error'] != null) {
             final value = error['error'];
-            message = value is Map
-                ? (value['message'] ?? value['code'] ?? message).toString()
-                : value.toString();
+            if (value is Map) {
+              providerCode = value['code']?.toString();
+              final providerMessage = value['message']?.toString();
+              if (providerMessage != null && providerMessage.isNotEmpty) {
+                message = providerMessage;
+              }
+            } else {
+              message = value.toString();
+            }
           }
         } catch (_) {
           // Conserva el código HTTP si el servidor no devuelve JSON.
         }
-        throw SportsApiException(message);
+
+        if (providerCode == 'rate_limited' || statusCode == 429) {
+          final wait = retryAfter ?? 60;
+          message = 'SportsAPI recibió demasiadas consultas. Espera ' +
+              wait.toString() + ' segundos y vuelve a actualizar.';
+        } else if (providerCode == 'quota_exceeded') {
+          final wait = retryAfter;
+          message = 'Se agotó la cuota de consultas de SportsAPI. ' +
+              (wait == null
+                  ? 'Vuelve a intentarlo cuando se restablezca el límite del proveedor.'
+                  : 'El proveedor indica que se restablece en ' + wait.toString() + ' segundos.');
+        } else if (providerCode == 'history_not_in_plan') {
+          message = 'La fecha solicitada está fuera del historial incluido en tu plan de SportsAPI.';
+        } else if (providerCode == 'endpoint_not_in_plan') {
+          message = 'Tu plan de SportsAPI no incluye este tipo de estadísticas.';
+        } else if (statusCode == 401) {
+          message = 'SportsAPI rechazó la clave configurada en el servidor. Hay que revisar el secreto del Worker.';
+        } else if (statusCode == 403) {
+          message = 'SportsAPI denegó esta consulta por permisos o por el plan contratado.';
+        }
+
+        throw SportsApiException(
+          message,
+          statusCode: statusCode,
+          code: providerCode,
+          retryAfterSeconds: retryAfter,
+        );
       }
       final decoded = jsonDecode(response.body);
       if (decoded is! Map) {
         throw const SportsApiException('La respuesta de SportsAPI no tiene el formato esperado.');
       }
-      if (route == '/favorites') return decoded;
+      if (route == '/favorites' || includeMeta) return decoded;
       if (!decoded.containsKey('data')) {
         throw const SportsApiException('La respuesta de SportsAPI no contiene el campo data.');
       }
@@ -105,62 +158,260 @@ class SportsApiAppService {
       <String, DateTime>{};
   static final Map<String, Future<List<SportsAgendaEvent>>> _agendaInFlight =
       <String, Future<List<SportsAgendaEvent>>>{};
+  static final Set<String> _agendaSecondDayScheduled = <String>{};
+
+  String _dayKey(DateTime value) =>
+      value.year.toString().padLeft(4, '0') + '-' +
+      value.month.toString().padLeft(2, '0') + '-' +
+      value.day.toString().padLeft(2, '0');
 
   Future<List<SportsAgendaEvent>> fetchFavoriteAgendaEvents({
     DateTime? date,
+    bool forceRefresh = false,
   }) {
-    // SportsAPI date is a UTC calendar day. Use the phone's calendar
-    // date deliberately so the native Agenda tab stays aligned with the
-    // user's local day; returned instants are converted to local time below.
     final selected = date ?? DateTime.now();
-    final day = selected.year.toString().padLeft(4, '0') + '-' +
-        selected.month.toString().padLeft(2, '0') + '-' +
-        selected.day.toString().padLeft(2, '0');
-    final cached = _agendaCache[day];
-    final expires = _agendaCacheExpiry[day];
-    if (cached != null && expires != null && DateTime.now().isBefore(expires)) {
-      return Future<List<SportsAgendaEvent>>.value(cached);
-    }
+    final localDay = DateTime(selected.year, selected.month, selected.day);
+    final day = _dayKey(localDay);
     final pending = _agendaInFlight[day];
     if (pending != null) return pending;
-    final future = _fetchFavoriteAgendaEvents(day);
+
+    final cached = _agendaCache[day];
+    final expires = _agendaCacheExpiry[day];
+    if (!forceRefresh && cached != null && expires != null &&
+        DateTime.now().isBefore(expires)) {
+      return Future<List<SportsAgendaEvent>>.value(cached);
+    }
+
+    // Mientras se completa la segunda fecha UTC no se vuelve a disparar el
+    // bloque de diez consultas de la primera fecha, aunque se pulse Actualizar.
+    if (_agendaSecondDayScheduled.contains(day) && cached != null) {
+      return Future<List<SportsAgendaEvent>>.value(cached);
+    }
+
+    final future = _fetchFavoriteAgendaEvents(localDay);
     _agendaInFlight[day] = future;
     return future.then((events) {
       _agendaCache[day] = events;
-      _agendaCacheExpiry[day] = DateTime.now().add(const Duration(minutes: 2));
+      _agendaCacheExpiry[day] = DateTime.now().add(const Duration(minutes: 5));
       return events;
     }).whenComplete(() {
-      _agendaInFlight.remove(day);
+      if (identical(_agendaInFlight[day], future)) {
+        _agendaInFlight.remove(day);
+      }
     });
   }
 
-  Future<List<SportsAgendaEvent>> _fetchFavoriteAgendaEvents(String day) async {
+  String _competitionKey(String value) {
+    return value
+        .toLowerCase()
+        .trim()
+        .replaceAll(RegExp(r'[^a-z0-9áéíóúüñ]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  Future<List<SportsAgendaEvent>> _fetchFavoriteAgendaEvents(
+    DateTime localDay,
+  ) async {
+    // La API recibe una fecha UTC. Una jornada local puede cruzar dos fechas;
+    // para no disparar veinte peticiones de golpe, se consulta primero la fecha
+    // UTC principal y la segunda se completa tras el reinicio del límite/minuto.
+    final localStart = DateTime(localDay.year, localDay.month, localDay.day);
+    final localEnd = DateTime(localDay.year, localDay.month, localDay.day + 1);
+    final utcStart = localStart.toUtc();
+    final utcLastInstant = localEnd.toUtc().subtract(
+      const Duration(microseconds: 1),
+    );
+    final firstUtcDay = DateTime.utc(utcStart.year, utcStart.month, utcStart.day);
+    final lastUtcDay = DateTime.utc(
+      utcLastInstant.year,
+      utcLastInstant.month,
+      utcLastInstant.day,
+    );
+    final utcDays = <String>[];
+    for (var day = firstUtcDay;
+        !day.isAfter(lastUtcDay);
+        day = day.add(const Duration(days: 1))) {
+      utcDays.add(_dayKey(day));
+    }
+
+    final favoriteSports = await fetchFavoriteSports();
+    final favoritesById = <String, Map<String, String>>{};
+    for (final sport in favoriteSports) {
+      final id = _text(sport['id']);
+      final rawCompetitions = sport['competitions'];
+      if (id.isEmpty || rawCompetitions is! List) continue;
+      final allowed = <String, String>{};
+      for (final rawName in rawCompetitions) {
+        final name = _text(rawName);
+        if (name.isNotEmpty) allowed[_competitionKey(name)] = name;
+      }
+      favoritesById[id] = allowed;
+    }
+    if (!_sportNames.keys.every(favoritesById.containsKey) ||
+        favoritesById.values.any((items) => items.isEmpty)) {
+      throw const SportsApiException(
+        'El catálogo de competiciones favoritas está incompleto en el Worker.',
+      );
+    }
+
+    final firstDayEvents = await _fetchFavoriteAgendaUtcDay(
+      utcDays.first,
+      localStart,
+      localEnd,
+      favoritesById,
+    );
+
+    if (utcDays.length > 1) {
+      final localKey = _dayKey(localDay);
+      if (_agendaSecondDayScheduled.add(localKey)) {
+        unawaited(_loadSecondUtcDayInBackground(
+          localKey,
+          utcDays[1],
+          localStart,
+          localEnd,
+          favoritesById,
+        ));
+      }
+    }
+    return firstDayEvents;
+  }
+
+  Future<void> _loadSecondUtcDayInBackground(
+    String localKey,
+    String utcDay,
+    DateTime localStart,
+    DateTime localEnd,
+    Map<String, Map<String, String>> favoritesById,
+  ) async {
+    try {
+      // El plan Free admite diez peticiones por minuto. Esperamos más de un
+      // minuto antes de completar la fecha UTC nocturna de la jornada local.
+      await Future<void>.delayed(const Duration(seconds: 65));
+      final additional = await _fetchFavoriteAgendaUtcDay(
+        utcDay,
+        localStart,
+        localEnd,
+        favoritesById,
+      );
+      final mergedById = <String, SportsAgendaEvent>{
+        for (final event in (_agendaCache[localKey] ?? <SportsAgendaEvent>[]))
+          event.id: event,
+        for (final event in additional) event.id: event,
+      };
+      final merged = mergedById.values.toList()
+        ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+      _agendaCache[localKey] = merged;
+      _agendaCacheExpiry[localKey] =
+          DateTime.now().add(const Duration(minutes: 5));
+      await SportsAgendaStore.save(merged);
+    } catch (_) {
+      // La primera fecha ya se muestra; una segunda fecha fallida no la borra.
+    } finally {
+      _agendaSecondDayScheduled.remove(localKey);
+    }
+  }
+
+  Future<List<SportsAgendaEvent>> _fetchFavoriteAgendaUtcDay(
+    String utcDay,
+    DateTime localStart,
+    DateTime localEnd,
+    Map<String, Map<String, String>> favoritesById,
+  ) async {
     var successfulSports = 0;
+    final failures = <String, String>{};
+
     final results = await Future.wait(_sportNames.entries.map((entry) async {
+      final allowed = favoritesById[entry.key] ?? <String, String>{};
+      final isRace = entry.key == 'cycling' || entry.key == 'motorsport';
       try {
-        final isRace = entry.key == 'cycling' || entry.key == 'motorsport';
-        final payload = await _get(
-          isRace ? '/races' : '/fixtures',
-          <String, String>{'date': day, 'sport': entry.key, if (!isRace) 'page': '0'},
-        );
-        if (payload is! List) {
-          throw const FormatException('SportsAPI devolvió una agenda con formato inválido.');
+        final List<dynamic> payload;
+        if (isRace) {
+          final raceData = await _get(
+            '/races',
+            <String, String>{'date': utcDay, 'sport': entry.key},
+          );
+          if (raceData is! List) {
+            throw const FormatException(
+              'SportsAPI devolvió una agenda de carreras con formato inválido.',
+            );
+          }
+          payload = raceData;
+        } else {
+          // Una página por deporte evita que la APK agote el límite/minuto
+          // recorriendo hasta cien páginas en diez deportes simultáneamente.
+          final envelope = await _getEnvelope(
+            '/fixtures',
+            <String, String>{
+              'date': utcDay,
+              'sport': entry.key,
+              'page': '0',
+            },
+          );
+          if (envelope is! Map || envelope['data'] is! List) {
+            throw const FormatException(
+              'SportsAPI devolvió una página de agenda con formato inválido.',
+            );
+          }
+          payload = List<dynamic>.from(envelope['data'] as List);
         }
         successfulSports++;
+
         return payload.whereType<Map>().map((raw) {
           final row = Map<String, dynamic>.from(raw);
-          if (isRace) return _raceEvent(row, entry.key, entry.value);
-          return _fixtureEvent(row, entry.value);
+          SportsAgendaEvent? event;
+          if (isRace) {
+            final series = row['series'] is Map
+                ? Map<String, dynamic>.from(row['series'])
+                : <String, dynamic>{};
+            final providerName = entry.key == 'cycling'
+                ? _text(row['name'])
+                : _text(series['name']);
+            final canonical = allowed[_competitionKey(providerName)];
+            if (canonical == null) return null;
+            if (entry.key == 'motorsport' && series.isNotEmpty) {
+              row['series'] = <String, dynamic>{...series, 'name': canonical};
+            }
+            event = _raceEvent(
+              row,
+              entry.key,
+              entry.value,
+              competitionName: canonical,
+            );
+          } else {
+            final league = row['league'] is Map
+                ? Map<String, dynamic>.from(row['league'])
+                : <String, dynamic>{};
+            final canonical = allowed[_competitionKey(_text(league['name']))];
+            if (canonical == null) return null;
+            row['league'] = <String, dynamic>{...league, 'name': canonical};
+            event = _fixtureEvent(row, entry.value);
+          }
+
+          if (event == null) return null;
+          if (event.startsAt.isBefore(localStart) ||
+              !event.startsAt.isBefore(localEnd)) {
+            return null;
+          }
+          return event;
         }).whereType<SportsAgendaEvent>().toList(growable: false);
-      } catch (_) {
-        // La falta de cobertura de un deporte no bloquea los demás.
+      } catch (error) {
+        failures[entry.key] = error.toString();
         return <SportsAgendaEvent>[];
       }
     }));
 
     if (successfulSports == 0) {
-      throw const SportsApiException('No se pudo consultar ninguno de tus diez deportes favoritos en SportsAPI.');
+      final details = failures.entries
+          .map((entry) => (_sportNames[entry.key] ?? entry.key) +
+              ': ' + entry.value)
+          .join(' | ');
+      throw SportsApiException(
+        details.isEmpty
+            ? 'No se pudo consultar ninguno de tus diez deportes favoritos en SportsAPI.'
+            : 'SportsAPI no respondió para tus deportes favoritos. ' + details,
+      );
     }
+
     final unique = <String, SportsAgendaEvent>{};
     for (final event in results.expand((items) => items)) {
       unique[event.id] = event;
@@ -227,8 +478,9 @@ class SportsApiAppService {
   SportsAgendaEvent? _raceEvent(
     Map<String, dynamic> row,
     String sportId,
-    String sportName,
-  ) {
+    String sportName, {
+    String? competitionName,
+  }) {
     final id = int.tryParse(_text(row['id']));
     if (id == null) return null;
     final sessions = row['sessions'] is List
@@ -260,7 +512,7 @@ class SportsApiAppService {
       id: 'sportsapi-race-$id-$sessionId',
       title: _text(row['name']).isEmpty ? sportName : _text(row['name']),
       sport: sportName,
-      competition: _text(series['name']),
+      competition: competitionName ?? _text(series['name']),
       participants: winnerName.isEmpty
           ? const <SportsAgendaParticipant>[]
           : <SportsAgendaParticipant>[SportsAgendaParticipant(name: winnerName, imageUrl: _image(winner['image']))],
