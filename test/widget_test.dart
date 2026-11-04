@@ -120,8 +120,8 @@ void main() {
 
     await tester.tap(find.text('PEGAR CONTENIDO M3U'));
     await tester.pumpAndSettle();
-    const playlist = '#EXTM3U\\n'
-        '#EXTINF:-1 group-title="Deportes",Canal Importado\\n'
+    const playlist = '#EXTM3U\n'
+        '#EXTINF:-1 group-title="Deportes",Canal Importado\n'
         'https://media.example/live/98765?token=abc';
     await tester.enterText(find.byType(TextField).last, playlist);
     await tester.tap(find.text('Importar'));
