@@ -8,6 +8,16 @@ import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sports_statistics_screen.dart';
 
 void main() {
+  test('el formulario manual conserva URLs completas al separar varias listas', () {
+    const firstUrl = 'https://raw.githubusercontent.com/iptv/listas/deportes.m3u';
+    const secondUrl = 'https://cdn.example.net/canales/directos.m3u8';
+
+    expect(
+      parseManualSourceUrls('$firstUrl\r\n$secondUrl; $firstUrl'),
+      equals(<String>[firstUrl, secondUrl]),
+    );
+  });
+
   testWidgets('estadísticas muestra selector multideporte e IDs', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(home: SportsStatisticsScreen()),
