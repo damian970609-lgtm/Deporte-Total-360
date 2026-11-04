@@ -476,8 +476,9 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
         SnackBar(
           content: Text(
             added == 1
-                ? (epg ? 'Guía EPG agregada.' : 'Lista M3U agregada.'),
-            ),
+                ? (epg ? 'Guía EPG agregada.' : 'Lista M3U agregada.')
+                : '$added fuentes agregadas correctamente.',
+          ),
         ),
       );
     }
