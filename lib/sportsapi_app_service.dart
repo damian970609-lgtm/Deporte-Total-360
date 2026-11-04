@@ -22,7 +22,12 @@ class SportsApiAppService {
     return Uri.parse('$base/api/sportsapi$route').replace(queryParameters: query.isEmpty ? null : query);
   }
 
-  Future<dynamic> _get(String route, [Map<String, String> query = const <String, String>{}]) async {
+  Future<dynamic> _get(
+    String route, [
+    Map<String, String> query = const <String, String>{},
+  ], {
+    bool includeMeta = false,
+  }) async {
     try {
       final response = await _client.get(
         _uri(route, query),
@@ -47,7 +52,7 @@ class SportsApiAppService {
       if (decoded is! Map) {
         throw const SportsApiException('La respuesta de SportsAPI no tiene el formato esperado.');
       }
-      if (route == '/favorites') return decoded;
+      if (route == '/favorites' || includeMeta) return decoded;
       if (!decoded.containsKey('data')) {
         throw const SportsApiException('La respuesta de SportsAPI no contiene el campo data.');
       }
@@ -171,12 +176,41 @@ class SportsApiAppService {
       try {
         final allowed = favoritesById[entry.key] ?? <String, String>{};
         final isRace = entry.key == 'cycling' || entry.key == 'motorsport';
-        final payload = await _get(
-          isRace ? '/races' : '/fixtures',
-          <String, String>{'date': day, 'sport': entry.key, if (!isRace) 'page': '0'},
-        );
-        if (payload is! List) {
-          throw const FormatException('SportsAPI devolvió una agenda con formato inválido.');
+        final payload = <dynamic>[];
+        if (isRace) {
+          final raceData = await _get(
+            '/races',
+            <String, String>{'date': day, 'sport': entry.key},
+          );
+          if (raceData is! List) {
+            throw const FormatException('SportsAPI devolvió una agenda de carreras con formato inválido.');
+          }
+          payload.addAll(raceData);
+        } else {
+          // SportsAPI pagina por diez ligas. Recorrer mientras hasNextPage
+          // evita perder torneos favoritos que aparecen después de la página 0.
+          for (var page = 0; page < 100; page++) {
+            final envelope = await _get(
+              '/fixtures',
+              <String, String>{
+                'date': day,
+                'sport': entry.key,
+                'page': page.toString(),
+              },
+              includeMeta: true,
+            );
+            if (envelope is! Map || envelope['data'] is! List) {
+              throw const FormatException('SportsAPI devolvió una página de agenda con formato inválido.');
+            }
+            payload.addAll(envelope['data'] as List);
+            final meta = envelope['meta'] is Map
+                ? Map<String, dynamic>.from(envelope['meta'] as Map)
+                : <String, dynamic>{};
+            if (meta['hasNextPage'] != true) break;
+            if (page == 99) {
+              throw const FormatException('SportsAPI indicó más de 100 páginas para un deporte.');
+            }
+          }
         }
         successfulSports++;
         return payload.whereType<Map>().map((raw) {
