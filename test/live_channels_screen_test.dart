@@ -23,7 +23,42 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pump();
     expect(refreshes, 1);
-    expect(find.text('MULTIVISTA · 2/4 EVENTOS'), findsOneWidget);
+    expect(find.text('MULTIVISTA · 2/8 EVENTOS'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('la pantalla principal reserva ocho canales de transmisión', (tester) async {
+    await tester.view.setPhysicalSize(const Size(430, 620));
+    await tester.view.setDevicePixelRatio(1);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: LivePlayerBoard(
+          sources: const <LivePlayerSource>[],
+          waitingEvents: <LivePlayerWaitingEvent>[
+            for (var index = 1; index <= 8; index++)
+              LivePlayerWaitingEvent(
+                heading: 'FÚTBOL · LIGA $index',
+                match: 'Equipo $index A vs Equipo $index B',
+                startLabel: 'Comienza 19:00',
+              ),
+          ],
+        ),
+      ),
+    ));
+    await tester.pump();
+
+    expect(find.text('DEPORTE TOTAL 360° CANAL 1'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('DEPORTE TOTAL 360° CANAL 8'),
+      420,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+    expect(find.text('DEPORTE TOTAL 360° CANAL 8'), findsOneWidget);
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
