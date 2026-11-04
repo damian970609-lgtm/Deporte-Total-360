@@ -6,7 +6,8 @@ Navegación principal: Inicio, Deportes en vivo, Agenda de hoy, Noticias, Mister
 
 Archivos principales:
 - lib/main.dart: navegación de ocho secciones, inicio y ajustes.
-- lib/automatic_live_service.dart y lib/automatic_live_screen.dart: captura de eventos de agenda, lectura de M3U/XMLTV, clasificación y asignación automática de señales a cuatro reproductores fijos y retiro de señales al terminar su horario EPG.
+- lib/automatic_live_service.dart y lib/automatic_live_screen.dart: captura de eventos de agenda, lectura de varias M3U/XMLTV, clasificación y asignación automática de señales verificadas a cuatro reproductores fijos, con hasta tres fuentes alternativas para recuperación si falla la principal.
+- lib/iptv_sources_screen.dart: gestor de listas M3U/M3U8 y guías XMLTV por URL, con alta, eliminación, prioridad, fusión de catálogos, detección de duplicados, búsqueda y selección de fuentes alternativas.
 - lib/live_media_format.dart y lib/live_channels_screen.dart: detección explícita de HLS, DASH, Smooth Streaming y vídeo progresivo, adaptación de calidad automática con ExoPlayer, selector manual por pistas y transición fullscreen/miniatura sin recrear el controlador.
 - lib/sports_summaries_screen.dart: categorías deportivas y reproducción de YouTube dentro de la app mediante WebView.
 - lib/public_chat_screen.dart: sala pública de chat compartida.
