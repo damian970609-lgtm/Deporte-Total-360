@@ -39,16 +39,26 @@ void main() {
     sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
   });
 
-  testWidgets('Ajustes expone un acceso visible al servidor deportivo', (tester) async {
+  testWidgets('Ajustes oculta el servidor y diez toques abren el menú secreto', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await tester.pumpWidget(
       const MaterialApp(home: SettingsScreen()),
     );
     await tester.pump();
 
-    expect(find.text('Servidor de estadísticas'), findsOneWidget);
+    expect(find.text('Servidor de estadísticas'), findsNothing);
+    for (var tap = 0; tap < 10; tap++) {
+      await tester.tap(find.text('DAMIAN.APK'));
+      await tester.pump(const Duration(milliseconds: 30));
+    }
+    await tester.pumpAndSettle();
+
+    expect(find.text('MENÚ SECRETO'), findsOneWidget);
+    expect(find.text('OTTFOX · EDITOR IPTV Y EPG'), findsOneWidget);
+    expect(find.text('AÑADIR FUENTES AL BUSCADOR AUTOMÁTICO'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
 
 
   testWidgets('Inicio conserva accesos y Explorar abre Estadísticas', (tester) async {
