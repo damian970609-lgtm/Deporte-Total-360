@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:deporte_total_360/agenda_screen.dart';
 import 'package:deporte_total_360/main.dart';
-import 'package:deporte_total_360/ottfox_workspace_screen.dart';
+import 'package:deporte_total_360/iptv_sources_screen.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sports_statistics_screen.dart';
 
@@ -46,7 +46,7 @@ void main() {
       MaterialApp(
         home: SettingsScreen(
           secretMenuBuilder: (_) => Scaffold(
-            appBar: AppBar(title: const Text('OTTFOX · EDITOR IPTV')),
+            appBar: AppBar(title: const Text('REPRODUCTOR IPTV · LISTAS Y CANALES')),
             body: const Text('ÚNICO ACCESO DEL MENÚ SECRETO'),
           ),
         ),
@@ -61,7 +61,7 @@ void main() {
     }
     await tester.pumpAndSettle();
 
-    expect(find.text('OTTFOX · EDITOR IPTV'), findsOneWidget);
+    expect(find.text('REPRODUCTOR IPTV · LISTAS Y CANALES'), findsOneWidget);
     expect(find.text('ÚNICO ACCESO DEL MENÚ SECRETO'), findsOneWidget);
     expect(find.text('ABRIR REPRODUCTOR Y EXTRACTOR IPTV'), findsNothing);
     expect(find.text('CODOPLAYER · REPRODUCTOR WEB'), findsNothing);
@@ -69,7 +69,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('la pantalla del menú secreto construye OTTFOX directamente', (tester) async {
+  testWidgets('la pantalla del menú secreto construye el gestor IPTV nativo', (tester) async {
     Widget? destination;
     await tester.pumpWidget(
       MaterialApp(
@@ -81,7 +81,7 @@ void main() {
         ),
       ),
     );
-    expect(destination, isA<OttfoxWorkspaceScreen>());
+    expect(destination, isA<IptvSourcesScreen>());
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
