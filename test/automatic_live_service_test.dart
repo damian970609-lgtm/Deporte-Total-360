@@ -243,18 +243,22 @@ void main() {
   });
 
   group('configuración internacional', () {
-    test('carga siete listas automáticamente y diecinueve EPG sin pedir validación', () async {
+    test('carga listas GitHub y guías EPG regionales automáticamente', () async {
       final settings = await AutoLiveSettings.load();
 
-      expect(settings.playlistUrls, hasLength(12));
+      expect(settings.playlistUrls, hasLength(14));
       expect(settings.playlistUrls.every(isSafeHttpUrl), isTrue);
-      expect(settings.epgUrls, hasLength(20));
+      expect(settings.epgUrls, hasLength(22));
       expect(settings.epgUrls.every(isSafeHttpUrl), isTrue);
       expect(settings.playlistUrls.first, contains('teleonline'));
       expect(settings.playlistUrls[1], contains('languages/spa.m3u'));
       expect(settings.playlistUrls[2], contains('countries/es.m3u'));
+      expect(settings.playlistUrls[12], contains('Free-TV/IPTV'));
+      expect(settings.playlistUrls[13], contains('legalFreeIPTVplaylist/live.m3u'));
       expect(settings.epgUrls.first, contains('epg-es.xml'));
       expect(settings.epgUrls[18], contains('teleonline/listas/main/epg.xml.gz'));
+      expect(settings.epgUrls[20], contains('epg-do.xml'));
+      expect(settings.epgUrls[21], contains('epg-sv.xml'));
       expect(settings.isConfigured, isTrue);
     });
 
@@ -267,10 +271,29 @@ void main() {
 
       final settings = await AutoLiveSettings.load();
 
-      expect(settings.playlistUrls, hasLength(12));
-      expect(settings.epgUrls, hasLength(20));
+      expect(settings.playlistUrls, hasLength(14));
+      expect(settings.epgUrls, hasLength(22));
       expect(settings.authorizationConfirmed, isTrue);
       expect(settings.isConfigured, isTrue);
+    });
+
+    test('añade las nuevas fuentes a los valores anteriores y conserva listas personalizadas', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'dt360_auto_live_playlist_url_v1':
+            previousDefaultAutoLivePlaylistUrls + '\\nhttps://user.example/custom.m3u',
+        'dt360_auto_live_epg_url_v1':
+            previousDefaultAutoLiveEpgUrl + '\\nhttps://user.example/custom.xml',
+        'dt360_auto_live_authorized_v1': true,
+      });
+
+      final settings = await AutoLiveSettings.load();
+
+      expect(settings.playlistUrls, hasLength(15));
+      expect(settings.playlistUrls, contains('https://user.example/custom.m3u'));
+      expect(settings.playlistUrls, contains('https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8'));
+      expect(settings.epgUrls, hasLength(23));
+      expect(settings.epgUrls, contains('https://user.example/custom.xml'));
+      expect(settings.epgUrls, contains('https://iptv-epg.org/files/epg-do.xml'));
     });
 
     test('restaura fuentes automáticas cuando una versión anterior dejó las listas vacías', () async {
@@ -283,8 +306,8 @@ void main() {
       final settings = await AutoLiveSettings.load();
 
       expect(settings.isConfigured, isTrue);
-      expect(settings.playlistUrls, hasLength(12));
-      expect(settings.epgUrls, hasLength(20));
+      expect(settings.playlistUrls, hasLength(14));
+      expect(settings.epgUrls, hasLength(22));
     });
 
     test('guarda varias listas de OTTFOX y las analiza incrementalmente fuera de la interfaz', () async {
