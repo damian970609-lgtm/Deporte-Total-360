@@ -32,7 +32,6 @@ const Color appRed = Color(0xFFFF3155);
 const Color appMuted = Color(0xFFA9BDD6);
 
 const String contactUrl = 'https://wa.me/5927214741';
-const String ottfoxWebUrl = 'https://ottfox.net/es/?utm_source=chatgpt.com';
 const String ottfoxEditorUrl = 'https://ottfox.net/es/iptv-playlist-editor/';
 const String settingsPhotoAsset =
     'assets/images/file_000000006048820e9e0720f1adf548f1.png';
@@ -1982,7 +1981,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Abre OTTFOX dentro de Deporte Total 360° para importar, ordenar y convertir tus propias listas y guías.',
+                    'La APK descarga y combina automáticamente las 12 listas y 20 guías que ya utiliza, además de las fuentes adicionales, y las envía al editor OTTFOX.',
                     style: TextStyle(color: appMuted, height: 1.45, fontSize: 11),
                   ),
                   const SizedBox(height: 12),
@@ -1995,7 +1994,7 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                         ),
                       ),
                       icon: const Icon(Icons.open_in_browser_rounded),
-                      label: const Text('ABRIR OTTFOX EN LA APK'),
+                      label: const Text('SINCRONIZAR LISTAS + EPG EN OTTFOX'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: appCyan,
                         side: const BorderSide(color: appCyan),
@@ -2188,6 +2187,9 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
     });
 
     try {
+      // Espera a que la interfaz del editor termine de montar sus campos.
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (!mounted) return;
       final settings = await AutoLiveSettings.load();
       _playlistCount = settings.playlistUrls.length;
       _epgCount = settings.epgUrls.length;
@@ -2244,7 +2246,7 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
                 element.id || '',
                 element.getAttribute('aria-label') || ''
               ].join(' ').toLowerCase();
-              return /(^|\\s)epg(\\s*\\d|\\s|$)|xmltv/.test(marker);
+              return /epg|xmltv/.test(marker);
             });
           const linkedGuides = Math.min(epgInputs.length, 5, epgUrls.length);
           for (let index = 0; index < linkedGuides; index++) {
@@ -2319,6 +2321,23 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
       ''';
 
       final rawResult = await controller.evaluateJavascript(source: script);
+      // La biblioteca de OTTFOX se actualiza al pulsar "Aplicar cambios".
+      // Espera a que termine de leer el M3U antes de intentar guardar.
+      await Future<void>.delayed(const Duration(seconds: 3));
+      final applyResult = await controller.evaluateJavascript(source: r'''
+        (() => {
+          const button = Array.from(document.querySelectorAll('button'))
+            .find((element) =>
+              /aplicar cambios|apply changes/i.test(
+                (element.innerText || element.textContent || '').trim()
+              ));
+          if (!button || button.disabled) return false;
+          button.click();
+          return true;
+        })();
+      ''');
+      final appliedToOttfox = applyResult == true ||
+          applyResult.toString().toLowerCase() == 'true';
       Map<String, dynamic> result = <String, dynamic>{};
       if (rawResult is String) {
         try {
@@ -2517,9 +2536,9 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
             padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
             color: const Color(0xFF020B19),
             child: const Text(
-              'La APK descarga y combina las listas configuradas antes de enviarlas al editor OTTFOX. '
-              'Las guías EPG se conservan como enlaces XMLTV en la M3U; OTTFOX guarda la lista en su biblioteca local. '
-              'La actualización automática de las listas de la APK sigue funcionando de forma independiente.',
+              'La APK descarga y combina las listas existentes y las guías XMLTV al abrir OTTFOX. '
+              'Todos los enlaces EPG se incluyen en la M3U; el editor dispone de cinco campos EPG visibles. '
+              'Las fuentes automáticas de la APK siguen actualizándose independientemente.',
               textAlign: TextAlign.center,
               style: TextStyle(color: appMuted, fontSize: 10, height: 1.4),
             ),
