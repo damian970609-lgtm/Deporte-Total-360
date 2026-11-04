@@ -827,3 +827,43 @@ https://media.example/offline.m3u8
     });
   });
 }
+
+
+void main() {
+  group('SportsAPI multi-sport EPG matching', () {
+    test('matches a motorsport race using its race name and series', () {
+      final event = SportsAgendaEvent(
+        id: 'sportsapi-race-10-20',
+        title: 'Singapore GP',
+        sport: 'Deportes de motor',
+        competition: 'Formula 1',
+        startsAt: DateTime.now().add(const Duration(hours: 1)),
+        detailUrl: 'https://deporte-total-360-api.damian970609.workers.dev/api/sportsapi/races/10',
+      );
+      expect(
+        AutomaticLiveService.programmeMatchesEvent(
+          'Formula 1 Singapore Grand Prix',
+          event,
+        ),
+        isTrue,
+      );
+    });
+
+    test('matches UFC broadcasts by the competition when fighter names are absent', () {
+      final event = SportsAgendaEvent(
+        id: 'sportsapi-fixture-20',
+        title: 'Fighter One vs Fighter Two',
+        sport: 'MMA',
+        competition: 'UFC',
+        homeTeam: 'Fighter One',
+        awayTeam: 'Fighter Two',
+        startsAt: DateTime.now().add(const Duration(hours: 1)),
+        detailUrl: 'https://deporte-total-360-api.damian970609.workers.dev/api/sportsapi/fixtures/20',
+      );
+      expect(
+        AutomaticLiveService.programmeMatchesEvent('UFC Fight Night live', event),
+        isTrue,
+      );
+    });
+  });
+}
