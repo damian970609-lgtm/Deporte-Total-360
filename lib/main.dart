@@ -2160,6 +2160,8 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
   int _playlistCount = 0;
   int _epgCount = 0;
   int _channelCount = 0;
+  int _downloadedCount = 0;
+  int _downloadTotal = 0;
   String _syncMessage =
       'Al abrir el editor, la APK descargará y unirá las listas y guías configuradas.';
   String? _error;
@@ -2170,6 +2172,8 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
       _loading = true;
       _error = null;
       _progress = 0;
+      _downloadedCount = 0;
+      _downloadTotal = 0;
       _syncMessage = 'Recargando el editor OTTFOX…';
     });
     await _controller?.loadUrl(
@@ -2201,11 +2205,28 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
 
       // La app descarga todas las fuentes originales y adicionales en lotes,
       // resuelve los enlaces relativos y elimina duplicados por URL.
+      _downloadedCount = 0;
+      _downloadTotal = _playlistCount + _epgCount;
+      if (mounted) setState(() {});
       final catalog = await _sourceService.loadCatalog(
         playlistUrl: settings.playlistUrl,
         epgUrl: settings.epgUrl,
         forceRefresh: true,
         allowEmptyEpg: true,
+        downloadBatchSize: 2,
+        batchPause: const Duration(milliseconds: 220),
+        maxEpgBytes: 12 * 1024 * 1024,
+        onProgress: (phase, completed, total) {
+          if (!mounted) return;
+          setState(() {
+            _downloadedCount = phase == 'M3U'
+                ? completed
+                : _playlistCount + completed;
+            final label = phase == 'M3U' ? 'listas M3U' : 'guías XMLTV';
+            _syncMessage = 'Descargando $label: $completed de $total. '
+                'Procesamiento gradual para mantener la APK estable…';
+          });
+        },
       );
       final mergedPlaylist = AutomaticLiveService.buildOttfoxM3u(
         catalog,
@@ -2226,12 +2247,41 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
       });
 
       // OTTFOX admite importar un archivo/texto M3U y asociar URL XMLTV/EPG.
-      // La app fusiona las 12 listas (y las adicionales del usuario) primero,
-      // y adjunta todas las guías en las cabeceras M3U. También rellena las
-      // cinco casillas EPG visibles del editor cuando están disponibles.
+      // La M3U se entrega en fragmentos pequeños para no bloquear el WebView.
+      if (mounted) {
+        setState(() => _syncMessage = 'Enviando la M3U a OTTFOX en bloques pequeños…');
+      }
+      await controller.evaluateJavascript(
+        source: 'window.__dt360M3uChunks = [];',
+      );
+      const chunkSize = 48 * 1024;
+      final chunkCount = (mergedPlaylist.length / chunkSize).ceil();
+      var chunkIndex = 0;
+      for (var start = 0; start < mergedPlaylist.length;) {
+        if (!mounted) return;
+        var end = (start + chunkSize).clamp(0, mergedPlaylist.length);
+        if (end < mergedPlaylist.length && end > start) {
+          final lastUnit = mergedPlaylist.codeUnitAt(end - 1);
+          if (lastUnit >= 0xD800 && lastUnit <= 0xDBFF) end--;
+        }
+        final part = mergedPlaylist.substring(start, end);
+        await controller.evaluateJavascript(
+          source: 'window.__dt360M3uChunks.push(${jsonEncode(part)});',
+        );
+        start = end;
+        chunkIndex++;
+        if (chunkIndex % 6 == 0 || chunkIndex == chunkCount) {
+          if (mounted) {
+            setState(() => _syncMessage =
+                'Enviando M3U a OTTFOX: bloque $chunkIndex de $chunkCount…');
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 35));
+        }
+      }
       final script = '''
         (() => {
-          const playlist = ${jsonEncode(mergedPlaylist)};
+          const playlist = (window.__dt360M3uChunks || []).join('');
+          window.__dt360M3uChunks = null;
           const epgUrls = ${jsonEncode(settings.epgUrls)};
           const dispatchValue = (element, value) => {
             element.value = value;
@@ -2449,9 +2499,9 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
         children: <Widget>[
           if (_loading || _syncingSources)
             LinearProgressIndicator(
-              value: _loading && !_syncingSources && _progress > 0
-                  ? _progress / 100
-                  : null,
+              value: _syncingSources && _downloadTotal > 0
+                  ? (_downloadedCount / _downloadTotal).clamp(0.0, 1.0)
+                  : (_loading && _progress > 0 ? _progress / 100 : null),
               minHeight: 2,
               backgroundColor: appPanel,
               color: appCyan,
