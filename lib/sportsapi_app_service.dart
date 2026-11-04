@@ -139,7 +139,7 @@ class SportsApiAppService {
         .toLowerCase()
         .trim()
         .replaceAll(RegExp(r'[^a-z0-9áéíóúüñ]+'), ' ')
-        .replaceAll(RegExp(r'\\s+'), ' ');
+        .replaceAll(RegExp(r'\s+'), ' ');
   }
 
   Future<List<SportsAgendaEvent>> _fetchFavoriteAgendaEvents(String day) async {
