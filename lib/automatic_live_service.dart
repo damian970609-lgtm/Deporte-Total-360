@@ -989,11 +989,10 @@ class AutomaticLiveService {
   }
 
   static String _m3uSingleLine(String value) =>
-      value.replaceAll(RegExp(r'[\\r\\n]+'), ' ').trim();
+      value.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
 
-  static String _m3uAttribute(String value) => _m3uSingleLine(value)
-      .replaceAll('&', '&amp;')
-      .replaceAll('"', '&quot;');
+  static String _m3uAttribute(String value) =>
+      _m3uSingleLine(value).replaceAll('"', '%22');
 
   /// Construye una lista única con todos los canales directos descargados por
   /// el catálogo nativo. Las guías XMLTV se anuncian en ambas cabeceras M3U
@@ -1010,7 +1009,7 @@ class AutomaticLiveService {
         ? ''
         : ' url-tvg="${_m3uAttribute(guides.join(','))}"'
           ' x-tvg-url="${_m3uAttribute(guides.join(','))}"';
-    final output = StringBuffer('#EXTM3U$guideHeader\\n');
+    final output = StringBuffer('#EXTM3U$guideHeader\n');
     final seen = <String>{};
 
     for (final channel in catalog.channels) {
@@ -1039,7 +1038,7 @@ class AutomaticLiveService {
         ..write(metadata.isEmpty ? '' : ' $metadata')
         ..write(',')
         ..write(name.isEmpty ? 'Canal deportivo' : name)
-        ..write('\\n')
+        ..write('\n')
         ..write(channel.url.trim())
         ..write('\\n');
     }
