@@ -92,25 +92,22 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
       return await injectedLoader() ?? <SportsAgendaEvent>[];
     }
 
-    final published = await AutomaticLiveService().fetchPublishedSchedule();
-    if (published != null) {
-      final events = published
-          .map((item) => item.event)
-          .toList(growable: false);
-      // Una respuesta válida vacía también limpia la caché antigua.
-      await SportsAgendaStore.save(events);
-      return events;
-    }
-
-    // Si el Worker no publica un calendario agregado, consulta SportsAPI
-    // directamente para los diez deportes favoritos. La clave permanece en
-    // Cloudflare y la APK solo recibe los datos públicos de cada evento.
+    // SportsAPI es la fuente principal de los diez deportes favoritos.
+    // Así la agenda nativa no queda limitada a una programación antigua.
     try {
       final events = await SportsApiAppService().fetchFavoriteAgendaEvents();
       await SportsAgendaStore.save(events);
       return events;
     } catch (_) {
-      // Una caída temporal conserva el último calendario sincronizado.
+      // Si la API falla, intenta el calendario agregado y luego la caché local.
+      final published = await AutomaticLiveService().fetchPublishedSchedule();
+      if (published != null) {
+        final events = published
+            .map((item) => item.event)
+            .toList(growable: false);
+        await SportsAgendaStore.save(events);
+        return events;
+      }
       return SportsAgendaStore.load();
     }
   }
