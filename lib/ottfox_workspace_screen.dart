@@ -99,6 +99,10 @@ const String _ottfoxLibraryExportScript = r'''
         addM3u(path, trimmed);
         return;
       }
+      if (isHttp(trimmed) && /(playlist|m3u)/i.test(path)) {
+        addPlaylistUrl(trimmed);
+        return;
+      }
       if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && trimmed.length < 12 * 1024 * 1024) {
         try { walk(JSON.parse(trimmed), path, depth + 1); } catch (_) {}
       }
@@ -109,6 +113,9 @@ const String _ottfoxLibraryExportScript = r'''
 
     const explicitPlaylistUrl = field(value, ['playlisturl', 'm3uurl', 'playlisturi', 'm3uuri']);
     if (explicitPlaylistUrl) addPlaylistUrl(explicitPlaylistUrl);
+    if (/(playlist|m3u)/i.test(path)) {
+      addPlaylistUrl(field(value, ['url', 'uri', 'source']));
+    }
 
     if (Array.isArray(value)) {
       rowsToM3u(value, path);
