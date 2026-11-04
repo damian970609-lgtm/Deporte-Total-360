@@ -74,26 +74,28 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     try {
       // La nube es la fuente principal: prepara los eventos y canales
       // aunque este dispositivo no sea el que ejecuta el planificador.
-      final published = await _service.fetchPublishedSchedule();
       final settings = await AutoLiveSettings.load();
       final localEvents = await SportsAgendaStore.load();
-      var events = published != null
-          ? published.map((item) => item.event).toList(growable: false)
-          : localEvents;
-
-      // El tablero Live también obtiene la agenda SportsAPI por sí solo:
-      // no depende de que el usuario abra primero la pestaña Agenda.
-      if (published == null) {
-        try {
-          events = await SportsApiAppService().fetchFavoriteAgendaEvents();
-          await SportsAgendaStore.save(events);
-        } catch (_) {
-          // Conserva el calendario local si SportsAPI falla temporalmente.
-        }
+      List<SportsAgendaEvent> events;
+      try {
+        // El tablero Live obtiene primero los diez deportes favoritos, aunque
+        // el usuario nunca haya abierto la pestaña Agenda.
+        events = await SportsApiAppService().fetchFavoriteAgendaEvents();
+        await SportsAgendaStore.save(events);
+      } catch (_) {
+        events = localEvents;
       }
 
-      final latest = published ??
-          (settings.isConfigured && events.isNotEmpty
+      final published = await _service.fetchPublishedSchedule();
+      final publishedIds = published
+          ?.map((item) => item.event.id)
+          .toSet() ?? <String>{};
+      final publishedMatchesCurrentAgenda = published != null &&
+          events.any((event) => publishedIds.contains(event.id));
+
+      final latest = publishedMatchesCurrentAgenda
+          ? published!
+          : (settings.isConfigured && events.isNotEmpty
               ? await _service.schedule(
                   events: events,
                   now: DateTime.now(),
