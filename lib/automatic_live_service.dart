@@ -988,6 +988,64 @@ class AutomaticLiveService {
     return result;
   }
 
+  static String _m3uSingleLine(String value) =>
+      value.replaceAll(RegExp(r'[\\r\\n]+'), ' ').trim();
+
+  static String _m3uAttribute(String value) => _m3uSingleLine(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('"', '&quot;');
+
+  /// Construye una lista única con todos los canales directos descargados por
+  /// el catálogo nativo. Las guías XMLTV se anuncian en ambas cabeceras M3U
+  /// habituales para que OTTFOX y otros editores puedan detectarlas.
+  static String buildOttfoxM3u(
+    AutoLiveCatalog catalog, {
+    List<String> epgUrls = const <String>[],
+  }) {
+    final guides = <String>{
+      for (final url in epgUrls)
+        if (isSafeHttpUrl(url)) url.trim(),
+    }.toList(growable: false);
+    final guideHeader = guides.isEmpty
+        ? ''
+        : ' url-tvg="${_m3uAttribute(guides.join(','))}"'
+          ' x-tvg-url="${_m3uAttribute(guides.join(','))}"';
+    final output = StringBuffer('#EXTM3U$guideHeader\\n');
+    final seen = <String>{};
+
+    for (final channel in catalog.channels) {
+      if (!isDirectPlayableStream(channel.url) || !seen.add(channel.url)) {
+        continue;
+      }
+      final attributes = <String, String>{
+        if (channel.tvgId.trim().isNotEmpty) 'tvg-id': channel.tvgId,
+        if (channel.tvgName.trim().isNotEmpty) 'tvg-name': channel.tvgName,
+        if (channel.logo.trim().isNotEmpty) 'tvg-logo': channel.logo,
+        'group-title': channel.group.trim().isNotEmpty
+            ? channel.group
+            : 'Deportes',
+        if (channel.language.trim().isNotEmpty)
+          'tvg-language': channel.language,
+        if (channel.country.trim().isNotEmpty)
+          'tvg-country': channel.country,
+      };
+      final metadata = attributes.entries
+          .map((entry) =>
+              '${entry.key}="${_m3uAttribute(entry.value)}"')
+          .join(' ');
+      final name = _m3uSingleLine(channel.name);
+      output
+        ..write('#EXTINF:-1')
+        ..write(metadata.isEmpty ? '' : ' $metadata')
+        ..write(',')
+        ..write(name.isEmpty ? 'Canal deportivo' : name)
+        ..write('\\n')
+        ..write(channel.url.trim())
+        ..write('\\n');
+    }
+    return output.toString();
+  }
+
   static DateTime? parseXmltvDate(String? value) {
     if (value == null) return null;
     final match = RegExp(r'^(\d{14})\s*([+-]\d{4})?$').firstMatch(value.trim());
