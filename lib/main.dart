@@ -2205,6 +2205,7 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
         playlistUrl: settings.playlistUrl,
         epgUrl: settings.epgUrl,
         forceRefresh: true,
+        allowEmptyEpg: true,
       );
       final mergedPlaylist = AutomaticLiveService.buildOttfoxM3u(
         catalog,
@@ -2283,10 +2284,13 @@ class _OttfoxWebScreenState extends State<OttfoxWebScreen> {
                   (button.innerText || button.textContent || '').trim()
                 ));
             }
-            if (loadButton) loadButton.click();
-            imported = true;
-            importMode = 'textarea';
-          } else {
+            if (loadButton) {
+              loadButton.click();
+              imported = true;
+              importMode = 'textarea';
+            }
+          }
+          if (!imported) {
             const fileInputs = Array.from(
               document.querySelectorAll('input[type="file"]')
             );
