@@ -12,7 +12,7 @@ const Color _ottfoxMuted = Color(0xFFA9BDD6);
 class OttfoxWorkspaceScreen extends StatefulWidget {
   const OttfoxWorkspaceScreen({super.key});
 
-  static const String initialUrl = 'https://ottfox.net/es/';
+  static const String initialUrl = 'https://ottfox.net/es/iptv-playlist-editor/';
 
   @override
   State<OttfoxWorkspaceScreen> createState() => _OttfoxWorkspaceScreenState();
