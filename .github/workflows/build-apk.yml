@@ -310,7 +310,11 @@ jobs:
           test -x "$APKSIGNER" || { echo "::error::No se encontró apksigner en Android Build Tools."; exit 1; }
           PACKAGE_NAME="$("$AAPT" dump badging "$APK" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -n 1)"
           CERT_INFO="$("$APKSIGNER" verify --print-certs "$APK")"
-          SHA1="$(printf '%s\n' "$CERT_INFO" | sed -n 's/^Signer #1 certificate SHA-1 digest: //p' | head -n 1)"
+          SHA1="$(printf '%s\\n' "$CERT_INFO" | grep -i 'certificate SHA-1 digest:' | head -n 1 | awk -F': ' '{print $NF}' | tr -d '[:space:]')"
+          if [[ -z "$SHA1" ]]; then
+            CERT_INFO="$(keytool -printcert -jarfile "$APK")"
+            SHA1="$(printf '%s\\n' "$CERT_INFO" | sed -n 's/^[[:space:]]*SHA1: //Ip' | head -n 1 | tr -d '[:space:]')"
+          fi
           if [[ "$PACKAGE_NAME" != "com.example.deporte_total_360" ]]; then
             echo "::error::El package name cambió inesperadamente: $PACKAGE_NAME"
             exit 1
