@@ -110,14 +110,22 @@ void main() {
     }
     await tester.pump();
     await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      () => Future<void>.delayed(const Duration(seconds: 3)),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
     expect(find.text('AÑADIR LISTAS'), findsOneWidget);
     expect(find.text('CARGAR ARCHIVOS'), findsOneWidget);
-    expect(find.text('Canal del menú secreto'), findsOneWidget);
+    final routeVisibleText = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((widget) => widget.data ?? widget.textSpan?.toPlainText() ?? '')
+        .join(' | ');
+    expect(
+      find.text('Canal del menú secreto'),
+      findsOneWidget,
+      reason: routeVisibleText,
+    );
     expect(find.text('No se pudo mostrar esta sección'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -265,7 +273,15 @@ void main() {
 
     expect(sportsRequests, 2);
     expect(personalRequests, 1);
-    expect(find.text('Canal Personal'), findsOneWidget);
+    final raceVisibleText = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((widget) => widget.data ?? widget.textSpan?.toPlainText() ?? '')
+        .join(' | ');
+    expect(
+      find.text('Canal Personal'),
+      findsOneWidget,
+      reason: raceVisibleText,
+    );
 
     initialResponse.complete(http.Response(sportsPlaylist, 200));
     await tester.runAsync(
