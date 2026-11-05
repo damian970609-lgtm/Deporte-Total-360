@@ -268,6 +268,21 @@ jobs:
       - name: Ejecutar pruebas automatizadas
         run: flutter test
 
+      - name: Validar el ID de cliente OAuth Web
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "$GOOGLE_OAUTH_CLIENT_ID" ]]; then
+            echo "::error::Falta el secreto GOOGLE_OAUTH_CLIENT_ID en este repositorio."
+            exit 1
+          fi
+          if [[ "$GOOGLE_OAUTH_CLIENT_ID" != *.apps.googleusercontent.com ]]; then
+            echo "::error::GOOGLE_OAUTH_CLIENT_ID no parece ser un ID de cliente OAuth Web."
+            exit 1
+          fi
+          echo "El ID de cliente OAuth Web está configurado. Su valor permanece oculto."
+
       - name: Compilar APK de producción
         env:
           FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
@@ -282,6 +297,40 @@ jobs:
             --dart-define=FIREBASE_MESSAGING_SENDER_ID="$FIREBASE_MESSAGING_SENDER_ID" \
             --dart-define=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
             --dart-define=GOOGLE_OAUTH_CLIENT_ID="$GOOGLE_OAUTH_CLIENT_ID"
+
+      - name: Obtener datos exactos para el cliente OAuth Android
+        run: |
+          set -Eeuo pipefail
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          BUILD_TOOLS="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          AAPT="$BUILD_TOOLS/aapt"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          test -x "$AAPT" || { echo "::error::No se encontró aapt en Android Build Tools."; exit 1; }
+          test -x "$APKSIGNER" || { echo "::error::No se encontró apksigner en Android Build Tools."; exit 1; }
+          PACKAGE_NAME="$("$AAPT" dump badging "$APK" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -n 1)"
+          CERT_INFO="$("$APKSIGNER" verify --print-certs "$APK")"
+          SHA1="$(printf '%s\\n' "$CERT_INFO" | sed -n 's/^Signer #1 certificate SHA-1 digest: //p' | head -n 1)"
+          if [[ "$PACKAGE_NAME" != "com.example.deporte_total_360" ]]; then
+            echo "::error::El package name cambió inesperadamente: $PACKAGE_NAME"
+            exit 1
+          fi
+          if [[ -z "$SHA1" ]]; then
+            echo "::error::No se pudo leer el SHA-1 del certificado que firma la APK."
+            exit 1
+          fi
+          SHA1_FORMATTED="$(printf '%s' "$SHA1" | tr '[:lower:]' '[:upper:]' | sed 's/../&:/g; s/:$//')"
+          {
+            echo "## Datos para registrar OAuth Android en Google Cloud"
+            echo
+            echo "- **Tipo de cliente:** Android"
+            echo "- **Package name:** \`$PACKAGE_NAME\`"
+            echo "- **SHA-1 del certificado de esta APK:** \`$SHA1_FORMATTED\`"
+            echo
+            echo "Crea un cliente OAuth de tipo Android usando exactamente el package name y SHA-1 anteriores. El ID OAuth Web se conserva como secreto GOOGLE_OAUTH_CLIENT_ID."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Package name Android: $PACKAGE_NAME"
+          echo "SHA-1 del APK: $SHA1_FORMATTED"
 
       - name: Guardar APK para descargar
         uses: actions/upload-artifact@v4
