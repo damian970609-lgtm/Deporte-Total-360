@@ -214,7 +214,7 @@ class _IntegratedIptvPlayerScreenState
     final failedSources = <String>{};
     try {
       final catalog = await _service.loadCatalog(
-        playlistUrl: playlistUrls.join('\\n'),
+        playlistUrl: playlistUrls.join('\n'),
         epgUrl: '',
         playlistTexts: playlistTexts,
         forceRefresh: true,
@@ -354,7 +354,7 @@ class _IntegratedIptvPlayerScreenState
     String raw, {
     String sourceName = 'Lista pegada',
   }) async {
-    final text = raw.replaceFirst('\\uFEFF', '').trim();
+    final text = raw.replaceFirst('\uFEFF', '').trim();
     if (!text.toUpperCase().startsWith('#EXTM3U')) {
       throw const FormatException(
         'El contenido no parece una lista M3U. Debe comenzar con #EXTM3U.',
@@ -385,7 +385,7 @@ class _IntegratedIptvPlayerScreenState
   }
 
   Future<void> _importM3uText(String raw) async {
-    final text = raw.replaceFirst('\\uFEFF', '').trim();
+    final text = raw.replaceFirst('\uFEFF', '').trim();
     try {
       final parsed = await _parseM3uContent(text);
       if (!mounted) return;
@@ -426,7 +426,7 @@ class _IntegratedIptvPlayerScreenState
           }
           final text = utf8
               .decode(bytes, allowMalformed: true)
-              .replaceFirst('\\uFEFF', '')
+              .replaceFirst('\uFEFF', '')
               .trim();
           final parsed = await _parseM3uContent(
             text,
