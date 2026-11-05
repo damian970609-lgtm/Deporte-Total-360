@@ -223,7 +223,6 @@ class _IntegratedIptvPlayerScreenState
     final grouped = <String, List<M3uChannel>>{};
     for (final channel in channels) {
       final key = 'id:' + channel.channelId;
-      if (normalizedName.isEmpty && id.isEmpty) continue;
       final alternatives = grouped.putIfAbsent(key, () => <M3uChannel>[]);
       if (!alternatives.any((item) => item.url == channel.url)) {
         alternatives.add(channel);
