@@ -1617,6 +1617,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                   child: DropdownButton<String>(
                     value: channel.language,
                     isDense: true,
+                    isExpanded: true,
                     dropdownColor: _channelPanel2,
                     icon: const Icon(
                       Icons.translate_rounded,
@@ -1631,15 +1632,15 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                     items: const <DropdownMenuItem<String>>[
                       DropdownMenuItem<String>(
                         value: 'unknown',
-                        child: Text('IDIOMA: Sin definir'),
+                        child: Text('IDIOMA: Sin definir', maxLines: 1, overflow: TextOverflow.ellipsis),
                       ),
                       DropdownMenuItem<String>(
                         value: 'es',
-                        child: Text('IDIOMA: Español 🇪🇸'),
+                        child: Text('IDIOMA: Español 🇪🇸', maxLines: 1, overflow: TextOverflow.ellipsis),
                       ),
                       DropdownMenuItem<String>(
                         value: 'en',
-                        child: Text('IDIOMA: Inglés 🇺🇸'),
+                        child: Text('IDIOMA: Inglés 🇺🇸', maxLines: 1, overflow: TextOverflow.ellipsis),
                       ),
                     ],
                     onChanged: (value) {
