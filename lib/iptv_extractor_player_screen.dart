@@ -172,7 +172,7 @@ Future<List<String>> loadIptvStudioPlaylistUrls() async {
       .map((url) => url.trim())
       .where(_isHttpMediaUrl)
       .toSet()
-      .toList(growable: false);
+      .toList(growable: true);
 }
 
 Future<List<String>> loadIptvStudioPlaylistTexts() async {
