@@ -18,6 +18,7 @@ class SportsChannel {
     this.groupTitle = '',
     this.isSports = true,
     this.visible = true,
+    this.language = 'unknown',
   });
 
   final String id;
@@ -28,6 +29,7 @@ class SportsChannel {
   final String groupTitle;
   final bool isSports;
   final bool visible;
+  final String language;
 
   factory SportsChannel.fromJson(Map<String, dynamic> json) {
     final id = (json['id'] ?? json['identifier'] ?? '').toString().trim();
@@ -37,6 +39,10 @@ class SportsChannel {
     final url = (json['url'] ?? '').toString().trim();
     final logoUrl = (json['logoUrl'] ?? '').toString().trim();
     final groupTitle = (json['groupTitle'] ?? '').toString().trim();
+    final rawLanguage = (json['language'] ?? 'unknown').toString().trim().toLowerCase();
+    final language = const <String>{'es', 'en'}.contains(rawLanguage)
+        ? rawLanguage
+        : 'unknown';
     if (id.isEmpty || identifier.isEmpty || name.isEmpty || url.isEmpty) {
       throw const FormatException('El canal recibido está incompleto.');
     }
@@ -59,6 +65,7 @@ class SportsChannel {
       groupTitle: groupTitle,
       isSports: json['isSports'] == true,
       visible: json['visible'] != false,
+      language: language,
     );
   }
 }
@@ -325,6 +332,26 @@ class ChannelCatalogService {
         'Content-Type': 'application/json',
       },
       body: jsonEncode(<String, bool>{'visible': visible}),
+    ).timeout(const Duration(seconds: 20));
+    _decode(result);
+  }
+
+  Future<void> setLanguage(
+    String channelId, {
+    required String language,
+  }) async {
+    if (!const <String>{'es', 'en', 'unknown'}.contains(language)) {
+      throw ArgumentError.value(language, 'language', 'Idioma no válido.');
+    }
+    final encodedId = Uri.encodeComponent(channelId);
+    final result = await _client.patch(
+      Uri.parse(_baseUrl + '/api/channels/admin/channels/' +
+          encodedId + '/language'),
+      headers: <String, String>{
+        ..._authHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(<String, String>{'language': language}),
     ).timeout(const Duration(seconds: 20));
     _decode(result);
   }
