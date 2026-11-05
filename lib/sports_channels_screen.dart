@@ -152,6 +152,17 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
     }
   }
 
+  List<IptvExtractedChannel> get _visibleChannels {
+    final query = _query.trim().toLowerCase();
+    return _channels.where((channel) {
+      if (_showFavoritesOnly && !_favoriteIds.contains(channel.id)) return false;
+      if (query.isEmpty) return true;
+      return (channel.name + ' ' + channel.group + ' ' + channel.tvgId)
+          .toLowerCase()
+          .contains(query);
+    }).toList(growable: false);
+  }
+
   VideoFormat _formatHint(String url) {
     final path = Uri.tryParse(url)?.path.toLowerCase() ?? '';
     if (path.endsWith('.m3u8')) return VideoFormat.hls;
