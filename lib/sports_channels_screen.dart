@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 
 import 'iptv_extractor_player_screen.dart';
@@ -18,21 +17,15 @@ class SportsChannelsScreen extends StatefulWidget {
   const SportsChannelsScreen({
     super.key,
     this.initialChannel,
-    this.httpClient,
-    this.parseInBackground = true,
   });
 
   final IptvExtractedChannel? initialChannel;
-  final http.Client? httpClient;
-  final bool parseInBackground;
 
   @override
   State<SportsChannelsScreen> createState() => _SportsChannelsScreenState();
 }
 
 class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
-  late final http.Client _client;
-  late final bool _ownsClient;
   final TextEditingController _searchController = TextEditingController();
 
   List<IptvExtractedChannel> _channels = <IptvExtractedChannel>[];
@@ -47,14 +40,14 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
   String? _libraryError;
   String? _playerError;
   int _playGeneration = 0;
+  int _libraryGeneration = 0;
 
   @override
   void initState() {
     super.initState();
-    _ownsClient = widget.httpClient == null;
-    _client = widget.httpClient ?? http.Client();
     _selectedChannel = widget.initialChannel;
     _searchController.addListener(_updateSearch);
+    iptvSportsCatalogVersion.addListener(_handleCatalogChanged);
     _loadLibrary();
     if (_selectedChannel != null) {
       _playChannel(_selectedChannel!);
@@ -75,10 +68,10 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
   @override
   void dispose() {
     _searchController.removeListener(_updateSearch);
+    iptvSportsCatalogVersion.removeListener(_handleCatalogChanged);
     _searchController.dispose();
     _controller?.removeListener(_controllerChanged);
     _controller?.dispose();
-    if (_ownsClient) _client.close();
     SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
       DeviceOrientation.portraitUp,
     ]);
@@ -90,28 +83,22 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
     if (mounted) setState(() => _query = _searchController.text.trim());
   }
 
-  String _identity(IptvExtractedChannel channel) {
-    final tvgId = channel.tvgId.trim().toLowerCase();
-    if (tvgId.isNotEmpty) return 'id:' + tvgId;
-    return 'name:' +
-        channel.name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ') +
-        '|group:' + channel.group.trim().toLowerCase();
+  void _handleCatalogChanged() {
+    _loadLibrary();
   }
 
   Future<void> _loadLibrary() async {
+    final generation = ++_libraryGeneration;
     try {
       final values = await Future.wait<Object>(<Future<Object>>[
-        loadSavedIptvStudioChannels(
-          httpClient: _client,
-          parseInBackground: widget.parseInBackground,
-        ),
+        loadIptvStudioSportsChannels(),
         loadIptvStudioFavoriteIds(),
       ]);
       final loaded = values[0] as List<IptvExtractedChannel>;
       final favorites = values[1] as Set<String>;
       final unique = <String, IptvExtractedChannel>{};
       for (final channel in loaded) {
-        unique.putIfAbsent(_identity(channel), () => channel);
+        unique.putIfAbsent(channel.id, () => channel);
       }
       final sorted = unique.values.toList()
         ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
@@ -120,20 +107,20 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
           !sorted.any((channel) => channel.url == selected.url)) {
         sorted.insert(0, selected);
       }
-      if (!mounted) return;
+      if (!mounted || generation != _libraryGeneration) return;
       setState(() {
         _channels = sorted;
         _favoriteIds = favorites;
         _loadingLibrary = false;
         _libraryError = sorted.isEmpty
-            ? 'No hay canales disponibles. Comprueba las listas en el menú de Damián APK.'
+            ? 'Aún no agregaste canales. Entra al menú de Damián APK y usa “Agregar a Canales deportivos”.'
             : null;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _libraryGeneration) return;
       setState(() {
         _loadingLibrary = false;
-        _libraryError = 'No se pudo cargar la biblioteca IPTV: ' + error.toString();
+        _libraryError = 'No se pudo cargar la selección de canales: ' + error.toString();
       });
     }
   }
@@ -246,6 +233,16 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('URL directa del canal copiada.')),
+    );
+  }
+
+  Future<void> _copySelectedIdentifierUrl() async {
+    final channel = _selectedChannel;
+    if (channel == null) return;
+    await Clipboard.setData(ClipboardData(text: channel.identificationUrl));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Identificador copiado: ' + channel.identificationUrl)),
     );
   }
 
@@ -529,9 +526,14 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
                             ),
                           ),
                           IconButton(
-                            tooltip: 'Copiar URL del canal',
+                            tooltip: 'Copiar URL directa del canal',
                             onPressed: _copySelectedUrl,
                             icon: const Icon(Icons.copy_rounded, color: _sportsCyan),
+                          ),
+                          IconButton(
+                            tooltip: 'Copiar URL identificadora',
+                            onPressed: _copySelectedIdentifierUrl,
+                            icon: const Icon(Icons.link_rounded, color: _sportsGreen),
                           ),
                         ],
                       ),
@@ -603,9 +605,10 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
                                 child: Padding(
                                   padding: const EdgeInsets.all(24),
                                   child: Text(
-                                    _libraryError ??
-                                        (_showFavoritesOnly
-                                            ? 'Todavía no tienes canales favoritos.'
+                                    _showFavoritesOnly
+                                        ? 'Todavía no tienes canales favoritos.'
+                                        : (_channels.isEmpty
+                                            ? (_libraryError ?? 'Todavía no agregaste canales desde el menú de Damián APK.')
                                             : 'No hay canales que coincidan con la búsqueda.'),
                                     textAlign: TextAlign.center,
                                     style: const TextStyle(color: _sportsMuted),

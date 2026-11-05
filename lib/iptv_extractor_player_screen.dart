@@ -25,6 +25,7 @@ const String _studioUrlsKey = 'dt360_secret_iptv_playlist_urls_v1';
 const String _studioTextsKey = 'dt360_secret_iptv_playlist_texts_v1';
 const String _studioFavoritesKey = 'dt360_secret_iptv_favorite_urls_v1';
 const String _studioDefaultAddedKey = 'dt360_iptv_studio_default_added_v1';
+const String _studioSportsChannelsKey = 'dt360_sports_selected_channels_v1';
 
 bool _isHttpMediaUrl(String value) {
   final uri = Uri.tryParse(value.trim());
@@ -66,6 +67,90 @@ class IptvExtractedChannel {
   final String group;
   final String logo;
   final String tvgId;
+
+  /// URI interna, estable y única para identificar este canal dentro de DT360.
+  String get identificationUrl => 'dt360://channel/' + Uri.encodeComponent(id);
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'id': id,
+        'name': name,
+        'url': url,
+        'source': source,
+        'group': group,
+        'logo': logo,
+        'tvgId': tvgId,
+      };
+
+  factory IptvExtractedChannel.fromJson(Map<String, dynamic> json) =>
+      IptvExtractedChannel(
+        id: (json['id'] ?? '').toString(),
+        name: (json['name'] ?? 'Canal').toString(),
+        url: (json['url'] ?? '').toString(),
+        source: (json['source'] ?? 'Lista importada').toString(),
+        group: (json['group'] ?? '').toString(),
+        logo: (json['logo'] ?? '').toString(),
+        tvgId: (json['tvgId'] ?? '').toString(),
+      );
+}
+
+/// Lista personal de canales escogidos para la pestaña pública.
+/// No modifica ni elimina las fuentes M3U originales.
+final ValueNotifier<int> iptvSportsCatalogVersion = ValueNotifier<int>(0);
+
+Future<List<IptvExtractedChannel>> loadIptvStudioSportsChannels() async {
+  final prefs = await SharedPreferences.getInstance();
+  final records = prefs.getStringList(_studioSportsChannelsKey) ?? <String>[];
+  final channels = <IptvExtractedChannel>[];
+  final seen = <String>{};
+  for (final record in records) {
+    try {
+      final decoded = jsonDecode(record);
+      if (decoded is! Map) continue;
+      final channel = IptvExtractedChannel.fromJson(
+        Map<String, dynamic>.from(decoded),
+      );
+      if (channel.id.isEmpty || !_isHttpMediaUrl(channel.url) ||
+          !seen.add(channel.id)) {
+        continue;
+      }
+      channels.add(channel);
+    } catch (_) {
+      // Un registro dañado no impide recuperar los demás canales.
+    }
+  }
+  return channels;
+}
+
+Future<void> saveIptvStudioSportsChannels(
+  Iterable<IptvExtractedChannel> channels,
+) async {
+  final unique = <String, IptvExtractedChannel>{};
+  for (final channel in channels) {
+    if (channel.id.isNotEmpty && _isHttpMediaUrl(channel.url)) {
+      unique[channel.id] = channel;
+    }
+  }
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setStringList(
+    _studioSportsChannelsKey,
+    unique.values.map((channel) => jsonEncode(channel.toJson())).toList(),
+  );
+  iptvSportsCatalogVersion.value++;
+}
+
+Future<void> addIptvStudioSportsChannel(
+  IptvExtractedChannel channel,
+) async {
+  final channels = await loadIptvStudioSportsChannels();
+  channels.removeWhere((item) => item.id == channel.id);
+  channels.add(channel);
+  await saveIptvStudioSportsChannels(channels);
+}
+
+Future<void> removeIptvStudioSportsChannel(String id) async {
+  final channels = await loadIptvStudioSportsChannels();
+  channels.removeWhere((channel) => channel.id == id);
+  await saveIptvStudioSportsChannels(channels);
 }
 
 /// Parser separado del servicio de agenda: acepta señales HTTP(S) directas
@@ -267,6 +352,7 @@ class _IptvExtractorPlayerScreenState
   List<String> _playlistUrls = <String>[];
   List<String> _playlistTexts = <String>[];
   final Set<String> _favoriteIds = <String>{};
+  final Set<String> _sportsChannelIds = <String>{};
   final List<IptvExtractedChannel> _rawChannels = <IptvExtractedChannel>[];
   List<_IptvStudioChannelGroup> _groups = <_IptvStudioChannelGroup>[];
   final Map<String, String> _sourceStatuses = <String, String>{};
@@ -304,6 +390,7 @@ class _IptvExtractorPlayerScreenState
       final prefs = await SharedPreferences.getInstance();
       var urls = prefs.getStringList(_studioUrlsKey) ?? <String>[];
       final texts = prefs.getStringList(_studioTextsKey) ?? <String>[];
+      final sportsChannels = await loadIptvStudioSportsChannels();
       if (!(prefs.getBool(_studioDefaultAddedKey) ?? false)) {
         urls = <String>[
           defaultIptvStudioSportsUrl,
@@ -319,6 +406,9 @@ class _IptvExtractorPlayerScreenState
         _favoriteIds
           ..clear()
           ..addAll(prefs.getStringList(_studioFavoritesKey) ?? <String>[]);
+        _sportsChannelIds
+          ..clear()
+          ..addAll(sportsChannels.map((channel) => channel.id));
         _initializing = false;
       });
       await _refreshLibrary();
@@ -780,6 +870,36 @@ class _IptvExtractorPlayerScreenState
     _showMessage('URL directa copiada: ' + channel.name);
   }
 
+  Future<void> _copyChannelIdentifier(IptvExtractedChannel channel) async {
+    await Clipboard.setData(ClipboardData(text: channel.identificationUrl));
+    _showMessage('Identificador copiado: ' + channel.identificationUrl);
+  }
+
+  Future<void> _addToSportsChannels(_IptvStudioChannelGroup entry) async {
+    final channel = entry.primary;
+    try {
+      await addIptvStudioSportsChannel(channel);
+      if (!mounted) return;
+      setState(() => _sportsChannelIds.add(channel.id));
+      _showMessage(channel.name + ' agregado a Canales deportivos. ID: ' +
+          channel.identificationUrl);
+    } catch (error) {
+      _showMessage('No se pudo agregar el canal: ' + error.toString());
+    }
+  }
+
+  Future<void> _removeFromSportsChannels(_IptvStudioChannelGroup entry) async {
+    final channel = entry.primary;
+    try {
+      await removeIptvStudioSportsChannel(channel.id);
+      if (!mounted) return;
+      setState(() => _sportsChannelIds.remove(channel.id));
+      _showMessage(channel.name + ' quitado de Canales deportivos.');
+    } catch (error) {
+      _showMessage('No se pudo quitar el canal: ' + error.toString());
+    }
+  }
+
   Future<void> _toggleFavorite(_IptvStudioChannelGroup entry) async {
     final id = entry.primary.id;
     setState(() {
@@ -806,6 +926,7 @@ class _IptvExtractorPlayerScreenState
   Widget _buildChannelCard(_IptvStudioChannelGroup entry) {
     final channel = entry.primary;
     final favorite = _isFavorite(entry);
+    final addedToSports = _sportsChannelIds.contains(channel.id);
     final metadata = <String>[
       if (channel.group.isNotEmpty) channel.group,
       if (entry.channels.length > 1) entry.channels.length.toString() + ' fuentes',
@@ -842,7 +963,8 @@ class _IptvExtractorPlayerScreenState
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
         ),
         subtitle: Text(
-          metadata.isEmpty ? 'Canal directo' : metadata,
+          (metadata.isEmpty ? 'Canal directo' : metadata) +
+              (addedToSports ? ' · EN CANALES DEPORTIVOS' : ''),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(color: _studioMuted, fontSize: 10),
@@ -855,6 +977,12 @@ class _IptvExtractorPlayerScreenState
               _copyChannelUrl(channel);
             } else if (action == 'favorite') {
               _toggleFavorite(entry);
+            } else if (action == 'sports') {
+              _addToSportsChannels(entry);
+            } else if (action == 'removeSports') {
+              _removeFromSportsChannels(entry);
+            } else if (action == 'copyIdentifier') {
+              _copyChannelIdentifier(channel);
             } else if (action == 'sources') {
               _showAlternatives(entry);
             }
@@ -863,6 +991,16 @@ class _IptvExtractorPlayerScreenState
             const PopupMenuItem<String>(
               value: 'copy',
               child: Text('Copiar URL directa'),
+            ),
+            PopupMenuItem<String>(
+              value: 'copyIdentifier',
+              child: const Text('Copiar URL identificadora'),
+            ),
+            PopupMenuItem<String>(
+              value: addedToSports ? 'removeSports' : 'sports',
+              child: Text(addedToSports
+                  ? 'Quitar de Canales deportivos'
+                  : 'Agregar a Canales deportivos'),
             ),
             PopupMenuItem<String>(
               value: 'favorite',
