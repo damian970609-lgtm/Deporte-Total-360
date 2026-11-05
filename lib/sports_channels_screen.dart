@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
 import 'iptv_extractor_player_screen.dart';
@@ -12,6 +13,7 @@ const Color _sportsCyan = Color(0xFF00E5FF);
 const Color _sportsGreen = Color(0xFF39FF9C);
 const Color _sportsPink = Color(0xFFFF28CF);
 const Color _sportsMuted = Color(0xFFA9BDD6);
+const String _sportsRecentStorageKey = 'dt360_sports_recent_channel_ids_v1';
 
 class SportsChannelsScreen extends StatefulWidget {
   const SportsChannelsScreen({
@@ -35,11 +37,15 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
   VideoPlayerController? _controller;
   bool _loadingLibrary = true;
   bool _loadingVideo = false;
-  bool _showFavoritesOnly = false;
   bool _fullscreen = false;
+  bool _listView = false;
+  String _selectedCategory = 'Todos';
+  String _selectedFilter = 'Todos';
+  List<String> _recentChannelIds = <String>[];
   String _query = '';
   String? _libraryError;
   String? _playerError;
+  final Set<String> _failedSourceUrls = <String>{};
   int _playGeneration = 0;
   int _libraryGeneration = 0;
 
@@ -50,6 +56,7 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
     _searchController.addListener(_updateSearch);
     iptvSportsCatalogVersion.addListener(_handleCatalogChanged);
     _loadLibrary();
+    _loadRecentChannels();
     if (_selectedChannel != null) {
       _playChannel(_selectedChannel!);
     }
@@ -83,6 +90,61 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
 
   void _updateSearch() {
     if (mounted) setState(() => _query = _searchController.text.trim());
+  }
+
+  Future<void> _loadRecentChannels() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final recent = prefs.getStringList(_sportsRecentStorageKey) ?? <String>[];
+      if (!mounted) return;
+      setState(() => _recentChannelIds = recent);
+    } catch (_) {
+      // Los recientes son opcionales; el catálogo sigue funcionando.
+    }
+  }
+
+  Future<void> _recordRecent(IptvExtractedChannel channel) async {
+    final id = channel.identificationUrl;
+    _recentChannelIds.remove(id);
+    _recentChannelIds.insert(0, id);
+    if (_recentChannelIds.length > 30) {
+      _recentChannelIds = _recentChannelIds.take(30).toList();
+    }
+    if (mounted) setState(() {});
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_sportsRecentStorageKey, _recentChannelIds);
+    } catch (_) {
+      // No bloquea la reproducción si falla el almacenamiento de recientes.
+    }
+  }
+
+  String _categoryFor(IptvExtractedChannel channel) {
+    final value = (channel.name + ' ' + channel.group)
+        .toLowerCase()
+        .replaceAll('á', 'a')
+        .replaceAll('é', 'e')
+        .replaceAll('í', 'i')
+        .replaceAll('ó', 'o')
+        .replaceAll('ú', 'u');
+    if (RegExp(r'\b(futbol|football|soccer|champions|premier|laliga|liga mx)\b')
+        .hasMatch(value)) {
+      return 'Fútbol';
+    }
+    if (RegExp(r'\b(baloncesto|basketball|basquet|nba|wnba)\b').hasMatch(value)) {
+      return 'Baloncesto';
+    }
+    if (RegExp(r'\b(beisbol|baseball|mlb)\b').hasMatch(value)) {
+      return 'Béisbol';
+    }
+    if (RegExp(r'\b(tenis|tennis|atp|wta)\b').hasMatch(value)) {
+      return 'Tenis';
+    }
+    if (RegExp(r'\b(formula|f1|motogp|nascar|rally|motor|racing)\b')
+        .hasMatch(value)) {
+      return 'Motor';
+    }
+    return 'Otros';
   }
 
   void _handleCatalogChanged() {
@@ -155,7 +217,12 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
   List<IptvExtractedChannel> get _visibleChannels {
     final query = _query.trim().toLowerCase();
     return _channels.where((channel) {
-      if (_showFavoritesOnly && !_favoriteIds.contains(channel.id)) return false;
+      if (_selectedFilter == 'Favoritos' &&
+          !_favoriteIds.contains(channel.id)) return false;
+      if (_selectedFilter == 'Recientes' &&
+          !_recentChannelIds.contains(channel.identificationUrl)) return false;
+      if (_selectedCategory != 'Todos' &&
+          _categoryFor(channel) != _selectedCategory) return false;
       if (query.isEmpty) return true;
       return (channel.name + ' ' + channel.group + ' ' + channel.tvgId)
           .toLowerCase()
@@ -170,7 +237,10 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
     return VideoFormat.other;
   }
 
-  Future<void> _playChannel(IptvExtractedChannel channel) async {
+  Future<void> _playChannel(
+    IptvExtractedChannel channel, {
+    bool retry = false,
+  }) async {
     final generation = ++_playGeneration;
     final old = _controller;
     _controller = null;
@@ -178,52 +248,103 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
     await old?.dispose();
     if (!mounted || generation != _playGeneration) return;
 
+    if (!retry) _failedSourceUrls.clear();
+    final normalizedName = channel.name
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9áéíóúüñ]+'), '');
+    final sameTvgId = channel.tvgId.trim().isNotEmpty;
+    final alternatives = _channels.where((item) {
+      if (item.url == channel.url) return false;
+      final itemName = item.name
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9áéíóúüñ]+'), '');
+      final sameName = itemName == normalizedName;
+      final sameId = sameTvgId && item.tvgId.trim().isNotEmpty &&
+          item.tvgId.trim().toLowerCase() == channel.tvgId.trim().toLowerCase();
+      return sameName || sameId;
+    }).toList(growable: false);
+    final allSources = <IptvExtractedChannel>[channel, ...alternatives];
+    var candidates = allSources
+        .where((item) => !_failedSourceUrls.contains(item.url))
+        .toList(growable: false);
+    if (candidates.isEmpty) {
+      _failedSourceUrls.clear();
+      candidates = allSources;
+    }
+
     setState(() {
       _selectedChannel = channel;
       _loadingVideo = true;
       _playerError = null;
     });
 
-    VideoPlayerController? next;
-    try {
-      next = VideoPlayerController.networkUrl(
-        Uri.parse(channel.url),
-        formatHint: _formatHint(channel.url),
-        httpHeaders: const <String, String>{
-          'User-Agent': 'DeporteTotal360-IPTV/1.0',
-        },
-      );
-      // En HLS/DASH el motor nativo elige automáticamente la calidad
-      // disponible cuando la señal publica variantes adaptativas.
-      await next.initialize().timeout(const Duration(seconds: 22));
-      if (!mounted || generation != _playGeneration) {
-        await next.dispose();
+    Object? lastError;
+    for (var index = 0; index < candidates.length; index++) {
+      final candidate = candidates[index];
+      VideoPlayerController? next;
+      try {
+        next = VideoPlayerController.networkUrl(
+          Uri.parse(candidate.url),
+          formatHint: _formatHint(candidate.url),
+          httpHeaders: const <String, String>{
+            'User-Agent': 'DeporteTotal360-IPTV/1.0',
+          },
+        );
+        // Si una fuente falla al inicializar, probar la siguiente del mismo canal.
+        await next.initialize().timeout(const Duration(seconds: 22));
+        if (!mounted || generation != _playGeneration) {
+          await next.dispose();
+          return;
+        }
+        _controller = next;
+        _selectedChannel = candidate;
+        next.addListener(_controllerChanged);
+        await next.play();
+        if (!mounted || generation != _playGeneration) return;
+        setState(() {
+          _loadingVideo = false;
+          _playerError = null;
+        });
+        await _recordRecent(candidate);
+        if (candidate.url != channel.url && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Se abrió una fuente alternativa de ' + channel.name + '.'),
+            ),
+          );
+        }
         return;
+      } catch (error) {
+        lastError = error;
+        _failedSourceUrls.add(candidate.url);
+        await next?.dispose();
+        if (!mounted || generation != _playGeneration) return;
       }
-      _controller = next;
-      next.addListener(_controllerChanged);
-      await next.play();
-      if (mounted && generation == _playGeneration) {
-        setState(() => _loadingVideo = false);
-      }
-    } catch (error) {
-      await next?.dispose();
-      if (!mounted || generation != _playGeneration) return;
-      setState(() {
-        _loadingVideo = false;
-        _playerError =
-            'No se pudo reproducir esta señal. Comprueba que esté activa y permita reproducción directa. ' +
-                error.toString();
-      });
     }
+
+    if (!mounted || generation != _playGeneration) return;
+    setState(() {
+      _loadingVideo = false;
+      _playerError =
+          'No se pudo reproducir ninguna de las ' +
+          candidates.length.toString() +
+          ' fuentes encontradas. Comprueba que la señal esté activa y permita reproducción directa. ' +
+          (lastError?.toString() ?? '');
+    });
+  }
+
+  Future<void> _retryChannel() async {
+    final channel = _selectedChannel;
+    if (channel != null) await _playChannel(channel, retry: true);
   }
 
   void _controllerChanged() {
     if (!mounted) return;
     final value = _controller?.value;
     if (value != null && value.hasError && _playerError == null) {
+      _failedSourceUrls.add(_selectedChannel?.url ?? '');
       setState(() => _playerError =
-          value.errorDescription ?? 'Error en la transmisión.');
+          value.errorDescription ?? 'Error en la transmisión. Pulsa reintentar para probar otra fuente.');
     }
   }
 
@@ -362,10 +483,28 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
               Center(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Text(
-                    _playerError!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white, fontSize: 11),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      const Icon(Icons.signal_wifi_connected_no_internet_4_rounded,
+                          color: _sportsPink, size: 32),
+                      const SizedBox(height: 8),
+                      Text(
+                        _playerError!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white, fontSize: 11),
+                      ),
+                      const SizedBox(height: 10),
+                      FilledButton.icon(
+                        onPressed: _loadingVideo ? null : _retryChannel,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('REINTENTAR / OTRA FUENTE'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _sportsCyan,
+                          foregroundColor: _sportsBg,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               )
@@ -541,6 +680,69 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
     );
   }
 
+  Widget _buildChannelListTile(IptvExtractedChannel channel) {
+    final selected = _selectedChannel?.identificationUrl == channel.identificationUrl;
+    final favorite = _favoriteIds.contains(channel.id);
+    return Card(
+      color: selected ? _sportsPanel2 : _sportsPanel,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(13),
+        side: BorderSide(color: selected ? _sportsCyan : _sportsLine),
+      ),
+      child: ListTile(
+        onTap: () => _playChannel(channel),
+        leading: SizedBox(
+          width: 48,
+          height: 48,
+          child: channel.logo.isNotEmpty
+              ? Image.network(
+                  channel.logo,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Icon(
+                    Icons.live_tv_rounded, color: _sportsCyan, size: 30,
+                  ),
+                )
+              : const Icon(Icons.live_tv_rounded, color: _sportsCyan, size: 30),
+        ),
+        title: Text(
+          channel.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+        ),
+        subtitle: Text(
+          channel.group.isEmpty ? _categoryFor(channel) : channel.group,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: _sportsMuted, fontSize: 10),
+        ),
+        trailing: Wrap(
+          spacing: 0,
+          children: <Widget>[
+            IconButton(
+              tooltip: favorite ? 'Quitar de favoritos' : 'Agregar a favoritos',
+              onPressed: () => _toggleFavorite(channel),
+              icon: Icon(
+                favorite ? Icons.favorite : Icons.favorite_border,
+                color: _sportsPink,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Copiar URL identificadora',
+              onPressed: () => _copyChannelIdentifier(channel),
+              icon: const Icon(Icons.link_rounded, color: _sportsCyan),
+            ),
+            IconButton(
+              tooltip: 'Ocultar canal',
+              onPressed: () => _hideChannel(channel),
+              icon: const Icon(Icons.visibility_off_rounded, color: _sportsPink),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildLibraryHeader(int count) {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 10, 12, 4),
@@ -650,6 +852,14 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
                   icon: const Icon(Icons.search_rounded, color: _sportsCyan),
                 ),
                 IconButton(
+                  tooltip: _listView ? 'Mostrar cuadrícula' : 'Mostrar lista',
+                  onPressed: () => setState(() => _listView = !_listView),
+                  icon: Icon(
+                    _listView ? Icons.grid_view_rounded : Icons.view_list_rounded,
+                    color: _sportsCyan,
+                  ),
+                ),
+                IconButton(
                   tooltip: 'Actualizar canales visibles',
                   onPressed: _loadingLibrary ? null : _refreshCatalog,
                   icon: const Icon(Icons.refresh_rounded, color: _sportsGreen),
@@ -751,22 +961,49 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
                     ),
                   ),
                   Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 5),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: <String>[
+                          'Todos', 'Fútbol', 'Baloncesto', 'Béisbol', 'Tenis', 'Motor', 'Otros',
+                        ].map((category) => Padding(
+                          padding: const EdgeInsets.only(right: 7),
+                          child: ChoiceChip(
+                            label: Text(category),
+                            selected: _selectedCategory == category,
+                            onSelected: (_) => setState(() => _selectedCategory = category),
+                            selectedColor: _sportsCyan.withAlpha(55),
+                            labelStyle: TextStyle(
+                              color: _selectedCategory == category ? Colors.white : _sportsMuted,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        )).toList(growable: false),
+                      ),
+                    ),
+                  ),
+                  Padding(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 7),
                     child: Row(
                       children: <Widget>[
-                        ChoiceChip(
-                          label: const Text('TODOS'),
-                          selected: !_showFavoritesOnly,
-                          onSelected: (_) => setState(() => _showFavoritesOnly = false),
-                          selectedColor: _sportsCyan.withAlpha(50),
-                        ),
-                        const SizedBox(width: 8),
-                        ChoiceChip(
-                          label: const Text('♥ FAVORITOS'),
-                          selected: _showFavoritesOnly,
-                          onSelected: (_) => setState(() => _showFavoritesOnly = true),
-                          selectedColor: _sportsPink.withAlpha(50),
-                        ),
+                        for (final filter in <String>['Todos', 'Favoritos', 'Recientes'])
+                          Padding(
+                            padding: const EdgeInsets.only(right: 7),
+                            child: ChoiceChip(
+                              label: Text(
+                                filter == 'Favoritos'
+                                    ? '♥ FAVORITOS'
+                                    : filter.toUpperCase(),
+                              ),
+                              selected: _selectedFilter == filter,
+                              onSelected: (_) => setState(() => _selectedFilter = filter),
+                              selectedColor: filter == 'Favoritos'
+                                  ? _sportsPink.withAlpha(50)
+                                  : _sportsGreen.withAlpha(40),
+                            ),
+                          ),
                         const Spacer(),
                         Text(
                           visible.length.toString() + ' canales',
@@ -789,25 +1026,35 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
                                         ? 'Todavía no tienes canales favoritos.'
                                         : (_channels.isEmpty
                                             ? (_libraryError ?? 'No hay canales habilitados todavía.')
-                                            : 'No hay canales que coincidan con la búsqueda.'),
+                                            : (_selectedFilter == 'Recientes'
+                                                ? 'Todavía no hay canales reproducidos recientemente.'
+                                                : 'No hay canales que coincidan con estos filtros.')),
                                     textAlign: TextAlign.center,
                                     style: const TextStyle(color: _sportsMuted),
                                   ),
                                 ),
                               )
-                            : GridView.builder(
-                                padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-                                gridDelegate:
-                                    const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  crossAxisSpacing: 9,
-                                  mainAxisSpacing: 9,
-                                  childAspectRatio: 1.38,
-                                ),
-                                itemCount: visible.length,
-                                itemBuilder: (_, index) =>
-                                    _buildChannelTile(visible[index]),
-                              ),
+                            : _listView
+                                ? ListView.separated(
+                                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                                    itemCount: visible.length,
+                                    separatorBuilder: (_, __) => const SizedBox(height: 5),
+                                    itemBuilder: (_, index) =>
+                                        _buildChannelListTile(visible[index]),
+                                  )
+                                : GridView.builder(
+                                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                                    gridDelegate:
+                                        const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      crossAxisSpacing: 9,
+                                      mainAxisSpacing: 9,
+                                      childAspectRatio: 1.38,
+                                    ),
+                                    itemCount: visible.length,
+                                    itemBuilder: (_, index) =>
+                                        _buildChannelTile(visible[index]),
+                                  ),
                   ),
                 ],
               ),
