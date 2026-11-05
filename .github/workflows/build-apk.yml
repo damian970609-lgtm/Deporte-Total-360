@@ -106,6 +106,27 @@ jobs:
                   count=1,
               )
 
+          # Las listas M3U pueden venir de proveedores HTTP. El validador de
+          # la app admite HTTP y HTTPS; Android debe permitir ese tráfico para
+          # que los proveedores HTTP no fallen solo en la APK release.
+          if 'android:usesCleartextTraffic="false"' in content:
+              content = content.replace(
+                  'android:usesCleartextTraffic="false"',
+                  'android:usesCleartextTraffic="true"',
+              )
+          elif 'android:usesCleartextTraffic=' not in content:
+              content = re.sub(
+                  r'(<application\\b)',
+                  r'\\1 android:usesCleartextTraffic="true"',
+                  content,
+                  count=1,
+              )
+
+          if 'android:usesCleartextTraffic="true"' not in content:
+              raise SystemExit(
+                  'No se pudo habilitar la compatibilidad con listas HTTP'
+              )
+
           receivers = '''
               <receiver
                   android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
