@@ -1477,6 +1477,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         url: uri.toString(),
         label: _labelController.text.trim(),
       );
+      if (!mounted) return;
       _urlController.clear();
       _labelController.clear();
       setState(() => _rightsConfirmed = false);
