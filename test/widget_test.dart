@@ -139,6 +139,10 @@ void main() {
     await tester.enterText(find.byType(TextField).last, playlist);
     await tester.tap(find.text('IMPORTAR'));
     await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 150)),
+    );
+    await tester.pumpAndSettle();
 
     expect(find.text('Canal Importado'), findsOneWidget);
     final prefs = await SharedPreferences.getInstance();
@@ -161,6 +165,10 @@ void main() {
       const MaterialApp(
         home: IntegratedIptvPlayerScreen(parseInBackground: false),
       ),
+    );
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 150)),
     );
     await tester.pumpAndSettle();
 
@@ -224,6 +232,10 @@ void main() {
       const MaterialApp(
         home: IntegratedIptvPlayerScreen(parseInBackground: false),
       ),
+    );
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 150)),
     );
     await tester.pumpAndSettle();
     expect(find.text('FAVORITOS (1)'), findsOneWidget);
