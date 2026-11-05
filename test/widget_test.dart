@@ -10,6 +10,7 @@ import 'package:deporte_total_360/main.dart';
 import 'package:deporte_total_360/iptv_sources_screen.dart';
 import 'package:deporte_total_360/automatic_live_service.dart';
 import 'package:deporte_total_360/iptv_player_screen.dart';
+import 'package:deporte_total_360/iptv_extractor_player_screen.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sports_statistics_screen.dart';
 
@@ -142,7 +143,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el menú secreto abre el reproductor IPTV integrado sin listas precargadas', (tester) async {
+  testWidgets('el menú secreto abre el extractor IPTV independiente', (tester) async {
     Widget? destination;
     await tester.pumpWidget(
       MaterialApp(
@@ -154,7 +155,7 @@ void main() {
         ),
       ),
     );
-    expect(destination, isA<IntegratedIptvPlayerScreen>());
+    expect(destination, isA<IptvExtractorPlayerScreen>());
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
