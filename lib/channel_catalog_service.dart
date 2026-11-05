@@ -105,6 +105,20 @@ class ChannelPlaylistSource {
   }
 }
 
+class ChannelCatalogPage {
+  const ChannelCatalogPage({
+    required this.channels,
+    required this.total,
+    required this.offset,
+    required this.hasMore,
+  });
+
+  final List<SportsChannel> channels;
+  final int total;
+  final int offset;
+  final bool hasMore;
+}
+
 class ChannelCatalogException implements Exception {
   const ChannelCatalogException(this.message);
   final String message;
@@ -176,19 +190,16 @@ class ChannelCatalogService {
       _idToken = token;
       signedInEmail = account.email;
       return account.email;
-    } on GoogleSignInException catch (error) {
-      // Credential Manager puede conservar el vínculo de una cuenta cuando
-      // la autenticación se cancela o falla. En el siguiente intento eso puede
-      // terminar como [16] Account reauth failed. Limpia la sesión nativa aquí,
-      // incluso cuando no se llegó a completar el inicio de sesión.
+    } on GoogleSignInException {
+      // Credential Manager puede conservar una cuenta previa aunque el
+      // intento falle antes de devolver un usuario. Limpia siempre esa sesión
+      // para que el siguiente intento no repita el error de reautenticación [16].
       _idToken = null;
       signedInEmail = null;
-      if (error.code == GoogleSignInExceptionCode.canceled) {
-        try {
-          await _google.signOut();
-        } catch (_) {
-          // Conserva el error original del inicio de sesión.
-        }
+      try {
+        await _google.signOut();
+      } catch (_) {
+        // Conserva el error original del inicio de sesión.
       }
       rethrow;
     }
@@ -245,44 +256,60 @@ class ChannelCatalogService {
     };
   }
 
-  Future<List<SportsChannel>> fetchPublicChannels() async {
-    final channels = <SportsChannel>[];
-    var offset = 0;
-    var pages = 0;
-    var hasMore = true;
-    while (hasMore && pages < 100) {
-      final uri = Uri.parse(_baseUrl + '/api/channels').replace(
-        queryParameters: <String, String>{'offset': offset.toString()},
-      );
-      final result = await _client.get(
-        uri,
-        headers: const <String, String>{'Accept': 'application/json'},
-      ).timeout(const Duration(seconds: 20));
-      final payload = _decode(result);
-      final rows = payload['channels'];
-      if (rows is! List) {
-        throw const ChannelCatalogException(
-          'El servidor no devolvió un catálogo de canales válido.',
-        );
-      }
-      final page = rows
-          .whereType<Map>()
-          .map((row) => SportsChannel.fromJson(
-                Map<String, dynamic>.from(row),
-              ))
-          .toList(growable: false);
-      if (page.isEmpty) break;
-      channels.addAll(page);
-      offset += page.length;
-      pages++;
-      hasMore = payload['hasMore'] == true;
-    }
-    if (hasMore) {
+  /// Descarga solo una página del catálogo. La interfaz solicita las
+  /// siguientes al desplazarse, sin traer miles de señales de una sola vez.
+  Future<ChannelCatalogPage> fetchPublicChannelPage({
+    String search = '',
+    int offset = 0,
+  }) async {
+    final normalizedOffset = offset.clamp(0, 100000).toInt();
+    final query = <String, String>{
+      'offset': normalizedOffset.toString(),
+      if (search.trim().isNotEmpty) 'q': search.trim(),
+    };
+    final uri = Uri.parse(_baseUrl + '/api/channels').replace(
+      queryParameters: query,
+    );
+    final result = await _client.get(
+      uri,
+      headers: const <String, String>{'Accept': 'application/json'},
+    ).timeout(const Duration(seconds: 20));
+    final payload = _decode(result);
+    final rows = payload['channels'];
+    if (rows is! List) {
       throw const ChannelCatalogException(
-        'El catálogo es demasiado grande; la carga se detuvo por seguridad.',
+        'El servidor no devolvió un catálogo de canales válido.',
       );
     }
-    return channels;
+    final page = rows
+        .whereType<Map>()
+        .map((row) => SportsChannel.fromJson(
+              Map<String, dynamic>.from(row),
+            ))
+        .toList(growable: false);
+    final responseOffset = int.tryParse(
+          (payload['offset'] ?? normalizedOffset).toString(),
+        ) ??
+        normalizedOffset;
+    final total = int.tryParse(
+          (payload['total'] ?? (responseOffset + page.length)).toString(),
+        ) ??
+        responseOffset + page.length;
+    final hasMore = page.isNotEmpty &&
+        (payload.containsKey('hasMore')
+            ? payload['hasMore'] == true
+            : responseOffset + page.length < total);
+    return ChannelCatalogPage(
+      channels: page,
+      total: total,
+      offset: responseOffset,
+      hasMore: hasMore,
+    );
+  }
+
+  /// Compatibilidad para llamadas antiguas: devuelve la primera página.
+  Future<List<SportsChannel>> fetchPublicChannels() async {
+    return (await fetchPublicChannelPage()).channels;
   }
 
   Future<List<SportsChannel>> fetchAdminChannels({
