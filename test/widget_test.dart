@@ -175,7 +175,9 @@ void main() {
     expect(find.text('Canal Deportes'), findsOneWidget);
     expect(find.text('Canal Deportes HD'), findsNothing);
     expect(find.textContaining('2 fuentes disponibles'), findsOneWidget);
-    expect(find.text('1 canales · 2 listas'), findsOneWidget);
+    // El resumen actual presenta la cantidad de canales únicos como una métrica,
+    // no como el texto combinado antiguo «1 canales · 2 listas».
+    expect(find.text('canales únicos'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
