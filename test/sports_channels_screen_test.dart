@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../lib/iptv_extractor_player_screen.dart';
@@ -13,6 +15,10 @@ void main() {
       'https://media.example/uno.m3u8\n'
       '#EXTINF:-1 tvg-id="sports.test.two" group-title="Baloncesto",Otro Canal\n'
       'https://media.example/dos.m3u8\n';
+
+  MockClient clientForSample() => MockClient(
+        (_) async => http.Response(sampleM3u, 200),
+      );
 
   test('cada canal tiene un identificador URI estable y distinto', () {
     final channels = parseIptvStudioM3u(sampleM3u);
@@ -44,40 +50,111 @@ void main() {
     expect(remaining.single.name, 'Canal B');
   });
 
-  test('la selección de Canales deportivos se guarda y se puede quitar', () async {
+  test('la primera lista se agrega automáticamente y permite añadir más', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    final channels = parseIptvStudioM3u(sampleM3u);
 
-    await addIptvStudioSportsChannel(channels[0]);
-    await addIptvStudioSportsChannel(channels[1]);
-    var saved = await loadIptvStudioSportsChannels();
-    expect(saved.map((channel) => channel.id), <String>[channels[0].id, channels[1].id]);
-    expect(saved.first.identificationUrl, channels.first.identificationUrl);
+    final urls = await loadIptvStudioPlaylistUrls();
+    expect(urls, contains(defaultIptvStudioSportsUrl));
 
-    await removeIptvStudioSportsChannel(channels[0].identificationUrl);
-    saved = await loadIptvStudioSportsChannels();
-    expect(saved, hasLength(1));
-    expect(saved.single.id, channels[1].id);
+    await addIptvStudioPlaylistUrls(<String>[
+      'https://listas.example/deportes.m3u',
+      'https://listas.example/television.m3u',
+    ]);
+    final saved = await loadIptvStudioPlaylistUrls();
+    expect(saved, contains(defaultIptvStudioSportsUrl));
+    expect(saved, contains('https://listas.example/deportes.m3u'));
+    expect(saved, contains('https://listas.example/television.m3u'));
   });
 
-  testWidgets('Canales deportivos solo muestra la selección y permite buscarla',
+  test('ocultar un canal lo conserva en la lista oculta para el menú secreto', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final channel = parseIptvStudioM3u(sampleM3u).first;
+
+    await setIptvStudioChannelHidden(channel.identificationUrl, true);
+    expect(
+      await loadIptvStudioHiddenChannelIds(),
+      contains(channel.identificationUrl),
+    );
+
+    await setIptvStudioChannelHidden(channel.identificationUrl, false);
+    expect(
+      await loadIptvStudioHiddenChannelIds(),
+      isNot(contains(channel.identificationUrl)),
+    );
+  });
+
+  testWidgets('Canales deportivos carga la lista y permite ocultar canales',
       (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    final channels = parseIptvStudioM3u(sampleM3u);
-    await saveIptvStudioSportsChannels(<IptvExtractedChannel>[channels.first]);
+    await addIptvStudioPlaylistUrls(<String>[
+      'https://listas.example/deportes.m3u',
+    ]);
 
     await tester.pumpWidget(
-      const MaterialApp(home: SportsChannelsScreen()),
+      MaterialApp(
+        home: SportsChannelsScreen(httpClient: clientForSample()),
+      ),
     );
-    await tester.pump();
+    for (var index = 0; index < 12; index++) {
+      await tester.pump(const Duration(milliseconds: 150));
+    }
 
     expect(find.text('Canal Prueba'), findsOneWidget);
-    expect(find.text('Otro Canal'), findsNothing);
+    expect(find.text('Otro Canal'), findsOneWidget);
     expect(find.text('CANALES DEPORTIVOS'), findsOneWidget);
+    expect(find.byTooltip('Agregar más listas'), findsOneWidget);
+    expect(find.byTooltip('Copiar URL identificadora'), findsNWidgets(2));
 
-    await tester.enterText(find.byType(TextField), 'Prueba');
-    await tester.pump();
-    expect(find.text('Canal Prueba'), findsOneWidget);
+    await tester.tap(find.byTooltip('Ocultar canal').first);
+    for (var index = 0; index < 5; index++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(find.text('Canal Prueba'), findsNothing);
+    expect(find.text('Otro Canal'), findsOneWidget);
+    final hidden = await loadIptvStudioHiddenChannelIds();
+    expect(
+      hidden,
+      contains(parseIptvStudioM3u(sampleM3u).first.identificationUrl),
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('el menú secreto conserva los canales ocultos y permite mostrarlos',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    await addIptvStudioPlaylistUrls(<String>[
+      'https://listas.example/deportes.m3u',
+    ]);
+    final hiddenChannel = parseIptvStudioM3u(sampleM3u).first;
+    await setIptvStudioChannelHidden(hiddenChannel.identificationUrl, true);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: IptvExtractorPlayerScreen(
+          httpClient: clientForSample(),
+          parseInBackground: false,
+        ),
+      ),
+    );
+    for (var index = 0; index < 12; index++) {
+      await tester.pump(const Duration(milliseconds: 150));
+    }
+
+    expect(find.text(hiddenChannel.name), findsOneWidget);
+    expect(find.textContaining('OCULTO EN CANALES DEPORTIVOS'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.more_vert).first);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('Mostrar en Canales deportivos'), findsOneWidget);
+    await tester.tap(find.text('Mostrar en Canales deportivos'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      await loadIptvStudioHiddenChannelIds(),
+      isNot(contains(hiddenChannel.identificationUrl)),
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
