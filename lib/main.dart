@@ -350,10 +350,12 @@ class _MainShellState extends State<MainShell> {
         onOpenAgenda: _openWebAgenda,
         onChat: _openPublicChat,
       ),
-      AutomaticLiveScreen(
-        onOpenAgenda: () => _selectTab(_agendaTab),
-        isActive: _selectedIndex == _liveTab,
-      ),
+      _visitedTabs.contains(_liveTab)
+          ? AutomaticLiveScreen(
+              onOpenAgenda: () => _selectTab(_agendaTab),
+              isActive: _selectedIndex == _liveTab,
+            )
+          : const SizedBox.shrink(),
       _visitedTabs.contains(_channelsTab)
           ? const ChannelCatalogScreen()
           : const SizedBox.shrink(),
