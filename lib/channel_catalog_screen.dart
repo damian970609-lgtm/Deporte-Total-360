@@ -35,9 +35,17 @@ class ChannelCatalogScreen extends StatefulWidget {
 class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
   final ChannelCatalogService _service = channelCatalogService;
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   final Set<String> _favorites = <String>{};
   List<SportsChannel> _channels = <SportsChannel>[];
   SportsChannel? _selectedChannel;
+  Timer? _searchDebounce;
+  int _catalogRequestId = 0;
+  int _nextCatalogOffset = 0;
+  int _catalogTotal = 0;
+  bool _hasMoreChannels = false;
+  bool _loadingMoreChannels = false;
+  String? _loadMoreError;
   bool _loading = true;
   bool _syncing = false;
   String? _error;
@@ -46,12 +54,17 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_handleCatalogScroll);
     unawaited(_loadLocalFavorites());
     unawaited(_loadChannels());
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _scrollController
+      ..removeListener(_handleCatalogScroll)
+      ..dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -79,27 +92,102 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
   }
 
   Future<void> _loadChannels() async {
+    _searchDebounce?.cancel();
+    final requestId = ++_catalogRequestId;
+    final search = _searchController.text.trim();
     if (mounted) {
       setState(() {
         _loading = true;
+        _loadingMoreChannels = false;
+        _loadMoreError = null;
         _error = null;
+        _channels = <SportsChannel>[];
+        _nextCatalogOffset = 0;
+        _catalogTotal = 0;
+        _hasMoreChannels = false;
       });
     }
     try {
-      final channels = await _service.fetchPublicChannels();
-      if (!mounted) return;
+      final page = await _service.fetchPublicChannelPage(
+        search: search,
+        offset: 0,
+      );
+      if (!mounted || requestId != _catalogRequestId) return;
       final previousId = _selectedChannel?.id;
       setState(() {
-        _channels = channels;
-        _selectedChannel = _firstOrNull(channels.where((item) => item.id == previousId));
+        _channels = page.channels;
+        _catalogTotal = page.total;
+        _nextCatalogOffset = page.offset + page.channels.length;
+        _hasMoreChannels = page.hasMore;
+        _selectedChannel = _firstOrNull(
+          page.channels.where((item) => item.id == previousId),
+        );
         _loading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || requestId != _catalogRequestId) return;
       setState(() {
         _loading = false;
         _error = error.toString();
       });
+    }
+  }
+
+  void _handleSearchChanged(String _) {
+    if (mounted) setState(() {});
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 350),
+      () => unawaited(_loadChannels()),
+    );
+  }
+
+  void _handleCatalogScroll() {
+    if (!_scrollController.hasClients || _loadMoreError != null) return;
+    if (_scrollController.position.extentAfter < 500) {
+      unawaited(_loadMoreChannels());
+    }
+  }
+
+  Future<void> _loadMoreChannels() async {
+    if (_loading || _loadingMoreChannels || !_hasMoreChannels) return;
+    final requestId = _catalogRequestId;
+    final offset = _nextCatalogOffset;
+    final search = _searchController.text.trim();
+    setState(() {
+      _loadingMoreChannels = true;
+      _loadMoreError = null;
+    });
+    try {
+      final page = await _service.fetchPublicChannelPage(
+        search: search,
+        offset: offset,
+      );
+      if (!mounted || requestId != _catalogRequestId) return;
+      if (page.channels.isEmpty && page.hasMore) {
+        setState(() {
+          _loadMoreError =
+              'El servidor no entregó más canales. Pulsa para volver a intentarlo.';
+        });
+        return;
+      }
+      setState(() {
+        final knownIds = _channels.map((channel) => channel.id).toSet();
+        _channels = <SportsChannel>[
+          ..._channels,
+          ...page.channels.where((channel) => knownIds.add(channel.id)),
+        ];
+        _catalogTotal = page.total;
+        _nextCatalogOffset = page.offset + page.channels.length;
+        _hasMoreChannels = page.hasMore;
+      });
+    } catch (error) {
+      if (!mounted || requestId != _catalogRequestId) return;
+      setState(() => _loadMoreError = error.toString());
+    } finally {
+      if (mounted && requestId == _catalogRequestId) {
+        setState(() => _loadingMoreChannels = false);
+      }
     }
   }
 
@@ -378,6 +466,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
           backgroundColor: _channelPanel,
           onRefresh: _loadChannels,
           child: CustomScrollView(
+            controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: <Widget>[
               SliverToBoxAdapter(
@@ -422,7 +511,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
                             ),
                             child: Text(
                               channels.length.toString() + ' / ' +
-                                  _channels.length.toString(),
+                                  _catalogTotal.toString(),
                               style: const TextStyle(
                                 color: _channelCyan,
                                 fontSize: 10,
@@ -435,7 +524,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
                       const SizedBox(height: 10),
                       TextField(
                         controller: _searchController,
-                        onChanged: (_) => setState(() {}),
+                        onChanged: _handleSearchChanged,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 13,
@@ -455,7 +544,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
                               : IconButton(
                                   onPressed: () {
                                     _searchController.clear();
-                                    setState(() {});
+                                    _handleSearchChanged('');
                                   },
                                   icon: const Icon(
                                     Icons.close_rounded,
@@ -569,6 +658,41 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
                       crossAxisSpacing: 10,
                       mainAxisSpacing: 10,
                       childAspectRatio: 1.15,
+                    ),
+                  ),
+                ),
+              if (_loadingMoreChannels)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(12, 8, 12, 28),
+                    child: Center(
+                      child: CircularProgressIndicator(color: _channelCyan),
+                    ),
+                  ),
+                )
+              else if (_loadMoreError != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 28),
+                    child: Center(
+                      child: TextButton.icon(
+                        onPressed: _loadMoreChannels,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('REINTENTAR CARGA'),
+                      ),
+                    ),
+                  ),
+                )
+              else if (_hasMoreChannels)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 28),
+                    child: Center(
+                      child: TextButton.icon(
+                        onPressed: _loadMoreChannels,
+                        icon: const Icon(Icons.expand_more_rounded),
+                        label: const Text('CARGAR MÁS CANALES'),
+                      ),
                     ),
                   ),
                 ),
