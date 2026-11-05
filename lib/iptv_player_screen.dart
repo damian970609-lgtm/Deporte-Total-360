@@ -635,12 +635,13 @@ class _IntegratedIptvPlayerScreenState
         entry.channels.length.toString() + ' fuentes disponibles',
     ].join(' · ');
 
-    return Container(
-      decoration: BoxDecoration(
-        color: _iptvPanel,
+    return Material(
+      color: _iptvPanel,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _iptvLine),
+        side: const BorderSide(color: _iptvLine),
       ),
+      clipBehavior: Clip.antiAlias,
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
         leading: ClipRRect(
