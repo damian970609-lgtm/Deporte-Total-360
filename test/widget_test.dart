@@ -124,7 +124,8 @@ void main() {
   });
 
   testWidgets('el reproductor integrado empieza vacío y permite añadir varias listas', (tester) async {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'dt360_secret_iptv_playlist_cleanup_v1': true,});
     await tester.pumpWidget(
       const MaterialApp(
         home: IntegratedIptvPlayerScreen(parseInBackground: false),
@@ -149,7 +150,8 @@ void main() {
   });
 
   testWidgets('el reproductor integrado importa una M3U y muestra su canal', (tester) async {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'dt360_secret_iptv_playlist_cleanup_v1': true,});
     await tester.pumpWidget(
       const MaterialApp(
         home: IntegratedIptvPlayerScreen(parseInBackground: false),
