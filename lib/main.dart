@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'automatic_live_screen.dart';
+import 'channel_catalog_screen.dart';
 
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
@@ -171,12 +172,13 @@ class _MainShellState extends State<MainShell> {
 
   static const int _homeTab = 0;
   static const int _liveTab = 1;
-  static const int _agendaTab = 2;
-  static const int _newsTab = 3;
-  static const int _fantasyTab = 4;
-  static const int _statisticsTab = 5;
-  static const int _summariesTab = 6;
-  static const int _settingsTab = 7;
+  static const int _channelsTab = 2;
+  static const int _agendaTab = 3;
+  static const int _newsTab = 4;
+  static const int _fantasyTab = 5;
+  static const int _statisticsTab = 6;
+  static const int _summariesTab = 7;
+  static const int _settingsTab = 8;
 
   int _selectedIndex = _homeTab;
   String _selectedStatisticsSport = 'Fútbol';
@@ -352,6 +354,9 @@ class _MainShellState extends State<MainShell> {
         onOpenAgenda: () => _selectTab(_agendaTab),
         isActive: _selectedIndex == _liveTab,
       ),
+      _visitedTabs.contains(_channelsTab)
+          ? const ChannelCatalogScreen()
+          : const SizedBox.shrink(),
       _visitedTabs.contains(_agendaTab)
           ? MarcaAgendaScreen(
               isActive: _selectedIndex == _agendaTab,
@@ -397,6 +402,7 @@ class _MainShellState extends State<MainShell> {
                 children: <Widget>[
                   _buildBottomTab(_homeTab, Icons.home_rounded, tr('home'), appCyan),
                   _buildBottomTab(_liveTab, Icons.live_tv_rounded, 'Deportes en vivo', appPink),
+                  _buildBottomTab(_channelsTab, Icons.grid_view_rounded, 'Canales deportivos', appCyan),
                   _buildBottomTab(_agendaTab, Icons.calendar_month_rounded, 'Agenda de hoy', appGreen),
                   _buildBottomTab(_newsTab, Icons.article_rounded, tr('news'), appGreen),
                   _buildBottomTab(_fantasyTab, Icons.emoji_events_rounded, 'Mister Fantasy', appYellow),
@@ -1187,7 +1193,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _signatureTapCount = 0;
       Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
-          builder: (_) => const DeveloperSettingsScreen(),
+          builder: (_) => const ChannelAdminScreen(),
         ),
       );
     }

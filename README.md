@@ -39,3 +39,37 @@ SportsAPI.app es la fuente principal de Agenda de hoy para Fútbol, Baloncesto, 
 ## Activar notificaciones push
 
 En Firebase crea una aplicación Android para el paquete de esta APK y copia los valores de configuración. Añade estos cuatro GitHub Actions Secrets en el repositorio de la APK: `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, `FIREBASE_MESSAGING_SENDER_ID` y `FIREBASE_PROJECT_ID`. En el Worker configura el secreto `FCM_SERVICE_ACCOUNT_JSON` con el JSON de una cuenta de servicio de Firebase que tenga permiso para enviar mensajes FCM. La APK suscribe los dispositivos que activan los avisos al tema `deporte_total_360_live`; el Worker envía una sola notificación al tema, sin almacenar tokens personales. El secreto se guarda en Cloudflare, nunca en GitHub ni en el APK. Después de compilar e instalar la APK, cada usuario debe activar Notificaciones en Ajustes y conceder el permiso Android. El Worker registra el token del dispositivo y envía un aviso cuando una señal directa queda verificada. Tocar el aviso abre Deportes en vivo; el usuario inicia el vídeo con Play. Sin los secretos Firebase y Cloudflare, las notificaciones locales existentes siguen funcionando, pero no se envían avisos push.
+
+ 
+## Catálogo de Canales deportivos
+
+La nueva pestaña **Canales deportivos** muestra únicamente señales aprobadas y
+publicadas desde el catálogo central de Cloudflare. El reproductor se desplaza
+con la lista, admite HLS/MP4, controles ocultables a los cinco segundos,
+bloqueo, pantalla completa, ajuste gestual de brillo de la aplicación y
+volumen multimedia, además de calidad automática y pistas publicadas por el
+proveedor. La calidad automática depende de las variantes disponibles en la
+señal; no puede crear resoluciones que el proveedor no publique.
+
+El acceso de diez pulsaciones sobre `DAMIÁN.APK` abre ahora el panel privado
+de importación. Inicia sesión con Google. Añade una lista M3U HTTPS y confirma
+que tienes autorización para distribuir las señales. Cloudflare descarga y
+procesa la lista en segundo plano; los nuevos canales permanecen ocultos.
+Desde el catálogo general puedes copiar su identificador o URL de señal y
+activar/desactivar el ojo de visibilidad para publicar u ocultar cada señal
+deportiva a todos los usuarios.
+
+Configura `GOOGLE_OAUTH_CLIENT_ID` como secreto de GitHub Actions del
+repositorio de la APK y del repositorio del Worker. Debe ser el **ID de cliente
+OAuth Web**, no un secreto privado. En Google Cloud configura además el cliente
+Android para el package name y la huella SHA-1 del certificado de firma
+utilizado por GitHub Actions. El Worker comprueba el ID token, su audiencia y
+correo verificado; solo `damian970609@gmail.com` administra el catálogo.
+Los favoritos individuales se sincronizan en Cloudflare al iniciar sesión
+con Google; sin iniciar sesión solo se guardan localmente.
+
+El reproductor modifica el brillo de la aplicación, no el brillo global del
+sistema, por lo que no necesita el permiso especial de Android. El control
+gestual de volumen utiliza el volumen multimedia de Android. Las importaciones
+solo aceptan playlists M3U HTTPS y direcciones HLS/MP4 directas; no extraen
+páginas de reproducción ni evaden DRM, cuentas o restricciones regionales.

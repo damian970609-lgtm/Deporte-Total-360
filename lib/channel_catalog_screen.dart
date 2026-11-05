@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
@@ -20,6 +19,11 @@ const Color _channelGreen = Color(0xFF39FF9C);
 const Color _channelYellow = Color(0xFFFFD600);
 const Color _channelMuted = Color(0xFFA9BDD6);
 const String _channelFavoritesKey = 'dt360_channel_catalog_favorites_v1';
+
+T? _firstOrNull<T>(Iterable<T> items) {
+  final iterator = items.iterator;
+  return iterator.moveNext() ? iterator.current : null;
+}
 
 class ChannelCatalogScreen extends StatefulWidget {
   const ChannelCatalogScreen({super.key});
@@ -87,8 +91,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
       final previousId = _selectedChannel?.id;
       setState(() {
         _channels = channels;
-        _selectedChannel = channels.where((item) => item.id == previousId)
-            .firstOrNull;
+        _selectedChannel = _firstOrNull(channels.where((item) => item.id == previousId));
         _loading = false;
       });
     } catch (error) {
@@ -970,8 +973,7 @@ class _ChannelPlayerSurfaceState extends State<_ChannelPlayerSurface> {
         await widget.controller.selectVideoTrack(null);
         _qualityId = null;
       } else {
-        final track = widget.tracks.where((item) => item.id == value)
-            .firstOrNull;
+        final track = _firstOrNull(widget.tracks.where((item) => item.id == value));
         if (track != null) {
           await widget.controller.selectVideoTrack(track);
           _qualityId = track.id;
@@ -989,8 +991,7 @@ class _ChannelPlayerSurfaceState extends State<_ChannelPlayerSurface> {
 
   String _qualityLabel() {
     if (_qualityId == null) return 'AUTO';
-    final track = widget.tracks.where((item) => item.id == _qualityId)
-        .firstOrNull;
+    final track = _firstOrNull(widget.tracks.where((item) => item.id == _qualityId));
     if (track == null) return 'AUTO';
     final height = track.height;
     return height == null ? 'CALIDAD' : height.toString() + 'P';
