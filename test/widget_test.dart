@@ -107,8 +107,16 @@ void main() {
     expect(find.text('IMPORTAR TUS LISTAS M3U'), findsOneWidget);
     expect(find.text('AGREGAR LISTA M3U'), findsOneWidget);
     expect(find.text('AGREGAR GUÍA EPG'), findsOneWidget);
+    expect(find.text('AGREGAR LISTA POR URL'), findsOneWidget);
+    expect(find.text('ABRIR REPRODUCTOR'), findsOneWidget);
     expect(find.textContaining('ninguna lista pública automáticamente'), findsOneWidget);
     expect(find.byTooltip('Agregar lista M3U por URL'), findsOneWidget);
+
+    await tester.tap(find.text('ABRIR REPRODUCTOR'));
+    await tester.pumpAndSettle();
+    expect(find.text('URL directa del canal'), findsOneWidget);
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Agregar lista M3U por URL'));
     await tester.pumpAndSettle();
