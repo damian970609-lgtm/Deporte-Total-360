@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'dart:isolate';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'automatic_live_service.dart';
@@ -40,9 +43,11 @@ class IntegratedIptvPlayerScreen extends StatefulWidget {
   const IntegratedIptvPlayerScreen({
     super.key,
     this.parseInBackground = true,
+    this.httpClient,
   });
 
   final bool parseInBackground;
+  final http.Client? httpClient;
 
   @override
   State<IntegratedIptvPlayerScreen> createState() =>
@@ -57,7 +62,7 @@ class _IptvChannelGroup {
 
 class _IntegratedIptvPlayerScreenState
     extends State<IntegratedIptvPlayerScreen> {
-  final AutomaticLiveService _service = AutomaticLiveService();
+  late final AutomaticLiveService _service;
   final TextEditingController _searchController = TextEditingController();
 
   List<String> _playlistUrls = <String>[];
@@ -67,6 +72,7 @@ class _IntegratedIptvPlayerScreenState
 
   bool _loading = true;
   bool _refreshing = false;
+  bool _refreshQueued = false;
   bool _showFavoritesOnly = false;
   String? _error;
   String? _warning;
@@ -74,6 +80,7 @@ class _IntegratedIptvPlayerScreenState
   @override
   void initState() {
     super.initState();
+    _service = AutomaticLiveService(client: widget.httpClient);
     _searchController.addListener(_handleSearchChanged);
     _loadSavedSources();
   }
@@ -147,8 +154,45 @@ class _IntegratedIptvPlayerScreenState
   }
 
   Future<void> _refreshCatalog({bool showLoading = true}) async {
-    if (_refreshing) return;
-    if (_playlistUrls.isEmpty && _playlistTexts.isEmpty) {
+    // No descartes un refresco que llegue mientras se descarga la lista inicial.
+    // Se marca como pendiente y se repite con las URLs/contenidos más recientes.
+    if (_refreshing) {
+      _refreshQueued = true;
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _refreshing = true;
+        if (showLoading && _channels.isEmpty) _loading = true;
+      });
+    }
+
+    try {
+      var showInitialLoading = showLoading;
+      do {
+        _refreshQueued = false;
+        await _loadCatalogSnapshot(showLoading: showInitialLoading);
+        showInitialLoading = false;
+      } while (_refreshQueued && mounted);
+    } finally {
+      _refreshQueued = false;
+      if (mounted) {
+        setState(() {
+          _refreshing = false;
+          _loading = false;
+        });
+      } else {
+        _refreshing = false;
+      }
+    }
+  }
+
+  Future<void> _loadCatalogSnapshot({required bool showLoading}) async {
+    final playlistUrls = List<String>.unmodifiable(_playlistUrls);
+    final playlistTexts = List<String>.unmodifiable(_playlistTexts);
+
+    if (playlistUrls.isEmpty && playlistTexts.isEmpty) {
       if (!mounted) return;
       setState(() {
         _channels = <_IptvChannelGroup>[];
@@ -161,7 +205,6 @@ class _IntegratedIptvPlayerScreenState
 
     if (mounted) {
       setState(() {
-        _refreshing = true;
         if (showLoading && _channels.isEmpty) _loading = true;
         _error = null;
         _warning = null;
@@ -171,9 +214,9 @@ class _IntegratedIptvPlayerScreenState
     final failedSources = <String>{};
     try {
       final catalog = await _service.loadCatalog(
-        playlistUrl: _playlistUrls.join('\n'),
+        playlistUrl: playlistUrls.join('\\n'),
         epgUrl: '',
-        playlistTexts: _playlistTexts,
+        playlistTexts: playlistTexts,
         forceRefresh: true,
         parseInBackground: widget.parseInBackground,
         downloadBatchSize: 4,
@@ -209,13 +252,6 @@ class _IntegratedIptvPlayerScreenState
             ? null
             : 'No se pudieron actualizar todas las fuentes. Se conserva la lista que ya estaba cargada.';
       });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _refreshing = false;
-          _loading = false;
-        });
-      }
     }
   }
 
@@ -314,41 +350,123 @@ class _IntegratedIptvPlayerScreenState
     if (result != null && mounted) await _addPlaylistUrls(result);
   }
 
-  Future<void> _importM3uText(String raw) async {
-    final text = raw.replaceFirst('\uFEFF', '').trim();
+  Future<List<M3uChannel>> _parseM3uContent(
+    String raw, {
+    String sourceName = 'Lista pegada',
+  }) async {
+    final text = raw.replaceFirst('\\uFEFF', '').trim();
     if (!text.toUpperCase().startsWith('#EXTM3U')) {
-      _showMessage('El contenido no parece una lista M3U. Debe comenzar con #EXTM3U.');
-      return;
+      throw const FormatException(
+        'El contenido no parece una lista M3U. Debe comenzar con #EXTM3U.',
+      );
     }
-    if (text.length > 8 * 1024 * 1024) {
-      _showMessage('La lista supera 8 MB. Divídela en varias listas antes de importarla.');
-      return;
+    if (utf8.encode(text).length > 8 * 1024 * 1024) {
+      throw const FormatException(
+        'La lista supera 8 MB. Divídela en varias listas antes de importarla.',
+      );
     }
-    try {
-      final parsed = widget.parseInBackground
-          ? await Isolate.run(
-              () => AutomaticLiveService.parseM3u(
-                text,
-                sourceUrl: 'Lista pegada',
-              ),
-            )
-          : AutomaticLiveService.parseM3u(
+    final parsed = widget.parseInBackground
+        ? await Isolate.run(
+            () => AutomaticLiveService.parseM3u(
               text,
-              sourceUrl: 'Lista pegada',
-            );
+              sourceUrl: sourceName,
+            ),
+          )
+        : AutomaticLiveService.parseM3u(
+            text,
+            sourceUrl: sourceName,
+          );
+    if (parsed.isEmpty) {
+      throw const FormatException(
+        'No encontré canales directos HLS, DASH, TS o MP4 compatibles en esa lista.',
+      );
+    }
+    return parsed;
+  }
+
+  Future<void> _importM3uText(String raw) async {
+    final text = raw.replaceFirst('\\uFEFF', '').trim();
+    try {
+      final parsed = await _parseM3uContent(text);
       if (!mounted) return;
-      if (parsed.isEmpty) {
-        _showMessage('No encontré canales directos compatibles en esa lista.');
-        return;
-      }
       if (!_playlistTexts.contains(text)) _playlistTexts.add(text);
       await _persistSources();
       await _refreshCatalog();
       if (mounted) {
-        _showMessage('Lista importada: ' + parsed.length.toString() + ' canales detectados.');
+        _showMessage(
+          'Lista importada: ' + parsed.length.toString() + ' canales detectados.',
+        );
       }
     } catch (error) {
       _showMessage('No se pudo importar la lista: ' + error.toString());
+    }
+  }
+
+  Future<void> _pickM3uFiles() async {
+    try {
+      final files = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const <String>['m3u', 'm3u8', 'txt'],
+      );
+      if (!mounted || files.isEmpty) return;
+
+      var importedFiles = 0;
+      var importedChannels = 0;
+      final rejectedFiles = <String>[];
+
+      for (final file in files) {
+        try {
+          final reportedLength = await file.length();
+          if (reportedLength != null && reportedLength > 8 * 1024 * 1024) {
+            throw const FormatException('El archivo supera el límite de 8 MB.');
+          }
+          final bytes = await file.readAsBytes();
+          if (bytes.length > 8 * 1024 * 1024) {
+            throw const FormatException('El archivo supera el límite de 8 MB.');
+          }
+          final text = utf8
+              .decode(bytes, allowMalformed: true)
+              .replaceFirst('\\uFEFF', '')
+              .trim();
+          final parsed = await _parseM3uContent(
+            text,
+            sourceName: file.name,
+          );
+          if (!_playlistTexts.contains(text)) {
+            _playlistTexts.add(text);
+          }
+          importedFiles++;
+          importedChannels += parsed.length;
+        } catch (error) {
+          rejectedFiles.add(file.name + ': ' + error.toString());
+        }
+      }
+
+      if (!mounted) return;
+      if (importedFiles == 0) {
+        _showMessage(
+          rejectedFiles.isEmpty
+              ? 'No seleccionaste archivos M3U.'
+              : 'No se pudo importar ningún archivo. ' +
+                  rejectedFiles.take(2).join(' | '),
+        );
+        return;
+      }
+
+      await _persistSources();
+      await _refreshCatalog();
+      if (!mounted) return;
+      final message = importedFiles.toString() +
+          ' archivo(s) importado(s), ' +
+          importedChannels.toString() +
+          ' canales detectados.';
+      _showMessage(
+        rejectedFiles.isEmpty
+            ? message
+            : message + ' Omitidos: ' + rejectedFiles.take(2).join(' | '),
+      );
+    } catch (error) {
+      _showMessage('No se pudo abrir el selector de archivos: ' + error.toString());
     }
   }
 
@@ -866,6 +984,15 @@ class _IntegratedIptvPlayerScreenState
                         style: FilledButton.styleFrom(
                           backgroundColor: _iptvCyan,
                           foregroundColor: _iptvBg,
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _pickM3uFiles,
+                        icon: const Icon(Icons.folder_open_rounded),
+                        label: const Text('CARGAR ARCHIVOS'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _iptvPink,
+                          side: const BorderSide(color: _iptvPink),
                         ),
                       ),
                       OutlinedButton.icon(
