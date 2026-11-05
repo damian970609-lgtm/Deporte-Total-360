@@ -86,6 +86,49 @@ void main() {
     expect(channel.language, 'unknown');
   });
 
+  test('Google OAuth confirma que APK y Worker comparten el cliente Web', () async {
+    final clientId = 'dt360-web.apps.googleusercontent.com';
+    final client = MockClient((request) async {
+      expect(request.url.path, '/api/channels/auth-config');
+      return http.Response(
+        jsonEncode(<String, Object>{
+          'configured': true,
+          'clientId': clientId,
+        }),
+        200,
+      );
+    });
+    final service = ChannelCatalogService(
+      client: client,
+      googleServerClientId: clientId,
+    );
+
+    await expectLater(
+      service.validateGoogleOAuthConfiguration(),
+      completes,
+    );
+    client.close();
+  });
+
+  test('Google OAuth rechaza clientes Web distintos entre APK y Worker', () async {
+    final client = MockClient((request) async => http.Response(
+      jsonEncode(<String, Object>{
+        'configured': true,
+        'clientId': 'otro-cliente.apps.googleusercontent.com',
+      }),
+      200,
+    ));
+    final service = ChannelCatalogService(
+      client: client,
+      googleServerClientId: 'dt360-web.apps.googleusercontent.com',
+    );
+
+    await expectLater(
+      service.validateGoogleOAuthConfiguration(),
+      throwsA(isA<ChannelCatalogException>()),
+    );
+    client.close();
+  });
   test('la carga pública devuelve una sola página y respeta la búsqueda', () async {
     Uri? requestedUri;
     final client = MockClient((request) async {
