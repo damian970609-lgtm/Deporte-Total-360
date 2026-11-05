@@ -19,6 +19,22 @@ const String _playlistUrlsKey = 'dt360_secret_iptv_playlist_urls_v1';
 const String _playlistTextsKey = 'dt360_secret_iptv_playlist_texts_v1';
 const String _favoriteUrlsKey = 'dt360_secret_iptv_favorite_urls_v1';
 
+/// Fuente deportiva inicial del reproductor del menú secreto.
+/// Se añade al principio sin sobrescribir ni eliminar listas personales.
+const String defaultSecretIptvSportsPlaylistUrl =
+    'https://iptv-org.github.io/iptv/categories/sports.m3u';
+
+List<String> ensureSecretIptvSportsPlaylistFirst(List<String> savedUrls) {
+  final result = <String>[defaultSecretIptvSportsPlaylistUrl];
+  for (final rawUrl in savedUrls) {
+    final url = rawUrl.trim();
+    if (isSafeHttpUrl(url) && !result.contains(url)) {
+      result.add(url);
+    }
+  }
+  return result;
+}
+
 class IntegratedIptvPlayerScreen extends StatefulWidget {
   const IntegratedIptvPlayerScreen({
     super.key,
@@ -77,10 +93,23 @@ class _IntegratedIptvPlayerScreenState
     try {
       final prefs = await SharedPreferences.getInstance();
       if (!mounted) return;
+      final savedPlaylistUrls =
+          (prefs.getStringList(_playlistUrlsKey) ?? <String>[])
+              .where(isSafeHttpUrl)
+              .toList(growable: false);
+      final playlistUrls =
+          ensureSecretIptvSportsPlaylistFirst(savedPlaylistUrls);
+      final needsPlaylistMigration =
+          playlistUrls.length != savedPlaylistUrls.length ||
+          playlistUrls.asMap().entries.any(
+                (entry) => entry.value != savedPlaylistUrls[entry.key],
+              );
+      if (needsPlaylistMigration) {
+        await prefs.setStringList(_playlistUrlsKey, playlistUrls);
+      }
+      if (!mounted) return;
       setState(() {
-        _playlistUrls = (prefs.getStringList(_playlistUrlsKey) ?? <String>[])
-            .where(isSafeHttpUrl)
-            .toList(growable: true);
+        _playlistUrls = playlistUrls;
         _playlistTexts =
             prefs.getStringList(_playlistTextsKey) ?? <String>[];
         _favoriteUrls
