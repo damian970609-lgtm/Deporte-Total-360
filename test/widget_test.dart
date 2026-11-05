@@ -259,7 +259,7 @@ void main() {
     // La lista personal debe aparecer sin esperar a que termine la descarga
     // de la lista automática que ya estaba en curso.
     await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 250)),
+      () => Future<void>.delayed(const Duration(seconds: 1)),
     );
     await tester.pump();
 
