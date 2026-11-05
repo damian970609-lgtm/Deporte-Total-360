@@ -11,6 +11,7 @@ on:
       - integration/zona-live-catalog-20261103
       - feature/iptv-source-manager-failover
       - feature/televizo-integration-20261104
+      - feature/sports-catalog-plus-admin-20261105
     paths:
       - 'lib/**'
       - 'test/**'
