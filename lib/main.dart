@@ -532,7 +532,7 @@ class HomeDashboard extends StatelessWidget {
                 final compact = constraints.maxHeight < 520;
                 final widthLimit = constraints.maxWidth * .88;
                 final preferredWidth =
-                    (constraints.maxHeight * .56).clamp(210.0, 390.0);
+                    (constraints.maxHeight * .56).clamp(210.0, 390.0).toDouble();
                 final crestWidth = preferredWidth > widthLimit
                     ? widthLimit
                     : preferredWidth;
