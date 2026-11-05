@@ -70,9 +70,18 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final channel = parseIptvStudioM3u(sampleM3u).first;
 
-    await setIptvStudioChannelHidden(channel.identificationUrl, true);
+    await setIptvStudioChannelHidden(
+      channel.identificationUrl,
+      true,
+      channel: channel,
+    );
     expect(
       await loadIptvStudioHiddenChannelIds(),
+      contains(channel.identificationUrl),
+    );
+    expect(
+      (await loadIptvStudioHiddenChannels())
+          .map((item) => item.identificationUrl),
       contains(channel.identificationUrl),
     );
 
@@ -128,7 +137,7 @@ void main() {
       'https://listas.example/deportes.m3u',
     ]);
     final hiddenChannel = parseIptvStudioM3u(sampleM3u).first;
-    await setIptvStudioChannelHidden(hiddenChannel.identificationUrl, true);
+    await setIptvStudioChannelHidden(hiddenChannel.identificationUrl, true, channel: hiddenChannel);
 
     await tester.pumpWidget(
       MaterialApp(
