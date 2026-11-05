@@ -256,19 +256,22 @@ void main() {
       contains('https://personal.example/my-list.m3u'),
     );
 
-    initialResponse.complete(http.Response(sportsPlaylist, 200));
+    // La lista personal debe aparecer sin esperar a que termine la descarga
+    // de la lista automática que ya estaba en curso.
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 250)),
     );
     await tester.pump();
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 250)),
-    );
-    await tester.pumpAndSettle();
 
     expect(sportsRequests, 2);
     expect(personalRequests, 1);
     expect(find.text('Canal Personal'), findsOneWidget);
+
+    initialResponse.complete(http.Response(sportsPlaylist, 200));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 250)),
+    );
+    await tester.pumpAndSettle();
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
