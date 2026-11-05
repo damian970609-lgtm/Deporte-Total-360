@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 
 import 'iptv_extractor_player_screen.dart';
@@ -17,9 +20,11 @@ class SportsChannelsScreen extends StatefulWidget {
   const SportsChannelsScreen({
     super.key,
     this.initialChannel,
+    this.httpClient,
   });
 
   final IptvExtractedChannel? initialChannel;
+  final http.Client? httpClient;
 
   @override
   State<SportsChannelsScreen> createState() => _SportsChannelsScreenState();
@@ -28,8 +33,11 @@ class SportsChannelsScreen extends StatefulWidget {
 class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
   final TextEditingController _searchController = TextEditingController();
 
+  late final http.Client _httpClient;
+  late final bool _ownsHttpClient;
   List<IptvExtractedChannel> _channels = <IptvExtractedChannel>[];
   Set<String> _favoriteIds = <String>{};
+  Set<String> _hiddenChannelIds = <String>{};
   IptvExtractedChannel? _selectedChannel;
   VideoPlayerController? _controller;
   bool _loadingLibrary = true;
@@ -45,9 +53,10 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
   @override
   void initState() {
     super.initState();
+    _ownsHttpClient = widget.httpClient == null;
+    _httpClient = widget.httpClient ?? http.Client();
     _selectedChannel = widget.initialChannel;
     _searchController.addListener(_updateSearch);
-    iptvSportsCatalogVersion.addListener(_handleCatalogChanged);
     _loadLibrary();
     if (_selectedChannel != null) {
       _playChannel(_selectedChannel!);
@@ -68,8 +77,8 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
   @override
   void dispose() {
     _searchController.removeListener(_updateSearch);
-    iptvSportsCatalogVersion.removeListener(_handleCatalogChanged);
     _searchController.dispose();
+    if (_ownsHttpClient) _httpClient.close();
     _controller?.removeListener(_controllerChanged);
     _controller?.dispose();
     SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
@@ -83,44 +92,138 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
     if (mounted) setState(() => _query = _searchController.text.trim());
   }
 
-  void _handleCatalogChanged() {
-    _loadLibrary();
-  }
-
   Future<void> _loadLibrary() async {
     final generation = ++_libraryGeneration;
     try {
       final values = await Future.wait<Object>(<Future<Object>>[
         loadIptvStudioSportsChannels(),
         loadIptvStudioFavoriteIds(),
+        loadIptvStudioHiddenChannelIds(),
       ]);
-      final loaded = values[0] as List<IptvExtractedChannel>;
+      final savedChannels = values[0] as List<IptvExtractedChannel>;
       final favorites = values[1] as Set<String>;
+      final hidden = values[2] as Set<String>;
       final unique = <String, IptvExtractedChannel>{};
-      for (final channel in loaded) {
+      for (final channel in savedChannels) {
         unique.putIfAbsent(channel.identificationUrl, () => channel);
       }
-      final sorted = unique.values.toList()
+      final sorted = unique.values
+          .where((channel) => !hidden.contains(channel.identificationUrl))
+          .toList()
         ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-      final selected = _selectedChannel;
-      if (selected != null &&
-          !sorted.any((channel) => channel.url == selected.url)) {
-        sorted.insert(0, selected);
-      }
       if (!mounted || generation != _libraryGeneration) return;
       setState(() {
         _channels = sorted;
         _favoriteIds = favorites;
+        _hiddenChannelIds = hidden;
         _loadingLibrary = false;
-        _libraryError = sorted.isEmpty
-            ? 'Aún no agregaste canales. Entra al menú de Damián APK y usa “Agregar a Canales deportivos”.'
-            : null;
+        _libraryError = null;
+      });
+      await _refreshCatalog();
+    } catch (error) {
+      if (!mounted || generation != _libraryGeneration) return;
+      setState(() {
+        _loadingLibrary = false;
+        _libraryError = 'No se pudo cargar la biblioteca de canales: ' + error.toString();
+      });
+    }
+  }
+
+  Future<void> _refreshCatalog() async {
+    final generation = ++_libraryGeneration;
+    if (mounted) {
+      setState(() {
+        _loadingLibrary = true;
+        _libraryError = null;
+      });
+    }
+    try {
+      final sources = await Future.wait<Object>(<Future<Object>>[
+        loadIptvStudioPlaylistUrls(),
+        loadIptvStudioPlaylistTexts(),
+        loadIptvStudioFavoriteIds(),
+        loadIptvStudioHiddenChannelIds(),
+        loadIptvStudioSportsChannels(),
+      ]);
+      final urls = sources[0] as List<String>;
+      final texts = sources[1] as List<String>;
+      final favorites = sources[2] as Set<String>;
+      final hidden = sources[3] as Set<String>;
+      final savedChannels = sources[4] as List<IptvExtractedChannel>;
+      final errors = <String>[];
+      final loaded = <IptvExtractedChannel>[];
+
+      final remoteResults = await Future.wait<List<IptvExtractedChannel>>(
+        urls.map((url) async {
+          try {
+            final response = await _httpClient
+                .get(
+                  Uri.parse(url),
+                  headers: const <String, String>{
+                    'Accept': 'application/x-mpegURL, application/vnd.apple.mpegurl, text/plain, */*',
+                    'User-Agent': 'DeporteTotal360-IPTV/1.0',
+                    'Cache-Control': 'no-cache',
+                  },
+                )
+                .timeout(const Duration(seconds: 25));
+            if (response.statusCode < 200 || response.statusCode >= 300) {
+              throw http.ClientException('HTTP ' + response.statusCode.toString());
+            }
+            if (response.bodyBytes.length > 12 * 1024 * 1024) {
+              throw const FormatException('La lista supera 12 MB.');
+            }
+            final body = utf8.decode(response.bodyBytes, allowMalformed: true);
+            return parseIptvStudioM3u(body, sourceUrl: url);
+          } catch (error) {
+            errors.add((Uri.tryParse(url)?.host ?? url) + ': ' + error.toString());
+            return <IptvExtractedChannel>[];
+          }
+        }),
+      );
+      for (final channels in remoteResults) {
+        loaded.addAll(channels);
+      }
+
+      for (var index = 0; index < texts.length; index++) {
+        try {
+          loaded.addAll(
+            parseIptvStudioM3u(
+              texts[index],
+              sourceUrl: 'Importada #' + (index + 1).toString(),
+            ),
+          );
+        } catch (error) {
+          errors.add('Lista importada #' + (index + 1).toString() + ': ' + error.toString());
+        }
+      }
+
+      final unique = <String, IptvExtractedChannel>{};
+      for (final channel in <IptvExtractedChannel>[
+        ...loaded,
+        ...savedChannels,
+      ]) {
+        unique.putIfAbsent(channel.identificationUrl, () => channel);
+      }
+      final sorted = unique.values
+          .where((channel) => !hidden.contains(channel.identificationUrl))
+          .toList()
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+      if (!mounted || generation != _libraryGeneration) return;
+      setState(() {
+        _channels = sorted;
+        _favoriteIds = favorites;
+        _hiddenChannelIds = hidden;
+        _loadingLibrary = false;
+        _libraryError = errors.isEmpty
+            ? (sorted.isEmpty ? 'La lista inicial no devolvió canales. Puedes agregar otra lista M3U.' : null)
+            : errors.take(2).join(' · ');
       });
     } catch (error) {
       if (!mounted || generation != _libraryGeneration) return;
       setState(() {
         _loadingLibrary = false;
-        _libraryError = 'No se pudo cargar la selección de canales: ' + error.toString();
+        _libraryError = 'No se pudieron actualizar las listas: ' + error.toString();
       });
     }
   }
@@ -236,14 +339,114 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
     );
   }
 
-  Future<void> _copySelectedIdentifierUrl() async {
-    final channel = _selectedChannel;
-    if (channel == null) return;
+  Future<void> _copyChannelIdentifier(IptvExtractedChannel channel) async {
     await Clipboard.setData(ClipboardData(text: channel.identificationUrl));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Identificador copiado: ' + channel.identificationUrl)),
     );
+  }
+
+  Future<void> _copySelectedIdentifierUrl() async {
+    final channel = _selectedChannel;
+    if (channel != null) await _copyChannelIdentifier(channel);
+  }
+
+  Future<void> _hideChannel(IptvExtractedChannel channel) async {
+    final id = channel.identificationUrl;
+    setState(() {
+      _hiddenChannelIds.add(id);
+      _channels.removeWhere((item) => item.identificationUrl == id);
+    });
+    try {
+      await setIptvStudioChannelHidden(id, true);
+      if (_selectedChannel?.identificationUrl == id) {
+        ++_playGeneration;
+        final old = _controller;
+        _controller = null;
+        old?.removeListener(_controllerChanged);
+        await old?.dispose();
+        if (mounted) {
+          setState(() {
+            _selectedChannel = null;
+            _loadingVideo = false;
+            _playerError = null;
+          });
+        }
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(channel.name + ' quedó oculto. Puedes recuperarlo desde Damián APK.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _hiddenChannelIds.remove(id);
+        _channels.add(channel);
+        _channels.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo ocultar el canal: ' + error.toString())),
+      );
+    }
+  }
+
+  Future<void> _showAddPlaylistDialog() async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _sportsPanel,
+        title: const Text(
+          'Agregar listas deportivas',
+          style: TextStyle(color: _sportsCyan, fontWeight: FontWeight.w900),
+        ),
+        content: TextField(
+          controller: controller,
+          minLines: 2,
+          maxLines: 6,
+          autofocus: true,
+          autocorrect: false,
+          enableSuggestions: false,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(
+            alignLabelWithHint: true,
+            labelText: 'URL M3U/M3U8 (una por línea)',
+            hintText: 'https://servidor/lista.m3u',
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('CANCELAR'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            child: const Text('AGREGAR'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result == null || result.trim().isEmpty || !mounted) return;
+    try {
+      final urls = result
+          .split(RegExp(r'[\r\n;]+'))
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toList(growable: false);
+      await addIptvStudioPlaylistUrls(urls);
+      await _refreshCatalog();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(urls.length.toString() + ' lista(s) guardada(s).')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo agregar la lista: ' + error.toString())),
+      );
+    }
   }
 
   Widget _buildPlayer() {
@@ -372,7 +575,7 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
   }
 
   Widget _buildChannelTile(IptvExtractedChannel channel) {
-    final selected = _selectedChannel?.url == channel.url;
+    final selected = _selectedChannel?.identificationUrl == channel.identificationUrl;
     final favorite = _favoriteIds.contains(channel.id);
     return Material(
       color: selected ? _sportsPanel2 : _sportsPanel,
@@ -410,7 +613,7 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(7, 7, 7, 5),
+                padding: const EdgeInsets.fromLTRB(7, 7, 7, 2),
                 child: Text(
                   channel.name,
                   maxLines: 1,
@@ -424,23 +627,38 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.only(left: 7, right: 7, bottom: 6),
+                padding: const EdgeInsets.only(left: 5, right: 5, bottom: 2),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[
                     Icon(
                       favorite ? Icons.favorite : Icons.play_circle_fill,
                       color: favorite ? _sportsPink : _sportsGreen,
-                      size: 12,
+                      size: 11,
                     ),
-                    const SizedBox(width: 4),
-                    Flexible(
+                    const SizedBox(width: 3),
+                    Expanded(
                       child: Text(
                         favorite ? 'FAVORITO' : (channel.group.isEmpty ? 'EN VIVO' : channel.group),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(color: _sportsMuted, fontSize: 8),
                       ),
+                    ),
+                    IconButton(
+                      tooltip: 'Copiar URL identificadora',
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                      padding: EdgeInsets.zero,
+                      onPressed: () => _copyChannelIdentifier(channel),
+                      icon: const Icon(Icons.link_rounded, color: _sportsCyan, size: 15),
+                    ),
+                    IconButton(
+                      tooltip: 'Ocultar canal',
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                      padding: EdgeInsets.zero,
+                      onPressed: () => _hideChannel(channel),
+                      icon: const Icon(Icons.visibility_off_rounded, color: _sportsPink, size: 15),
                     ),
                   ],
                 ),
@@ -472,8 +690,13 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
               ),
               actions: <Widget>[
                 IconButton(
+                  tooltip: 'Agregar más listas',
+                  onPressed: _showAddPlaylistDialog,
+                  icon: const Icon(Icons.add_link_rounded, color: _sportsCyan),
+                ),
+                IconButton(
                   tooltip: 'Actualizar listas',
-                  onPressed: _loadingLibrary ? null : _loadLibrary,
+                  onPressed: _loadingLibrary ? null : _refreshCatalog,
                   icon: const Icon(Icons.refresh_rounded, color: _sportsGreen),
                 ),
               ],
@@ -608,7 +831,7 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
                                     _showFavoritesOnly
                                         ? 'Todavía no tienes canales favoritos.'
                                         : (_channels.isEmpty
-                                            ? (_libraryError ?? 'Todavía no agregaste canales desde el menú de Damián APK.')
+                                            ? (_libraryError ?? 'No se cargaron canales. Agrega otra lista o inténtalo de nuevo.')
                                             : 'No hay canales que coincidan con la búsqueda.'),
                                     textAlign: TextAlign.center,
                                     style: const TextStyle(color: _sportsMuted),
