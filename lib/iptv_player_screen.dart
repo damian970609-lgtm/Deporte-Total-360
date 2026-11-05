@@ -72,7 +72,7 @@ class _IntegratedIptvPlayerScreenState
 
   bool _loading = true;
   bool _refreshing = false;
-  bool _refreshQueued = false;
+  int _catalogGeneration = 0;
   bool _showFavoritesOnly = false;
   String? _error;
   String? _warning;
@@ -154,13 +154,9 @@ class _IntegratedIptvPlayerScreenState
   }
 
   Future<void> _refreshCatalog({bool showLoading = true}) async {
-    // No descartes un refresco que llegue mientras se descarga la lista inicial.
-    // Se marca como pendiente y se repite con las URLs/contenidos más recientes.
-    if (_refreshing) {
-      _refreshQueued = true;
-      return;
-    }
-
+    // Cada cambio inicia una carga con una fotografía actualizada de las listas.
+    // La generación evita que una respuesta antigua reemplace los canales nuevos.
+    final generation = ++_catalogGeneration;
     if (mounted) {
       setState(() {
         _refreshing = true;
@@ -169,31 +165,36 @@ class _IntegratedIptvPlayerScreenState
     }
 
     try {
-      var showInitialLoading = showLoading;
-      do {
-        _refreshQueued = false;
-        await _loadCatalogSnapshot(showLoading: showInitialLoading);
-        showInitialLoading = false;
-      } while (_refreshQueued && mounted);
+      await _loadCatalogSnapshot(
+        showLoading: showLoading,
+        generation: generation,
+      );
     } finally {
-      _refreshQueued = false;
-      if (mounted) {
+      if (mounted && generation == _catalogGeneration) {
         setState(() {
           _refreshing = false;
           _loading = false;
         });
-      } else {
-        _refreshing = false;
       }
     }
   }
 
-  Future<void> _loadCatalogSnapshot({required bool showLoading}) async {
-    final playlistUrls = List<String>.unmodifiable(_playlistUrls);
+  Future<void> _loadCatalogSnapshot({
+    required bool showLoading,
+    required int generation,
+  }) async {
+    final savedUrls = List<String>.unmodifiable(_playlistUrls);
+    // Primero se consultan las listas personales; la lista automática queda
+    // como respaldo y nunca debe retrasar la aparición de un canal importado.
+    final playlistUrls = <String>[
+      ...savedUrls.where((url) => url != defaultSecretIptvSportsPlaylistUrl),
+      if (savedUrls.contains(defaultSecretIptvSportsPlaylistUrl))
+        defaultSecretIptvSportsPlaylistUrl,
+    ];
     final playlistTexts = List<String>.unmodifiable(_playlistTexts);
 
     if (playlistUrls.isEmpty && playlistTexts.isEmpty) {
-      if (!mounted) return;
+      if (!mounted || generation != _catalogGeneration) return;
       setState(() {
         _channels = <_IptvChannelGroup>[];
         _error = null;
@@ -203,7 +204,7 @@ class _IntegratedIptvPlayerScreenState
       return;
     }
 
-    if (mounted) {
+    if (mounted && generation == _catalogGeneration) {
       setState(() {
         if (showLoading && _channels.isEmpty) _loading = true;
         _error = null;
@@ -214,22 +215,31 @@ class _IntegratedIptvPlayerScreenState
     final failedSources = <String>{};
     try {
       final catalog = await _service.loadCatalog(
-        playlistUrl: playlistUrls.join('\n'),
+        playlistUrl: playlistUrls.join('\\n'),
         epgUrl: '',
         playlistTexts: playlistTexts,
         forceRefresh: true,
         parseInBackground: widget.parseInBackground,
-        downloadBatchSize: 4,
+        // Cada fuente se analiza antes de comenzar la siguiente. Así una lista
+        // personal rápida aparece aunque la fuente automática esté lenta.
+        downloadBatchSize: 1,
         batchPause: Duration.zero,
         maxPlaylistBytes: 16 * 1024 * 1024,
         maxEpgBytes: 1024 * 1024,
+        onChannelsLoaded: (channels) {
+          if (!mounted || generation != _catalogGeneration) return;
+          setState(() {
+            _channels = _mergeChannels(channels);
+            _error = null;
+          });
+        },
         onSourceError: (url, _) {
           final host = Uri.tryParse(url)?.host;
           failedSources.add(host == null || host.isEmpty ? 'fuente local' : host);
         },
       );
       final merged = _mergeChannels(catalog.channels);
-      if (!mounted) return;
+      if (!mounted || generation != _catalogGeneration) return;
       setState(() {
         _channels = merged;
         _warning = failedSources.isEmpty
@@ -242,7 +252,7 @@ class _IntegratedIptvPlayerScreenState
             : null;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _catalogGeneration) return;
       setState(() {
         _error = _channels.isEmpty
             ? 'No se pudieron cargar los canales. Comprueba las URLs M3U/M3U8 y tu conexión. ' +
