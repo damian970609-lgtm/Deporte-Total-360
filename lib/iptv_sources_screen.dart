@@ -1096,6 +1096,87 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
     await _playChannel(selected);
   }
 
+  Future<void> _openDirectPlayer() async {
+    final controller = TextEditingController();
+    var validationError = '';
+    final url = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: _iptvPanel,
+          title: const Text(
+            'ABRIR REPRODUCTOR',
+            style: TextStyle(color: _iptvCyan, fontWeight: FontWeight.w900),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Text(
+                'Pega la URL directa de una señal HLS (.m3u8), DASH (.mpd), TS o MP4. Esta opción reproduce una señal sin tener que importar primero una lista.',
+                style: TextStyle(color: _iptvMuted, fontSize: 12, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: const InputDecoration(
+                  labelText: 'URL directa del canal',
+                  hintText: 'https://servidor/senal/playlist.m3u8',
+                  prefixIcon: Icon(Icons.link_rounded),
+                ),
+              ),
+              if (validationError.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    validationError,
+                    style: const TextStyle(color: Colors.redAccent, fontSize: 11),
+                  ),
+                ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                final value = controller.text.trim();
+                if (!isDirectPlayableStream(value)) {
+                  setDialogState(() => validationError =
+                      'Introduce una URL directa HTTP/HTTPS de vídeo compatible, no la página web del canal.');
+                  return;
+                }
+                Navigator.pop(dialogContext, value);
+              },
+              icon: const Icon(Icons.play_arrow_rounded),
+              label: const Text('REPRODUCIR'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    if (url == null || !mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => LivePlayerGridScreen(
+          sources: <LivePlayerSource>[
+            LivePlayerSource(
+              title: 'Señal manual',
+              url: url,
+              subtitle: 'URL directa añadida manualmente',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _playChannel(M3uChannel channel) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -1209,6 +1290,26 @@ class _IptvSourcesScreenState extends State<IptvSourcesScreen> {
                         spacing: 8,
                         runSpacing: 8,
                         children: <Widget>[
+                          FilledButton.icon(
+                            onPressed: _saving || _refreshing
+                                ? null
+                                : () => _addSource(epg: false),
+                            icon: const Icon(Icons.add_link_rounded),
+                            label: const Text('AGREGAR LISTA POR URL'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _iptvCyan,
+                              foregroundColor: _iptvBg,
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: _openDirectPlayer,
+                            icon: const Icon(Icons.play_circle_fill_rounded),
+                            label: const Text('ABRIR REPRODUCTOR'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _iptvGreen,
+                              side: const BorderSide(color: _iptvGreen),
+                            ),
+                          ),
                           FilledButton.icon(
                             onPressed: _importClipboardPlaylist,
                             icon: const Icon(Icons.playlist_add_check_rounded),
