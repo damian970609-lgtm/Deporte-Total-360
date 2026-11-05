@@ -68,6 +68,13 @@ correo verificado; solo `damian970609@gmail.com` administra el catálogo.
 Los favoritos individuales se sincronizan en Cloudflare al iniciar sesión
 con Google; sin iniciar sesión solo se guardan localmente.
 
+El package name Android que ya usa la APK es `com.example.deporte_total_360`.
+El workflow comprueba que no cambie y, después de compilar, publica en el resumen
+del trabajo la huella SHA-1 exacta del certificado que firmó esa APK. Para crear
+el cliente OAuth Android en Google Cloud, copia ambos datos desde ese resumen.
+El workflow falla antes de compilar si falta `GOOGLE_OAUTH_CLIENT_ID` o si no
+parece un ID OAuth Web; nunca imprime el valor del secreto.
+
 El reproductor modifica el brillo de la aplicación, no el brillo global del
 sistema, por lo que no necesita el permiso especial de Android. El control
 gestual de volumen utiliza el volumen multimedia de Android. Las importaciones
