@@ -136,7 +136,7 @@ class _IntegratedIptvPlayerScreenState
         parseInBackground: widget.parseInBackground,
         downloadBatchSize: 4,
         batchPause: Duration.zero,
-        maxPlaylistBytes: 8 * 1024 * 1024,
+        maxPlaylistBytes: 16 * 1024 * 1024,
         maxEpgBytes: 1024 * 1024,
         onSourceError: (url, _) {
           final host = Uri.tryParse(url)?.host;
@@ -281,7 +281,7 @@ class _IntegratedIptvPlayerScreenState
   }
 
   Future<void> _importM3uText(String raw) async {
-    final text = raw.trim();
+    final text = raw.replaceFirst('\uFEFF', '').trim();
     if (!text.toUpperCase().startsWith('#EXTM3U')) {
       _showMessage('El contenido no parece una lista M3U. Debe comenzar con #EXTM3U.');
       return;
@@ -720,6 +720,7 @@ class _IntegratedIptvPlayerScreenState
     final filtered = _filteredChannels;
     final favoriteCount = _channels.where(_isFavorite).length;
     final sourceCount = _playlistUrls.length + _playlistTexts.length;
+    final warning = _warning;
 
     return Scaffold(
       backgroundColor: _iptvBg,
@@ -879,11 +880,11 @@ class _IntegratedIptvPlayerScreenState
                 color: _iptvCyan,
                 backgroundColor: _iptvPanel,
               ),
-            if (_warning != null)
+            if (warning != null)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                 child: Text(
-                  _warning!,
+                  warning,
                   style: const TextStyle(color: Colors.orangeAccent, fontSize: 10),
                 ),
               ),

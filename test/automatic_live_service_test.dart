@@ -1046,6 +1046,31 @@ https://media.example/live.m3u8
       }
     });
 
+    test('importa listas M3U con BOM y atributos sin comillas', () {
+      const playlist = '\uFEFF#EXTM3U\n'
+          '#EXTINF:-1 tvg-id=sports.one group-title=Deportes,Canal TS\n'
+          '#EXTVLCOPT:http-user-agent=Mozilla/5.0\n'
+          'https://provider.example/get.php?username=user&output=ts';
+      final channels = AutomaticLiveService.parseM3u(playlist);
+
+      expect(channels, hasLength(1));
+      expect(channels.single.name, 'Canal TS');
+      expect(channels.single.group, 'Deportes');
+      expect(channels.single.url, contains('output=ts'));
+      expect(liveMediaFormatForUrl(channels.single.url), LiveMediaFormat.progressive);
+    });
+
+    test('reconoce endpoints IPTV cuyo formato viene en la query', () {
+      expect(
+        liveMediaFormatForUrl('https://provider.example/live?id=12&format=m3u8'),
+        LiveMediaFormat.hls,
+      );
+      expect(
+        liveMediaFormatForUrl('https://provider.example/channel?id=12&type=dash'),
+        LiveMediaFormat.dash,
+      );
+    });
+
     test('analiza metadatos M3U con comillas simples y dobles', () {
       const playlist = '''
 #EXTM3U

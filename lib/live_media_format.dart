@@ -71,6 +71,28 @@ LiveMediaFormat? liveMediaFormatForUrl(String value) {
   if (progressiveExtensions.any(path.endsWith)) {
     return LiveMediaFormat.progressive;
   }
+  // Algunos proveedores IPTV entregan señales sin extensión y describen el
+  // contenedor en la query string (por ejemplo get.php?...&output=ts).
+  const hlsHints = <String>{
+    'hls', 'm3u8', 'application/vnd.apple.mpegurl',
+    'application/x-mpegurl',
+  };
+  const dashHints = <String>{'dash', 'mpd', 'application/dash+xml'};
+  const progressiveHints = <String>{
+    'ts', 'mpegts', 'mpeg-ts', 'mp4', 'm4v', 'mov', 'mkv', 'webm', 'flv',
+  };
+  final mediaHints = uri.queryParameters.entries
+      .where((entry) => const <String>{
+            'output', 'format', 'type', 'stream_type', 'container',
+          }.contains(entry.key.toLowerCase()))
+      .map((entry) => entry.value.trim().toLowerCase())
+      .toSet();
+  if (mediaHints.any(hlsHints.contains)) return LiveMediaFormat.hls;
+  if (mediaHints.any(dashHints.contains)) return LiveMediaFormat.dash;
+  if (mediaHints.any(progressiveHints.contains)) {
+    return LiveMediaFormat.progressive;
+  }
+
   if (_isExtensionlessLiveEndpoint(uri)) return LiveMediaFormat.other;
   return null;
 }

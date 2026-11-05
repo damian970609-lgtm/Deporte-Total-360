@@ -129,6 +129,17 @@ List<String> _splitPlaylistUrls(String value) => value
     .where((url) => url.isNotEmpty)
     .toList(growable: false);
 
+String _playlistErrorLabel(Object error) {
+  final value = error
+      .toString()
+      .replaceFirst(
+        RegExp(r'^(FormatException|HttpException|SocketException):\s*'),
+        '',
+      )
+      .trim();
+  return value.length > 150 ? value.substring(0, 147) + '…' : value;
+}
+
 bool isSafeHttpUrl(String value) {
   final uri = Uri.tryParse(value.trim());
   return uri != null && uri.hasAuthority &&
@@ -812,9 +823,11 @@ class AutomaticLiveService {
     // por lote antes de procesar EPG, para que la pantalla no espere a las guías.
     // El análisis M3U/XMLTV se ejecuta en isolates y no bloquea la interfaz.
     final channelsByUrl = <String, M3uChannel>{};
-    final playlistFailures = <String>[];
+    final playlistFailureDetails = <String>[];
     for (var localIndex = 0; localIndex < localPlaylistTexts.length; localIndex++) {
-      final localText = localPlaylistTexts[localIndex];
+      final localText = localPlaylistTexts[localIndex]
+          .replaceFirst('\uFEFF', '')
+          .trim();
       final sourceLabel = 'Lista local ${localIndex + 1}';
       try {
         if (localText.length > maxPlaylistBytes ||
@@ -834,7 +847,9 @@ class AutomaticLiveService {
         }
         onChannelsLoaded?.call(List<M3uChannel>.unmodifiable(channelsByUrl.values));
       } catch (error) {
-        playlistFailures.add(sourceLabel);
+        playlistFailureDetails.add(
+          '$sourceLabel: ${_playlistErrorLabel(error)}',
+        );
         onSourceError?.call(sourceLabel, error);
       }
       onProgress?.call('LOCAL', localIndex + 1, localPlaylistTexts.length);
@@ -848,10 +863,12 @@ class AutomaticLiveService {
             return await _downloadText(
               url,
               maxBytes: maxPlaylistBytes,
-              timeout: const Duration(seconds: 12),
+              timeout: const Duration(seconds: 25),
             );
           } catch (error) {
-            playlistFailures.add(url);
+            playlistFailureDetails.add(
+              '$url: ${_playlistErrorLabel(error)}',
+            );
             onSourceError?.call(url, error);
             return null;
           }
@@ -868,11 +885,10 @@ class AutomaticLiveService {
             () => parseM3u(body, baseUri: baseUri, sourceUrl: batch[index]),
           );
           if (parsedChannels.isEmpty) {
-            playlistFailures.add(batch[index]);
-            onSourceError?.call(
-              batch[index],
-              const FormatException('La lista no contiene enlaces directos compatibles.'),
-            );
+            const reason =
+                'La descarga terminó, pero no se encontraron enlaces directos HLS/DASH/TS/MP4 compatibles.';
+            playlistFailureDetails.add('${batch[index]}: $reason');
+            onSourceError?.call(batch[index], const FormatException(reason));
             continue;
           }
           for (final channel in parsedChannels) {
@@ -880,7 +896,9 @@ class AutomaticLiveService {
           }
         } catch (error) {
           // Una lista dañada no impide continuar con las demás fuentes.
-          playlistFailures.add(batch[index]);
+          playlistFailureDetails.add(
+            '${batch[index]}: ${_playlistErrorLabel(error)}',
+          );
           onSourceError?.call(batch[index], error);
         }
       }
@@ -894,10 +912,10 @@ class AutomaticLiveService {
     }
     final channels = channelsByUrl.values.toList(growable: false);
     if (channels.isEmpty) {
-      final failedSources = playlistFailures.take(3).join(', ');
+      final details = playlistFailureDetails.take(3).join(' | ');
       throw FormatException(
-        'No se pudo cargar ningún canal. Revisa las direcciones M3U, el acceso del proveedor o que incluyan enlaces HLS/DASH/TS/MP4 directos.'
-        '${failedSources.isEmpty ? '' : ' Fuentes sin respuesta o sin enlaces compatibles: $failedSources'}',
+        'No se pudo cargar ningún canal. Revisa la conexión y que la lista contenga enlaces directos reproducibles.'
+        '${details.isEmpty ? '' : ' Detalles: $details'}',
       );
     }
 
@@ -957,7 +975,11 @@ class AutomaticLiveService {
     Duration timeout = const Duration(seconds: 25),
   }) async {
     final request = http.Request('GET', Uri.parse(value.trim()))
-      ..headers['Accept'] = '*/*';
+      ..headers.addAll(const <String, String>{
+        'Accept':
+            'application/vnd.apple.mpegurl, application/x-mpegURL, audio/mpegurl, text/plain, */*',
+        'User-Agent': 'Mozilla/5.0 (compatible; DeporteTotal360/1.0)',
+      });
     final response = await _client.send(request).timeout(timeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       await response.stream.drain<void>();
@@ -1022,23 +1044,29 @@ class AutomaticLiveService {
     Uri? baseUri,
     String sourceUrl = '',
   }) {
-    final lines = body.replaceAll('\r', '').split('\n');
+    final lines = body
+        .replaceAll('\uFEFF', '')
+        .replaceAll('\r', '')
+        .split('\n');
     final result = <M3uChannel>[];
     Map<String, String>? pending;
     var pendingName = '';
     for (final raw in lines) {
       final line = raw.trim();
       if (line.isEmpty) continue;
-      if (line.startsWith('#EXTINF:')) {
+      if (line.toUpperCase().startsWith('#EXTINF:')) {
         final comma = line.indexOf(',');
         final metadata = comma >= 0 ? line.substring(0, comma) : line;
         pendingName = comma >= 0 ? line.substring(comma + 1).trim() : '';
         final attributes = <String, String>{};
-        final attributePattern =
-            RegExp(r"""([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')""");
+        final attributePattern = RegExp(
+          r"""([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s,]+))""",
+        );
         for (final match in attributePattern.allMatches(metadata)) {
-          attributes[match.group(1)!.toLowerCase()] =
-              (match.group(2) ?? match.group(3) ?? '').trim();
+          final key = match.group(1);
+          if (key == null || key.isEmpty) continue;
+          attributes[key.toLowerCase()] =
+              (match.group(2) ?? match.group(3) ?? match.group(4) ?? '').trim();
         }
         pending = attributes;
         continue;
