@@ -73,3 +73,12 @@ sistema, por lo que no necesita el permiso especial de Android. El control
 gestual de volumen utiliza el volumen multimedia de Android. Las importaciones
 solo aceptan playlists M3U HTTPS y direcciones HLS/MP4/MPEG-TS directas; no extraen
 páginas de reproducción ni evaden DRM, cuentas o restricciones regionales.
+
+
+### Idioma de los canales
+
+En el panel privado de canales (diez pulsaciones en DAMIÁN.APK dentro de
+Ajustes), cada señal tiene un selector de idioma: Español 🇪🇸, Inglés 🇺🇸 o
+Sin definir. Al publicarse, la tarjeta de Canales deportivos muestra el
+indicativo de idioma en su esquina superior. El idioma se guarda en Cloudflare
+para que todos los usuarios vean la misma etiqueta.
