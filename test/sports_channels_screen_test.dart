@@ -114,10 +114,11 @@ void main() {
     expect(find.byTooltip('Agregar más listas'), findsOneWidget);
     expect(find.byTooltip('Copiar URL identificadora'), findsNWidgets(2));
 
-    await tester.tap(find.byTooltip('Ocultar canal').first);
-    for (var index = 0; index < 5; index++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
+    final hideButton = find.byTooltip('Ocultar canal').first;
+    await tester.ensureVisible(hideButton);
+    await tester.pumpAndSettle();
+    await tester.tap(hideButton);
+    await tester.pumpAndSettle();
 
     expect(find.text('Canal Prueba'), findsNothing);
     expect(find.text('Otro Canal'), findsOneWidget);
@@ -155,10 +156,13 @@ void main() {
     expect(find.textContaining('OCULTO EN CANALES DEPORTIVOS'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.more_vert).first);
-    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
     expect(find.text('Mostrar en Canales deportivos'), findsOneWidget);
-    await tester.tap(find.text('Mostrar en Canales deportivos'));
-    await tester.pump(const Duration(milliseconds: 300));
+    final restoreAction = find.text('Mostrar en Canales deportivos');
+    await tester.ensureVisible(restoreAction);
+    await tester.pumpAndSettle();
+    await tester.tap(restoreAction);
+    await tester.pumpAndSettle();
 
     expect(
       await loadIptvStudioHiddenChannelIds(),
