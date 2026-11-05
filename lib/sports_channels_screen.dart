@@ -359,7 +359,7 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
       _channels.removeWhere((item) => item.identificationUrl == id);
     });
     try {
-      await setIptvStudioChannelHidden(id, true);
+      await setIptvStudioChannelHidden(id, true, channel: channel);
       if (_selectedChannel?.identificationUrl == id) {
         ++_playGeneration;
         final old = _controller;
