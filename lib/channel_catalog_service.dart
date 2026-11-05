@@ -128,10 +128,12 @@ class ChannelCatalogException implements Exception {
 }
 
 class ChannelCatalogService {
-  ChannelCatalogService({http.Client? client})
-      : _client = client ?? http.Client();
+  ChannelCatalogService({http.Client? client, String? googleServerClientId})
+      : _client = client ?? http.Client(),
+        _serverClientId = googleServerClientId ?? _googleServerClientId;
 
   final http.Client _client;
+  final String _serverClientId;
   static final GoogleSignIn _google = GoogleSignIn.instance;
   static Future<void>? _initialization;
   String? _idToken;
@@ -150,29 +152,47 @@ class ChannelCatalogService {
 
   Future<void> _initializeGoogle() {
     return _initialization ??= _google.initialize(
-      serverClientId:
-          _googleServerClientId.isEmpty ? null : _googleServerClientId,
+      serverClientId: _serverClientId.isEmpty ? null : _serverClientId,
     );
   }
 
+  /// Comprueba antes de abrir Google que el cliente Web de la APK y el
+  /// configurado en Cloudflare sean exactamente el mismo. El ID OAuth es
+  /// público por diseño; no se devuelve ningún secreto ni token.
+  Future<void> validateGoogleOAuthConfiguration() async {
+    if (_serverClientId.isEmpty) {
+      throw const ChannelCatalogException(
+        'Falta GOOGLE_OAUTH_CLIENT_ID (cliente OAuth Web) en la APK.',
+      );
+    }
+
+    final result = await _client.get(
+      Uri.parse(_baseUrl + '/api/channels/auth-config'),
+      headers: const <String, String>{'Accept': 'application/json'},
+    ).timeout(const Duration(seconds: 12));
+    final payload = _decode(result);
+    if (payload['configured'] != true) {
+      throw const ChannelCatalogException(
+        'Google OAuth no está configurado en Cloudflare. Revisa el secreto GOOGLE_OAUTH_CLIENT_ID del Worker.',
+      );
+    }
+    final workerClientId = (payload['clientId'] ?? '').toString().trim();
+    if (workerClientId.isEmpty || workerClientId != _serverClientId) {
+      throw const ChannelCatalogException(
+        'La APK y Cloudflare usan clientes OAuth Web diferentes. Configura el mismo GOOGLE_OAUTH_CLIENT_ID en ambos repositorios y vuelve a compilar.',
+      );
+    }
+  }
   Future<String> signIn() async {
-    // Reutiliza la sesión ya autenticada dentro del proceso. Evita volver a
-    // abrir Credential Manager para la misma cuenta en cada sincronización,
-    // una ruta que puede terminar en [16] Account reauth failed en Android.
+    // Reutiliza la sesión autenticada que ya vive en memoria.
     final currentToken = _idToken;
     final currentEmail = signedInEmail;
-    if (currentToken != null &&
-        currentToken.isNotEmpty &&
-        currentEmail != null &&
-        currentEmail.isNotEmpty) {
+    if (currentToken != null && currentToken.isNotEmpty &&
+        currentEmail != null && currentEmail.isNotEmpty) {
       return currentEmail;
     }
 
-    if (_googleServerClientId.isEmpty) {
-      throw const ChannelCatalogException(
-        'Falta configurar GOOGLE_OAUTH_CLIENT_ID en la compilación de la APK.',
-      );
-    }
+    await validateGoogleOAuthConfiguration();
     await _initializeGoogle();
     if (!_google.supportsAuthenticate()) {
       throw const ChannelCatalogException(
@@ -180,38 +200,56 @@ class ChannelCatalogService {
       );
     }
     try {
-      // El token se mantiene solo en memoria. Cuando Android destruye el
-      // proceso, Credential Manager puede conservar la relación de la cuenta
-      // anterior. Si llamamos authenticate() directamente en el siguiente
-      // arranque, algunos dispositivos responden [16] Account reauth failed.
-      // Primero cerramos la sesión nativa anterior, incluso si la app se
-      // cerró sin que el usuario pulsara "Cerrar sesión".
+      // Credential Manager puede conservar una relación de cuenta entre
+      // ejecuciones. Limpia el estado nativo antes de abrir una sesión nueva.
       await _google.signOut();
       final account = await _google.authenticate();
       final token = account.authentication.idToken;
       if (token == null || token.isEmpty) {
         throw const ChannelCatalogException(
-          'Google no entregó un ID token. Revisa el cliente OAuth Web y Android.',
+          'Google no entregó un ID token. Comprueba que GOOGLE_OAUTH_CLIENT_ID sea el cliente OAuth Web.',
         );
       }
       _idToken = token;
       signedInEmail = account.email;
       return account.email;
-    } on GoogleSignInException {
-      // Credential Manager puede conservar una cuenta previa aunque el
-      // intento falle antes de devolver un usuario. Limpia siempre esa sesión
-      // para que el siguiente intento no repita el error de reautenticación [16].
+    } on GoogleSignInException catch (error) {
       _idToken = null;
       signedInEmail = null;
       try {
         await _google.signOut();
       } catch (_) {
-        // Conserva el error original del inicio de sesión.
+        // No ocultar el error original de Google.
       }
-      rethrow;
+
+      final detail = error.description?.trim();
+      final detailSuffix = detail == null || detail.isEmpty
+          ? ''
+          : '\\nDetalle de Google: ' + detail;
+      switch (error.code) {
+        case GoogleSignInExceptionCode.clientConfigurationError:
+          throw ChannelCatalogException(
+            'Google rechazó la configuración OAuth. Revisa el package name com.example.deporte_total_360, la huella SHA-1 de esta APK y que serverClientId sea el cliente OAuth Web.' + detailSuffix,
+          );
+        case GoogleSignInExceptionCode.canceled:
+          throw ChannelCatalogException(
+            'Google canceló el acceso. Si ocurrió justo después de elegir tu cuenta, suele indicar que el SHA-1, el package name o el cliente OAuth Web no coinciden.' + detailSuffix,
+          );
+        case GoogleSignInExceptionCode.providerConfigurationError:
+          throw ChannelCatalogException(
+            'El servicio de identidad de Google no está disponible o está mal configurado en este dispositivo.' + detailSuffix,
+          );
+        case GoogleSignInExceptionCode.uiUnavailable:
+          throw ChannelCatalogException(
+            'Android no pudo abrir la ventana segura de Google. Cierra y vuelve a abrir la aplicación.' + detailSuffix,
+          );
+        default:
+          throw ChannelCatalogException(
+            'No se pudo iniciar sesión con Google (código: ' + error.code.name + ').' + detailSuffix,
+          );
+      }
     }
   }
-
   Future<void> signOut() async {
     try {
       await _initializeGoogle();
