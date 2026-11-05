@@ -180,6 +180,13 @@ class ChannelCatalogService {
       );
     }
     try {
+      // El token se mantiene solo en memoria. Cuando Android destruye el
+      // proceso, Credential Manager puede conservar la relación de la cuenta
+      // anterior. Si llamamos authenticate() directamente en el siguiente
+      // arranque, algunos dispositivos responden [16] Account reauth failed.
+      // Primero cerramos la sesión nativa anterior, incluso si la app se
+      // cerró sin que el usuario pulsara "Cerrar sesión".
+      await _google.signOut();
       final account = await _google.authenticate();
       final token = account.authentication.idToken;
       if (token == null || token.isEmpty) {
