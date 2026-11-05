@@ -548,7 +548,8 @@ class _IptvExtractorPlayerScreenState
       final errors = <String>[];
       for (final file in files) {
         try {
-          if (file.size > 12 * 1024 * 1024) {
+          final reportedLength = await file.length();
+          if (reportedLength != null && reportedLength > 12 * 1024 * 1024) {
             throw const FormatException('El archivo supera 12 MB.');
           }
           final bytes = await file.readAsBytes();
