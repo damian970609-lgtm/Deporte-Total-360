@@ -1,4 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:deporte_total_360/agenda_screen.dart';
@@ -135,6 +139,7 @@ void main() {
 
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
     expect(find.text('AÑADIR LISTAS'), findsOneWidget);
+    expect(find.text('CARGAR ARCHIVOS'), findsOneWidget);
     expect(find.text('IMPORTAR PEGADA'), findsOneWidget);
     expect(find.text('PEGAR LISTA M3U'), findsOneWidget);
     expect(find.text('TU REPRODUCTOR ESTÁ LISTO'), findsOneWidget);
@@ -145,6 +150,86 @@ void main() {
     expect(find.text('URLs de tus listas (una por línea)'), findsOneWidget);
     await tester.tap(find.text('Cancelar'));
     await tester.pumpAndSettle();
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('no pierde una URL agregada durante la carga inicial', (tester) async {
+    const sportsPlaylist = '#EXTM3U\\n'
+        '#EXTINF:-1 group-title="Deportes",Canal Deportivo\\n'
+        'https://media.example/sports.m3u8';
+    const personalPlaylist = '#EXTM3U\\n'
+        '#EXTINF:-1 group-title="Deportes",Canal Personal\\n'
+        'https://media.example/personal.m3u8';
+
+    final initialResponse = Completer<http.Response>();
+    final initialRequestStarted = Completer<void>();
+    var sportsRequests = 0;
+    var personalRequests = 0;
+    final client = MockClient((request) async {
+      if (request.url.host == 'iptv-org.github.io') {
+        sportsRequests++;
+        if (sportsRequests == 1) {
+          if (!initialRequestStarted.isCompleted) {
+            initialRequestStarted.complete();
+          }
+          return initialResponse.future;
+        }
+        return http.Response(sportsPlaylist, 200);
+      }
+      if (request.url.host == 'personal.example') {
+        personalRequests++;
+        return http.Response(personalPlaylist, 200);
+      }
+      return http.Response('', 404);
+    });
+
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'dt360_secret_iptv_playlist_cleanup_v1': true,
+      'dt360_secret_iptv_playlist_urls_v1': <String>[
+        defaultSecretIptvSportsPlaylistUrl,
+      ],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: IntegratedIptvPlayerScreen(
+          parseInBackground: false,
+          httpClient: client,
+        ),
+      ),
+    );
+    await tester.runAsync(() => initialRequestStarted.future);
+    await tester.pump();
+
+    await tester.tap(find.text('AÑADIR LISTAS'));
+    await tester.pump();
+    await tester.enterText(
+      find.byType(TextField).last,
+      'https://personal.example/my-list.m3u',
+    );
+    await tester.tap(find.text('AGREGAR'));
+    await tester.pump();
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getStringList('dt360_secret_iptv_playlist_urls_v1'),
+      contains('https://personal.example/my-list.m3u'),
+    );
+
+    initialResponse.complete(http.Response(sportsPlaylist, 200));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 250)),
+    );
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 250)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(sportsRequests, 2);
+    expect(personalRequests, 1);
+    expect(find.text('Canal Personal'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
