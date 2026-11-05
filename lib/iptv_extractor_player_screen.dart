@@ -993,33 +993,157 @@ class _IptvExtractorPlayerScreenState
 
   Future<void> _toggleChannelVisibility(_IptvStudioChannelGroup entry) async {
     final channel = entry.primary;
-    final visible = !_visibleChannelIds.contains(channel.identificationUrl);
+    final sourceIds = entry.channels.map((item) => item.identificationUrl).toSet();
+    final visible = !entry.channels.any(
+      (item) => _visibleChannelIds.contains(item.identificationUrl),
+    );
+    final previous = Set<String>.of(_visibleChannelIds);
     setState(() {
       if (visible) {
-        _visibleChannelIds.add(channel.identificationUrl);
+        _visibleChannelIds.addAll(sourceIds);
       } else {
-        _visibleChannelIds.remove(channel.identificationUrl);
+        _visibleChannelIds.removeAll(sourceIds);
       }
     });
     try {
-      if (visible) {
-        await addIptvStudioSportsChannel(channel);
-        _showMessage(channel.name + ' ahora aparece en Canales deportivos.');
-      } else {
-        await removeIptvStudioSportsChannel(channel.identificationUrl);
-        _showMessage(channel.name + ' ya no aparece en Canales deportivos.');
-      }
+      final selected = await loadIptvStudioSportsChannels();
+      selected.removeWhere((item) => sourceIds.contains(item.identificationUrl));
+      if (visible) selected.addAll(entry.channels);
+      await saveIptvStudioSportsChannels(selected);
+      _showMessage(visible
+          ? channel.name + ' y sus fuentes alternativas aparecen en Canales deportivos.'
+          : channel.name + ' ya no aparece en Canales deportivos.');
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        if (visible) {
-          _visibleChannelIds.remove(channel.identificationUrl);
-        } else {
-          _visibleChannelIds.add(channel.identificationUrl);
-        }
+        _visibleChannelIds
+          ..clear()
+          ..addAll(previous);
       });
       _showMessage('No se pudo cambiar la visibilidad: ' + error.toString());
     }
+  }
+
+  Future<void> _setAllChannelVisibility(bool visible) async {
+    final channels = visible
+        ? _groups.expand((entry) => entry.channels).toList(growable: false)
+        : <IptvExtractedChannel>[];
+    try {
+      await saveIptvStudioSportsChannels(channels);
+      if (!mounted) return;
+      setState(() {
+        _visibleChannelIds
+          ..clear()
+          ..addAll(channels.map((channel) => channel.identificationUrl));
+      });
+      _showMessage(visible
+          ? _groups.length.toString() + ' canales y sus fuentes alternativas publicados.'
+          : 'Se ocultaron los canales del catálogo público. Tus listas originales siguen guardadas.');
+    } catch (error) {
+      _showMessage('No se pudo guardar la selección: ' + error.toString());
+    }
+  }
+
+  Future<void> _showSourceDiagnostics() async {
+    final entries = _sourceStatuses.entries.toList(growable: false);
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: _studioPanel,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 16, 14, 22),
+          child: SizedBox(
+            height: MediaQuery.of(sheetContext).size.height * .65,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text(
+                  'DIAGNÓSTICO DE FUENTES',
+                  style: TextStyle(
+                    color: _studioCyan,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  _sourceStatuses.values.where((value) => value.startsWith('Error')).length.toString() +
+                      ' con error · ' +
+                      _sourceStatuses.values.where((value) => !value.startsWith('Error') && !value.contains('Cargando') && !value.contains('Leyendo')).length.toString() +
+                      ' respondieron',
+                  style: const TextStyle(color: _studioMuted, fontSize: 11),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: entries.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'Todavía no hay resultados. Actualiza las listas para probar las fuentes.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: _studioMuted),
+                          ),
+                        )
+                      : ListView.separated(
+                          itemCount: entries.length,
+                          separatorBuilder: (_, __) => const Divider(color: _studioLine, height: 1),
+                          itemBuilder: (_, index) {
+                            final entry = entries[index];
+                            final failed = entry.value.startsWith('Error');
+                            final pending = entry.value.contains('Cargando') ||
+                                entry.value.contains('Leyendo');
+                            return ListTile(
+                              dense: true,
+                              leading: Icon(
+                                failed
+                                    ? Icons.error_outline_rounded
+                                    : (pending
+                                        ? Icons.hourglass_top_rounded
+                                        : Icons.check_circle_outline_rounded),
+                                color: failed
+                                    ? _studioPink
+                                    : (pending ? _studioMuted : _studioGreen),
+                              ),
+                              title: Text(
+                                Uri.tryParse(entry.key)?.host ?? entry.key,
+                                style: const TextStyle(color: Colors.white, fontSize: 12),
+                              ),
+                              subtitle: Text(
+                                entry.value,
+                                style: TextStyle(
+                                  color: failed ? _studioPink : _studioMuted,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(sheetContext);
+                          _refreshLibrary();
+                        },
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('PROBAR DE NUEVO'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () => Navigator.pop(sheetContext),
+                      child: const Text('CERRAR'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _toggleFavorite(_IptvStudioChannelGroup entry) async {
@@ -1048,7 +1172,9 @@ class _IptvExtractorPlayerScreenState
   Widget _buildChannelCard(_IptvStudioChannelGroup entry) {
     final channel = entry.primary;
     final favorite = _isFavorite(entry);
-    final visible = _visibleChannelIds.contains(channel.identificationUrl);
+    final visible = entry.channels.any(
+      (item) => _visibleChannelIds.contains(item.identificationUrl),
+    );
     final metadata = <String>[
       if (channel.group.isNotEmpty) channel.group,
       if (entry.channels.length > 1) entry.channels.length.toString() + ' fuentes',
@@ -1326,6 +1452,24 @@ class _IptvExtractorPlayerScreenState
                           side: const BorderSide(color: _studioLine),
                         ),
                       ),
+                      OutlinedButton.icon(
+                        onPressed: _refreshing ? null : () => _setAllChannelVisibility(true),
+                        icon: const Icon(Icons.visibility_rounded),
+                        label: const Text('PUBLICAR TODOS'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _studioGreen,
+                          side: const BorderSide(color: _studioGreen),
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _refreshing ? null : () => _setAllChannelVisibility(false),
+                        icon: const Icon(Icons.visibility_off_rounded),
+                        label: const Text('OCULTAR TODOS'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _studioPink,
+                          side: const BorderSide(color: _studioPink),
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -1358,7 +1502,9 @@ class _IptvExtractorPlayerScreenState
                       Expanded(
                         child: Text(
                           _groups.length.toString() + ' detectados · ' +
-                              _visibleChannelIds.length.toString() + ' visibles · ' +
+                              _groups.where((entry) => entry.channels.any(
+                                (channel) => _visibleChannelIds.contains(channel.identificationUrl),
+                              )).length.toString() + ' publicados · ' +
                               totalSources.toString() + ' listas',
                           style: const TextStyle(
                             color: _studioGreen,
@@ -1366,6 +1512,11 @@ class _IptvExtractorPlayerScreenState
                             fontWeight: FontWeight.w800,
                           ),
                         ),
+                      ),
+                      IconButton(
+                        tooltip: 'Diagnóstico de las listas',
+                        onPressed: _showSourceDiagnostics,
+                        icon: const Icon(Icons.monitor_heart_rounded, color: _studioCyan),
                       ),
                       SizedBox(
                         width: 150,
