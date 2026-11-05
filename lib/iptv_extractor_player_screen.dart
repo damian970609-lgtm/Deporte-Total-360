@@ -538,16 +538,15 @@ class _IptvExtractorPlayerScreenState
 
   Future<void> _pickPlaylistFiles() async {
     try {
-      final picked = await FilePicker.pickFiles(
+      final files = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: const <String>['m3u', 'm3u8', 'txt'],
-        allowMultiple: true,
       );
-      if (picked == null || !mounted) return;
+      if (!mounted || files.isEmpty) return;
       var filesImported = 0;
       var channelsFound = 0;
       final errors = <String>[];
-      for (final file in picked.files) {
+      for (final file in files) {
         try {
           if (file.size > 12 * 1024 * 1024) {
             throw const FormatException('El archivo supera 12 MB.');
