@@ -941,19 +941,6 @@ class _IptvExtractorPlayerScreenState
     _showMessage('Identificador copiado: ' + channel.identificationUrl);
   }
 
-  Future<void> _addToSportsChannels(_IptvStudioChannelGroup entry) async {
-    final channel = entry.primary;
-    try {
-      await addIptvStudioSportsChannel(channel);
-      if (!mounted) return;
-      setState(() => _sportsChannelIds.add(channel.identificationUrl));
-      _showMessage(channel.name + ' agregado a Canales deportivos. ID: ' +
-          channel.identificationUrl);
-    } catch (error) {
-      _showMessage('No se pudo agregar el canal: ' + error.toString());
-    }
-  }
-
   Future<void> _toggleChannelVisibility(_IptvStudioChannelGroup entry) async {
     final channel = entry.primary;
     final hidden = !_hiddenChannelIds.contains(channel.identificationUrl);
