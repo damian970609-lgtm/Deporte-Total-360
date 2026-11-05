@@ -215,7 +215,7 @@ class _IntegratedIptvPlayerScreenState
     final failedSources = <String>{};
     try {
       final catalog = await _service.loadCatalog(
-        playlistUrl: playlistUrls.join('\\n'),
+        playlistUrl: playlistUrls.join('\n'),
         epgUrl: '',
         playlistTexts: playlistTexts,
         forceRefresh: true,
