@@ -257,6 +257,31 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
                   ),
                 ),
                 const Spacer(),
+                if (channel.language == 'es' || channel.language == 'en')
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _channelCyan.withAlpha(18),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(
+                        color: channel.language == 'es'
+                            ? _channelGreen.withAlpha(130)
+                            : _channelCyan.withAlpha(130),
+                      ),
+                    ),
+                    child: Text(
+                      channel.language == 'es' ? 'IDIOMA 🇪🇸' : 'IDIOMA 🇺🇸',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 7,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 5),
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
@@ -1490,6 +1515,23 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
+  Future<void> _setChannelLanguage(
+    SportsChannel channel,
+    String language,
+  ) async {
+    try {
+      await _service.setLanguage(channel.id, language: language);
+      await _loadAdmin(showLoading: false);
+      _message(language == 'es'
+          ? 'Idioma guardado: Español 🇪🇸'
+          : language == 'en'
+              ? 'Idioma guardado: Inglés 🇺🇸'
+              : 'Idioma automático/sin definir guardado.');
+    } catch (error) {
+      _message('No se pudo guardar el idioma: ' + error.toString());
+    }
+  }
+
   Future<void> _copy(String value, String label) async {
     await Clipboard.setData(ClipboardData(text: value));
     _message(label + ' copiado.');
@@ -1569,6 +1611,42 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                     color: sport ? _channelGreen : _channelMuted,
                     fontWeight: FontWeight.w800,
                     fontSize: 8,
+                  ),
+                ),
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: channel.language,
+                    isDense: true,
+                    dropdownColor: _channelPanel2,
+                    icon: const Icon(
+                      Icons.translate_rounded,
+                      color: _channelCyan,
+                      size: 15,
+                    ),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    items: const <DropdownMenuItem<String>>[
+                      DropdownMenuItem<String>(
+                        value: 'unknown',
+                        child: Text('IDIOMA: Sin definir'),
+                      ),
+                      DropdownMenuItem<String>(
+                        value: 'es',
+                        child: Text('IDIOMA: Español 🇪🇸'),
+                      ),
+                      DropdownMenuItem<String>(
+                        value: 'en',
+                        child: Text('IDIOMA: Inglés 🇺🇸'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null && value != channel.language) {
+                        unawaited(_setChannelLanguage(channel, value));
+                      }
+                    },
                   ),
                 ),
                 Text(
