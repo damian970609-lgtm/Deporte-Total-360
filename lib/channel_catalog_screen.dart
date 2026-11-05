@@ -672,10 +672,11 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
         uri.host.isEmpty ||
         uri.userInfo.isNotEmpty ||
         !(uri.path.toLowerCase().endsWith('.m3u8') ||
-            uri.path.toLowerCase().endsWith('.mp4'))) {
+            uri.path.toLowerCase().endsWith('.mp4') ||
+            uri.path.toLowerCase().endsWith('.ts'))) {
       setState(() {
         _loading = false;
-        _error = 'La fuente no es un enlace HLS o MP4 directo seguro.';
+        _error = 'La fuente no es un enlace HLS, MP4 o MPEG-TS directo seguro.';
       });
       return;
     }

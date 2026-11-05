@@ -21,6 +21,17 @@ void main() {
     expect(channel.visible, isTrue);
   });
 
+  test('canal admite señales MPEG-TS directas de listas M3U', () {
+    final channel = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'canal-ts',
+      'identifier': 'canal-ts',
+      'name': 'Canal TS',
+      'url': 'https://media.example/live.ts',
+      'isSports': true,
+    });
+    expect(channel.url, endsWith('.ts'));
+  });
+
   test('canal rechaza páginas web y streams que no sean HTTPS directos', () {
     expect(
       () => SportsChannel.fromJson(<String, dynamic>{

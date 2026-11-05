@@ -46,7 +46,8 @@ class SportsChannel {
         uri.host.isEmpty ||
         uri.userInfo.isNotEmpty ||
         !(uri.path.toLowerCase().endsWith('.m3u8') ||
-            uri.path.toLowerCase().endsWith('.mp4'))) {
+            uri.path.toLowerCase().endsWith('.mp4') ||
+            uri.path.toLowerCase().endsWith('.ts'))) {
       throw const FormatException('El canal no contiene una señal HTTPS directa válida.');
     }
     return SportsChannel(

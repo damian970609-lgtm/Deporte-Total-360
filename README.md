@@ -45,7 +45,7 @@ En Firebase crea una aplicación Android para el paquete de esta APK y copia los
 
 La nueva pestaña **Canales deportivos** muestra únicamente señales aprobadas y
 publicadas desde el catálogo central de Cloudflare. El reproductor se desplaza
-con la lista, admite HLS/MP4, controles ocultables a los cinco segundos,
+con la lista, admite HLS/MP4/MPEG-TS, controles ocultables a los cinco segundos,
 bloqueo, pantalla completa, ajuste gestual de brillo de la aplicación y
 volumen multimedia, además de calidad automática y pistas publicadas por el
 proveedor. La calidad automática depende de las variantes disponibles en la
@@ -71,5 +71,5 @@ con Google; sin iniciar sesión solo se guardan localmente.
 El reproductor modifica el brillo de la aplicación, no el brillo global del
 sistema, por lo que no necesita el permiso especial de Android. El control
 gestual de volumen utiliza el volumen multimedia de Android. Las importaciones
-solo aceptan playlists M3U HTTPS y direcciones HLS/MP4 directas; no extraen
+solo aceptan playlists M3U HTTPS y direcciones HLS/MP4/MPEG-TS directas; no extraen
 páginas de reproducción ni evaden DRM, cuentas o restricciones regionales.
