@@ -204,23 +204,43 @@ class ChannelCatalogService {
   }
 
   Future<List<SportsChannel>> fetchPublicChannels() async {
-    final result = await _client.get(
-      Uri.parse(_baseUrl + '/api/channels'),
-      headers: const <String, String>{'Accept': 'application/json'},
-    ).timeout(const Duration(seconds: 20));
-    final payload = _decode(result);
-    final rows = payload['channels'];
-    if (rows is! List) {
+    final channels = <SportsChannel>[];
+    var offset = 0;
+    var pages = 0;
+    var hasMore = true;
+    while (hasMore && pages < 100) {
+      final uri = Uri.parse(_baseUrl + '/api/channels').replace(
+        queryParameters: <String, String>{'offset': offset.toString()},
+      );
+      final result = await _client.get(
+        uri,
+        headers: const <String, String>{'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 20));
+      final payload = _decode(result);
+      final rows = payload['channels'];
+      if (rows is! List) {
+        throw const ChannelCatalogException(
+          'El servidor no devolvió un catálogo de canales válido.',
+        );
+      }
+      final page = rows
+          .whereType<Map>()
+          .map((row) => SportsChannel.fromJson(
+                Map<String, dynamic>.from(row),
+              ))
+          .toList(growable: false);
+      if (page.isEmpty) break;
+      channels.addAll(page);
+      offset += page.length;
+      pages++;
+      hasMore = payload['hasMore'] == true;
+    }
+    if (hasMore) {
       throw const ChannelCatalogException(
-        'El servidor no devolvió un catálogo de canales válido.',
+        'El catálogo es demasiado grande; la carga se detuvo por seguridad.',
       );
     }
-    return rows
-        .whereType<Map>()
-        .map((row) => SportsChannel.fromJson(
-              Map<String, dynamic>.from(row),
-            ))
-        .toList(growable: false);
+    return channels;
   }
 
   Future<List<SportsChannel>> fetchAdminChannels({
