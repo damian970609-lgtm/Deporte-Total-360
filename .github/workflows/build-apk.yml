@@ -62,9 +62,26 @@ jobs:
       - name: Preparar archivos Android
         run: flutter create --platforms=android .
 
-      # Flutter firma las APK release generadas sin keystore propio con
-      # ~/.android/debug.keystore. Conserva esa clave entre ejecuciones para
-      # que el SHA-1 del cliente OAuth Android no cambie en cada compilación.
+      # El runner es efímero. Crea la llave antes de ejecutar actions/cache;
+      # si la ruta no existe, el post-step de cache no puede guardarla.
+      - name: Crear llave Android estable para OAuth
+        run: |
+          set -Eeuo pipefail
+          KEYSTORE="$HOME/.android/debug.keystore"
+          mkdir -p "$(dirname "$KEYSTORE")"
+          if [[ ! -s "$KEYSTORE" ]]; then
+            keytool -genkeypair -noprompt \
+              -keystore "$KEYSTORE" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          test -s "$KEYSTORE"
+          keytool -list -keystore "$KEYSTORE" -storepass android -alias androiddebugkey
+
+      # La caché ahora restaura la misma llave en futuras ejecuciones.
       - name: Restaurar firma Android estable para OAuth
         uses: actions/cache@v4
         with:
