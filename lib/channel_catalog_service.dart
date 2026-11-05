@@ -142,6 +142,18 @@ class ChannelCatalogService {
   }
 
   Future<String> signIn() async {
+    // Reutiliza la sesión ya autenticada dentro del proceso. Evita volver a
+    // abrir Credential Manager para la misma cuenta en cada sincronización,
+    // una ruta que puede terminar en [16] Account reauth failed en Android.
+    final currentToken = _idToken;
+    final currentEmail = signedInEmail;
+    if (currentToken != null &&
+        currentToken.isNotEmpty &&
+        currentEmail != null &&
+        currentEmail.isNotEmpty) {
+      return currentEmail;
+    }
+
     if (_googleServerClientId.isEmpty) {
       throw const ChannelCatalogException(
         'Falta configurar GOOGLE_OAUTH_CLIENT_ID en la compilación de la APK.',
@@ -166,10 +178,15 @@ class ChannelCatalogService {
   }
 
   Future<void> signOut() async {
-    await _initializeGoogle();
-    await _google.signOut();
-    _idToken = null;
-    signedInEmail = null;
+    try {
+      await _initializeGoogle();
+      // Google también debe cerrar su sesión de Credential Manager; cerrar
+      // únicamente la sesión del backend deja una cuenta anterior en caché.
+      await _google.signOut();
+    } finally {
+      _idToken = null;
+      signedInEmail = null;
+    }
   }
 
   Map<String, dynamic> _decode(http.Response result) {
