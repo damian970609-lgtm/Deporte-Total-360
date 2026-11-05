@@ -1083,7 +1083,22 @@ class _IptvExtractorPlayerScreenState
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(color: _studioMuted, fontSize: 10),
         ),
-        trailing: PopupMenuButton<String>(
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            IconButton(
+              tooltip: hidden
+                  ? 'Mostrar en Canales deportivos'
+                  : 'Ocultar en Canales deportivos',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _toggleChannelVisibility(entry),
+              icon: Icon(
+                hidden ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                color: hidden ? _studioGreen : _studioPink,
+                size: 19,
+              ),
+            ),
+            PopupMenuButton<String>(
           tooltip: 'Acciones del canal',
           icon: const Icon(Icons.more_vert, color: _studioCyan),
           onSelected: (action) {
@@ -1123,6 +1138,8 @@ class _IptvExtractorPlayerScreenState
                 value: 'sources',
                 child: Text('Elegir fuente alternativa'),
               ),
+          ],
+            ),
           ],
         ),
         onTap: () => _openChannel(entry),
