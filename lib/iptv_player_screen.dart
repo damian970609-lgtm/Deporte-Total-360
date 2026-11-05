@@ -18,6 +18,7 @@ const Color _iptvMuted = Color(0xFFA9BDD6);
 const String _playlistUrlsKey = 'dt360_secret_iptv_playlist_urls_v1';
 const String _playlistTextsKey = 'dt360_secret_iptv_playlist_texts_v1';
 const String _favoriteUrlsKey = 'dt360_secret_iptv_favorite_urls_v1';
+const String _legacyPlaylistCleanupKey = 'dt360_secret_iptv_playlist_cleanup_v1';
 
 /// Fuente deportiva inicial del reproductor del menú secreto.
 /// Se añade al principio sin sobrescribir ni eliminar listas personales.
@@ -93,6 +94,18 @@ class _IntegratedIptvPlayerScreenState
     try {
       final prefs = await SharedPreferences.getInstance();
       if (!mounted) return;
+      // Limpia una sola vez las listas antiguas del reproductor secreto.
+      // Se conserva únicamente la fuente deportiva automática. Las listas
+      // agregadas después se guardan normalmente y ya no vuelven a borrarse.
+      final cleanupCompleted = prefs.getBool(_legacyPlaylistCleanupKey) ?? false;
+      if (!cleanupCompleted) {
+        await prefs.setStringList(
+          _playlistUrlsKey,
+          <String>[defaultSecretIptvSportsPlaylistUrl],
+        );
+        await prefs.remove(_playlistTextsKey);
+        await prefs.setBool(_legacyPlaylistCleanupKey, true);
+      }
       final savedPlaylistUrls =
           (prefs.getStringList(_playlistUrlsKey) ?? <String>[])
               .where(isSafeHttpUrl)
@@ -209,14 +222,7 @@ class _IntegratedIptvPlayerScreenState
   List<_IptvChannelGroup> _mergeChannels(List<M3uChannel> channels) {
     final grouped = <String, List<M3uChannel>>{};
     for (final channel in channels) {
-      final id = AutomaticLiveService.normalizeText(channel.tvgId);
-      final displayName =
-          channel.tvgName.trim().isNotEmpty ? channel.tvgName : channel.name;
-      final normalizedName = AutomaticLiveService.normalizeText(displayName);
-      final normalizedGroup =
-          AutomaticLiveService.normalizeText(channel.group);
-      final key =
-          id.isNotEmpty ? 'id:' + id : 'name:' + normalizedName + '|' + normalizedGroup;
+      final key = 'id:' + channel.channelId;
       if (normalizedName.isEmpty && id.isEmpty) continue;
       final alternatives = grouped.putIfAbsent(key, () => <M3uChannel>[]);
       if (!alternatives.any((item) => item.url == channel.url)) {
@@ -552,6 +558,17 @@ class _IntegratedIptvPlayerScreenState
     }
   }
 
+  Future<void> _copyChannelIdentifier(M3uChannel channel) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: channel.identifierUrl));
+      if (mounted) {
+        _showMessage('Identificador DT360 de ' + channel.name + ' copiado.');
+      }
+    } catch (error) {
+      _showMessage('No se pudo copiar el identificador: ' + error.toString());
+    }
+  }
+
   Future<void> _playChannel(M3uChannel channel) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -736,6 +753,12 @@ class _IntegratedIptvPlayerScreenState
               visualDensity: VisualDensity.compact,
               onPressed: () => _copyChannelUrl(channel),
               icon: const Icon(Icons.copy_rounded, color: _iptvCyan),
+            ),
+            IconButton(
+              tooltip: 'Copiar identificador DT360',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _copyChannelIdentifier(channel),
+              icon: const Icon(Icons.tag_rounded, color: _iptvGreen),
             ),
           ],
         ),

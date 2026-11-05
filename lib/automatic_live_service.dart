@@ -517,6 +517,22 @@ class SportsAgendaStore {
   }
 }
 
+String _stableIptvChannelHash(String value) {
+  final bytes = utf8.encode(value);
+  int hashWithSeed(int seed) {
+    var hash = seed;
+    for (final byte in bytes) {
+      hash = ((hash ^ byte) * 0x01000193) & 0xffffffff;
+    }
+    return hash;
+  }
+
+  final first = hashWithSeed(0x811c9dc5);
+  final second = hashWithSeed(0x9747b28c);
+  return 'ch_' + first.toRadixString(16).padLeft(8, '0') +
+      second.toRadixString(16).padLeft(8, '0');
+}
+
 class M3uChannel {
   const M3uChannel({
     required this.name,
@@ -538,6 +554,28 @@ class M3uChannel {
   final String logo;
   final String language;
   final String country;
+
+  /// Identidad lógica entre listas: tvg-id cuando existe; si falta, combina
+  /// nombre, grupo e idioma. No depende de la URL de transmisión.
+  String get stableIdentityKey {
+    final normalizedId = AutomaticLiveService.normalizeText(tvgId);
+    if (normalizedId.isNotEmpty) return 'tvg:' + normalizedId;
+    final displayName = AutomaticLiveService.normalizeText(
+      tvgName.trim().isNotEmpty ? tvgName : name,
+    );
+    final normalizedGroup = AutomaticLiveService.normalizeText(group);
+    final normalizedLanguage = AutomaticLiveService.normalizeText(language);
+    final normalizedCountry = AutomaticLiveService.normalizeText(country);
+    if (displayName.isEmpty) return 'url:' + url.trim().toLowerCase();
+    return 'name:' + displayName + '|group:' + normalizedGroup +
+        '|language:' + normalizedLanguage + '|country:' + normalizedCountry;
+  }
+
+  /// ID determinista de 64 bits para identificar el canal dentro de DT360.
+  String get channelId => _stableIptvChannelHash(stableIdentityKey);
+
+  /// URI interna de identificación; no sustituye la URL real del stream.
+  String get identifierUrl => 'dt360://channel/' + channelId;
 
   /// 2 = español; 0 = cualquier idioma como respaldo.
   int get languagePriority {
@@ -1130,6 +1168,8 @@ class AutomaticLiveService {
     for (final channel in catalog.channels) {
       if (!isDirectPlayableStream(channel.url) || !seen.add(channel.url)) continue;
       final attributes = <String, String>{
+        'dt360-id': channel.channelId,
+        'dt360-url': channel.identifierUrl,
         if (channel.tvgId.trim().isNotEmpty) 'tvg-id': channel.tvgId,
         if (channel.tvgName.trim().isNotEmpty) 'tvg-name': channel.tvgName,
         if (channel.logo.trim().isNotEmpty) 'tvg-logo': channel.logo,

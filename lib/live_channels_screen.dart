@@ -1738,7 +1738,9 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
   VideoPlayerController? _controller;
   String? _error;
   List<VideoTrack> _videoTracks = <VideoTrack>[];
+  List<VideoAudioTrack> _audioTracks = <VideoAudioTrack>[];
   String? _manualQualityTrackId;
+  String? _manualAudioTrackId;
   bool _loading = false;
   bool _showControls = true;
   bool _muted = false;
@@ -1828,6 +1830,19 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
     }
   }
 
+  Future<List<VideoAudioTrack>> _readAudioTracks(
+    VideoPlayerController controller,
+  ) async {
+    try {
+      if (!controller.isAudioTrackSupportAvailable()) {
+        return <VideoAudioTrack>[];
+      }
+      return (await controller.getAudioTracks()).toList(growable: false);
+    } catch (_) {
+      return <VideoAudioTrack>[];
+    }
+  }
+
   Future<void> _initialize({int startAt = 0}) async {
     if (!widget.isActive) return;
     final old = _controller;
@@ -1840,7 +1855,9 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
       _loading = true;
       _error = null;
       _videoTracks = <VideoTrack>[];
+      _audioTracks = <VideoAudioTrack>[];
       _manualQualityTrackId = null;
+      _manualAudioTrackId = null;
       _compactPlayback = false;
       _isFullscreen = false;
     });
@@ -1876,6 +1893,14 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
         await controller.setLooping(false);
         await controller.setVolume(_muted ? 0 : 1);
         final tracks = await _readVideoTracks(controller);
+        final audioTracks = await _readAudioTracks(controller);
+        String? selectedAudioTrackId;
+        for (final track in audioTracks) {
+          if (track.isSelected) {
+            selectedAudioTrackId = track.id;
+            break;
+          }
+        }
         if (!mounted || !widget.isActive) {
           await controller.dispose();
           if (identical(_controller, controller)) _controller = null;
@@ -1884,6 +1909,8 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
         _activeSourceIndex = index;
         setState(() {
           _videoTracks = tracks;
+          _audioTracks = audioTracks;
+          _manualAudioTrackId = selectedAudioTrackId;
           _loading = false;
           _error = null;
         });
@@ -1953,6 +1980,20 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _applyAudioTrack(VideoAudioTrack track) async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    try {
+      await controller.selectAudioTrack(track.id);
+      if (mounted) setState(() => _manualAudioTrackId = track.id);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo cambiar la pista de audio: $error')),
+      );
+    }
+  }
+
   void _applyQuality(VideoTrack? track) {
     // El selector ya aplicó la pista en ExoPlayer; aquí solo se actualiza
     // la etiqueta del canal sin duplicar la orden nativa.
@@ -1970,6 +2011,11 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
           controller: controller,
           initiallyMuted: _muted,
           initialQualityTrackId: _manualQualityTrackId,
+          initialAudioTrackId: _manualAudioTrackId,
+          onAudioChanged: (track) {
+            if (!mounted || !identical(_controller, controller)) return;
+            setState(() => _manualAudioTrackId = track.id);
+          },
           onQualityChanged: (track) {
             if (!mounted || !identical(_controller, controller)) return;
             setState(() => _manualQualityTrackId = track?.id);
@@ -2214,6 +2260,14 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
                         onChanged: _applyQuality,
                         compact: true,
                       ),
+                      if (_audioTracks.length > 1)
+                        _VideoAudioTrackPickerButton(
+                          controller: controller!,
+                          tracks: _audioTracks,
+                          selectedTrackId: _manualAudioTrackId,
+                          onChanged: _applyAudioTrack,
+                          compact: true,
+                        ),
                       IconButton(
                         visualDensity: VisualDensity.compact,
                         onPressed: () => _openFullscreen(controller),
@@ -2391,12 +2445,142 @@ class _VideoQualityPickerButton extends StatelessWidget {
   }
 }
 
+class _VideoAudioTrackPickerButton extends StatelessWidget {
+  const _VideoAudioTrackPickerButton({
+    required this.controller,
+    required this.tracks,
+    required this.selectedTrackId,
+    required this.onChanged,
+    this.compact = false,
+  });
+
+  final VideoPlayerController controller;
+  final List<VideoAudioTrack> tracks;
+  final String? selectedTrackId;
+  final ValueChanged<VideoAudioTrack> onChanged;
+  final bool compact;
+
+  String _trackLabel(VideoAudioTrack track, int index) {
+    final label = track.label?.trim() ?? '';
+    if (label.isNotEmpty) return label;
+    final language = track.language?.trim() ?? '';
+    if (language.isNotEmpty && language != 'und') return language.toUpperCase();
+    return 'Pista de audio ' + (index + 1).toString();
+  }
+
+  String _trackDetails(VideoAudioTrack track) {
+    final details = <String>[
+      if (track.codec?.isNotEmpty == true) track.codec!,
+      if ((track.channelCount ?? 0) > 0) '${track.channelCount} canales',
+      if ((track.sampleRate ?? 0) > 0)
+        '${(track.sampleRate! / 1000).toStringAsFixed(1)} kHz',
+      if ((track.bitrate ?? 0) > 0) '${(track.bitrate! / 1000).round()} kb/s',
+    ];
+    return details.join(' · ');
+  }
+
+  Future<void> _openPicker(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: _livePanel,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 12, bottom: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Padding(
+                padding: EdgeInsets.fromLTRB(18, 5, 18, 13),
+                child: Row(
+                  children: <Widget>[
+                    Icon(Icons.audiotrack_rounded, color: _liveCyan),
+                    SizedBox(width: 10),
+                    Text(
+                      'IDIOMA / PISTA DE AUDIO',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              for (var index = 0; index < tracks.length; index++)
+                ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.volume_up_rounded, color: _liveMuted),
+                  title: Text(
+                    _trackLabel(tracks[index], index),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  subtitle: Text(
+                    _trackDetails(tracks[index]).isEmpty
+                        ? 'Pista de audio publicada por el proveedor'
+                        : _trackDetails(tracks[index]),
+                    style: const TextStyle(color: _liveMuted, fontSize: 11),
+                  ),
+                  trailing: selectedTrackId == tracks[index].id ||
+                          (selectedTrackId == null && tracks[index].isSelected)
+                      ? const Icon(Icons.check_circle_rounded, color: _liveGreen)
+                      : null,
+                  onTap: () async {
+                    try {
+                      await controller.selectAudioTrack(tracks[index].id);
+                      onChanged(tracks[index]);
+                      if (sheetContext.mounted) Navigator.pop(sheetContext);
+                    } catch (error) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('No se pudo cambiar la pista de audio: $error')),
+                        );
+                      }
+                    }
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (tracks.length < 2) return const SizedBox.shrink();
+    if (compact) {
+      return IconButton(
+        visualDensity: VisualDensity.compact,
+        tooltip: 'Cambiar idioma o pista de audio',
+        onPressed: () => _openPicker(context),
+        icon: const Icon(Icons.audiotrack_rounded, color: Colors.white, size: 18),
+      );
+    }
+    return TextButton.icon(
+      onPressed: () => _openPicker(context),
+      icon: const Icon(Icons.audiotrack_rounded, size: 17),
+      label: const Text('AUDIO'),
+      style: TextButton.styleFrom(
+        foregroundColor: _liveCyan,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        minimumSize: const Size(52, 32),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    );
+  }
+}
+
 class _LiveFullscreenPlayer extends StatefulWidget {
   const _LiveFullscreenPlayer({
     required this.title,
     required this.controller,
     required this.initiallyMuted,
     required this.initialQualityTrackId,
+    required this.initialAudioTrackId,
+    required this.onAudioChanged,
     required this.onQualityChanged,
   });
 
@@ -2404,6 +2588,8 @@ class _LiveFullscreenPlayer extends StatefulWidget {
   final VideoPlayerController controller;
   final bool initiallyMuted;
   final String? initialQualityTrackId;
+  final String? initialAudioTrackId;
+  final ValueChanged<VideoAudioTrack> onAudioChanged;
   final ValueChanged<VideoTrack?> onQualityChanged;
 
   @override
@@ -2412,7 +2598,9 @@ class _LiveFullscreenPlayer extends StatefulWidget {
 
 class _LiveFullscreenPlayerState extends State<_LiveFullscreenPlayer> {
   List<VideoTrack> _videoTracks = <VideoTrack>[];
+  List<VideoAudioTrack> _audioTracks = <VideoAudioTrack>[];
   String? _manualQualityTrackId;
+  String? _manualAudioTrackId;
   bool _muted = false;
   bool _showControls = true;
 
@@ -2421,6 +2609,7 @@ class _LiveFullscreenPlayerState extends State<_LiveFullscreenPlayer> {
     super.initState();
     _muted = widget.initiallyMuted;
     _manualQualityTrackId = widget.initialQualityTrackId;
+    _manualAudioTrackId = widget.initialAudioTrackId;
     unawaited(SystemChrome.setPreferredOrientations(
       const <DeviceOrientation>[
         DeviceOrientation.landscapeLeft,
@@ -2434,12 +2623,25 @@ class _LiveFullscreenPlayerState extends State<_LiveFullscreenPlayer> {
   Future<void> _loadTracks() async {
     try {
       final controller = widget.controller;
-      if (!controller.isVideoTrackSupportAvailable()) return;
-      final tracks = await controller.getVideoTracks();
+      final tracks = controller.isVideoTrackSupportAvailable()
+          ? await controller.getVideoTracks()
+          : <VideoTrack>[];
+      final audioTracks = controller.isAudioTrackSupportAvailable()
+          ? await controller.getAudioTracks()
+          : <VideoAudioTrack>[];
       if (!mounted) return;
+      String? selectedAudioTrackId;
+      for (final track in audioTracks) {
+        if (track.isSelected) {
+          selectedAudioTrackId = track.id;
+          break;
+        }
+      }
       setState(() {
         _videoTracks = tracks.toList(growable: false)
           ..sort((a, b) => (b.height ?? 0).compareTo(a.height ?? 0));
+        _audioTracks = audioTracks.toList(growable: false);
+        _manualAudioTrackId = selectedAudioTrackId ?? _manualAudioTrackId;
       });
     } catch (_) {
       // La calidad automática sigue disponible aunque el proveedor no exponga pistas.
@@ -2473,6 +2675,12 @@ class _LiveFullscreenPlayerState extends State<_LiveFullscreenPlayer> {
   void _qualityChanged(VideoTrack? track) {
     _manualQualityTrackId = track?.id;
     widget.onQualityChanged(track);
+    if (mounted) setState(() {});
+  }
+
+  void _audioChanged(VideoAudioTrack track) {
+    _manualAudioTrackId = track.id;
+    widget.onAudioChanged(track);
     if (mounted) setState(() {});
   }
 
@@ -2523,6 +2731,13 @@ class _LiveFullscreenPlayerState extends State<_LiveFullscreenPlayer> {
                         ),
                       ),
                     ),
+                    if (_audioTracks.length > 1)
+                      _VideoAudioTrackPickerButton(
+                        controller: controller,
+                        tracks: _audioTracks,
+                        selectedTrackId: _manualAudioTrackId,
+                        onChanged: _audioChanged,
+                      ),
                     _VideoQualityPickerButton(
                       controller: controller,
                       tracks: _videoTracks,

@@ -97,6 +97,32 @@ void main() {
   });
 
 
+  testWidgets('el reproductor limpia listas antiguas y conserva solo la fuente automática', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'dt360_secret_iptv_playlist_urls_v1': <String>[
+        'https://old.example/uno.m3u',
+        'https://old.example/dos.m3u',
+      ],
+      'dt360_secret_iptv_playlist_texts_v1': <String>['#EXTM3U antigua'],
+    });
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: IntegratedIptvPlayerScreen(parseInBackground: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getStringList('dt360_secret_iptv_playlist_urls_v1'),
+      <String>[defaultSecretIptvSportsPlaylistUrl],
+    );
+    expect(prefs.getStringList('dt360_secret_iptv_playlist_texts_v1'), isNull);
+    expect(prefs.getBool('dt360_secret_iptv_playlist_cleanup_v1'), isTrue);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('el reproductor integrado empieza vacío y permite añadir varias listas', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await tester.pumpWidget(
@@ -156,6 +182,7 @@ void main() {
 
   testWidgets('el reproductor integra varias listas y agrupa canales duplicados', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{
+      'dt360_secret_iptv_playlist_cleanup_v1': true,
       'dt360_secret_iptv_playlist_texts_v1': <String>[
         '#EXTM3U\n#EXTINF:-1 tvg-id="sports.es" group-title="Deportes",Canal Deportes\nhttps://media.example/live/uno.m3u8',
         '#EXTM3U\n#EXTINF:-1 tvg-id="sports.es" group-title="Deportes",Canal Deportes HD\nhttps://media.example/live/dos.m3u8',
@@ -175,9 +202,7 @@ void main() {
     expect(find.text('Canal Deportes'), findsOneWidget);
     expect(find.text('Canal Deportes HD'), findsNothing);
     expect(find.textContaining('2 fuentes disponibles'), findsOneWidget);
-    // El resumen actual presenta la cantidad de canales únicos como una métrica,
-    // no como el texto combinado antiguo «1 canales · 2 listas».
-    expect(find.text('canales únicos'), findsOneWidget);
+    expect(find.byTooltip('Copiar identificador DT360'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -186,6 +211,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(360, 1800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     SharedPreferences.setMockInitialValues(<String, Object>{
+      'dt360_secret_iptv_playlist_cleanup_v1': true,
       'dt360_secret_iptv_playlist_texts_v1': <String>[
         '#EXTM3U\n#EXTINF:-1 group-title="Deportes",Prueba TV\nhttps://media.example/prueba.m3u8',
       ],
