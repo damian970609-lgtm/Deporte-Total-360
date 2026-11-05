@@ -1270,64 +1270,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late final TextEditingController _telegramController;
-  bool _saving = false;
-  bool _notificationsEnabled = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _telegramController = TextEditingController(text: telegramLink.value);
-    _loadNotificationPreference();
-  }
-
-  Future<void> _loadNotificationPreference() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      if (mounted) setState(() => _notificationsEnabled =
-          prefs.getBool('notifications_enabled') ?? false);
-    } catch (_) {}
-  }
-
-  Future<void> _toggleNotifications(bool enabled) async {
-    if (enabled) {
-      final granted = await NotificationService.requestPermission();
-      if (!granted) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(appText(
-            'Activa el permiso de notificaciones en Android.',
-            'Enable notification permission in Android settings.',
-            'Ative a permissão de notificações nas configurações do Android.',
-            'Activez l’autorisation des notifications dans les paramètres Android.'))));
-        return;
-      }
-    } else {
-      await NotificationService.cancelMatchReminders();
-      await NotificationService.unregisterCurrentDevice();
-    }
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('notifications_enabled', enabled);
-    } catch (_) {}
-    if (enabled) await NotificationService.registerCurrentDevice();
-    if (mounted) setState(() => _notificationsEnabled = enabled);
-  }
-
-  Future<void> _testNotification() async {
-    try {
-      await NotificationService.showTestNotification();
-    } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())));
-    }
-  }
-
-  @override
-  void dispose() {
-    _telegramController.dispose();
-    super.dispose();
-  }
-
   int _signatureTapCount = 0;
   DateTime? _lastSignatureTapAt;
 
@@ -1351,66 +1293,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _save() async {
-    final link = _telegramController.text.trim();
-    if (link.isNotEmpty) {
-      final uri = Uri.tryParse(link);
-      if (uri == null ||
-          uri.scheme != 'https' ||
-          (uri.host != 't.me' && uri.host != 'telegram.me')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Usa el enlace público real https://t.me/tu_canal.')),
-        );
-        return;
-      }
-    }
-    setState(() => _saving = true);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('telegram_public_link', link);
-      telegramLink.value = link;
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Configuración guardada.')),
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se pudo guardar. Vuelve a intentarlo.')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  Future<void> _setLanguage(AppLanguage? value) async {
-    if (value == null) return;
-    appLanguage.value = value;
-    setState(() {});
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('app_language', languageCode(value));
-    } catch (_) {
-      // El idioma permanece activo durante esta sesión.
-    }
-  }
-
-  Widget _settingsCard({required Color border, required Widget child}) =>
-      Container(
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: appPanel.withAlpha(235),
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: border.withAlpha(190)),
-          boxShadow: <BoxShadow>[
-            BoxShadow(color: border.withAlpha(16), blurRadius: 15),
-          ],
-        ),
-        child: child,
-      );
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1426,261 +1308,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
       body: SettingsBackdrop(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
-          children: <Widget>[
-            Container(
-              height: 125,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                gradient: const LinearGradient(
-                  colors: <Color>[
-                    Color(0xDD06152D),
-                    Color(0xCC15082D),
-                    Color(0xDD031E2B),
+        child: Center(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _handleSignatureTap,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 28, vertical: 22),
+              child: Text(
+                'DAMIAN.APK',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: appPink,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2.0,
+                  fontSize: 20,
+                  shadows: <Shadow>[
+                    Shadow(color: appPink, blurRadius: 16),
+                    Shadow(color: appCyan, blurRadius: 8),
                   ],
                 ),
-                border: Border.all(color: appCyan.withAlpha(200)),
-                boxShadow: <BoxShadow>[
-                  BoxShadow(color: appCyan.withAlpha(25), blurRadius: 18),
-                ],
-              ),
-              child: Row(
-                children: <Widget>[
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.asset(
-                      'assets/images/app_icon.png',
-                      width: 88,
-                      height: 88,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(
-                        Icons.emoji_events_rounded,
-                        color: appYellow,
-                        size: 62,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          'DEPORTE TOTAL 360°',
-                          style: TextStyle(
-                            color: appCyan,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 14,
-                          ),
-                        ),
-                        SizedBox(height: 6),
-                        Text(
-                          tr('settings_description'),
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: _handleSignatureTap,
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 2),
-                            child: Text(
-                              'DAMIAN.APK',
-                              style: TextStyle(
-                                color: appPink,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 1.1,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          tr('settings_intro'),
-                          style: TextStyle(color: appMuted, fontSize: 11),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
               ),
             ),
-            const SizedBox(height: 13),
-            _settingsCard(
-              border: appCyan,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    tr('settings'),
-                    style: const TextStyle(
-                      color: appCyan,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    tr('language'),
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 7),
-                  DropdownButtonFormField<AppLanguage>(
-                    value: appLanguage.value,
-                    decoration: const InputDecoration(
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                    ),
-                    items: const <DropdownMenuItem<AppLanguage>>[
-                      DropdownMenuItem(
-                        value: AppLanguage.spanish,
-                        child: Text('Español'),
-                      ),
-                      DropdownMenuItem(
-                        value: AppLanguage.english,
-                        child: Text('English'),
-                      ),
-                      DropdownMenuItem(
-                        value: AppLanguage.portuguese,
-                        child: Text('Português'),
-                      ),
-                      DropdownMenuItem(
-                        value: AppLanguage.french,
-                        child: Text('Français'),
-                      ),
-                    ],
-                    onChanged: _setLanguage,
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    tr('notifications'),
-                    style: const TextStyle(
-                      color: appCyan,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    tr('notifications_description'),
-                    style: const TextStyle(
-                      color: appMuted,
-                      fontSize: 11,
-                      height: 1.4,
-                    ),
-                  ),
-                  Material(
-                    color: Colors.transparent,
-                    child: SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        tr('notifications_enabled'),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      subtitle: Text(
-                        appText(
-                          'Aviso antes de los eventos que cargues en la agenda.',
-                          'Reminder before events you load in the schedule.',
-                          'Aviso antes dos eventos carregados na agenda.',
-                          'Alerte avant les événements chargés dans le calendrier.',
-                        ),
-                        style: const TextStyle(color: appMuted, fontSize: 10),
-                      ),
-                      value: _notificationsEnabled,
-                      activeThumbColor: appGreen,
-                      onChanged: _toggleNotifications,
-                    ),
-                  ),
-                  if (_notificationsEnabled)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: _testNotification,
-                        icon: const Icon(Icons.notifications_active_rounded),
-                        label: Text(appText(
-                          'Probar notificación',
-                          'Test notification',
-                          'Testar notificação',
-                          'Tester la notification',
-                        )),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            _settingsCard(
-              border: appPink,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    tr('telegram_section').toUpperCase(),
-                    style: TextStyle(
-                      color: appCyan,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    tr('telegram_description'),
-                    style: TextStyle(
-                      color: appMuted,
-                      fontSize: 12,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 11),
-                  TextField(
-                    controller: _telegramController,
-                    keyboardType: TextInputType.url,
-                    autocorrect: false,
-                    decoration: InputDecoration(
-                      labelText: tr('public_link'),
-                      hintText: 'https://t.me/tu_canal',
-                      prefixIcon: Icon(Icons.send_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _saving ? null : _save,
-                      icon: const Icon(Icons.save_rounded),
-                      label: Text(
-                        _saving
-                            ? appText('GUARDANDO…', 'SAVING…', 'SALVANDO…', 'ENREGISTREMENT…')
-                            : appText('GUARDAR CONFIGURACIÓN', 'SAVE SETTINGS', 'SALVAR CONFIGURAÇÃO', 'ENREGISTRER LES PARAMÈTRES'),
-                      ),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: appGreen,
-                        foregroundColor: appBg,
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-          ],
+          ),
         ),
       ),
     );
