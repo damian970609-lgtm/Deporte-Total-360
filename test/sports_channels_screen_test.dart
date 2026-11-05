@@ -117,7 +117,7 @@ void main() {
 
     expect(find.text('Canal Prueba'), findsOneWidget);
     expect(find.text('Otro Canal'), findsNothing);
-    expect(find.byIcon(Icons.search_rounded), findsOneWidget);
+    expect(find.byTooltip('Buscar canal por nombre'), findsOneWidget);
 
     final hideButton = find.byTooltip('Ocultar canal').first;
     await tester.ensureVisible(hideButton);
@@ -153,7 +153,7 @@ void main() {
     }
 
     expect(find.text(channel.name), findsOneWidget);
-    expect(find.textContaining('NO VISIBLE EN CANALES DEPORTIVOS'), findsOneWidget);
+    expect(find.textContaining('NO VISIBLE EN CANALES DEPORTIVOS'), findsNWidgets(2));
 
     final showButton = find.byTooltip('Mostrar en Canales deportivos').first;
     await tester.ensureVisible(showButton);
@@ -166,7 +166,7 @@ void main() {
           .map((item) => item.identificationUrl),
       contains(channel.identificationUrl),
     );
-    expect(find.textContaining('VISIBLE EN CANALES DEPORTIVOS'), findsOneWidget);
+    expect(find.textContaining('· VISIBLE EN CANALES DEPORTIVOS'), findsOneWidget);
 
     final hideButton = find.byTooltip('Ocultar en Canales deportivos').first;
     await tester.ensureVisible(hideButton);
