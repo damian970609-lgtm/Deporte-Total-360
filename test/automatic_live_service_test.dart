@@ -1105,9 +1105,13 @@ https://news.example/tercera.m3u8
       final alternate = AutomaticLiveService.parseM3u(alternatePlaylist).single;
       final different = AutomaticLiveService.parseM3u(differentChannelPlaylist).single;
 
-      expect(
-        first.identifierUrl,
-        matches(RegExp(r'^dt360://channel/ch_[0-9a-f]{16}
+      expect(first.identifierUrl.startsWith('dt360://channel/ch_'), isTrue);
+      expect(first.channelId, hasLength(19));
+      expect(first.identifierUrl, alternate.identifierUrl);
+      expect(first.identifierUrl, isNot(different.identifierUrl));
+    });
+
+    test('publica los canales M3U mediante el callback incremental', () async {
       const playlist = '''
 #EXTM3U
 #EXTINF:-1 tvg-id="sports.one" group-title="Deportes",Canal deportivo
