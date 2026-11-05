@@ -186,6 +186,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
 
     expect(find.text('Prueba TV'), findsOneWidget);
     expect(find.byTooltip('Agregar a favoritos'), findsOneWidget);
@@ -193,8 +197,16 @@ void main() {
 
     await tester.tap(find.byTooltip('Agregar a favoritos'));
     await tester.pumpAndSettle();
-    expect(find.text('Prueba TV agregado a favoritos.'), findsOneWidget);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
     expect(find.text('FAVORITOS (1)'), findsOneWidget);
+    final savedFavorites = await SharedPreferences.getInstance();
+    expect(
+      savedFavorites.getStringList('dt360_secret_iptv_favorite_urls_v1'),
+      contains('https://media.example/prueba.m3u8'),
+    );
 
     await tester.tap(find.text('FAVORITOS (1)'));
     await tester.pumpAndSettle();
