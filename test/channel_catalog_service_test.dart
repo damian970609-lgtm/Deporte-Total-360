@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:deporte_total_360/channel_catalog_service.dart';
 
 void main() {
@@ -81,4 +85,48 @@ void main() {
     });
     expect(channel.language, 'unknown');
   });
+
+  test('la carga pública devuelve una sola página y respeta la búsqueda', () async {
+    Uri? requestedUri;
+    final client = MockClient((request) async {
+      requestedUri = request.url;
+      return http.Response(
+        jsonEncode(<String, Object>{
+          'configured': true,
+          'total': 450,
+          'offset': 200,
+          'hasMore': true,
+          'channels': <Map<String, Object>>[
+            <String, Object>{
+              'id': 'espn-latino',
+              'identifier': 'espn-latino',
+              'name': 'ESPN Latino',
+              'url': 'https://media.example/espn.m3u8',
+              'isSports': true,
+              'visible': true,
+              'language': 'es',
+            },
+          ],
+        }),
+        200,
+      );
+    });
+    final service = ChannelCatalogService(client: client);
+
+    final page = await service.fetchPublicChannelPage(
+      search: 'ESPN',
+      offset: 200,
+    );
+
+    expect(requestedUri?.path, '/api/channels');
+    expect(requestedUri?.queryParameters['q'], 'ESPN');
+    expect(requestedUri?.queryParameters['offset'], '200');
+    expect(page.total, 450);
+    expect(page.offset, 200);
+    expect(page.hasMore, isTrue);
+    expect(page.channels, hasLength(1));
+    expect(page.channels.single.name, 'ESPN Latino');
+    client.close();
+  });
+
 }
