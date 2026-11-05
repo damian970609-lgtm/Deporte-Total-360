@@ -88,8 +88,8 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'dt360_secret_iptv_playlist_cleanup_v1': true,
     });
-    const playlist = '#EXTM3U\\n'
-        '#EXTINF:-1 group-title="Deportes",Canal del menú secreto\\n'
+    const playlist = '#EXTM3U\n'
+        '#EXTINF:-1 group-title="Deportes",Canal del menú secreto\n'
         'https://media.example/secret.m3u8';
     final client = MockClient((request) async => http.Response(playlist, 200));
 
@@ -194,11 +194,11 @@ void main() {
   });
 
   testWidgets('no pierde una URL agregada durante la carga inicial', (tester) async {
-    const sportsPlaylist = '#EXTM3U\\n'
-        '#EXTINF:-1 group-title="Deportes",Canal Deportivo\\n'
+    const sportsPlaylist = '#EXTM3U\n'
+        '#EXTINF:-1 group-title="Deportes",Canal Deportivo\n'
         'https://media.example/sports.m3u8';
-    const personalPlaylist = '#EXTM3U\\n'
-        '#EXTINF:-1 group-title="Deportes",Canal Personal\\n'
+    const personalPlaylist = '#EXTM3U\n'
+        '#EXTINF:-1 group-title="Deportes",Canal Personal\n'
         'https://media.example/personal.m3u8';
 
     final initialResponse = Completer<http.Response>();
