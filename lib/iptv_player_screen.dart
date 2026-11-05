@@ -568,7 +568,10 @@ class _IntegratedIptvPlayerScreenState
     }
   }
 
-  Future<void> _playChannel(M3uChannel channel) async {
+  Future<void> _playChannel(
+    M3uChannel channel, {
+    List<String> fallbackUrls = const <String>[],
+  }) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => LivePlayerGridScreen(
@@ -577,6 +580,7 @@ class _IntegratedIptvPlayerScreenState
               title: channel.name,
               url: channel.url,
               subtitle: channel.group.isEmpty ? 'Canal IPTV' : channel.group,
+              fallbackUrls: fallbackUrls,
             ),
           ],
         ),
@@ -647,7 +651,13 @@ class _IntegratedIptvPlayerScreenState
         ),
       ),
     );
-    if (selected != null && mounted) await _playChannel(selected);
+    if (selected != null && mounted) {
+      final fallbackUrls = entry.channels
+          .where((candidate) => candidate.url != selected.url)
+          .map((candidate) => candidate.url)
+          .toList(growable: false);
+      await _playChannel(selected, fallbackUrls: fallbackUrls);
+    }
   }
 
   List<_IptvChannelGroup> get _filteredChannels {
@@ -761,7 +771,13 @@ class _IntegratedIptvPlayerScreenState
             ),
           ],
         ),
-        onTap: () => _playChannel(channel),
+        onTap: () => _playChannel(
+          channel,
+          fallbackUrls: entry.channels
+              .skip(1)
+              .map((alternative) => alternative.url)
+              .toList(growable: false),
+        ),
       ),
     );
   }
