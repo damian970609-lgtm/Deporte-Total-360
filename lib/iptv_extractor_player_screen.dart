@@ -518,11 +518,12 @@ class _IptvExtractorPlayerScreenState
     }
   }
 
-  Future<void> _persistLibrary() async {
+  Future<void> _persistLibrary({bool notifySportsTab = false}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_studioUrlsKey, _playlistUrls);
     await prefs.setStringList(_studioTextsKey, _playlistTexts);
     await prefs.setStringList(_studioFavoritesKey, _favoriteIds.toList());
+    if (notifySportsTab) iptvSportsCatalogVersion.value++;
   }
 
   Future<List<IptvExtractedChannel>> _parse(
@@ -708,7 +709,7 @@ class _IptvExtractorPlayerScreenState
     }
     setState(() => _playlistUrls.addAll(added));
     try {
-      await _persistLibrary();
+      await _persistLibrary(notifySportsTab: true);
       await _refreshLibrary();
       _showMessage(added.length.toString() + ' lista(s) agregada(s).');
     } catch (error) {
@@ -764,7 +765,7 @@ class _IptvExtractorPlayerScreenState
       final parsed = await _parse(text, source: source);
       if (!mounted) return;
       if (!_playlistTexts.contains(text)) _playlistTexts.add(text);
-      await _persistLibrary();
+      await _persistLibrary(notifySportsTab: true);
       await _refreshLibrary();
       _showMessage('Importada: ' + parsed.length.toString() + ' canales detectados.');
     } catch (error) {
@@ -846,7 +847,7 @@ class _IptvExtractorPlayerScreenState
         _showMessage(errors.isEmpty ? 'No seleccionaste archivos.' : errors.take(2).join(' | '));
         return;
       }
-      await _persistLibrary();
+      await _persistLibrary(notifySportsTab: true);
       await _refreshLibrary();
       _showMessage(
         filesImported.toString() + ' archivo(s), ' +
@@ -872,14 +873,14 @@ class _IptvExtractorPlayerScreenState
 
   Future<void> _removePlaylistUrl(String url) async {
     setState(() => _playlistUrls.remove(url));
-    await _persistLibrary();
+    await _persistLibrary(notifySportsTab: true);
     await _refreshLibrary();
   }
 
   Future<void> _removePlaylistText(int index) async {
     if (index < 0 || index >= _playlistTexts.length) return;
     setState(() => _playlistTexts.removeAt(index));
-    await _persistLibrary();
+    await _persistLibrary(notifySportsTab: true);
     await _refreshLibrary();
   }
 
