@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:deporte_total_360/agenda_screen.dart';
 import 'package:deporte_total_360/main.dart';
 import 'package:deporte_total_360/iptv_sources_screen.dart';
+import 'package:deporte_total_360/automatic_live_service.dart';
 import 'package:deporte_total_360/iptv_player_screen.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sports_statistics_screen.dart';
@@ -91,7 +92,11 @@ void main() {
     const playlist = '#EXTM3U\n'
         '#EXTINF:-1 group-title="Deportes",Canal del menú secreto\n'
         'https://media.example/secret.m3u8';
-    final client = MockClient((request) async => http.Response(playlist, 200));
+    final routeRequests = <String>[];
+    final client = MockClient((request) async {
+      routeRequests.add(request.url.toString());
+      return http.Response(playlist, 200);
+    });
 
     await tester.pumpWidget(
       MaterialApp(
@@ -121,6 +126,12 @@ void main() {
         .widgetList<Text>(find.byType(Text))
         .map((widget) => widget.data ?? widget.textSpan?.toPlainText() ?? '')
         .join(' | ');
+    print('DEBUG_SECRET_ROUTE_REQUESTS=' + routeRequests.join(' | '));
+    print('DEBUG_SECRET_ROUTE_TEXT=' + routeVisibleText);
+    expect(
+      AutomaticLiveService.parseM3u(playlist).map((channel) => channel.name),
+      contains('Canal del menú secreto'),
+    );
     expect(
       find.text('Canal del menú secreto'),
       findsOneWidget,
@@ -213,7 +224,9 @@ void main() {
     final initialRequestStarted = Completer<void>();
     var sportsRequests = 0;
     var personalRequests = 0;
+    final requestLog = <String>[];
     final client = MockClient((request) async {
+      requestLog.add(request.url.toString());
       if (request.url.host == 'iptv-org.github.io') {
         sportsRequests++;
         if (sportsRequests == 1) {
@@ -277,6 +290,12 @@ void main() {
         .widgetList<Text>(find.byType(Text))
         .map((widget) => widget.data ?? widget.textSpan?.toPlainText() ?? '')
         .join(' | ');
+    print('DEBUG_IPTV_RACE_REQUESTS=' + requestLog.join(' | '));
+    print('DEBUG_IPTV_RACE_TEXT=' + raceVisibleText);
+    expect(
+      AutomaticLiveService.parseM3u(personalPlaylist).map((channel) => channel.name),
+      contains('Canal Personal'),
+    );
     expect(
       find.text('Canal Personal'),
       findsOneWidget,
