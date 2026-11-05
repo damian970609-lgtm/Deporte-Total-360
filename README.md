@@ -39,3 +39,119 @@ SportsAPI.app es la fuente principal de Agenda de hoy para Fútbol, Baloncesto, 
 ## Activar notificaciones push
 
 En Firebase crea una aplicación Android para el paquete de esta APK y copia los valores de configuración. Añade estos cuatro GitHub Actions Secrets en el repositorio de la APK: `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, `FIREBASE_MESSAGING_SENDER_ID` y `FIREBASE_PROJECT_ID`. En el Worker configura el secreto `FCM_SERVICE_ACCOUNT_JSON` con el JSON de una cuenta de servicio de Firebase que tenga permiso para enviar mensajes FCM. La APK suscribe los dispositivos que activan los avisos al tema `deporte_total_360_live`; el Worker envía una sola notificación al tema, sin almacenar tokens personales. El secreto se guarda en Cloudflare, nunca en GitHub ni en el APK. Después de compilar e instalar la APK, cada usuario debe activar Notificaciones en Ajustes y conceder el permiso Android. El Worker registra el token del dispositivo y envía un aviso cuando una señal directa queda verificada. Tocar el aviso abre Deportes en vivo; el usuario inicia el vídeo con Play. Sin los secretos Firebase y Cloudflare, las notificaciones locales existentes siguen funcionando, pero no se envían avisos push.
+
+ 
+## Catálogo de Canales deportivos
+
+La nueva pestaña **Canales deportivos** muestra únicamente señales aprobadas y
+publicadas desde el catálogo central de Cloudflare. El reproductor se desplaza
+con la lista, admite HLS/MP4/MPEG-TS, controles ocultables a los cinco segundos,
+bloqueo, pantalla completa, ajuste gestual de brillo de la aplicación y
+volumen multimedia, además de calidad automática y pistas publicadas por el
+proveedor. La calidad automática depende de las variantes disponibles en la
+señal; no puede crear resoluciones que el proveedor no publique.
+
+El acceso de diez pulsaciones sobre `DAMIÁN.APK` abre ahora el panel privado
+de importación. Inicia sesión con Google. Añade una lista M3U HTTPS y confirma
+que tienes autorización para distribuir las señales. Cloudflare descarga y
+procesa la lista en segundo plano; los nuevos canales permanecen ocultos.
+Desde el catálogo general puedes copiar su identificador o URL de señal y
+activar/desactivar el ojo de visibilidad para publicar u ocultar cada señal
+deportiva a todos los usuarios.
+
+Configura `GOOGLE_OAUTH_CLIENT_ID` como secreto de GitHub Actions del
+repositorio de la APK y del repositorio del Worker. Debe ser el **ID de cliente
+OAuth Web**, no un secreto privado. En Google Cloud configura además el cliente
+Android para el package name y la huella SHA-1 del certificado de firma
+utilizado por GitHub Actions. El Worker comprueba el ID token, su audiencia y
+correo verificado; solo `damian970609@gmail.com` administra el catálogo.
+Los favoritos individuales se sincronizan en Cloudflare al iniciar sesión
+con Google; sin iniciar sesión solo se guardan localmente.
+
+El package name Android que ya usa la APK es `com.example.deporte_total_360`.
+El workflow comprueba que no cambie y, después de compilar, publica en el resumen
+del trabajo la huella SHA-1 exacta del certificado que firmó esa APK. Para crear
+el cliente OAuth Android en Google Cloud, copia ambos datos desde ese resumen.
+El workflow falla antes de compilar si falta `GOOGLE_OAUTH_CLIENT_ID` o si no
+parece un ID OAuth Web; nunca imprime el valor del secreto.
+
+El reproductor modifica el brillo de la aplicación, no el brillo global del
+sistema, por lo que no necesita el permiso especial de Android. El control
+gestual de volumen utiliza el volumen multimedia de Android. Las importaciones
+solo aceptan playlists M3U HTTPS y direcciones HLS/MP4/MPEG-TS directas; no extraen
+páginas de reproducción ni evaden DRM, cuentas o restricciones regionales.
+
+
+### Idioma de los canales
+
+En el panel privado de canales (diez pulsaciones en DAMIÁN.APK dentro de
+Ajustes), cada señal tiene un selector de idioma: Español 🇪🇸, Inglés 🇺🇸 o
+Sin definir. Al publicarse, la tarjeta de Canales deportivos muestra el
+indicativo de idioma en su esquina superior. El idioma se guarda en Cloudflare
+para que todos los usuarios vean la misma etiqueta.
+## Configuración segura de Google Sign-In y firma Android
+
+El inicio de sesión valida primero que el cliente OAuth Web incorporado en la APK
+sea exactamente el mismo que está configurado en Cloudflare. Si no coincide,
+la aplicación muestra un error concreto antes de abrir el selector de cuentas.
+El ID de cliente OAuth es público; no se exponen ID tokens ni contraseñas.
+
+### 1. Crear una llave privada de firma una sola vez
+
+La compilación de distribución ya no guarda llaves Android en `actions/cache`.
+El workflow necesita una llave privada estable, guardada únicamente como GitHub
+Actions Secrets. En Termux instala Java y genera la llave:
+
+```sh
+pkg update
+pkg install openjdk-17 coreutils
+read -rsp 'Contraseña nueva para la llave: ' KEY_PASS
+echo
+keytool -genkeypair -v -storetype JKS \
+  -keystore "$HOME/deporte-total-360-release.jks" \
+  -alias dt360 -keyalg RSA -keysize 2048 -validity 10000 \
+  -dname 'CN=Deporte Total 360,O=Deporte Total 360,C=GY' \
+  -storepass "$KEY_PASS" -keypass "$KEY_PASS"
+base64 -w 0 "$HOME/deporte-total-360-release.jks"
+unset KEY_PASS
+```
+
+Copia el resultado de Base64 directamente a GitHub; no lo publiques ni lo envíes
+por chat. En el repositorio abre Settings → Secrets and variables → Actions y
+crea estos dos secretos:
+
+- `ANDROID_KEYSTORE_BASE64`: el resultado completo del comando Base64.
+- `ANDROID_KEYSTORE_PASSWORD`: la contraseña que acabas de crear.
+
+Conserva una copia de seguridad cifrada del archivo `.jks` y su contraseña.
+Si se pierde esta llave, no será posible crear actualizaciones firmadas con la
+misma identidad de distribución. Los workflows de pull request no reciben la
+llave privada ni publican APK.
+
+### 2. Registrar Google OAuth
+
+En Google Cloud Console, dentro del mismo proyecto, crea o revisa:
+
+- Un cliente OAuth de tipo **Web application**. El valor de su Client ID debe
+  estar configurado como `GOOGLE_OAUTH_CLIENT_ID` en los secretos de Actions
+  de este repositorio y del repositorio Cloudflare `Deporte-Total-360-`.
+- Un cliente OAuth de tipo **Android**, con package name
+  `com.example.deporte_total_360` y el SHA-1 que el workflow publique en el
+  resumen de la compilación ya firmada.
+
+El cliente Web y el cliente Android pertenecen al mismo proyecto de Google
+Cloud. Si la pantalla de consentimiento está en modo Testing, añade la cuenta
+Google que va a iniciar sesión a la lista de usuarios de prueba.
+
+### 3. Ejecutar la compilación
+
+Después de guardar los dos secretos de firma, ejecuta el workflow
+`Crear APK de DEPORTE TOTAL 360`. El workflow falla de forma segura si falta la
+llave, si no puede leerla o si el SHA-1 de la APK no coincide con la llave usada.
+Antes de crear la APK, el workflow compara el Client ID Web del secreto de
+este repositorio con el publicado por Cloudflare y bloquea la compilación si no
+coinciden. En el teléfono, la aplicación vuelve a comprobar la misma igualdad y
+rechaza la autenticación antes de abrir Google cuando los dos no coinciden.
+
+Los errores de Google muestran el código y la descripción disponibles sin
+registrar contraseñas, credenciales ni tokens.

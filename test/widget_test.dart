@@ -119,10 +119,14 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('muestra las ocho secciones principales y deja Chat como acceso auxiliar', (tester) async {
+  testWidgets('muestra las nueve secciones principales y deja Chat como acceso auxiliar', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
 
     expect(find.text('Deportes en vivo'), findsOneWidget);
+    expect(find.text('Canales deportivos'), findsOneWidget);
+    // La pantalla de transmisiones no debe arrancar ni consultar servicios
+    // hasta que el usuario entre en esa pestaña.
+    expect(find.text('TRANSMISIONES EN VIVO'), findsNothing);
     expect(find.text('Agenda de hoy'), findsOneWidget);
     expect(find.text('Noticias'), findsWidgets);
     expect(find.text('Mister Fantasy'), findsOneWidget);
