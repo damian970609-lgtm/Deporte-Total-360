@@ -309,7 +309,7 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
                     foregroundColor: _sportsCyan,
                   ),
                   onPressed: () {
-                    if (value.isPlaying) {
+                    if (value!.isPlaying) {
                       controller!.pause();
                     } else {
                       controller!.play();
