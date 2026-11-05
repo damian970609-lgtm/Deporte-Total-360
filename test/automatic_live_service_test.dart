@@ -176,8 +176,8 @@ void main() {
     });
   });
 
-  group('tablero fijo de transmisiones', () {
-    testWidgets('mantiene cuatro cuadros visibles sin desplazamiento', (tester) async {
+  group('tablero de ocho reproductores', () {
+    testWidgets('mantiene ocho cuadros y permite desplazarse hasta el octavo', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -186,15 +186,16 @@ void main() {
         ),
       );
 
-      for (var channel = 1; channel <= 4; channel++) {
-        expect(
-          find.text('DEPORTE TOTAL 360° CANAL $channel'),
-          findsOneWidget,
-        );
-      }
-      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(4));
       final grid = tester.widget<GridView>(find.byType(GridView));
-      expect(grid.physics, isA<NeverScrollableScrollPhysics>());
+      expect(grid.childrenDelegate.estimatedChildCount, 8);
+      expect(grid.physics, isA<BouncingScrollPhysics>());
+      expect(find.text('DEPORTE TOTAL 360° CANAL 1'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('DEPORTE TOTAL 360° CANAL 8'),
+        350,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('DEPORTE TOTAL 360° CANAL 8'), findsOneWidget);
     });
 
     testWidgets('muestra el próximo evento con su horario mientras espera la señal', (tester) async {
@@ -218,7 +219,6 @@ void main() {
       expect(find.text('Fútbol · Liga de prueba'), findsOneWidget);
       expect(find.text('Equipo Azul vs Equipo Rojo'), findsOneWidget);
       expect(find.text('Comienza 19:30'), findsOneWidget);
-      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(4));
     });
 
     testWidgets('muestra el evento asignado y espera en los otros tres canales', (tester) async {
@@ -239,23 +239,34 @@ void main() {
       expect(find.text('DEPORTE TOTAL 360° CANAL 1'), findsOneWidget);
       expect(find.text('Fútbol · Liga · Tigres vs Atlas'), findsOneWidget);
       expect(find.byTooltip('Reproducir en pantalla completa'), findsOneWidget);
-      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(3));
     });
   });
 
   group('configuración internacional', () {
-    test('carga siete listas automáticamente y diecinueve EPG sin pedir validación', () async {
+    test('carga listas GitHub y guías EPG regionales automáticamente', () async {
       final settings = await AutoLiveSettings.load();
 
-      expect(settings.playlistUrls, hasLength(12));
+      expect(settings.playlistUrls, hasLength(14));
       expect(settings.playlistUrls.every(isSafeHttpUrl), isTrue);
-      expect(settings.epgUrls, hasLength(20));
+      expect(settings.epgUrls, hasLength(30));
       expect(settings.epgUrls.every(isSafeHttpUrl), isTrue);
-      expect(settings.playlistUrls.first, contains('teleonline'));
-      expect(settings.playlistUrls[1], contains('languages/spa.m3u'));
-      expect(settings.playlistUrls[2], contains('countries/es.m3u'));
+      expect(settings.playlistUrls.first, contains('Free-TV/IPTV'));
+      expect(settings.playlistUrls[1], contains('teleonline'));
+      expect(settings.playlistUrls[2], contains('languages/spa.m3u'));
+      expect(settings.playlistUrls[3], contains('countries/es.m3u'));
+      expect(settings.playlistUrls[13], contains('legalFreeIPTVplaylist/live.m3u'));
       expect(settings.epgUrls.first, contains('epg-es.xml'));
       expect(settings.epgUrls[18], contains('teleonline/listas/main/epg.xml.gz'));
+      expect(settings.epgUrls[20], contains('epg-do.xml'));
+      expect(settings.epgUrls[21], contains('epg-sv.xml'));
+      expect(settings.epgUrls[22], contains('epgshare01.online/epgshare01/epg_ripper_ES1.xml.gz'));
+      expect(settings.epgUrls[23], contains('epgshare01.online/epgshare01/epg_ripper_AR1.xml.gz'));
+      expect(settings.epgUrls[24], contains('epgshare01.online/epgshare01/epg_ripper_MX1.xml.gz'));
+      expect(settings.epgUrls[25], contains('epgshare01.online/epgshare01/epg_ripper_CO1.xml.gz'));
+      expect(settings.epgUrls[26], contains('epgshare01.online/epgshare01/epg_ripper_CL1.xml.gz'));
+      expect(settings.epgUrls[27], contains('epgshare01.online/epgshare01/epg_ripper_PE1.xml.gz'));
+      expect(settings.epgUrls[28], contains('epgshare01.online/epgshare01/epg_ripper_DO1.xml.gz'));
+      expect(settings.epgUrls[29], contains('epgshare01.online/epgshare01/epg_ripper_BR1.xml.gz'));
       expect(settings.isConfigured, isTrue);
     });
 
@@ -268,10 +279,59 @@ void main() {
 
       final settings = await AutoLiveSettings.load();
 
-      expect(settings.playlistUrls, hasLength(12));
-      expect(settings.epgUrls, hasLength(20));
+      expect(settings.playlistUrls, hasLength(14));
+      expect(settings.epgUrls, hasLength(30));
       expect(settings.authorizationConfirmed, isTrue);
       expect(settings.isConfigured, isTrue);
+    });
+
+    test('añade las nuevas fuentes a los valores anteriores y conserva listas personalizadas', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'dt360_auto_live_playlist_url_v1':
+            previousDefaultAutoLivePlaylistUrls + '\nhttps://user.example/custom.m3u',
+        'dt360_auto_live_epg_url_v1':
+            previousDefaultAutoLiveEpgUrl + '\nhttps://user.example/custom.xml',
+        'dt360_auto_live_authorized_v1': true,
+      });
+
+      final settings = await AutoLiveSettings.load();
+
+      expect(settings.playlistUrls, hasLength(15));
+      expect(settings.playlistUrls, contains('https://user.example/custom.m3u'));
+      expect(settings.playlistUrls, contains('https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8'));
+      expect(settings.epgUrls, hasLength(31));
+      expect(settings.epgUrls, contains('https://user.example/custom.xml'));
+      expect(settings.epgUrls, contains('https://iptv-epg.org/files/epg-do.xml'));
+    });
+
+    test('recupera listas automáticas si antes se guardó la página OTTFOX y conserva fuentes propias', () async {
+      const customPlaylist = 'https://listas.example/mi-lista.m3u';
+      const customEpg = 'https://guias.example/mi-guia.xml';
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'dt360_auto_live_playlist_url_v1':
+            'https://ottfox.net/es/iptv-playlist-editor/\n$customPlaylist',
+        'dt360_auto_live_epg_url_v1':
+            'https://ottfox.net/es/\n$customEpg',
+        'dt360_auto_live_authorized_v1': true,
+      });
+
+      final settings = await AutoLiveSettings.load();
+
+      expect(settings.playlistUrls, hasLength(15));
+      expect(settings.epgUrls, hasLength(31));
+      expect(settings.playlistUrls, contains(customPlaylist));
+      expect(settings.epgUrls, contains(customEpg));
+      expect(settings.playlistUrls.any((url) => url.contains('ottfox.net')), isFalse);
+      expect(settings.epgUrls.any((url) => url.contains('ottfox.net')), isFalse);
+
+      // Una vez migrada, una edición posterior del usuario no vuelve a
+      // añadir todas las listas predeterminadas automáticamente.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('dt360_auto_live_playlist_url_v1', customPlaylist);
+      await prefs.setString('dt360_auto_live_epg_url_v1', customEpg);
+      final edited = await AutoLiveSettings.load();
+      expect(edited.playlistUrls, <String>[customPlaylist]);
+      expect(edited.epgUrls, <String>[customEpg]);
     });
 
     test('restaura fuentes automáticas cuando una versión anterior dejó las listas vacías', () async {
@@ -284,8 +344,55 @@ void main() {
       final settings = await AutoLiveSettings.load();
 
       expect(settings.isConfigured, isTrue);
-      expect(settings.playlistUrls, hasLength(12));
-      expect(settings.epgUrls, hasLength(20));
+      expect(settings.playlistUrls, hasLength(14));
+      expect(settings.epgUrls, hasLength(30));
+    });
+
+    test('guarda varias listas importadas y las analiza incrementalmente fuera de la interfaz', () async {
+      const firstPlaylist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="ottfox.one" group-title="Deportes",Canal OTTFOX Uno
+https://cdn.example/live/one.m3u8
+''';
+      const secondPlaylist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="ottfox.two" group-title="Deportes",Canal OTTFOX Dos
+https://cdn.example/live/two.m3u8
+''';
+
+      await AutoLiveSettings.save(
+        playlistUrl: 'https://lists.example/owned.m3u',
+        epgUrl: 'https://guide.example/owned.xml',
+        authorizationConfirmed: true,
+        playlistTexts: <String>[firstPlaylist, secondPlaylist],
+      );
+      final settings = await AutoLiveSettings.load();
+      expect(settings.localPlaylistTexts, hasLength(2));
+
+      final service = AutomaticLiveService(
+        client: MockClient((request) async => http.Response('', 404)),
+      );
+      addTearDown(service.dispose);
+      final snapshots = <List<M3uChannel>>[];
+      final progress = <String>[];
+      final catalog = await service.loadCatalog(
+        playlistUrl: '',
+        epgUrl: '',
+        playlistTexts: settings.localPlaylistTexts,
+        batchPause: Duration.zero,
+        onChannelsLoaded: snapshots.add,
+        onProgress: (phase, completed, total) {
+          progress.add('$phase:$completed/$total');
+        },
+      );
+
+      expect(catalog.channels, hasLength(2));
+      expect(catalog.channels.map((channel) => channel.name).toList(),
+          <String>['Canal OTTFOX Uno', 'Canal OTTFOX Dos']);
+      expect(snapshots, hasLength(2));
+      expect(snapshots.first, hasLength(1));
+      expect(snapshots.last, hasLength(2));
+      expect(progress, <String>['LOCAL:1/2', 'LOCAL:2/2']);
     });
   });
 
@@ -400,6 +507,23 @@ https://media.example/teledeporte.m3u8
       expect(channel.languagePriority, 2);
     });
 
+    test('conserva la URL de origen de cada canal importado', () {
+      const sourceUrl = 'https://playlist.example/deportes.m3u';
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.source",Canal deportivo
+https://cdn.example/live.m3u8
+''';
+      final channels = AutomaticLiveService.parseM3u(
+        playlist,
+        baseUri: Uri.parse(sourceUrl),
+        sourceUrl: sourceUrl,
+      );
+
+      expect(channels, hasLength(1));
+      expect(channels.single.sourceUrl, sourceUrl);
+    });
+
     test('usa la segunda lista M3U si la primera está caída', () async {
       final start = DateTime.now().toUtc().add(const Duration(hours: 1));
       final stop = start.add(const Duration(hours: 2));
@@ -499,7 +623,7 @@ https://media.example/backup.m3u8
   });
 
   group('programación automática', () {
-    test('espera hasta diez minutos antes y elige una sola señal de mayor calidad', () async {
+    test('espera diez minutos antes y conserva alternativas verificadas por calidad', () async {
       final start = DateTime.fromMillisecondsSinceEpoch((DateTime.now().add(const Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000) * 1000);
       final stop = start.add(const Duration(hours: 2));
       final playlist = '''
@@ -551,10 +675,12 @@ https://media.example/sports-hd.m3u8
         settings: settings,
       );
       expect(prepared, hasLength(1));
-      expect(prepared.single.sources, hasLength(1));
-      expect(prepared.single.sources.single.channelName, 'Sports HD 1080p');
-      expect(prepared.single.sources.single.url, 'https://media.example/sports-hd.m3u8');
-      expect(prepared.single.sources.single.available, isTrue);
+      expect(prepared.single.sources, hasLength(2));
+      expect(prepared.single.sources.first.channelName, 'Sports HD 1080p');
+      expect(prepared.single.sources.first.url, 'https://media.example/sports-hd.m3u8');
+      expect(prepared.single.sources.last.channelName, 'Sports SD');
+      expect(prepared.single.sources.last.url, 'https://media.example/sports-sd.m3u8');
+      expect(prepared.single.sources.every((source) => source.available), isTrue);
       expect(prepared.single.removeAt, stop);
     });
 
@@ -861,4 +987,134 @@ https://media.example/offline.m3u8
     });
 
   });
+
+  group('extractor y reproductor de listas IPTV', () {
+    test('analiza M3U fuera de la interfaz y comunica el progreso', () async {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.one" group-title="Deportes",Canal deportivo
+https://media.example/live.m3u8
+''';
+      final client = MockClient((request) async {
+        if (request.url.host == 'playlist.example') {
+          return http.Response(playlist, 200);
+        }
+        return http.Response('', 404);
+      });
+      final service = AutomaticLiveService(client: client);
+      final progress = <String>[];
+      try {
+        final catalog = await service.loadCatalog(
+          playlistUrl: 'https://playlist.example/sports.m3u',
+          epgUrl: '',
+          forceRefresh: true,
+          downloadBatchSize: 1,
+          batchPause: Duration.zero,
+          onProgress: (phase, completed, total) {
+            progress.add('$phase:$completed/$total');
+          },
+        );
+
+        expect(catalog.channels, hasLength(1));
+        expect(catalog.channels.single.name, 'Canal deportivo');
+        expect(progress, <String>['M3U:1/1']);
+      } finally {
+        service.dispose();
+      }
+    });
+
+    test('analiza metadatos M3U con comillas simples y dobles', () {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id='sports.one' group-title="Deportes",Canal deportivo
+https://media.example/live.m3u8
+''';
+      final channels = AutomaticLiveService.parseM3u(playlist);
+
+      expect(channels, hasLength(1));
+      expect(channels.single.tvgId, 'sports.one');
+      expect(channels.single.group, 'Deportes');
+      expect(channels.single.name, 'Canal deportivo');
+    });
+
+    test('publica los canales M3U mediante el callback incremental', () async {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="sports.one" group-title="Deportes",Canal deportivo
+https://media.example/live.m3u8
+''';
+      final client = MockClient((request) async {
+        if (request.url.host == 'playlist.example') {
+          return http.Response(playlist, 200);
+        }
+        return http.Response('', 404);
+      });
+      final service = AutomaticLiveService(client: client);
+      final snapshots = <List<M3uChannel>>[];
+      try {
+        final catalog = await service.loadCatalog(
+          playlistUrl: 'https://playlist.example/sports.m3u',
+          epgUrl: '',
+          forceRefresh: true,
+          downloadBatchSize: 1,
+          batchPause: Duration.zero,
+          onChannelsLoaded: snapshots.add,
+        );
+
+        expect(catalog.channels, hasLength(1));
+        expect(snapshots, hasLength(1));
+        expect(snapshots.single.single.name, 'Canal deportivo');
+      } finally {
+        service.dispose();
+      }
+    });
+
+    test('exporta una sola M3U con canales únicos y todas las referencias EPG', () {
+      final catalog = AutoLiveCatalog(
+        channels: const <M3uChannel>[
+          M3uChannel(
+            name: 'Canal Uno HD',
+            url: 'https://media.example/one.m3u8',
+            tvgId: 'canal.uno',
+            tvgName: 'Canal Uno',
+            group: 'Deportes',
+            logo: 'https://img.example/uno.png',
+          ),
+          M3uChannel(
+            name: 'Canal Uno alternativo',
+            url: 'https://media.example/one.m3u8',
+            tvgId: 'canal.uno',
+          ),
+          M3uChannel(
+            name: 'Canal Dos',
+            url: 'https://media.example/two.mpd',
+          ),
+          M3uChannel(
+            name: 'Página web no reproducible',
+            url: 'https://media.example/watch?id=123',
+          ),
+        ],
+        programmes: const <XmltvProgramme>[],
+      );
+
+      final merged = AutomaticLiveService.buildMergedM3u(
+        catalog,
+        epgUrls: const <String>[
+          'https://guide.example/es.xml',
+          'https://guide.example/latam.xml.gz',
+          'javascript:alert(1)',
+        ],
+      );
+
+      expect(merged, startsWith('#EXTM3U'));
+      expect(merged, contains('url-tvg="https://guide.example/es.xml,https://guide.example/latam.xml.gz"'));
+      expect(merged, contains('tvg-id="canal.uno"'));
+      expect(merged, contains('#EXTINF:-1'));
+      expect('https://media.example/one.m3u8'.allMatches(merged), hasLength(1));
+      expect(merged, contains('https://media.example/two.mpd'));
+      expect(merged, isNot(contains('watch?id=123')));
+      expect(merged, isNot(contains('javascript:')));
+    });
+  });
+
 }

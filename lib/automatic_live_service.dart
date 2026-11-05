@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io' show gzip;
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -10,8 +11,11 @@ import 'live_media_format.dart';
 import 'sports_api_service.dart';
 
 const String _playlistUrlKey = 'dt360_auto_live_playlist_url_v1';
+const String _playlistTextKey = 'dt360_auto_live_playlist_text_v1';
+const String _playlistTextsKey = 'dt360_auto_live_playlist_texts_v2';
 const String _epgUrlKey = 'dt360_auto_live_epg_url_v1';
 const String _authorizedKey = 'dt360_auto_live_authorized_v1';
+const String _defaultSourcesMigratedKey = 'dt360_auto_live_default_sources_migrated_v1';
 
 /// Normaliza imágenes de MARCA: admite URL HTTPS absolutas, protocol-relative
 /// y rutas relativas del mismo sitio. Nunca permite esquemas no HTTPS ni
@@ -61,9 +65,9 @@ const String legacyDefaultAutoLivePlaylistUrls =
 const String legacyDefaultAutoLiveEpgUrl =
     'https://dearbulut.github.io/iptv/epg/guide.xml.gz';
 
-// Fuentes automáticas: primero catálogos en español y emisoras públicas;
-// después directorios deportivos internacionales como respaldo.
-const String defaultAutoLivePlaylistUrls =
+// Snapshot de los valores predeterminados de la versión anterior. Se usa
+// para ampliar las instalaciones ya existentes sin borrar fuentes personales.
+const String previousDefaultAutoLivePlaylistUrls =
     'https://teleonline.github.io/listas/tv.m3u8\n'
     'https://iptv-org.github.io/iptv/languages/spa.m3u\n'
     'https://iptv-org.github.io/iptv/countries/es.m3u\n'
@@ -76,10 +80,7 @@ const String defaultAutoLivePlaylistUrls =
     'https://dearbulut.github.io/iptv/playlists/category/sports.m3u\n'
     'https://dearbulut.github.io/iptv/playlists/online.m3u\n'
     'https://dearbulut.github.io/iptv/playlists/best.m3u';
-
-// Guías priorizadas en español (España y Latinoamérica/Caribe), con una
-// guía global al final como último respaldo.
-const String defaultAutoLiveEpgUrl =
+const String previousDefaultAutoLiveEpgUrl =
     'https://iptv-epg.org/files/epg-es.xml\n'
     'https://iptv-epg.org/files/epg-ar.xml\n'
     'https://iptv-epg.org/files/epg-mx.xml\n'
@@ -101,6 +102,27 @@ const String defaultAutoLiveEpgUrl =
     'https://raw.githubusercontent.com/teleonline/listas/main/epg.xml.gz\n'
     'https://dearbulut.github.io/iptv/epg/guide.xml.gz';
 
+// Listas públicas: deportes y canales abiertos de repositorios GitHub
+// mantenidos por comunidad, conservando las fuentes regionales en español.
+const String defaultAutoLivePlaylistUrls =
+    'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8\n' +
+    previousDefaultAutoLivePlaylistUrls +
+    '\nhttps://biskyt.github.io/legalFreeIPTVplaylist/live.m3u';
+
+// EPG regional en español y Caribe. Los XML se procesan en lotes limitados.
+const String defaultAutoLiveEpgUrl =
+    previousDefaultAutoLiveEpgUrl + '\n'
+    'https://iptv-epg.org/files/epg-do.xml\n'
+    'https://iptv-epg.org/files/epg-sv.xml\n'
+    'https://epgshare01.online/epgshare01/epg_ripper_ES1.xml.gz\n'
+    'https://epgshare01.online/epgshare01/epg_ripper_AR1.xml.gz\n'
+    'https://epgshare01.online/epgshare01/epg_ripper_MX1.xml.gz\n'
+    'https://epgshare01.online/epgshare01/epg_ripper_CO1.xml.gz\n'
+    'https://epgshare01.online/epgshare01/epg_ripper_CL1.xml.gz\n'
+    'https://epgshare01.online/epgshare01/epg_ripper_PE1.xml.gz\n'
+    'https://epgshare01.online/epgshare01/epg_ripper_DO1.xml.gz\n'
+    'https://epgshare01.online/epgshare01/epg_ripper_BR1.xml.gz';
+
 List<String> _splitPlaylistUrls(String value) => value
     .split(RegExp(r'[\r\n;]+'))
     .map((url) => url.trim())
@@ -117,15 +139,31 @@ bool isSafeHttpUrl(String value) {
 bool isDirectPlayableStream(String value) =>
     liveMediaFormatForUrl(value) != null;
 
+bool _isLegacyOttfoxWebUrl(String value) {
+  final host = Uri.tryParse(value.trim())?.host.toLowerCase() ?? '';
+  return host == 'ottfox.net' || host.endsWith('.ottfox.net');
+}
+
 class AutoLiveSettings {
   const AutoLiveSettings({
     required this.playlistUrl,
     required this.epgUrl,
     required this.authorizationConfirmed,
+    this.playlistText = '',
+    this.playlistTexts = const <String>[],
   });
   final String playlistUrl;
   final String epgUrl;
   final bool authorizationConfirmed;
+  /// M3U local copiada o exportada desde OTTFOX (compatibilidad anterior).
+  final String playlistText;
+  /// Biblioteca local de OTTFOX, guardada como listas independientes.
+  final List<String> playlistTexts;
+
+  List<String> get localPlaylistTexts => <String>{
+    ...playlistTexts.map((item) => item.trim()).where((item) => item.isNotEmpty),
+    if (playlistText.trim().isNotEmpty) playlistText.trim(),
+  }.toList(growable: false);
 
   List<String> get playlistUrls => _splitPlaylistUrls(playlistUrl);
   List<String> get epgUrls => _splitPlaylistUrls(epgUrl);
@@ -141,28 +179,59 @@ class AutoLiveSettings {
     final prefs = await SharedPreferences.getInstance();
     var playlist = prefs.getString(_playlistUrlKey) ?? defaultAutoLivePlaylistUrls;
     var epg = prefs.getString(_epgUrlKey) ?? defaultAutoLiveEpgUrl;
+    final playlistText = prefs.getString(_playlistTextKey) ?? '';
+    final playlistTexts = prefs.getStringList(_playlistTextsKey) ?? <String>[];
 
-    // Migra la configuración predeterminada anterior sin sobrescribir listas
-    // o guías personalizadas que el usuario haya guardado.
-    if (playlist.trim() == legacyDefaultAutoLivePlaylistUrls.trim()) {
+    // Actualiza una sola vez las instalaciones anteriores: incorpora las
+    // fuentes públicas incluidas, conserva URLs personales y descarta la
+    // dirección de la antigua página OTTFOX (no era una lista M3U).
+    final sourcesMigrated = prefs.getBool(_defaultSourcesMigratedKey) ?? false;
+    if (!sourcesMigrated) {
+      final defaults = _splitPlaylistUrls(defaultAutoLivePlaylistUrls);
+      final savedPlaylists = _splitPlaylistUrls(playlist)
+          .where((url) => isSafeHttpUrl(url) && !_isLegacyOttfoxWebUrl(url));
+      final prioritySources = defaults.where(
+        (url) => url.contains('raw.githubusercontent.com/Free-TV/IPTV/'),
+      );
+      playlist = <String>{
+        ...prioritySources,
+        ...savedPlaylists,
+        ...defaults,
+      }.join('\n');
+
+      final savedEpg = _splitPlaylistUrls(epg)
+          .where((url) => isSafeHttpUrl(url) && !_isLegacyOttfoxWebUrl(url));
+      epg = <String>{
+        ..._splitPlaylistUrls(defaultAutoLiveEpgUrl),
+        ...savedEpg,
+      }.join('\n');
+
+      await prefs.setString(_playlistUrlKey, playlist);
+      await prefs.setString(_epgUrlKey, epg);
+      await prefs.setBool(_defaultSourcesMigratedKey, true);
+    }
+
+    // Elimina páginas web e URLs inválidas, pero mantiene todas las fuentes
+    // M3U/EPG personales que sí sean direcciones HTTP/HTTPS.
+    final safePlaylists = _splitPlaylistUrls(playlist)
+        .where((url) => isSafeHttpUrl(url) && !_isLegacyOttfoxWebUrl(url))
+        .toList(growable: false);
+    if (safePlaylists.isEmpty) {
       playlist = defaultAutoLivePlaylistUrls;
       await prefs.setString(_playlistUrlKey, playlist);
+    } else if (safePlaylists.length != _splitPlaylistUrls(playlist).length) {
+      playlist = safePlaylists.join('\n');
+      await prefs.setString(_playlistUrlKey, playlist);
     }
-    if (epg.trim() == legacyDefaultAutoLiveEpgUrl.trim()) {
+
+    final safeEpg = _splitPlaylistUrls(epg)
+        .where((url) => isSafeHttpUrl(url) && !_isLegacyOttfoxWebUrl(url))
+        .toList(growable: false);
+    if (safeEpg.isEmpty) {
       epg = defaultAutoLiveEpgUrl;
       await prefs.setString(_epgUrlKey, epg);
-    }
-
-    // Recupera automáticamente la configuración integrada si una versión
-    // anterior dejó valores vacíos, incompletos o con URLs inválidas.
-    if (playlist.trim().isEmpty ||
-        !_splitPlaylistUrls(playlist).every(isSafeHttpUrl)) {
-      playlist = defaultAutoLivePlaylistUrls;
-      await prefs.setString(_playlistUrlKey, playlist);
-    }
-    if (epg.trim().isEmpty ||
-        !_splitPlaylistUrls(epg).every(isSafeHttpUrl)) {
-      epg = defaultAutoLiveEpgUrl;
+    } else if (safeEpg.length != _splitPlaylistUrls(epg).length) {
+      epg = safeEpg.join('\n');
       await prefs.setString(_epgUrlKey, epg);
     }
 
@@ -170,6 +239,8 @@ class AutoLiveSettings {
       playlistUrl: playlist,
       epgUrl: epg,
       authorizationConfirmed: true,
+      playlistText: playlistText,
+      playlistTexts: playlistTexts,
     );
   }
 
@@ -177,6 +248,8 @@ class AutoLiveSettings {
     required String playlistUrl,
     required String epgUrl,
     required bool authorizationConfirmed,
+    String? playlistText,
+    List<String>? playlistTexts,
   }) async {
     final playlist = _splitPlaylistUrls(playlistUrl).join('\n');
     final epg = _splitPlaylistUrls(epgUrl).join('\n');
@@ -188,9 +261,32 @@ class AutoLiveSettings {
         !epgUrls.every(isSafeHttpUrl)) {
       throw const FormatException('Cada lista M3U y cada guía EPG deben tener una dirección HTTP o HTTPS válida.');
     }
+    final localPlaylist = playlistText?.trim();
+    final localPlaylists = <String>{
+      if (playlistTexts != null)
+        ...playlistTexts.map((item) => item.trim()).where((item) => item.isNotEmpty),
+      if (localPlaylist != null && localPlaylist.isNotEmpty) localPlaylist,
+    }.toList(growable: false);
+    if (localPlaylists.any((item) => item.length > 3 * 1024 * 1024)) {
+      throw const FormatException('Una lista OTTFOX supera el límite de 3 MB. Divide esa lista antes de importarla.');
+    }
+    final totalLocalBytes = localPlaylists.fold<int>(0, (total, item) => total + utf8.encode(item).length);
+    if (totalLocalBytes > 12 * 1024 * 1024) {
+      throw const FormatException('La biblioteca OTTFOX supera el límite local de 12 MB. Divide o reduce las listas para importarlas por partes.');
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_playlistUrlKey, playlist);
     await prefs.setString(_epgUrlKey, epg);
+    if (playlistTexts != null || localPlaylist != null) {
+      if (localPlaylists.isEmpty) {
+        await prefs.remove(_playlistTextsKey);
+      } else {
+        await prefs.setStringList(_playlistTextsKey, localPlaylists);
+      }
+      // Las listas nuevas se guardan en la colección v2 para permitir varias
+      // listas sin sobrescribir el M3U importado anteriormente.
+      await prefs.setString(_playlistTextKey, '');
+    }
     await prefs.setBool(_authorizedKey, true);
   }
 
@@ -200,6 +296,8 @@ class AutoLiveSettings {
     // inmediatamente después de que el usuario pulse Borrar.
     await prefs.setString(_playlistUrlKey, '');
     await prefs.setString(_epgUrlKey, '');
+    await prefs.setString(_playlistTextKey, '');
+    await prefs.remove(_playlistTextsKey);
     await prefs.setBool(_authorizedKey, false);
   }
 }
@@ -418,9 +516,11 @@ class M3uChannel {
     this.logo = '',
     this.language = '',
     this.country = '',
+    this.sourceUrl = '',
   });
   final String name;
   final String url;
+  final String sourceUrl;
   final String tvgId;
   final String tvgName;
   final String group;
@@ -498,9 +598,17 @@ class AutoLiveCatalog {
 class AutomaticLiveService {
   AutomaticLiveService({http.Client? client}) : _client = client ?? http.Client();
   final http.Client _client;
+  bool _disposed = false;
+
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _client.close();
+  }
   AutoLiveCatalog? _cachedCatalog;
   DateTime? _cachedAt;
   String? _cachedPlaylist;
+  String? _cachedPlaylistText;
   String? _cachedEpg;
   final Map<String, ({bool available, int quality, DateTime checkedAt})> _probeCache =
       <String, ({bool available, int quality, DateTime checkedAt})>{};
@@ -662,41 +770,86 @@ class AutomaticLiveService {
   }
 
   Future<AutoLiveCatalog> loadCatalog({
-    required String playlistUrl, required String epgUrl,
+    required String playlistUrl,
+    required String epgUrl,
+    String playlistText = '',
+    List<String> playlistTexts = const <String>[],
     bool forceRefresh = false,
+    int downloadBatchSize = 2,
+    Duration batchPause = const Duration(milliseconds: 160),
+    int maxPlaylistBytes = 8 * 1024 * 1024,
+    int maxEpgBytes = 12 * 1024 * 1024,
+    void Function(String phase, int completed, int total)? onProgress,
+    void Function(List<M3uChannel> channels)? onChannelsLoaded,
+    void Function(String url, Object error)? onSourceError,
   }) async {
     final playlistUrls = _splitPlaylistUrls(playlistUrl);
     final epgUrls = _splitPlaylistUrls(epgUrl);
-    if (playlistUrls.isEmpty ||
+    final localPlaylistTexts = <String>{
+      if (playlistText.trim().isNotEmpty) playlistText.trim(),
+      ...playlistTexts.map((item) => item.trim()).where((item) => item.isNotEmpty),
+    }.toList(growable: false);
+    final localPlaylistCacheKey = jsonEncode(localPlaylistTexts);
+    if ((playlistUrls.isEmpty && localPlaylistTexts.isEmpty) ||
         !playlistUrls.every(isSafeHttpUrl) ||
-        epgUrls.isEmpty ||
         !epgUrls.every(isSafeHttpUrl)) {
-      throw const FormatException('Configura listas M3U y guías XMLTV/EPG con direcciones HTTP o HTTPS válidas.');
+      throw const FormatException('Configura al menos una lista M3U y utiliza direcciones HTTP o HTTPS válidas para las guías EPG.');
     }
+    final int effectiveBatchSize = downloadBatchSize.clamp(1, 4).toInt();
     final playlistCacheKey = playlistUrls.join('\n');
     final epgCacheKey = epgUrls.join('\n');
     final now = DateTime.now();
     final cached = _cachedCatalog;
     if (!forceRefresh && cached != null &&
-        _cachedPlaylist == playlistCacheKey && _cachedEpg == epgCacheKey &&
+        _cachedPlaylist == playlistCacheKey &&
+        _cachedPlaylistText == localPlaylistCacheKey && _cachedEpg == epgCacheKey &&
         _cachedAt != null && now.difference(_cachedAt!) < const Duration(minutes: 5)) {
       return cached;
     }
 
-    // Se descargan tres listas a la vez para limitar memoria y conexiones.
-    // Una lista caída no bloquea el resto del catálogo.
+    // Se descargan hasta cuatro listas a la vez. Los canales se publican
+    // por lote antes de procesar EPG, para que la pantalla no espere a las guías.
+    // El análisis M3U/XMLTV se ejecuta en isolates y no bloquea la interfaz.
     final channelsByUrl = <String, M3uChannel>{};
-    for (var batchStart = 0; batchStart < playlistUrls.length; batchStart += 3) {
-      final batch = playlistUrls.skip(batchStart).take(3).toList(growable: false);
+    final playlistFailures = <String>[];
+    for (var localIndex = 0; localIndex < localPlaylistTexts.length; localIndex++) {
+      final localText = localPlaylistTexts[localIndex];
+      final sourceLabel = 'Lista local ${localIndex + 1}';
+      try {
+        if (localText.length > maxPlaylistBytes ||
+            !localText.toUpperCase().startsWith('#EXTM3U')) {
+          throw const FormatException('La entrada guardada no es M3U o supera el tamaño permitido.');
+        }
+        final localChannels = await Isolate.run(
+          () => parseM3u(localText, sourceUrl: sourceLabel),
+        );
+        if (localChannels.isEmpty) {
+          throw const FormatException('La M3U no contiene enlaces directos HLS, DASH, TS o MP4 compatibles.');
+        }
+        for (final channel in localChannels) {
+          channelsByUrl.putIfAbsent(channel.url, () => channel);
+        }
+        onChannelsLoaded?.call(List<M3uChannel>.unmodifiable(channelsByUrl.values));
+      } catch (error) {
+        playlistFailures.add(sourceLabel);
+        onSourceError?.call(sourceLabel, error);
+      }
+      onProgress?.call('LOCAL', localIndex + 1, localPlaylistTexts.length);
+      if (batchPause > Duration.zero) await Future<void>.delayed(batchPause);
+    }
+    for (var batchStart = 0; batchStart < playlistUrls.length; batchStart += effectiveBatchSize) {
+      final batch = playlistUrls.skip(batchStart).take(effectiveBatchSize).toList(growable: false);
       final playlistBodies = await Future.wait<String?>(
         batch.map((url) async {
           try {
             return await _downloadText(
               url,
-              maxBytes: 8 * 1024 * 1024,
+              maxBytes: maxPlaylistBytes,
               timeout: const Duration(seconds: 12),
             );
-          } catch (_) {
+          } catch (error) {
+            playlistFailures.add(url);
+            onSourceError?.call(url, error);
             return null;
           }
         }),
@@ -707,30 +860,58 @@ class AutomaticLiveService {
         // Algunas M3U contienen rutas relativas; se resuelven contra la
         // dirección de la propia lista antes de pasar la URL al reproductor.
         final baseUri = Uri.tryParse(batch[index]);
-        for (final channel in parseM3u(body, baseUri: baseUri)) {
-          channelsByUrl.putIfAbsent(channel.url, () => channel);
+        try {
+          final parsedChannels = await Isolate.run(
+            () => parseM3u(body, baseUri: baseUri, sourceUrl: batch[index]),
+          );
+          if (parsedChannels.isEmpty) {
+            playlistFailures.add(batch[index]);
+            onSourceError?.call(
+              batch[index],
+              const FormatException('La lista no contiene enlaces directos compatibles.'),
+            );
+            continue;
+          }
+          for (final channel in parsedChannels) {
+            channelsByUrl.putIfAbsent(channel.url, () => channel);
+          }
+        } catch (error) {
+          // Una lista dañada no impide continuar con las demás fuentes.
+          playlistFailures.add(batch[index]);
+          onSourceError?.call(batch[index], error);
         }
       }
+      if (channelsByUrl.isNotEmpty) {
+        onChannelsLoaded?.call(
+          List<M3uChannel>.unmodifiable(channelsByUrl.values),
+        );
+      }
+      onProgress?.call('M3U', batchStart + batch.length, playlistUrls.length);
+      if (batchPause > Duration.zero) await Future<void>.delayed(batchPause);
     }
     final channels = channelsByUrl.values.toList(growable: false);
     if (channels.isEmpty) {
-      throw const FormatException('Ninguna lista M3U respondió con señales HLS, DASH o vídeo directo compatibles.');
+      final failedSources = playlistFailures.take(3).join(', ');
+      throw FormatException(
+        'No se pudo cargar ningún canal. Revisa las direcciones M3U, el acceso del proveedor o que incluyan enlaces HLS/DASH/TS/MP4 directos.'
+        '${failedSources.isEmpty ? '' : ' Fuentes sin respuesta o sin enlaces compatibles: $failedSources'}',
+      );
     }
 
-    // Se fusionan varias guías. Si una EPG no responde o publica XML inválido,
-    // las demás siguen aportando programas. Las guías regionales tienen un
-    // límite menor para cuidar la memoria del teléfono.
+    // Las listas M3U pueden explorarse aunque todavía no se haya añadido EPG.
+    // Cuando existen guías, se fusionan en lotes; un fallo de una guía no
+    // impide mostrar los canales importados correctamente.
     final programmesByKey = <String, XmltvProgramme>{};
-    // Descarga por lotes pequeños: varias guías pueden responder a la vez, pero
-    // nunca se abren todas las descargas grandes simultáneamente.
-    for (var batchStart = 0; batchStart < epgUrls.length; batchStart += 3) {
-      final batch = epgUrls.skip(batchStart).take(3).toList(growable: false);
+    // XMLTV puede consumir bastante memoria. Se descarga por lotes pequeños
+    // y cada documento se analiza fuera del hilo de interfaz.
+    for (var batchStart = 0; batchStart < epgUrls.length; batchStart += effectiveBatchSize) {
+      final batch = epgUrls.skip(batchStart).take(effectiveBatchSize).toList(growable: false);
       final bodies = await Future.wait<String?>(
         batch.map((url) async {
           try {
             return await _downloadText(
               url,
-              maxBytes: 20 * 1024 * 1024,
+              maxBytes: maxEpgBytes,
               timeout: const Duration(seconds: 12),
             );
           } catch (_) {
@@ -740,7 +921,8 @@ class AutomaticLiveService {
       );
       for (final epgBody in bodies.whereType<String>()) {
         try {
-          for (final programme in parseXmltv(epgBody)) {
+          final parsedProgrammes = await Isolate.run(() => parseXmltv(epgBody));
+          for (final programme in parsedProgrammes) {
             final key = <String>[
               programme.channelId.toLowerCase(),
               programme.title.toLowerCase().trim(),
@@ -753,16 +935,15 @@ class AutomaticLiveService {
           // Una guía inválida no interrumpe las siguientes fuentes.
         }
       }
+      onProgress?.call('EPG', batchStart + batch.length, epgUrls.length);
+      if (batchPause > Duration.zero) await Future<void>.delayed(batchPause);
     }
     final programmes = programmesByKey.values.toList(growable: false);
-    if (programmes.isEmpty) {
-      throw const FormatException('Ninguna guía EPG/XMLTV respondió con programas legibles.');
-    }
-
     final catalog = AutoLiveCatalog(channels: channels, programmes: programmes);
     _cachedCatalog = catalog;
     _cachedAt = now;
     _cachedPlaylist = playlistCacheKey;
+    _cachedPlaylistText = localPlaylistCacheKey;
     _cachedEpg = epgCacheKey;
     return catalog;
   }
@@ -797,32 +978,47 @@ class AutomaticLiveService {
       }
       compressed.add(chunk);
     }
-    var bytes = compressed.takeBytes();
-    if (bytes.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b) {
+    final bytes = compressed.takeBytes();
+    return Isolate.run(() async {
       try {
-        final expanded = BytesBuilder(copy: false);
-        var expandedLength = 0;
-        await for (final chunk in gzip.decoder
-            .bind(Stream<List<int>>.value(bytes))
-            .timeout(timeout)) {
-          expandedLength += chunk.length;
-          if (expandedLength > maxBytes) {
-            throw const FormatException('El XML descomprimido supera el límite permitido.');
+        List<int> decodedBytes = bytes;
+        if (decodedBytes.length >= 2 &&
+            decodedBytes[0] == 0x1f &&
+            decodedBytes[1] == 0x8b) {
+          final expanded = BytesBuilder(copy: false);
+          var expandedLength = 0;
+          await for (final chunk in gzip.decoder
+              .bind(Stream<List<int>>.value(decodedBytes))) {
+            expandedLength += chunk.length;
+            if (expandedLength > maxBytes) {
+              throw const FormatException(
+                'El archivo descomprimido supera el límite permitido.',
+              );
+            }
+            expanded.add(chunk);
           }
-          expanded.add(chunk);
+          decodedBytes = expanded.takeBytes();
         }
-        bytes = expanded.takeBytes();
-      } catch (error) {
-        if (error is FormatException) rethrow;
-        throw const FormatException('No se pudo descomprimir la fuente GZIP.');
+        final body = utf8.decode(decodedBytes, allowMalformed: true);
+        if (body.trim().isEmpty) {
+          throw const FormatException('La fuente está vacía.');
+        }
+        return body;
+      } on FormatException {
+        rethrow;
+      } catch (_) {
+        throw const FormatException(
+          'No se pudo descomprimir o decodificar la fuente.',
+        );
       }
-    }
-    final body = utf8.decode(bytes, allowMalformed: true);
-    if (body.trim().isEmpty) throw const FormatException('La fuente está vacía.');
-    return body;
+    });
   }
 
-  static List<M3uChannel> parseM3u(String body, {Uri? baseUri}) {
+  static List<M3uChannel> parseM3u(
+    String body, {
+    Uri? baseUri,
+    String sourceUrl = '',
+  }) {
     final lines = body.replaceAll('\r', '').split('\n');
     final result = <M3uChannel>[];
     Map<String, String>? pending;
@@ -835,8 +1031,11 @@ class AutomaticLiveService {
         final metadata = comma >= 0 ? line.substring(0, comma) : line;
         pendingName = comma >= 0 ? line.substring(comma + 1).trim() : '';
         final attributes = <String, String>{};
-        for (final match in RegExp(r'([\w-]+)="([^"]*)"').allMatches(metadata)) {
-          attributes[match.group(1)!.toLowerCase()] = match.group(2)!.trim();
+        final attributePattern =
+            RegExp(r"""([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')""");
+        for (final match in attributePattern.allMatches(metadata)) {
+          attributes[match.group(1)!.toLowerCase()] =
+              (match.group(2) ?? match.group(3) ?? '').trim();
         }
         pending = attributes;
         continue;
@@ -864,11 +1063,63 @@ class AutomaticLiveService {
         logo: data['tvg-logo'] ?? '',
         language: data['tvg-language'] ?? data['language'] ?? '',
         country: data['tvg-country'] ?? data['country'] ?? '',
+        sourceUrl: sourceUrl,
       ));
       pending = null;
       pendingName = '';
     }
     return result;
+  }
+
+  static String _m3uAttribute(String value) => value
+      .replaceAll('&', '&amp;')
+      .replaceAll('"', '&quot;')
+      .replaceAll('\r', ' ')
+      .replaceAll('\n', ' ')
+      .trim();
+
+  static String _m3uSingleLine(String value) =>
+      value.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+
+  /// Combina los canales directos sin duplicados y conserva referencias EPG.
+  static String buildMergedM3u(
+    AutoLiveCatalog catalog, {
+    List<String> epgUrls = const <String>[],
+  }) {
+    final guides = <String>{
+      for (final url in epgUrls)
+        if (isSafeHttpUrl(url)) url.trim(),
+    }.toList(growable: false);
+    final guideHeader = guides.isEmpty
+        ? ''
+        : ' url-tvg="${_m3uAttribute(guides.join(','))}"'
+          ' x-tvg-url="${_m3uAttribute(guides.join(','))}"';
+    final output = StringBuffer('#EXTM3U$guideHeader\n');
+    final seen = <String>{};
+    for (final channel in catalog.channels) {
+      if (!isDirectPlayableStream(channel.url) || !seen.add(channel.url)) continue;
+      final attributes = <String, String>{
+        if (channel.tvgId.trim().isNotEmpty) 'tvg-id': channel.tvgId,
+        if (channel.tvgName.trim().isNotEmpty) 'tvg-name': channel.tvgName,
+        if (channel.logo.trim().isNotEmpty) 'tvg-logo': channel.logo,
+        'group-title': channel.group.trim().isNotEmpty ? channel.group : 'Deportes',
+        if (channel.language.trim().isNotEmpty) 'tvg-language': channel.language,
+        if (channel.country.trim().isNotEmpty) 'tvg-country': channel.country,
+      };
+      final metadata = attributes.entries
+          .map((entry) => '${entry.key}="${_m3uAttribute(entry.value)}"')
+          .join(' ');
+      final name = _m3uSingleLine(channel.name);
+      output
+        ..write('#EXTINF:-1')
+        ..write(metadata.isEmpty ? '' : ' $metadata')
+        ..write(',')
+        ..write(name.isEmpty ? 'Canal' : name)
+        ..write('\n')
+        ..write(channel.url.trim())
+        ..write('\n');
+    }
+    return output.toString();
   }
 
   static List<XmltvProgramme> parseXmltv(String body) {
@@ -926,6 +1177,8 @@ class AutomaticLiveService {
     if (!settings.isConfigured) return <ScheduledLiveEvent>[];
     final catalog = await loadCatalog(
       playlistUrl: settings.playlistUrl, epgUrl: settings.epgUrl,
+      playlistText: settings.playlistText,
+      playlistTexts: settings.playlistTexts,
       forceRefresh: forceRefresh,
     );
     final byId = <String, List<M3uChannel>>{};
@@ -1025,15 +1278,15 @@ class AutomaticLiveService {
       // Solo se programa una fuente cuya lista de reproducción respondió
       // correctamente a la comprobación. No se asignan señales no verificadas.
       if (verifiedCandidates.isEmpty) continue;
-      // Entre las señales disponibles, se conserva una sola: la de mayor
-      // calidad anunciada y confirmada por la lista HLS.
+      // Se conserva la señal principal y hasta tres alternativas que también
+      // superaron la comprobación de disponibilidad del manifiesto o medio.
       verifiedCandidates.sort((a, b) {
         final language = b.languagePriority.compareTo(a.languagePriority);
         return language != 0
             ? language
             : b.qualityScore.compareTo(a.qualityScore);
       });
-      final sources = <ScheduledLiveSource>[verifiedCandidates.first];
+      final sources = verifiedCandidates.take(4).toList(growable: false);
       final programmeEnd = sources.map((s) => s.programmeEndsAt).reduce(
         (a, b) => a.isAfter(b) ? a : b,
       );

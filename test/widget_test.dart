@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:deporte_total_360/agenda_screen.dart';
 import 'package:deporte_total_360/main.dart';
+import 'package:deporte_total_360/ottfox_workspace_screen.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sports_statistics_screen.dart';
 
@@ -43,14 +44,49 @@ void main() {
     sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
   });
 
-  testWidgets('Ajustes expone un acceso visible al servidor deportivo', (tester) async {
+  testWidgets('el menú oculto DAMIAN.APK abre directamente el destino secreto', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await tester.pumpWidget(
-      const MaterialApp(home: SettingsScreen()),
+      MaterialApp(
+        home: SettingsScreen(
+          secretMenuBuilder: (_) => Scaffold(
+            appBar: AppBar(title: const Text('REPRODUCTOR IPTV · LISTAS Y CANALES')),
+            body: const Text('ÚNICO ACCESO DEL MENÚ SECRETO'),
+          ),
+        ),
+      ),
     );
     await tester.pump();
 
-    expect(find.text('Servidor de estadísticas'), findsOneWidget);
+    expect(find.text('Servidor de estadísticas'), findsNothing);
+    expect(find.text('DAMIAN.APK'), findsOneWidget);
+    for (var tap = 0; tap < 10; tap++) {
+      await tester.tap(find.text('DAMIAN.APK'));
+    }
+    await tester.pumpAndSettle();
+
+    expect(find.text('REPRODUCTOR IPTV · LISTAS Y CANALES'), findsOneWidget);
+    expect(find.text('ÚNICO ACCESO DEL MENÚ SECRETO'), findsOneWidget);
+    expect(find.text('ABRIR REPRODUCTOR Y EXTRACTOR IPTV'), findsNothing);
+    expect(find.text('CODOPLAYER · REPRODUCTOR WEB'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('la pantalla del menú secreto abre el espacio integrado de OTTFOX', (tester) async {
+    Widget? destination;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            destination = const DeveloperSettingsScreen().build(context);
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+    expect(destination, isA<OttfoxWorkspaceScreen>());
+    expect(OttfoxWorkspaceScreen.initialUrl, 'https://ottfox.net/es/iptv-playlist-editor/');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

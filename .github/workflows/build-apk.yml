@@ -9,6 +9,7 @@ on:
     branches:
       - main
       - integration/zona-live-catalog-20261103
+      - feature/iptv-source-manager-failover
     paths:
       - 'lib/**'
       - 'test/**'

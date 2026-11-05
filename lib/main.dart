@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'automatic_live_screen.dart';
+import 'ottfox_workspace_screen.dart';
 
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
@@ -1106,7 +1107,13 @@ class _HomeAtmospherePainter extends CustomPainter {
 }
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({
+    super.key,
+    this.secretMenuBuilder,
+  });
+
+  /// Permite probar la navegación secreta sin inicializar un WebView nativo.
+  final WidgetBuilder? secretMenuBuilder;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -1187,7 +1194,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _signatureTapCount = 0;
       Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
-          builder: (_) => const DeveloperSettingsScreen(),
+          builder: widget.secretMenuBuilder ??
+              (_) => const DeveloperSettingsScreen(),
         ),
       );
     }
@@ -1352,48 +1360,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(height: 13),
-            _settingsCard(
-              border: appBlue,
-              child: Material(
-                color: Colors.transparent,
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const CircleAvatar(
-                    backgroundColor: Color(0x332D8CFF),
-                    child: Icon(Icons.cloud_sync_rounded, color: appCyan),
-                  ),
-                  title: Text(
-                    appText(
-                      'Servidor de estadísticas',
-                      'Statistics server',
-                      'Servidor de estatísticas',
-                      'Serveur des statistiques',
-                    ),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
-                    ),
-                  ),
-                  subtitle: Text(
-                    appText(
-                      'Comprobar la conexión del servicio de estadísticas y configurar el Worker.',
-                      'Check the statistics service and configure the public Worker URL.',
-                      'Verifique a conexão do serviço de estatísticas e configure o Worker.',
-                      'Vérifier le service de statistiques et configurer le Worker.',
-                    ),
-                    style: const TextStyle(color: appMuted, fontSize: 11, height: 1.4),
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded, color: appCyan),
-                  onTap: () => Navigator.of(context).push<void>(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const DeveloperSettingsScreen(),
-                    ),
-                  ),
-                ),
               ),
             ),
             const SizedBox(height: 13),
@@ -1572,239 +1538,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 
-class DeveloperSettingsScreen extends StatefulWidget {
+class DeveloperSettingsScreen extends StatelessWidget {
   const DeveloperSettingsScreen({super.key});
 
   @override
-  State<DeveloperSettingsScreen> createState() => _DeveloperSettingsScreenState();
-}
-
-class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
-  late final TextEditingController _apiUrlController;
-  bool _testing = false;
-  bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _apiUrlController = TextEditingController(text: sportsApiBaseUrl.value);
-  }
-
-  @override
-  void dispose() {
-    _apiUrlController.dispose();
-    super.dispose();
-  }
-
-  void _showMessage(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-  }
-
-  Future<void> _testConnection() async {
-    final url = SportsApiService.normalizeBaseUrl(_apiUrlController.text);
-    if (url == null) {
-      _showMessage(appText('Introduce una URL HTTPS válida del Worker.', 'Enter a valid HTTPS Worker URL.', 'Digite uma URL HTTPS válida do Worker.', 'Saisissez une URL HTTPS valide du Worker.'));
-      return;
-    }
-    setState(() => _testing = true);
-    try {
-      await SportsApiService().checkHealth(url);
-      _showMessage('Worker operativo. API-Sports queda disponible únicamente para Estadísticas.');
-    } catch (error) {
-      _showMessage('La prueba del servicio de estadísticas falló: $error');
-    } finally {
-      if (mounted) setState(() => _testing = false);
-    }
-  }
-
-  Future<void> _saveApiUrl() async {
-    final url = SportsApiService.normalizeBaseUrl(_apiUrlController.text);
-    if (url == null) {
-      _showMessage('Introduce una URL HTTPS válida del Worker.');
-      return;
-    }
-
-    setState(() => _saving = true);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('sports_api_base_url', url);
-      sportsApiBaseUrl.value = url;
-      _apiUrlController.text = url;
-      _showMessage(appText('Dirección de la API guardada.', 'API address saved.', 'Endereço da API salvo.', 'Adresse de l’API enregistrée.'));
-    } catch (_) {
-      _showMessage(appText('No se pudo guardar la dirección. Inténtalo de nuevo.', 'Could not save the address. Try again.', 'Não foi possível salvar o endereço. Tente novamente.', 'Impossible d’enregistrer l’adresse. Réessayez.'));
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  Future<void> _clearApiUrl() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('sports_api_base_url');
-      sportsApiBaseUrl.value = '';
-      _apiUrlController.clear();
-      _showMessage(appText('Dirección de la API eliminada.', 'API address cleared.', 'Endereço da API removido.', 'Adresse de l’API supprimée.'));
-    } catch (_) {
-      _showMessage(appText('No se pudo eliminar la dirección guardada.', 'Could not clear the saved address.', 'Não foi possível remover o endereço salvo.', 'Impossible d’effacer l’adresse enregistrée.'));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: appBg,
-      appBar: AppBar(
-        title: Text(
-          appText('SERVIDOR Y DATOS DEPORTIVOS', 'SPORTS DATA SERVER', 'SERVIDOR E DADOS ESPORTIVOS', 'SERVEUR ET DONNÉES SPORTIVES'),
-          style: TextStyle(
-            color: appCyan,
-            fontWeight: FontWeight.w900,
-            fontSize: 13,
-          ),
-        ),
-      ),
-      body: AppBackdrop(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: <Widget>[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: appPanel,
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: appCyan.withAlpha(180)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      const Icon(Icons.developer_mode_rounded, color: appCyan),
-                      SizedBox(width: 9),
-                      Expanded(
-                        child: Text(
-                          appText('CONEXIÓN DEL SERVIDOR DEPORTIVO', 'SPORTS SERVER CONNECTION', 'CONEXÃO DO SERVIDOR ESPORTIVO', 'CONNEXION AU SERVEUR SPORTIF'),
-                          style: TextStyle(
-                            color: appCyan,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    appText('Introduce la dirección HTTPS pública del Cloudflare Worker. No pegues aquí la clave de API.', 'Enter the public HTTPS URL of your Cloudflare Worker. Do not paste your API key here.', 'Digite o endereço HTTPS público do Cloudflare Worker. Não cole sua chave de API aqui.', 'Saisissez l’URL HTTPS publique de votre Cloudflare Worker. Ne collez pas votre clé API ici.'),
-                    style: TextStyle(color: appMuted, height: 1.5, fontSize: 12),
-                  ),
-                  const SizedBox(height: 13),
-                  TextField(
-                    controller: _apiUrlController,
-                    keyboardType: TextInputType.url,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    decoration: InputDecoration(
-                      labelText: appText('URL del servidor API', 'API server URL', 'URL do servidor API', 'URL du serveur API'),
-                      hintText: 'https://tu-worker.tu-cuenta.workers.dev',
-                      prefixIcon: Icon(Icons.cloud_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _testing ? null : _testConnection,
-                      icon: _testing
-                          ? const SizedBox(
-                              width: 17,
-                              height: 17,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.network_check_rounded),
-                      label: Text(_testing ? appText('COMPROBANDO…', 'CHECKING…', 'VERIFICANDO…', 'VÉRIFICATION…') : appText('PROBAR CONEXIÓN', 'TEST CONNECTION', 'TESTAR CONEXÃO', 'TESTER LA CONNEXION')),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: appCyan,
-                        side: const BorderSide(color: appCyan),
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _saving ? null : _saveApiUrl,
-                      icon: const Icon(Icons.save_rounded),
-                      label: Text(_saving ? appText('GUARDANDO…', 'SAVING…', 'SALVANDO…', 'ENREGISTREMENT…') : appText('GUARDAR SERVIDOR', 'SAVE SERVER', 'SALVAR SERVIDOR', 'ENREGISTRER LE SERVEUR')),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: appGreen,
-                        foregroundColor: appBg,
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                      ),
-                    ),
-                  ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: _clearApiUrl,
-                      icon: const Icon(Icons.delete_outline_rounded, size: 17),
-                      label: Text(appText('Borrar dirección guardada', 'Clear saved address', 'Apagar endereço salvo', 'Effacer l’adresse enregistrée')),
-                      style: TextButton.styleFrom(foregroundColor: appPink),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: appPanel,
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: appPink.withAlpha(180)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const <Widget>[
-                  Row(children: <Widget>[
-                    Icon(Icons.auto_awesome_rounded, color: appPink),
-                    SizedBox(width: 9),
-                    Expanded(child: Text(
-                      'FUENTES DEPORTIVAS AUTOMÁTICAS',
-                      style: TextStyle(color: appPink, fontWeight: FontWeight.w900, fontSize: 12),
-                    )),
-                  ]),
-                  SizedBox(height: 9),
-                  Text(
-                    'Las listas de canales y guías de programación se descargan y actualizan automáticamente. Primero se priorizan señales en español; cuando no hay una señal española disponible, se prueban fuentes internacionales. Las direcciones y el catálogo permanecen ocultos en la interfaz y no requieren validación manual del usuario.',
-                    style: TextStyle(color: appMuted, fontSize: 11, height: 1.45),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: appPanel2,
-                borderRadius: BorderRadius.circular(13),
-                border: Border.all(color: appGreen.withAlpha(150)),
-              ),
-              child: Text(
-                appText('SEGURIDAD: la clave APISPORTS_KEY permanece como secreto del Worker en Cloudflare. La aplicación guarda solo la URL pública. El acceso directo desde Ajustes y el atajo de diez toques abren esta misma pantalla; ninguno sustituye autenticación real.', 'SECURITY: APISPORTS_KEY remains a Cloudflare Worker secret. The app stores only the public URL. The Settings shortcut and the ten-tap shortcut open this same screen; neither replaces real authentication.', 'SEGURANÇA: APISPORTS_KEY permanece como segredo do Worker no Cloudflare. O app salva apenas a URL pública. O atalho em Configurações e o atalho de dez toques abrem esta mesma tela; nenhum substitui autenticação real.', 'SÉCURITÉ : APISPORTS_KEY reste un secret du Worker Cloudflare. L’application ne conserve que l’URL publique. Le raccourci des paramètres et celui de dix pressions ouvrent le même écran ; aucun ne remplace une véritable authentification.'),
-                style: TextStyle(color: appMuted, fontSize: 11, height: 1.5),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const OttfoxWorkspaceScreen();
 }
 
 class DonationsScreen extends StatelessWidget {
