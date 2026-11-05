@@ -59,8 +59,6 @@ void main() {
       throwsFormatException,
     );
   });
-}
-
 
   test('canal conserva la etiqueta de idioma inglés', () {
     final channel = SportsChannel.fromJson(<String, dynamic>{
@@ -83,3 +81,4 @@ void main() {
     });
     expect(channel.language, 'unknown');
   });
+}
