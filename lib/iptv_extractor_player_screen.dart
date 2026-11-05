@@ -191,6 +191,7 @@ Future<void> addIptvStudioPlaylistUrls(Iterable<String> values) async {
   }
   final prefs = await SharedPreferences.getInstance();
   await prefs.setStringList(_studioUrlsKey, urls);
+  iptvSportsCatalogVersion.value++;
 }
 
 Future<Set<String>> loadIptvStudioHiddenChannelIds() async {
@@ -245,6 +246,7 @@ Future<void> setIptvStudioChannelHidden(
     _studioHiddenChannelRecordsKey,
     records.map((item) => jsonEncode(item.toJson())).toList(),
   );
+  iptvSportsCatalogVersion.value++;
 }
 
 
