@@ -88,6 +88,16 @@ jobs:
           path: ~/.android/debug.keystore
           key: android-debug-keystore-v1-${{ github.repository }}
 
+      - name: Verificar llave persistente para Google OAuth
+        run: |
+          set -Eeuo pipefail
+          KEYSTORE="$HOME/.android/debug.keystore"
+          test -s "$KEYSTORE" || {
+            echo "::error::No se pudo restaurar la llave de firma Android."
+            exit 1
+          }
+          keytool -list -keystore "$KEYSTORE" -storepass android -alias androiddebugkey
+
       - name: Habilitar Internet en el APK release
         run: |
           python3 - <<'PY'
