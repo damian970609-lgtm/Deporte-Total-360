@@ -655,45 +655,50 @@ class _HomeWordmark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: <Widget>[
-        Container(
-          width: 22,
-          height: 2,
-          decoration: BoxDecoration(
-            color: appCyan,
-            borderRadius: BorderRadius.circular(2),
-            boxShadow: <BoxShadow>[
-              BoxShadow(color: appCyan.withAlpha(150), blurRadius: 8),
-            ],
-          ),
+    return Center(
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Container(
+              width: 22,
+              height: 2,
+              decoration: BoxDecoration(
+                color: appCyan,
+                borderRadius: BorderRadius.circular(2),
+                boxShadow: <BoxShadow>[
+                  BoxShadow(color: appCyan.withAlpha(150), blurRadius: 8),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              tr('title'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: appCyan,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2.1,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              width: 22,
+              height: 2,
+              decoration: BoxDecoration(
+                color: appPink,
+                borderRadius: BorderRadius.circular(2),
+                boxShadow: <BoxShadow>[
+                  BoxShadow(color: appPink.withAlpha(150), blurRadius: 8),
+                ],
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 10),
-        Text(
-          tr('title'),
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: appCyan,
-            fontSize: 13,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 2.1,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Container(
-          width: 22,
-          height: 2,
-          decoration: BoxDecoration(
-            color: appPink,
-            borderRadius: BorderRadius.circular(2),
-            boxShadow: <BoxShadow>[
-              BoxShadow(color: appPink.withAlpha(150), blurRadius: 8),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
