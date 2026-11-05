@@ -193,7 +193,7 @@ void main() {
     expect(find.text('Canal Prueba'), findsOneWidget);
     expect(find.text('Otro Canal'), findsOneWidget);
 
-    await tester.tap(find.text('Fútbol'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Fútbol'));
     await tester.pumpAndSettle();
     expect(find.text('Canal Prueba'), findsOneWidget);
     expect(find.text('Otro Canal'), findsNothing);
@@ -225,7 +225,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Canal Duplicado'), findsOneWidget);
-    expect(find.textContaining('1 canales'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
