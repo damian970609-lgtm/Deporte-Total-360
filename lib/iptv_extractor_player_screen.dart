@@ -27,6 +27,7 @@ const String _studioFavoritesKey = 'dt360_secret_iptv_favorite_urls_v1';
 const String _studioDefaultAddedKey = 'dt360_iptv_studio_default_added_v1';
 const String _studioSportsChannelsKey = 'dt360_sports_selected_channels_v1';
 const String _studioHiddenChannelsKey = 'dt360_hidden_sports_channel_ids_v1';
+const String _studioHiddenChannelRecordsKey = 'dt360_hidden_sports_channel_records_v1';
 
 bool _isHttpMediaUrl(String value) {
   final uri = Uri.tryParse(value.trim());
@@ -197,20 +198,53 @@ Future<Set<String>> loadIptvStudioHiddenChannelIds() async {
   return (prefs.getStringList(_studioHiddenChannelsKey) ?? <String>[]).toSet();
 }
 
+Future<List<IptvExtractedChannel>> loadIptvStudioHiddenChannels() async {
+  final prefs = await SharedPreferences.getInstance();
+  final records =
+      prefs.getStringList(_studioHiddenChannelRecordsKey) ?? <String>[];
+  final channels = <IptvExtractedChannel>[];
+  for (final record in records) {
+    try {
+      final decoded = jsonDecode(record);
+      if (decoded is! Map) continue;
+      final channel = IptvExtractedChannel.fromJson(
+        Map<String, dynamic>.from(decoded),
+      );
+      if (channel.id.isNotEmpty && _isHttpMediaUrl(channel.url)) {
+        channels.add(channel);
+      }
+    } catch (_) {
+      // Se omite un registro dañado y se recuperan los demás.
+    }
+  }
+  return channels;
+}
+
 Future<void> setIptvStudioChannelHidden(
   String identificationUrl,
-  bool hidden,
-) async {
+  bool hidden, {
+  IptvExtractedChannel? channel,
+}) async {
   final id = identificationUrl.trim();
   if (id.isEmpty) return;
   final ids = await loadIptvStudioHiddenChannelIds();
+  final records = await loadIptvStudioHiddenChannels();
   if (hidden) {
     ids.add(id);
+    if (channel != null) {
+      records.removeWhere((item) => item.identificationUrl == id);
+      records.add(channel);
+    }
   } else {
     ids.remove(id);
+    records.removeWhere((item) => item.identificationUrl == id);
   }
   final prefs = await SharedPreferences.getInstance();
   await prefs.setStringList(_studioHiddenChannelsKey, ids.toList()..sort());
+  await prefs.setStringList(
+    _studioHiddenChannelRecordsKey,
+    records.map((item) => jsonEncode(item.toJson())).toList(),
+  );
 }
 
 
@@ -502,13 +536,17 @@ class _IptvExtractorPlayerScreenState
   Future<void> _refreshLibrary() async {
     final generation = ++_generation;
     final hiddenChannelIds = await loadIptvStudioHiddenChannelIds();
+    final hiddenChannels = await loadIptvStudioHiddenChannels();
     if (!mounted || generation != _generation) return;
     setState(() {
       _hiddenChannelIds
         ..clear()
         ..addAll(hiddenChannelIds);
       _refreshing = true;
-      _rawChannels.clear();
+      _rawChannels
+        ..clear()
+        ..addAll(hiddenChannels);
+      _rebuildGroups();
       _groups = <_IptvStudioChannelGroup>[];
       _sourceStatuses.clear();
       _loadMessage = null;
@@ -952,7 +990,11 @@ class _IptvExtractorPlayerScreenState
       }
     });
     try {
-      await setIptvStudioChannelHidden(channel.identificationUrl, hidden);
+      await setIptvStudioChannelHidden(
+        channel.identificationUrl,
+        hidden,
+        channel: channel,
+      );
       _showMessage(hidden
           ? channel.name + ' quedó oculto en Canales deportivos.'
           : channel.name + ' volvió a Canales deportivos.');
