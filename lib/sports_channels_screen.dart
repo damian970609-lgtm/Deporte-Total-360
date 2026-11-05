@@ -92,7 +92,7 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
     final tvgId = channel.tvgId.trim().toLowerCase();
     if (tvgId.isNotEmpty) return 'id:' + tvgId;
     return 'name:' +
-        channel.name.trim().toLowerCase().replaceAll(RegExp(r'\\s+'), ' ') +
+        channel.name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ') +
         '|group:' + channel.group.trim().toLowerCase();
   }
 
