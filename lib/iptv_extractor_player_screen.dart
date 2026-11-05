@@ -69,7 +69,8 @@ class IptvExtractedChannel {
   final String tvgId;
 
   /// URI interna, estable y única para identificar este canal dentro de DT360.
-  String get identificationUrl => 'dt360://channel/' + Uri.encodeComponent(id);
+  String get identificationUrl => 'dt360://channel/' +
+      _stableIptvHash(id + '|' + _normalizeIptvText(name) + '|' + url.trim().toLowerCase());
 
   Map<String, Object?> toJson() => <String, Object?>{
         'id': id,
@@ -110,7 +111,7 @@ Future<List<IptvExtractedChannel>> loadIptvStudioSportsChannels() async {
         Map<String, dynamic>.from(decoded),
       );
       if (channel.id.isEmpty || !_isHttpMediaUrl(channel.url) ||
-          !seen.add(channel.id)) {
+          !seen.add(channel.identificationUrl)) {
         continue;
       }
       channels.add(channel);
@@ -127,7 +128,7 @@ Future<void> saveIptvStudioSportsChannels(
   final unique = <String, IptvExtractedChannel>{};
   for (final channel in channels) {
     if (channel.id.isNotEmpty && _isHttpMediaUrl(channel.url)) {
-      unique[channel.id] = channel;
+      unique[channel.identificationUrl] = channel;
     }
   }
   final prefs = await SharedPreferences.getInstance();
@@ -142,14 +143,14 @@ Future<void> addIptvStudioSportsChannel(
   IptvExtractedChannel channel,
 ) async {
   final channels = await loadIptvStudioSportsChannels();
-  channels.removeWhere((item) => item.id == channel.id);
+  channels.removeWhere((item) => item.identificationUrl == channel.identificationUrl);
   channels.add(channel);
   await saveIptvStudioSportsChannels(channels);
 }
 
-Future<void> removeIptvStudioSportsChannel(String id) async {
+Future<void> removeIptvStudioSportsChannel(String identificationUrl) async {
   final channels = await loadIptvStudioSportsChannels();
-  channels.removeWhere((channel) => channel.id == id);
+  channels.removeWhere((channel) => channel.identificationUrl == identificationUrl);
   await saveIptvStudioSportsChannels(channels);
 }
 
@@ -408,7 +409,7 @@ class _IptvExtractorPlayerScreenState
           ..addAll(prefs.getStringList(_studioFavoritesKey) ?? <String>[]);
         _sportsChannelIds
           ..clear()
-          ..addAll(sportsChannels.map((channel) => channel.id));
+          ..addAll(sportsChannels.map((channel) => channel.identificationUrl));
         _initializing = false;
       });
       await _refreshLibrary();
@@ -542,7 +543,8 @@ class _IptvExtractorPlayerScreenState
     final grouped = <String, List<IptvExtractedChannel>>{};
     for (final channel in _rawChannels) {
       final key = channel.tvgId.trim().isNotEmpty
-          ? 'id:' + channel.tvgId.trim().toLowerCase()
+          ? 'id:' + channel.tvgId.trim().toLowerCase() +
+              '|name:' + _normalizeIptvText(channel.name)
           : 'name:' + _normalizeIptvText(channel.name) +
               '|group:' + _normalizeIptvText(channel.group);
       final values = grouped.putIfAbsent(key, () => <IptvExtractedChannel>[]);
@@ -880,7 +882,7 @@ class _IptvExtractorPlayerScreenState
     try {
       await addIptvStudioSportsChannel(channel);
       if (!mounted) return;
-      setState(() => _sportsChannelIds.add(channel.id));
+      setState(() => _sportsChannelIds.add(channel.identificationUrl));
       _showMessage(channel.name + ' agregado a Canales deportivos. ID: ' +
           channel.identificationUrl);
     } catch (error) {
@@ -891,7 +893,7 @@ class _IptvExtractorPlayerScreenState
   Future<void> _removeFromSportsChannels(_IptvStudioChannelGroup entry) async {
     final channel = entry.primary;
     try {
-      await removeIptvStudioSportsChannel(channel.id);
+      await removeIptvStudioSportsChannel(channel.identificationUrl);
       if (!mounted) return;
       setState(() => _sportsChannelIds.remove(channel.id));
       _showMessage(channel.name + ' quitado de Canales deportivos.');
@@ -926,7 +928,7 @@ class _IptvExtractorPlayerScreenState
   Widget _buildChannelCard(_IptvStudioChannelGroup entry) {
     final channel = entry.primary;
     final favorite = _isFavorite(entry);
-    final addedToSports = _sportsChannelIds.contains(channel.id);
+    final addedToSports = _sportsChannelIds.contains(channel.identificationUrl);
     final metadata = <String>[
       if (channel.group.isNotEmpty) channel.group,
       if (entry.channels.length > 1) entry.channels.length.toString() + ' fuentes',

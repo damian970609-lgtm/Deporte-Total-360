@@ -98,7 +98,7 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
       final favorites = values[1] as Set<String>;
       final unique = <String, IptvExtractedChannel>{};
       for (final channel in loaded) {
-        unique.putIfAbsent(channel.id, () => channel);
+        unique.putIfAbsent(channel.identificationUrl, () => channel);
       }
       final sorted = unique.values.toList()
         ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));

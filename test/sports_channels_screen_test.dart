@@ -18,7 +18,19 @@ void main() {
     final channels = parseIptvStudioM3u(sampleM3u);
     expect(channels[0].identificationUrl, startsWith('dt360://channel/'));
     expect(channels[0].identificationUrl, isNot(channels[1].identificationUrl));
-    expect(channels[0].identificationUrl, channels[0].identificationUrl);
+    expect(
+      parseIptvStudioM3u(sampleM3u)[0].identificationUrl,
+      channels[0].identificationUrl,
+    );
+    final duplicateTvgId = parseIptvStudioM3u(
+      '#EXTM3U\\n'
+      '#EXTINF:-1 tvg-id="duplicated" group-title="Deportes",Canal A\\n'
+      'https://media.example/a.m3u8\\n'
+      '#EXTINF:-1 tvg-id="duplicated" group-title="Deportes",Canal B\\n'
+      'https://media.example/b.m3u8\\n',
+    );
+    expect(duplicateTvgId[0].identificationUrl,
+        isNot(duplicateTvgId[1].identificationUrl));
   });
 
   test('la selección de Canales deportivos se guarda y se puede quitar', () async {
