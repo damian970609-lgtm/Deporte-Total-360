@@ -781,7 +781,6 @@ class _IptvExtractorPlayerScreenState
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(width: 34, height: 34),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               onPressed: () => _copyChannelUrl(channel),
               icon: const Icon(Icons.copy, color: _studioCyan),
             ),
@@ -790,7 +789,6 @@ class _IptvExtractorPlayerScreenState
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(width: 34, height: 34),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               onPressed: () => _toggleFavorite(entry),
               icon: Icon(
                 favorite ? Icons.favorite : Icons.favorite_border,
@@ -803,7 +801,6 @@ class _IptvExtractorPlayerScreenState
                 visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(width: 34, height: 34),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 onPressed: () => _showAlternatives(entry),
                 icon: const Icon(Icons.swap_horiz, color: _studioGreen),
               ),
