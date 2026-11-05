@@ -22,15 +22,26 @@ void main() {
       parseIptvStudioM3u(sampleM3u)[0].identificationUrl,
       channels[0].identificationUrl,
     );
-    final duplicateTvgId = parseIptvStudioM3u(
-      '#EXTM3U\\n'
-      '#EXTINF:-1 tvg-id="duplicated" group-title="Deportes",Canal A\\n'
-      'https://media.example/a.m3u8\\n'
-      '#EXTINF:-1 tvg-id="duplicated" group-title="Deportes",Canal B\\n'
-      'https://media.example/b.m3u8\\n',
+  });
+
+  test('canales con el mismo tvg-id conservan identificadores separados', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final channels = parseIptvStudioM3u(
+      '#EXTM3U\n'
+      '#EXTINF:-1 tvg-id="duplicated" group-title="Deportes",Canal A\n'
+      'https://media.example/a.m3u8\n'
+      '#EXTINF:-1 tvg-id="duplicated" group-title="Deportes",Canal B\n'
+      'https://media.example/b.m3u8\n',
     );
-    expect(duplicateTvgId[0].identificationUrl,
-        isNot(duplicateTvgId[1].identificationUrl));
+
+    expect(channels[0].id, channels[1].id);
+    expect(channels[0].identificationUrl, isNot(channels[1].identificationUrl));
+    await saveIptvStudioSportsChannels(channels);
+    expect(await loadIptvStudioSportsChannels(), hasLength(2));
+    await removeIptvStudioSportsChannel(channels[0].identificationUrl);
+    final remaining = await loadIptvStudioSportsChannels();
+    expect(remaining, hasLength(1));
+    expect(remaining.single.name, 'Canal B');
   });
 
   test('la selección de Canales deportivos se guarda y se puede quitar', () async {
@@ -43,7 +54,7 @@ void main() {
     expect(saved.map((channel) => channel.id), <String>[channels[0].id, channels[1].id]);
     expect(saved.first.identificationUrl, channels.first.identificationUrl);
 
-    await removeIptvStudioSportsChannel(channels[0].id);
+    await removeIptvStudioSportsChannel(channels[0].identificationUrl);
     saved = await loadIptvStudioSportsChannels();
     expect(saved, hasLength(1));
     expect(saved.single.id, channels[1].id);
