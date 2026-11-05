@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:deporte_total_360/agenda_screen.dart';
 import 'package:deporte_total_360/main.dart';
 import 'package:deporte_total_360/iptv_sources_screen.dart';
+import 'package:deporte_total_360/iptv_player_screen.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sports_statistics_screen.dart';
 
@@ -91,68 +92,54 @@ void main() {
         ),
       ),
     );
-    expect(destination, isA<IptvSourcesScreen>());
-    expect((destination as IptvSourcesScreen).manualOnly, isTrue);
+    expect(destination, isA<IntegratedIptvPlayerScreen>());
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
 
-  testWidgets('el reproductor secreto empieza vacío y permite agregar listas manualmente', (tester) async {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
-    await tester.pumpWidget(
-      const MaterialApp(home: IptvSourcesScreen(manualOnly: true)),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('IMPORTAR TUS LISTAS M3U'), findsOneWidget);
-    expect(find.text('AGREGAR LISTA M3U'), findsOneWidget);
-    expect(find.text('AGREGAR GUÍA EPG'), findsOneWidget);
-    expect(find.text('AGREGAR LISTA POR URL'), findsOneWidget);
-    expect(find.text('ABRIR REPRODUCTOR'), findsOneWidget);
-    expect(find.textContaining('ninguna lista pública automáticamente'), findsOneWidget);
-    expect(find.byTooltip('Agregar lista M3U por URL'), findsOneWidget);
-
-    await tester.tap(find.text('ABRIR REPRODUCTOR'));
-    await tester.pumpAndSettle();
-    expect(find.text('URL directa del canal'), findsOneWidget);
-    await tester.tap(find.text('Cancelar'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byTooltip('Agregar lista M3U por URL'));
-    await tester.pumpAndSettle();
-    expect(find.text('Agregar lista M3U / M3U8'), findsOneWidget);
-    await tester.tap(find.text('Cancelar'));
-    await tester.pumpAndSettle();
-
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('el reproductor secreto importa una lista M3U pegada y muestra sus canales', (tester) async {
+  testWidgets('el reproductor integrado empieza vacío y permite añadir varias listas', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await tester.pumpWidget(
       const MaterialApp(
-        home: IptvSourcesScreen(manualOnly: true, parseInBackground: false),
+        home: IntegratedIptvPlayerScreen(parseInBackground: false),
       ),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('PEGAR CONTENIDO M3U'));
+    expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
+    expect(find.text('AÑADIR LISTAS'), findsOneWidget);
+    expect(find.text('IMPORTAR PEGADA'), findsOneWidget);
+    expect(find.text('PEGAR LISTA M3U'), findsOneWidget);
+    expect(find.text('TU REPRODUCTOR ESTÁ LISTO'), findsOneWidget);
+
+    await tester.tap(find.text('AÑADIR LISTAS'));
     await tester.pumpAndSettle();
-    const playlist = '#EXTM3U\n'
-        '#EXTINF:-1 group-title="Deportes",Canal Importado\n'
-        'https://media.example/live/98765?token=abc';
-    await tester.enterText(find.byType(TextField).last, playlist);
-    await tester.tap(find.text('Importar'));
+    expect(find.text('Agregar listas M3U / M3U8'), findsOneWidget);
+    expect(find.text('URLs de tus listas (una por línea)'), findsOneWidget);
+    await tester.tap(find.text('Cancelar'));
     await tester.pumpAndSettle();
 
-    // La pantalla contiene varias secciones antes del catálogo. La lista es
-    // perezosa y no construye la tarjeta hasta que se desplaza a la vista.
-    await tester.scrollUntilVisible(
-      find.text('Canal Importado'),
-      400,
-      scrollable: find.byType(Scrollable).last,
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('el reproductor integrado importa una M3U y muestra su canal', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: IntegratedIptvPlayerScreen(parseInBackground: false),
+      ),
     );
     await tester.pumpAndSettle();
+
+    await tester.tap(find.text('PEGAR LISTA M3U'));
+    await tester.pumpAndSettle();
+    const playlist = '#EXTM3U\\n'
+        '#EXTINF:-1 group-title="Deportes",Canal Importado\\n'
+        'https://media.example/live/98765?token=abc';
+    await tester.enterText(find.byType(TextField).last, playlist);
+    await tester.tap(find.text('IMPORTAR'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Canal Importado'), findsOneWidget);
     final prefs = await SharedPreferences.getInstance();
     expect(
@@ -163,24 +150,40 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el reproductor IPTV permite guardar favoritos y buscar canales', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(360, 1800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+  testWidgets('el reproductor integra varias listas y agrupa canales duplicados', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'dt360_secret_iptv_playlist_texts_v1': <String>[
-        '#EXTM3U\n#EXTINF:-1 group-title="Deportes",Prueba TV\nhttps://media.example/prueba.m3u8',
+        '#EXTM3U\\n#EXTINF:-1 tvg-id="sports.es" group-title="Deportes",Canal Deportes\\nhttps://media.example/live/uno.m3u8',
+        '#EXTM3U\\n#EXTINF:-1 tvg-id="sports.es" group-title="Deportes",Canal Deportes HD\\nhttps://media.example/live/dos.m3u8',
       ],
     });
     await tester.pumpWidget(
       const MaterialApp(
-        home: IptvSourcesScreen(manualOnly: true, parseInBackground: false),
+        home: IntegratedIptvPlayerScreen(parseInBackground: false),
       ),
     );
     await tester.pumpAndSettle();
-    // Espera el Future de SharedPreferences y el refresco inicial del catálogo
-    // fuera del reloj falso de testWidgets, sin depender de Isolate.run.
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+
+    expect(find.text('Canal Deportes'), findsOneWidget);
+    expect(find.text('Canal Deportes HD'), findsNothing);
+    expect(find.textContaining('2 fuentes disponibles'), findsOneWidget);
+    expect(find.text('1 canales · 2 listas'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('el reproductor integrado permite favoritos, búsqueda y copia de URL', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 1800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'dt360_secret_iptv_playlist_texts_v1': <String>[
+        '#EXTM3U\\n#EXTINF:-1 group-title="Deportes",Prueba TV\\nhttps://media.example/prueba.m3u8',
+      ],
+    });
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: IntegratedIptvPlayerScreen(parseInBackground: false),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -195,25 +198,25 @@ void main() {
 
     await tester.tap(find.text('FAVORITOS (1)'));
     await tester.pumpAndSettle();
-    expect(find.text('MIS CANALES FAVORITOS (1)'), findsOneWidget);
     expect(find.text('Prueba TV'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).first, 'canal inexistente');
     await tester.pumpAndSettle();
-    expect(find.text('MIS CANALES FAVORITOS (0)'), findsOneWidget);
-    expect(find.textContaining('Ningún favorito coincide con tu búsqueda'), findsOneWidget);
+    expect(
+      find.text('No tienes favoritos que coincidan con la búsqueda.'),
+      findsOneWidget,
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(
       const MaterialApp(
-        home: IptvSourcesScreen(manualOnly: true, parseInBackground: false),
+        home: IntegratedIptvPlayerScreen(parseInBackground: false),
       ),
     );
     await tester.pumpAndSettle();
     expect(find.text('FAVORITOS (1)'), findsOneWidget);
     await tester.tap(find.text('FAVORITOS (1)'));
     await tester.pumpAndSettle();
-    expect(find.text('MIS CANALES FAVORITOS (1)'), findsOneWidget);
     expect(find.text('Prueba TV'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
