@@ -231,6 +231,9 @@ class _IntegratedIptvPlayerScreenState
           setState(() {
             _channels = _mergeChannels(channels);
             _error = null;
+            // La primera fuente válida ya permite mostrar canales. No mantengas
+            // la pantalla tapada por el spinner mientras cargan otras listas/EPG.
+            _loading = false;
           });
         },
         onSourceError: (url, _) {
