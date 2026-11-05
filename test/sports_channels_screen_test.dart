@@ -155,13 +155,11 @@ void main() {
     expect(find.text(hiddenChannel.name), findsOneWidget);
     expect(find.textContaining('OCULTO EN CANALES DEPORTIVOS'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.more_vert).first);
+    final restoreButton = find.byTooltip('Mostrar en Canales deportivos');
+    await tester.ensureVisible(restoreButton);
     await tester.pumpAndSettle();
-    expect(find.text('Mostrar en Canales deportivos'), findsOneWidget);
-    final restoreAction = find.text('Mostrar en Canales deportivos');
-    await tester.ensureVisible(restoreAction);
-    await tester.pumpAndSettle();
-    await tester.tap(restoreAction);
+    expect(restoreButton, findsOneWidget);
+    await tester.tap(restoreButton);
     await tester.pumpAndSettle();
 
     expect(
