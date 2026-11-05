@@ -89,3 +89,68 @@ Ajustes), cada señal tiene un selector de idioma: Español 🇪🇸, Inglés �
 Sin definir. Al publicarse, la tarjeta de Canales deportivos muestra el
 indicativo de idioma en su esquina superior. El idioma se guarda en Cloudflare
 para que todos los usuarios vean la misma etiqueta.
+## Configuración segura de Google Sign-In y firma Android
+
+El inicio de sesión valida primero que el cliente OAuth Web incorporado en la APK
+sea exactamente el mismo que está configurado en Cloudflare. Si no coincide,
+la aplicación muestra un error concreto antes de abrir el selector de cuentas.
+El ID de cliente OAuth es público; no se exponen ID tokens ni contraseñas.
+
+### 1. Crear una llave privada de firma una sola vez
+
+La compilación de distribución ya no guarda llaves Android en `actions/cache`.
+El workflow necesita una llave privada estable, guardada únicamente como GitHub
+Actions Secrets. En Termux instala Java y genera la llave:
+
+```sh
+pkg update
+pkg install openjdk-17 coreutils
+read -rsp 'Contraseña nueva para la llave: ' KEY_PASS
+echo
+keytool -genkeypair -v -storetype JKS \
+  -keystore "$HOME/deporte-total-360-release.jks" \
+  -alias dt360 -keyalg RSA -keysize 2048 -validity 10000 \
+  -dname 'CN=Deporte Total 360,O=Deporte Total 360,C=GY' \
+  -storepass "$KEY_PASS" -keypass "$KEY_PASS"
+base64 -w 0 "$HOME/deporte-total-360-release.jks"
+unset KEY_PASS
+```
+
+Copia el resultado de Base64 directamente a GitHub; no lo publiques ni lo envíes
+por chat. En el repositorio abre Settings → Secrets and variables → Actions y
+crea estos dos secretos:
+
+- `ANDROID_KEYSTORE_BASE64`: el resultado completo del comando Base64.
+- `ANDROID_KEYSTORE_PASSWORD`: la contraseña que acabas de crear.
+
+Conserva una copia de seguridad cifrada del archivo `.jks` y su contraseña.
+Si se pierde esta llave, no será posible crear actualizaciones firmadas con la
+misma identidad de distribución. Los workflows de pull request no reciben la
+llave privada ni publican APK.
+
+### 2. Registrar Google OAuth
+
+En Google Cloud Console, dentro del mismo proyecto, crea o revisa:
+
+- Un cliente OAuth de tipo **Web application**. El valor de su Client ID debe
+  estar configurado como `GOOGLE_OAUTH_CLIENT_ID` en los secretos de Actions
+  de este repositorio y del repositorio Cloudflare `Deporte-Total-360-`.
+- Un cliente OAuth de tipo **Android**, con package name
+  `com.example.deporte_total_360` y el SHA-1 que el workflow publique en el
+  resumen de la compilación ya firmada.
+
+El cliente Web y el cliente Android pertenecen al mismo proyecto de Google
+Cloud. Si la pantalla de consentimiento está en modo Testing, añade la cuenta
+Google que va a iniciar sesión a la lista de usuarios de prueba.
+
+### 3. Ejecutar la compilación
+
+Después de guardar los dos secretos de firma, ejecuta el workflow
+`Crear APK de DEPORTE TOTAL 360`. El workflow falla de forma segura si falta la
+llave, si no puede leerla o si el SHA-1 de la APK no coincide con la llave usada.
+Una vez desplegado el Worker, la aplicación compara el Client ID Web de la APK
+con el de Cloudflare y rechaza la autenticación antes de abrir Google cuando
+los dos no coinciden.
+
+Los errores de Google muestran el código y la descripción disponibles sin
+registrar contraseñas, credenciales ni tokens.
