@@ -178,4 +178,93 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+
+  testWidgets('el catálogo filtra por deporte y permite cambiar a vista de lista',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final channels = parseIptvStudioM3u(sampleM3u);
+    await saveIptvStudioSportsChannels(channels);
+
+    await tester.pumpWidget(
+      const MaterialApp(home: SportsChannelsScreen()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Canal Prueba'), findsOneWidget);
+    expect(find.text('Otro Canal'), findsOneWidget);
+
+    await tester.tap(find.text('Fútbol'));
+    await tester.pumpAndSettle();
+    expect(find.text('Canal Prueba'), findsOneWidget);
+    expect(find.text('Otro Canal'), findsNothing);
+
+    final listToggle = find.byTooltip('Mostrar lista');
+    expect(listToggle, findsOneWidget);
+    await tester.tap(listToggle);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Mostrar cuadrícula'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('fuentes alternativas se muestran como un solo canal público',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    const duplicated = '#EXTM3U\\n'
+        '#EXTINF:-1 tvg-id="sports.same" group-title="Fútbol",Canal Duplicado\\n'
+        'https://media.example/primera.m3u8\\n'
+        '#EXTINF:-1 tvg-id="sports.same" group-title="Fútbol",Canal Duplicado\\n'
+        'https://media.example/segunda.m3u8\\n';
+    final channels = parseIptvStudioM3u(duplicated);
+    expect(channels, hasLength(2));
+    await saveIptvStudioSportsChannels(channels);
+
+    await tester.pumpWidget(
+      const MaterialApp(home: SportsChannelsScreen()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Canal Duplicado'), findsOneWidget);
+    expect(find.textContaining('1 canales'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('el administrador publica y oculta todos sin borrar sus listas',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    await addIptvStudioPlaylistUrls(<String>[
+      'https://listas.example/deportes.m3u',
+    ]);
+    final client = clientForSample();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: IptvExtractorPlayerScreen(
+          httpClient: client,
+          parseInBackground: false,
+        ),
+      ),
+    );
+    for (var index = 0; index < 12; index++) {
+      await tester.pump(const Duration(milliseconds: 150));
+    }
+
+    expect(find.text('PUBLICAR TODOS'), findsOneWidget);
+    await tester.tap(find.text('PUBLICAR TODOS'));
+    await tester.pumpAndSettle();
+    expect(await loadIptvStudioSportsChannels(), hasLength(2));
+
+    await tester.tap(find.text('OCULTAR TODOS'));
+    await tester.pumpAndSettle();
+    expect(await loadIptvStudioSportsChannels(), isEmpty);
+    expect(
+      await loadIptvStudioPlaylistUrls(),
+      contains('https://listas.example/deportes.m3u'),
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    client.close();
+  });
+
 }
