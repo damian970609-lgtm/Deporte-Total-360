@@ -133,8 +133,8 @@ void main() {
 
     await tester.tap(find.text('PEGAR LISTA M3U'));
     await tester.pumpAndSettle();
-    const playlist = '#EXTM3U\\n'
-        '#EXTINF:-1 group-title="Deportes",Canal Importado\\n'
+    const playlist = '#EXTM3U\n'
+        '#EXTINF:-1 group-title="Deportes",Canal Importado\n'
         'https://media.example/live/98765?token=abc';
     await tester.enterText(find.byType(TextField).last, playlist);
     await tester.tap(find.text('IMPORTAR'));
@@ -153,8 +153,8 @@ void main() {
   testWidgets('el reproductor integra varias listas y agrupa canales duplicados', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'dt360_secret_iptv_playlist_texts_v1': <String>[
-        '#EXTM3U\\n#EXTINF:-1 tvg-id="sports.es" group-title="Deportes",Canal Deportes\\nhttps://media.example/live/uno.m3u8',
-        '#EXTM3U\\n#EXTINF:-1 tvg-id="sports.es" group-title="Deportes",Canal Deportes HD\\nhttps://media.example/live/dos.m3u8',
+        '#EXTM3U\n#EXTINF:-1 tvg-id="sports.es" group-title="Deportes",Canal Deportes\nhttps://media.example/live/uno.m3u8',
+        '#EXTM3U\n#EXTINF:-1 tvg-id="sports.es" group-title="Deportes",Canal Deportes HD\nhttps://media.example/live/dos.m3u8',
       ],
     });
     await tester.pumpWidget(
@@ -177,7 +177,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     SharedPreferences.setMockInitialValues(<String, Object>{
       'dt360_secret_iptv_playlist_texts_v1': <String>[
-        '#EXTM3U\\n#EXTINF:-1 group-title="Deportes",Prueba TV\\nhttps://media.example/prueba.m3u8',
+        '#EXTM3U\n#EXTINF:-1 group-title="Deportes",Prueba TV\nhttps://media.example/prueba.m3u8',
       ],
     });
     await tester.pumpWidget(
