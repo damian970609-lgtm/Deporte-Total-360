@@ -12,6 +12,7 @@ void main() {
       'groupTitle': 'Deportes',
       'isSports': true,
       'visible': true,
+      'language': 'es',
     });
 
     expect(channel.identifier, 'espn-latino-1234');
@@ -19,6 +20,7 @@ void main() {
     expect(channel.groupTitle, 'Deportes');
     expect(channel.isSports, isTrue);
     expect(channel.visible, isTrue);
+    expect(channel.language, 'es');
   });
 
   test('canal admite señales MPEG-TS directas de listas M3U', () {
@@ -58,3 +60,26 @@ void main() {
     );
   });
 }
+
+
+  test('canal conserva la etiqueta de idioma inglés', () {
+    final channel = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'sports-en',
+      'identifier': 'sports-en',
+      'name': 'Sports Network',
+      'url': 'https://media.example/english.m3u8',
+      'language': 'en',
+    });
+    expect(channel.language, 'en');
+  });
+
+  test('canal sin idioma válido queda sin bandera', () {
+    final channel = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'sports-unknown',
+      'identifier': 'sports-unknown',
+      'name': 'ESPN 2',
+      'url': 'https://media.example/live.m3u8',
+      'language': 'fr',
+    });
+    expect(channel.language, 'unknown');
+  });
