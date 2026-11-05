@@ -1,8 +1,5 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 
 import 'iptv_extractor_player_screen.dart';
@@ -20,11 +17,9 @@ class SportsChannelsScreen extends StatefulWidget {
   const SportsChannelsScreen({
     super.key,
     this.initialChannel,
-    this.httpClient,
   });
 
   final IptvExtractedChannel? initialChannel;
-  final http.Client? httpClient;
 
   @override
   State<SportsChannelsScreen> createState() => _SportsChannelsScreenState();
@@ -33,11 +28,9 @@ class SportsChannelsScreen extends StatefulWidget {
 class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
   final TextEditingController _searchController = TextEditingController();
 
-  late final http.Client _httpClient;
-  late final bool _ownsHttpClient;
+  final FocusNode _searchFocusNode = FocusNode();
   List<IptvExtractedChannel> _channels = <IptvExtractedChannel>[];
   Set<String> _favoriteIds = <String>{};
-  Set<String> _hiddenChannelIds = <String>{};
   IptvExtractedChannel? _selectedChannel;
   VideoPlayerController? _controller;
   bool _loadingLibrary = true;
@@ -53,8 +46,6 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
   @override
   void initState() {
     super.initState();
-    _ownsHttpClient = widget.httpClient == null;
-    _httpClient = widget.httpClient ?? http.Client();
     _selectedChannel = widget.initialChannel;
     _searchController.addListener(_updateSearch);
     iptvSportsCatalogVersion.addListener(_handleCatalogChanged);
@@ -80,7 +71,7 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
     _searchController.removeListener(_updateSearch);
     iptvSportsCatalogVersion.removeListener(_handleCatalogChanged);
     _searchController.dispose();
-    if (_ownsHttpClient) _httpClient.close();
+    _searchFocusNode.dispose();
     _controller?.removeListener(_controllerChanged);
     _controller?.dispose();
     SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
@@ -99,40 +90,7 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
   }
 
   Future<void> _loadLibrary() async {
-    final generation = ++_libraryGeneration;
-    try {
-      final values = await Future.wait<Object>(<Future<Object>>[
-        loadIptvStudioSportsChannels(),
-        loadIptvStudioFavoriteIds(),
-        loadIptvStudioHiddenChannelIds(),
-      ]);
-      final savedChannels = values[0] as List<IptvExtractedChannel>;
-      final favorites = values[1] as Set<String>;
-      final hidden = values[2] as Set<String>;
-      final unique = <String, IptvExtractedChannel>{};
-      for (final channel in savedChannels) {
-        unique.putIfAbsent(channel.identificationUrl, () => channel);
-      }
-      final sorted = unique.values
-          .where((channel) => !hidden.contains(channel.identificationUrl))
-          .toList()
-        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-      if (!mounted || generation != _libraryGeneration) return;
-      setState(() {
-        _channels = sorted;
-        _favoriteIds = favorites;
-        _hiddenChannelIds = hidden;
-        _loadingLibrary = false;
-        _libraryError = null;
-      });
-      await _refreshCatalog();
-    } catch (error) {
-      if (!mounted || generation != _libraryGeneration) return;
-      setState(() {
-        _loadingLibrary = false;
-        _libraryError = 'No se pudo cargar la biblioteca de canales: ' + error.toString();
-      });
-    }
+    await _refreshCatalog();
   }
 
   Future<void> _refreshCatalog() async {
@@ -144,105 +102,54 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
       });
     }
     try {
-      final sources = await Future.wait<Object>(<Future<Object>>[
-        loadIptvStudioPlaylistUrls(),
-        loadIptvStudioPlaylistTexts(),
-        loadIptvStudioFavoriteIds(),
-        loadIptvStudioHiddenChannelIds(),
+      // La pantalla pública nunca descarga ni administra listas M3U.
+      // Solo recibe los canales que el usuario habilitó desde Damián APK.
+      final values = await Future.wait<Object>(<Future<Object>>[
         loadIptvStudioSportsChannels(),
+        loadIptvStudioFavoriteIds(),
       ]);
-      final urls = sources[0] as List<String>;
-      final texts = sources[1] as List<String>;
-      final favorites = sources[2] as Set<String>;
-      final hidden = sources[3] as Set<String>;
-      final savedChannels = sources[4] as List<IptvExtractedChannel>;
-      final errors = <String>[];
-      final loaded = <IptvExtractedChannel>[];
-
-      final remoteResults = await Future.wait<List<IptvExtractedChannel>>(
-        urls.map((url) async {
-          try {
-            final response = await _httpClient
-                .get(
-                  Uri.parse(url),
-                  headers: const <String, String>{
-                    'Accept': 'application/x-mpegURL, application/vnd.apple.mpegurl, text/plain, */*',
-                    'User-Agent': 'DeporteTotal360-IPTV/1.0',
-                    'Cache-Control': 'no-cache',
-                  },
-                )
-                .timeout(const Duration(seconds: 25));
-            if (response.statusCode < 200 || response.statusCode >= 300) {
-              throw http.ClientException('HTTP ' + response.statusCode.toString());
-            }
-            if (response.bodyBytes.length > 12 * 1024 * 1024) {
-              throw const FormatException('La lista supera 12 MB.');
-            }
-            final body = utf8.decode(response.bodyBytes, allowMalformed: true);
-            return parseIptvStudioM3u(body, sourceUrl: url);
-          } catch (error) {
-            errors.add((Uri.tryParse(url)?.host ?? url) + ': ' + error.toString());
-            return <IptvExtractedChannel>[];
-          }
-        }),
-      );
-      for (final channels in remoteResults) {
-        loaded.addAll(channels);
-      }
-
-      for (var index = 0; index < texts.length; index++) {
-        try {
-          loaded.addAll(
-            parseIptvStudioM3u(
-              texts[index],
-              sourceUrl: 'Importada #' + (index + 1).toString(),
-            ),
-          );
-        } catch (error) {
-          errors.add('Lista importada #' + (index + 1).toString() + ': ' + error.toString());
-        }
-      }
-
+      final selectedChannels = values[0] as List<IptvExtractedChannel>;
+      final favorites = values[1] as Set<String>;
       final unique = <String, IptvExtractedChannel>{};
-      for (final channel in <IptvExtractedChannel>[
-        ...loaded,
-        ...savedChannels,
-      ]) {
+      for (final channel in selectedChannels) {
         unique.putIfAbsent(channel.identificationUrl, () => channel);
       }
-      final sorted = unique.values
-          .where((channel) => !hidden.contains(channel.identificationUrl))
-          .toList()
+      final sorted = unique.values.toList()
         ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
+      final selected = _selectedChannel;
+      final selectionStillVisible = selected == null ||
+          sorted.any((channel) =>
+              channel.identificationUrl == selected.identificationUrl);
+      if (!selectionStillVisible) {
+        ++_playGeneration;
+        final old = _controller;
+        _controller = null;
+        old?.removeListener(_controllerChanged);
+        await old?.dispose();
+      }
       if (!mounted || generation != _libraryGeneration) return;
       setState(() {
         _channels = sorted;
         _favoriteIds = favorites;
-        _hiddenChannelIds = hidden;
         _loadingLibrary = false;
-        _libraryError = errors.isEmpty
-            ? (sorted.isEmpty ? 'La lista inicial no devolvió canales. Puedes agregar otra lista M3U.' : null)
-            : errors.take(2).join(' · ');
+        if (!selectionStillVisible) {
+          _selectedChannel = null;
+          _loadingVideo = false;
+          _playerError = null;
+        }
+        _libraryError = sorted.isEmpty
+            ? 'Todavía no has habilitado canales. Entra en Ajustes, abre DAMIAN.APK y activa los que quieres mostrar aquí.'
+            : null;
       });
     } catch (error) {
       if (!mounted || generation != _libraryGeneration) return;
       setState(() {
         _loadingLibrary = false;
-        _libraryError = 'No se pudieron actualizar las listas: ' + error.toString();
+        _libraryError = 'No se pudo actualizar tu selección de canales: ' +
+            error.toString();
       });
     }
-  }
-
-  List<IptvExtractedChannel> get _visibleChannels {
-    final query = _query.trim().toLowerCase();
-    return _channels.where((channel) {
-      if (_showFavoritesOnly && !_favoriteIds.contains(channel.id)) return false;
-      if (query.isEmpty) return true;
-      return (channel.name + ' ' + channel.group + ' ' + channel.tvgId)
-          .toLowerCase()
-          .contains(query);
-    }).toList(growable: false);
   }
 
   VideoFormat _formatHint(String url) {
@@ -360,12 +267,12 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
 
   Future<void> _hideChannel(IptvExtractedChannel channel) async {
     final id = channel.identificationUrl;
+    final previous = List<IptvExtractedChannel>.of(_channels);
     setState(() {
-      _hiddenChannelIds.add(id);
       _channels.removeWhere((item) => item.identificationUrl == id);
     });
     try {
-      await setIptvStudioChannelHidden(id, true, channel: channel);
+      await removeIptvStudioSportsChannel(id);
       if (_selectedChannel?.identificationUrl == id) {
         ++_playGeneration;
         final old = _controller;
@@ -382,74 +289,22 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(channel.name + ' quedó oculto. Puedes recuperarlo desde Damián APK.')),
+        SnackBar(
+          content: Text(
+            channel.name +
+                ' quedó oculto. Puedes volver a habilitarlo desde Damián APK.',
+          ),
+        ),
       );
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _hiddenChannelIds.remove(id);
-        _channels.add(channel);
-        _channels.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        _channels
+          ..clear()
+          ..addAll(previous);
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo ocultar el canal: ' + error.toString())),
-      );
-    }
-  }
-
-  Future<void> _showAddPlaylistDialog() async {
-    final controller = TextEditingController();
-    final result = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: _sportsPanel,
-        title: const Text(
-          'Agregar listas deportivas',
-          style: TextStyle(color: _sportsCyan, fontWeight: FontWeight.w900),
-        ),
-        content: TextField(
-          controller: controller,
-          minLines: 2,
-          maxLines: 6,
-          autofocus: true,
-          autocorrect: false,
-          enableSuggestions: false,
-          keyboardType: TextInputType.url,
-          decoration: const InputDecoration(
-            alignLabelWithHint: true,
-            labelText: 'URL M3U/M3U8 (una por línea)',
-            hintText: 'https://servidor/lista.m3u',
-          ),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('CANCELAR'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, controller.text),
-            child: const Text('AGREGAR'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (result == null || result.trim().isEmpty || !mounted) return;
-    try {
-      final urls = result
-          .split(RegExp(r'[\r\n;]+'))
-          .map((value) => value.trim())
-          .where((value) => value.isNotEmpty)
-          .toList(growable: false);
-      await addIptvStudioPlaylistUrls(urls);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(urls.length.toString() + ' lista(s) guardada(s).')),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo agregar la lista: ' + error.toString())),
       );
     }
   }
@@ -675,6 +530,90 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
     );
   }
 
+  Widget _buildLibraryHeader(int count) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(15),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[
+            _sportsCyan.withAlpha(28),
+            _sportsPanel,
+            _sportsPink.withAlpha(18),
+          ],
+        ),
+        border: Border.all(color: _sportsCyan.withAlpha(105)),
+        boxShadow: <BoxShadow>[
+          BoxShadow(color: _sportsCyan.withAlpha(18), blurRadius: 15),
+        ],
+      ),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: _sportsCyan.withAlpha(28),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.sports_soccer_rounded,
+              color: _sportsCyan,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text(
+                  'TU SELECCIÓN DEPORTIVA',
+                  style: TextStyle(
+                    color: _sportsCyan,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: .55,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  count == 1
+                      ? '1 canal habilitado para reproducir'
+                      : '$count canales habilitados para reproducir',
+                  style: const TextStyle(
+                    color: _sportsMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: _sportsGreen.withAlpha(20),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: _sportsGreen.withAlpha(100)),
+            ),
+            child: Text(
+              count.toString(),
+              style: const TextStyle(
+                color: _sportsGreen,
+                fontWeight: FontWeight.w900,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final visible = _visibleChannels;
@@ -695,12 +634,12 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
               ),
               actions: <Widget>[
                 IconButton(
-                  tooltip: 'Agregar más listas',
-                  onPressed: _showAddPlaylistDialog,
-                  icon: const Icon(Icons.add_link_rounded, color: _sportsCyan),
+                  tooltip: 'Buscar canal por nombre',
+                  onPressed: () => _searchFocusNode.requestFocus(),
+                  icon: const Icon(Icons.search_rounded, color: _sportsCyan),
                 ),
                 IconButton(
-                  tooltip: 'Actualizar listas',
+                  tooltip: 'Actualizar canales visibles',
                   onPressed: _loadingLibrary ? null : _refreshCatalog,
                   icon: const Icon(Icons.refresh_rounded, color: _sportsGreen),
                 ),
@@ -712,6 +651,7 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
             : Column(
                 children: <Widget>[
                   _buildPlayer(),
+                  _buildLibraryHeader(_channels.length),
                   if (_selectedChannel != null)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 5),
@@ -769,6 +709,7 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 7, 12, 6),
                     child: TextField(
+                      focusNode: _searchFocusNode,
                       controller: _searchController,
                       decoration: InputDecoration(
                         hintText: 'Buscar canal…',
@@ -836,7 +777,7 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
                                     _showFavoritesOnly
                                         ? 'Todavía no tienes canales favoritos.'
                                         : (_channels.isEmpty
-                                            ? (_libraryError ?? 'No se cargaron canales. Agrega otra lista o inténtalo de nuevo.')
+                                            ? (_libraryError ?? 'No hay canales habilitados todavía.')
                                             : 'No hay canales que coincidan con la búsqueda.'),
                                     textAlign: TextAlign.center,
                                     style: const TextStyle(color: _sportsMuted),

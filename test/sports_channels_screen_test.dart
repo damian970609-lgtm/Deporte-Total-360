@@ -92,27 +92,32 @@ void main() {
     );
   });
 
-  testWidgets('Canales deportivos carga la lista y permite ocultar canales',
+  testWidgets(
+      'Canales deportivos solo muestra canales habilitados desde Damián APK',
       (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await addIptvStudioPlaylistUrls(<String>[
       'https://listas.example/deportes.m3u',
     ]);
+    final channels = parseIptvStudioM3u(sampleM3u);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: SportsChannelsScreen(httpClient: clientForSample()),
-      ),
+      const MaterialApp(home: SportsChannelsScreen()),
     );
-    for (var index = 0; index < 12; index++) {
-      await tester.pump(const Duration(milliseconds: 150));
-    }
+    await tester.pumpAndSettle();
+
+    expect(find.text('CANALES DEPORTIVOS'), findsOneWidget);
+    expect(find.text('Canal Prueba'), findsNothing);
+    expect(find.text('Otro Canal'), findsNothing);
+    expect(find.byTooltip('Agregar más listas'), findsNothing);
+    expect(find.byTooltip('Buscar canal por nombre'), findsOneWidget);
+
+    await addIptvStudioSportsChannel(channels.first);
+    await tester.pumpAndSettle();
 
     expect(find.text('Canal Prueba'), findsOneWidget);
-    expect(find.text('Otro Canal'), findsOneWidget);
-    expect(find.text('CANALES DEPORTIVOS'), findsOneWidget);
-    expect(find.byTooltip('Agregar más listas'), findsOneWidget);
-    expect(find.byTooltip('Copiar URL identificadora'), findsNWidgets(2));
+    expect(find.text('Otro Canal'), findsNothing);
+    expect(find.byIcon(Icons.search_rounded), findsOneWidget);
 
     final hideButton = find.byTooltip('Ocultar canal').first;
     await tester.ensureVisible(hideButton);
@@ -121,24 +126,19 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Canal Prueba'), findsNothing);
-    expect(find.text('Otro Canal'), findsOneWidget);
-    final hidden = await loadIptvStudioHiddenChannelIds();
-    expect(
-      hidden,
-      contains(parseIptvStudioM3u(sampleM3u).first.identificationUrl),
-    );
+    expect(await loadIptvStudioSportsChannels(), isEmpty);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el menú secreto conserva los canales ocultos y permite mostrarlos',
+  testWidgets(
+      'el menú secreto activa y desactiva canales en Canales deportivos',
       (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await addIptvStudioPlaylistUrls(<String>[
       'https://listas.example/deportes.m3u',
     ]);
-    final hiddenChannel = parseIptvStudioM3u(sampleM3u).first;
-    await setIptvStudioChannelHidden(hiddenChannel.identificationUrl, true, channel: hiddenChannel);
+    final channel = parseIptvStudioM3u(sampleM3u).first;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -152,21 +152,30 @@ void main() {
       await tester.pump(const Duration(milliseconds: 150));
     }
 
-    expect(find.text(hiddenChannel.name), findsOneWidget);
-    expect(find.textContaining('OCULTO EN CANALES DEPORTIVOS'), findsOneWidget);
+    expect(find.text(channel.name), findsOneWidget);
+    expect(find.textContaining('NO VISIBLE EN CANALES DEPORTIVOS'), findsOneWidget);
 
-    final restoreButton = find.byTooltip('Mostrar en Canales deportivos');
-    await tester.ensureVisible(restoreButton);
+    final showButton = find.byTooltip('Mostrar en Canales deportivos').first;
+    await tester.ensureVisible(showButton);
     await tester.pumpAndSettle();
-    expect(restoreButton, findsOneWidget);
-    await tester.tap(restoreButton);
+    await tester.tap(showButton);
     await tester.pumpAndSettle();
 
     expect(
-      await loadIptvStudioHiddenChannelIds(),
-      isNot(contains(hiddenChannel.identificationUrl)),
+      (await loadIptvStudioSportsChannels())
+          .map((item) => item.identificationUrl),
+      contains(channel.identificationUrl),
     );
+    expect(find.textContaining('VISIBLE EN CANALES DEPORTIVOS'), findsOneWidget);
+
+    final hideButton = find.byTooltip('Ocultar en Canales deportivos').first;
+    await tester.ensureVisible(hideButton);
+    await tester.pumpAndSettle();
+    await tester.tap(hideButton);
+    await tester.pumpAndSettle();
+    expect(await loadIptvStudioSportsChannels(), isEmpty);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
 }

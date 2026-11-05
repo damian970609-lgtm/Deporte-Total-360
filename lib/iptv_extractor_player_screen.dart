@@ -445,11 +445,12 @@ class _IptvExtractorPlayerScreenState
   late final http.Client _client;
   late final bool _ownsClient;
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
 
   List<String> _playlistUrls = <String>[];
   List<String> _playlistTexts = <String>[];
   final Set<String> _favoriteIds = <String>{};
-  final Set<String> _hiddenChannelIds = <String>{};
+  final Set<String> _visibleChannelIds = <String>{};
   final List<IptvExtractedChannel> _rawChannels = <IptvExtractedChannel>[];
   List<_IptvStudioChannelGroup> _groups = <_IptvStudioChannelGroup>[];
   final Map<String, String> _sourceStatuses = <String, String>{};
@@ -474,6 +475,7 @@ class _IptvExtractorPlayerScreenState
   void dispose() {
     _searchController.removeListener(_updateSearch);
     _searchController.dispose();
+    _searchFocusNode.dispose();
     if (_ownsClient) _client.close();
     super.dispose();
   }
@@ -487,7 +489,7 @@ class _IptvExtractorPlayerScreenState
       final prefs = await SharedPreferences.getInstance();
       var urls = prefs.getStringList(_studioUrlsKey) ?? <String>[];
       final texts = prefs.getStringList(_studioTextsKey) ?? <String>[];
-      final hiddenChannelIds = await loadIptvStudioHiddenChannelIds();
+      final visibleChannels = await loadIptvStudioSportsChannels();
       if (!(prefs.getBool(_studioDefaultAddedKey) ?? false)) {
         urls = <String>[
           defaultIptvStudioSportsUrl,
@@ -503,9 +505,11 @@ class _IptvExtractorPlayerScreenState
         _favoriteIds
           ..clear()
           ..addAll(prefs.getStringList(_studioFavoritesKey) ?? <String>[]);
-        _hiddenChannelIds
+        _visibleChannelIds
           ..clear()
-          ..addAll(hiddenChannelIds);
+          ..addAll(
+            visibleChannels.map((channel) => channel.identificationUrl),
+          );
         _initializing = false;
       });
       await _refreshLibrary();
@@ -538,18 +542,23 @@ class _IptvExtractorPlayerScreenState
 
   Future<void> _refreshLibrary() async {
     final generation = ++_generation;
-    final hiddenChannelIds = await loadIptvStudioHiddenChannelIds();
+    final visibleChannels = await loadIptvStudioSportsChannels();
     final hiddenChannels = await loadIptvStudioHiddenChannels();
     if (!mounted || generation != _generation) return;
     setState(() {
-      _hiddenChannelIds
+      _visibleChannelIds
         ..clear()
-        ..addAll(hiddenChannelIds);
+        ..addAll(
+          visibleChannels.map((channel) => channel.identificationUrl),
+        );
       _refreshing = true;
       _groups = <_IptvStudioChannelGroup>[];
       _rawChannels
         ..clear()
-        ..addAll(hiddenChannels);
+        ..addAll(<IptvExtractedChannel>[
+          ...hiddenChannels,
+          ...visibleChannels,
+        ]);
       _sourceStatuses.clear();
       _rebuildGroups();
       _loadMessage = null;
@@ -984,30 +993,29 @@ class _IptvExtractorPlayerScreenState
 
   Future<void> _toggleChannelVisibility(_IptvStudioChannelGroup entry) async {
     final channel = entry.primary;
-    final hidden = !_hiddenChannelIds.contains(channel.identificationUrl);
+    final visible = !_visibleChannelIds.contains(channel.identificationUrl);
     setState(() {
-      if (hidden) {
-        _hiddenChannelIds.add(channel.identificationUrl);
+      if (visible) {
+        _visibleChannelIds.add(channel.identificationUrl);
       } else {
-        _hiddenChannelIds.remove(channel.identificationUrl);
+        _visibleChannelIds.remove(channel.identificationUrl);
       }
     });
     try {
-      await setIptvStudioChannelHidden(
-        channel.identificationUrl,
-        hidden,
-        channel: channel,
-      );
-      _showMessage(hidden
-          ? channel.name + ' quedó oculto en Canales deportivos.'
-          : channel.name + ' volvió a Canales deportivos.');
+      if (visible) {
+        await addIptvStudioSportsChannel(channel);
+        _showMessage(channel.name + ' ahora aparece en Canales deportivos.');
+      } else {
+        await removeIptvStudioSportsChannel(channel.identificationUrl);
+        _showMessage(channel.name + ' ya no aparece en Canales deportivos.');
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        if (hidden) {
-          _hiddenChannelIds.remove(channel.identificationUrl);
+        if (visible) {
+          _visibleChannelIds.remove(channel.identificationUrl);
         } else {
-          _hiddenChannelIds.add(channel.identificationUrl);
+          _visibleChannelIds.add(channel.identificationUrl);
         }
       });
       _showMessage('No se pudo cambiar la visibilidad: ' + error.toString());
@@ -1040,7 +1048,7 @@ class _IptvExtractorPlayerScreenState
   Widget _buildChannelCard(_IptvStudioChannelGroup entry) {
     final channel = entry.primary;
     final favorite = _isFavorite(entry);
-    final hidden = _hiddenChannelIds.contains(channel.identificationUrl);
+    final visible = _visibleChannelIds.contains(channel.identificationUrl);
     final metadata = <String>[
       if (channel.group.isNotEmpty) channel.group,
       if (entry.channels.length > 1) entry.channels.length.toString() + ' fuentes',
@@ -1078,7 +1086,9 @@ class _IptvExtractorPlayerScreenState
         ),
         subtitle: Text(
           (metadata.isEmpty ? 'Canal directo' : metadata) +
-              (hidden ? ' · OCULTO EN CANALES DEPORTIVOS' : ''),
+              (visible
+                  ? ' · VISIBLE EN CANALES DEPORTIVOS'
+                  : ' · NO VISIBLE EN CANALES DEPORTIVOS'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(color: _studioMuted, fontSize: 10),
@@ -1087,14 +1097,14 @@ class _IptvExtractorPlayerScreenState
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             IconButton(
-              tooltip: hidden
-                  ? 'Mostrar en Canales deportivos'
-                  : 'Ocultar en Canales deportivos',
+              tooltip: visible
+                  ? 'Ocultar en Canales deportivos'
+                  : 'Mostrar en Canales deportivos',
               visualDensity: VisualDensity.compact,
               onPressed: () => _toggleChannelVisibility(entry),
               icon: Icon(
-                hidden ? Icons.visibility_rounded : Icons.visibility_off_rounded,
-                color: hidden ? _studioGreen : _studioPink,
+                visible ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                color: visible ? _studioPink : _studioGreen,
                 size: 19,
               ),
             ),
@@ -1125,9 +1135,9 @@ class _IptvExtractorPlayerScreenState
             ),
             PopupMenuItem<String>(
               value: 'toggleVisibility',
-              child: Text(hidden
-                  ? 'Mostrar en Canales deportivos'
-                  : 'Ocultar en Canales deportivos'),
+              child: Text(visible
+                  ? 'Ocultar en Canales deportivos'
+                  : 'Mostrar en Canales deportivos'),
             ),
             PopupMenuItem<String>(
               value: 'favorite',
@@ -1223,6 +1233,11 @@ class _IptvExtractorPlayerScreenState
           ),
         ),
         actions: <Widget>[
+          IconButton(
+            tooltip: 'Buscar canal por nombre',
+            onPressed: () => _searchFocusNode.requestFocus(),
+            icon: const Icon(Icons.search_rounded, color: _studioCyan),
+          ),
           IconButton(
             tooltip: 'Mis listas guardadas',
             onPressed: _showSavedSources,
@@ -1327,10 +1342,13 @@ class _IptvExtractorPlayerScreenState
               child: Column(
                 children: <Widget>[
                   TextField(
+                    focusNode: _searchFocusNode,
                     controller: _searchController,
                     decoration: const InputDecoration(
                       hintText: 'Buscar canal, liga, deporte o grupo…',
-                      prefixIcon: Icon(Icons.search, color: _studioCyan),
+                      prefixIcon: Icon(Icons.search_rounded, color: _studioCyan),
+                      filled: true,
+                      fillColor: _studioPanel,
                       isDense: true,
                     ),
                   ),
@@ -1339,7 +1357,8 @@ class _IptvExtractorPlayerScreenState
                     children: <Widget>[
                       Expanded(
                         child: Text(
-                          _groups.length.toString() + ' canales · ' +
+                          _groups.length.toString() + ' detectados · ' +
+                              _visibleChannelIds.length.toString() + ' visibles · ' +
                               totalSources.toString() + ' listas',
                           style: const TextStyle(
                             color: _studioGreen,

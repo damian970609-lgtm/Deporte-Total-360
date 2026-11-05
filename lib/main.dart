@@ -1293,6 +1293,111 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _setLanguage(AppLanguage? value) async {
+    if (value == null) return;
+    appLanguage.value = value;
+    if (mounted) setState(() {});
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('app_language', languageCode(value));
+    } catch (_) {
+      // El idioma permanece activo durante la sesión actual.
+    }
+  }
+
+  Widget _languageCard() => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: appPanel.withAlpha(238),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: appCyan.withAlpha(180)),
+          boxShadow: <BoxShadow>[
+            BoxShadow(color: appCyan.withAlpha(24), blurRadius: 18),
+            BoxShadow(color: appPink.withAlpha(12), blurRadius: 22),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: appCyan.withAlpha(25),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(color: appCyan.withAlpha(90)),
+                  ),
+                  child: const Icon(Icons.translate_rounded, color: appCyan),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        tr('language').toUpperCase(),
+                        style: const TextStyle(
+                          color: appCyan,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 13,
+                          letterSpacing: .6,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        appText(
+                          'Elige el idioma de la aplicación',
+                          'Choose the application language',
+                          'Escolha o idioma do aplicativo',
+                          'Choisissez la langue de l’application',
+                        ),
+                        style: const TextStyle(color: appMuted, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<AppLanguage>(
+              value: appLanguage.value,
+              isExpanded: true,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: appPanel2,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 13,
+                  vertical: 12,
+                ),
+                prefixIcon: const Icon(Icons.language_rounded, color: appGreen),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(13),
+                  borderSide: const BorderSide(color: appLine),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(13),
+                  borderSide: const BorderSide(color: appLine),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(13),
+                  borderSide: const BorderSide(color: appCyan, width: 1.4),
+                ),
+              ),
+              dropdownColor: appPanel2,
+              items: const <DropdownMenuItem<AppLanguage>>[
+                DropdownMenuItem(value: AppLanguage.spanish, child: Text('Español')),
+                DropdownMenuItem(value: AppLanguage.english, child: Text('English')),
+                DropdownMenuItem(value: AppLanguage.portuguese, child: Text('Português')),
+                DropdownMenuItem(value: AppLanguage.french, child: Text('Français')),
+              ],
+              onChanged: _setLanguage,
+            ),
+          ],
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1300,36 +1405,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(
         title: Text(
           tr('settings').toUpperCase(),
-          style: const TextStyle(
-            color: appCyan,
-            fontWeight: FontWeight.w900,
-            fontSize: 14,
-          ),
+          style: const TextStyle(color: appCyan, fontWeight: FontWeight.w900, fontSize: 14),
         ),
       ),
       body: SettingsBackdrop(
-        child: Center(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _handleSignatureTap,
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 28, vertical: 22),
-              child: Text(
-                'DAMIAN.APK',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: appPink,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 2.0,
-                  fontSize: 20,
-                  shadows: <Shadow>[
-                    Shadow(color: appPink, blurRadius: 16),
-                    Shadow(color: appCyan, blurRadius: 8),
-                  ],
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(14, 16, 14, 30),
+          children: <Widget>[
+            _languageCard(),
+            const SizedBox(height: 24),
+            Center(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _handleSignatureTap,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 19),
+                  decoration: BoxDecoration(
+                    color: appPanel.withAlpha(185),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: appPink.withAlpha(105)),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(color: appPink.withAlpha(20), blurRadius: 18),
+                    ],
+                  ),
+                  child: const Text(
+                    'DAMIAN.APK',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: appPink,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 2.0,
+                      fontSize: 20,
+                      shadows: <Shadow>[
+                        Shadow(color: appPink, blurRadius: 16),
+                        Shadow(color: appCyan, blurRadius: 8),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );
