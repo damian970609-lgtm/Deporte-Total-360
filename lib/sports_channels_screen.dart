@@ -57,6 +57,7 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
     _httpClient = widget.httpClient ?? http.Client();
     _selectedChannel = widget.initialChannel;
     _searchController.addListener(_updateSearch);
+    iptvSportsCatalogVersion.addListener(_handleCatalogChanged);
     _loadLibrary();
     if (_selectedChannel != null) {
       _playChannel(_selectedChannel!);
@@ -77,6 +78,7 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
   @override
   void dispose() {
     _searchController.removeListener(_updateSearch);
+    iptvSportsCatalogVersion.removeListener(_handleCatalogChanged);
     _searchController.dispose();
     if (_ownsHttpClient) _httpClient.close();
     _controller?.removeListener(_controllerChanged);
@@ -90,6 +92,10 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
 
   void _updateSearch() {
     if (mounted) setState(() => _query = _searchController.text.trim());
+  }
+
+  void _handleCatalogChanged() {
+    if (mounted) _refreshCatalog();
   }
 
   Future<void> _loadLibrary() async {
@@ -436,7 +442,6 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
           .where((value) => value.isNotEmpty)
           .toList(growable: false);
       await addIptvStudioPlaylistUrls(urls);
-      await _refreshCatalog();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(urls.length.toString() + ' lista(s) guardada(s).')),
