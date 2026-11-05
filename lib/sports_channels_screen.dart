@@ -15,6 +15,24 @@ const Color _sportsPink = Color(0xFFFF28CF);
 const Color _sportsMuted = Color(0xFFA9BDD6);
 const String _sportsRecentStorageKey = 'dt360_sports_recent_channel_ids_v1';
 
+String _sportsNormalizedText(String value) => value
+    .toLowerCase()
+    .replaceAll('á', 'a')
+    .replaceAll('é', 'e')
+    .replaceAll('í', 'i')
+    .replaceAll('ó', 'o')
+    .replaceAll('ú', 'u')
+    .replaceAll(RegExp(r'[^a-z0-9ñ]+'), ' ')
+    .trim()
+    .replaceAll(RegExp(r'\s+'), ' ');
+
+String _sportsCatalogKey(IptvExtractedChannel channel) =>
+    channel.tvgId.trim().isNotEmpty
+        ? 'id:' + channel.tvgId.trim().toLowerCase() +
+            '|name:' + _sportsNormalizedText(channel.name)
+        : 'name:' + _sportsNormalizedText(channel.name) +
+            '|group:' + _sportsNormalizedText(channel.group);
+
 class SportsChannelsScreen extends StatefulWidget {
   const SportsChannelsScreen({
     super.key,
@@ -104,7 +122,7 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
   }
 
   Future<void> _recordRecent(IptvExtractedChannel channel) async {
-    final id = channel.identificationUrl;
+    final id = _sportsCatalogKey(channel);
     _recentChannelIds.remove(id);
     _recentChannelIds.insert(0, id);
     if (_recentChannelIds.length > 30) {
@@ -215,18 +233,23 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
   }
 
   List<IptvExtractedChannel> get _visibleChannels {
-    final query = _query.trim().toLowerCase();
-    return _channels.where((channel) {
+    // Las fuentes alternativas se agrupan como un único canal público.
+    final grouped = <String, IptvExtractedChannel>{};
+    for (final channel in _channels) {
+      grouped.putIfAbsent(_sportsCatalogKey(channel), () => channel);
+    }
+    final query = _sportsNormalizedText(_query);
+    return grouped.values.where((channel) {
       if (_selectedFilter == 'Favoritos' &&
           !_favoriteIds.contains(channel.id)) return false;
       if (_selectedFilter == 'Recientes' &&
-          !_recentChannelIds.contains(channel.identificationUrl)) return false;
+          !_recentChannelIds.contains(_sportsCatalogKey(channel))) return false;
       if (_selectedCategory != 'Todos' &&
           _categoryFor(channel) != _selectedCategory) return false;
       if (query.isEmpty) return true;
-      return (channel.name + ' ' + channel.group + ' ' + channel.tvgId)
-          .toLowerCase()
-          .contains(query);
+      return _sportsNormalizedText(
+        channel.name + ' ' + channel.group + ' ' + channel.tvgId,
+      ).contains(query);
     }).toList(growable: false);
   }
 
@@ -249,20 +272,10 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
     if (!mounted || generation != _playGeneration) return;
 
     if (!retry) _failedSourceUrls.clear();
-    final normalizedName = channel.name
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9áéíóúüñ]+'), '');
-    final sameTvgId = channel.tvgId.trim().isNotEmpty;
-    final alternatives = _channels.where((item) {
-      if (item.url == channel.url) return false;
-      final itemName = item.name
-          .toLowerCase()
-          .replaceAll(RegExp(r'[^a-z0-9áéíóúüñ]+'), '');
-      final sameName = itemName == normalizedName;
-      final sameId = sameTvgId && item.tvgId.trim().isNotEmpty &&
-          item.tvgId.trim().toLowerCase() == channel.tvgId.trim().toLowerCase();
-      return sameName || sameId;
-    }).toList(growable: false);
+    final channelKey = _sportsCatalogKey(channel);
+    final alternatives = _channels.where((item) =>
+        item.url != channel.url && _sportsCatalogKey(item) == channelKey)
+        .toList(growable: false);
     final allSources = <IptvExtractedChannel>[channel, ...alternatives];
     var candidates = allSources
         .where((item) => !_failedSourceUrls.contains(item.url))
@@ -398,14 +411,14 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
   }
 
   Future<void> _hideChannel(IptvExtractedChannel channel) async {
-    final id = channel.identificationUrl;
+    final key = _sportsCatalogKey(channel);
     final previous = List<IptvExtractedChannel>.of(_channels);
     setState(() {
-      _channels.removeWhere((item) => item.identificationUrl == id);
+      _channels.removeWhere((item) => _sportsCatalogKey(item) == key);
     });
     try {
-      await removeIptvStudioSportsChannel(id);
-      if (_selectedChannel?.identificationUrl == id) {
+      await saveIptvStudioSportsChannels(_channels);
+      if (_selectedChannel != null && _sportsCatalogKey(_selectedChannel!) == key) {
         ++_playGeneration;
         final old = _controller;
         _controller = null;
@@ -872,7 +885,7 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
             : Column(
                 children: <Widget>[
                   _buildPlayer(),
-                  _buildLibraryHeader(_channels.length),
+                  _buildLibraryHeader(_visibleChannels.length),
                   if (_selectedChannel != null)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 5),
