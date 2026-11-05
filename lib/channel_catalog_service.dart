@@ -165,16 +165,33 @@ class ChannelCatalogService {
         'El inicio de sesión Google no está disponible en este dispositivo.',
       );
     }
-    final account = await _google.authenticate();
-    final token = account.authentication.idToken;
-    if (token == null || token.isEmpty) {
-      throw const ChannelCatalogException(
-        'Google no entregó un ID token. Revisa el cliente OAuth Web y Android.',
-      );
+    try {
+      final account = await _google.authenticate();
+      final token = account.authentication.idToken;
+      if (token == null || token.isEmpty) {
+        throw const ChannelCatalogException(
+          'Google no entregó un ID token. Revisa el cliente OAuth Web y Android.',
+        );
+      }
+      _idToken = token;
+      signedInEmail = account.email;
+      return account.email;
+    } on GoogleSignInException catch (error) {
+      // Credential Manager puede conservar el vínculo de una cuenta cuando
+      // la autenticación se cancela o falla. En el siguiente intento eso puede
+      // terminar como [16] Account reauth failed. Limpia la sesión nativa aquí,
+      // incluso cuando no se llegó a completar el inicio de sesión.
+      _idToken = null;
+      signedInEmail = null;
+      if (error.code == GoogleSignInExceptionCode.canceled) {
+        try {
+          await _google.signOut();
+        } catch (_) {
+          // Conserva el error original del inicio de sesión.
+        }
+      }
+      rethrow;
     }
-    _idToken = token;
-    signedInEmail = account.email;
-    return account.email;
   }
 
   Future<void> signOut() async {
