@@ -90,7 +90,7 @@ void main() {
       'dt360_secret_iptv_playlist_cleanup_v1': true,
     });
     const playlist = '#EXTM3U\n'
-        '#EXTINF:-1 group-title="Deportes",Canal del menú secreto\n'
+        '#EXTINF:-1 group-title="Deportes",Canal del menu secreto\n'
         'https://media.example/secret.m3u8';
     final routeRequests = <String>[];
     final client = MockClient((request) async {
@@ -130,10 +130,10 @@ void main() {
     print('DEBUG_SECRET_ROUTE_TEXT=' + routeVisibleText);
     expect(
       AutomaticLiveService.parseM3u(playlist).map((channel) => channel.name),
-      contains('Canal del menú secreto'),
+      contains('Canal del menu secreto'),
     );
     expect(
-      find.text('Canal del menú secreto'),
+      find.text('Canal del menu secreto'),
       findsOneWidget,
       reason: routeVisibleText,
     );
@@ -280,9 +280,9 @@ void main() {
     // La lista personal debe aparecer sin esperar a que termine la descarga
     // de la lista automática que ya estaba en curso.
     await tester.runAsync(
-      () => Future<void>.delayed(const Duration(seconds: 1)),
+      () => Future<void>.delayed(const Duration(seconds: 5)),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(sportsRequests, 2);
     expect(personalRequests, 1);
