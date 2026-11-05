@@ -183,6 +183,7 @@ class ChannelCatalogService {
               result.statusCode.toString();
       if (result.statusCode == 401) {
         _idToken = null;
+        signedInEmail = null;
       }
       throw ChannelCatalogException(message);
     }
