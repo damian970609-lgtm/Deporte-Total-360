@@ -124,6 +124,9 @@ void main() {
 
     expect(find.text('Deportes en vivo'), findsOneWidget);
     expect(find.text('Canales deportivos'), findsOneWidget);
+    // La pantalla de transmisiones no debe arrancar ni consultar servicios
+    // hasta que el usuario entre en esa pestaña.
+    expect(find.text('TRANSMISIONES EN VIVO'), findsNothing);
     expect(find.text('Agenda de hoy'), findsOneWidget);
     expect(find.text('Noticias'), findsWidgets);
     expect(find.text('Mister Fantasy'), findsOneWidget);
