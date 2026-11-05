@@ -68,7 +68,7 @@ void main() {
 
     expect(requested, contains(defaultIptvStudioSportsUrl));
     expect(find.text('Canal Prueba'), findsOneWidget);
-    expect(find.byTooltip('Copiar URL directa'), findsOneWidget);
+    expect(find.byTooltip('Acciones del canal'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     client.close();
