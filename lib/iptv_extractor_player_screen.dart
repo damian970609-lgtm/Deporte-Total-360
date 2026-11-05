@@ -1013,6 +1013,7 @@ class _IptvExtractorPlayerScreenState
                               ? _selectedGroup
                               : 'Todos',
                           isDense: true,
+                          isExpanded: true,
                           decoration: const InputDecoration(
                             contentPadding: EdgeInsets.symmetric(
                               horizontal: 9,
