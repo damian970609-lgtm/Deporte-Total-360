@@ -62,6 +62,15 @@ jobs:
       - name: Preparar archivos Android
         run: flutter create --platforms=android .
 
+      # Flutter firma las APK release generadas sin keystore propio con
+      # ~/.android/debug.keystore. Conserva esa clave entre ejecuciones para
+      # que el SHA-1 del cliente OAuth Android no cambie en cada compilación.
+      - name: Restaurar firma Android estable para OAuth
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1-${{ github.repository }}
+
       - name: Habilitar Internet en el APK release
         run: |
           python3 - <<'PY'
