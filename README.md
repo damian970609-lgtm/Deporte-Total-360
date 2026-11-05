@@ -148,9 +148,10 @@ Google que va a iniciar sesión a la lista de usuarios de prueba.
 Después de guardar los dos secretos de firma, ejecuta el workflow
 `Crear APK de DEPORTE TOTAL 360`. El workflow falla de forma segura si falta la
 llave, si no puede leerla o si el SHA-1 de la APK no coincide con la llave usada.
-Una vez desplegado el Worker, la aplicación compara el Client ID Web de la APK
-con el de Cloudflare y rechaza la autenticación antes de abrir Google cuando
-los dos no coinciden.
+Antes de crear la APK, el workflow compara el Client ID Web del secreto de
+este repositorio con el publicado por Cloudflare y bloquea la compilación si no
+coinciden. En el teléfono, la aplicación vuelve a comprobar la misma igualdad y
+rechaza la autenticación antes de abrir Google cuando los dos no coinciden.
 
 Los errores de Google muestran el código y la descripción disponibles sin
 registrar contraseñas, credenciales ni tokens.
