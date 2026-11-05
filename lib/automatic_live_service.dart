@@ -919,9 +919,19 @@ class AutomaticLiveService {
         // dirección de la propia lista antes de pasar la URL al reproductor.
         final baseUri = Uri.tryParse(batch[index]);
         try {
-          final parsedChannels = await Isolate.run(
-            () => parseM3u(body, baseUri: baseUri, sourceUrl: batch[index]),
-          );
+          final parsedChannels = parseInBackground
+              ? await Isolate.run(
+                  () => parseM3u(
+                    body,
+                    baseUri: baseUri,
+                    sourceUrl: batch[index],
+                  ),
+                )
+              : parseM3u(
+                  body,
+                  baseUri: baseUri,
+                  sourceUrl: batch[index],
+                );
           if (parsedChannels.isEmpty) {
             const reason =
                 'La descarga terminó, pero no se encontraron enlaces directos HLS/DASH/TS/MP4 compatibles.';
