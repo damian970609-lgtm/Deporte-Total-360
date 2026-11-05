@@ -506,6 +506,9 @@ class HomeDashboard extends StatelessWidget {
     required this.onChat,
   });
 
+  // Se conservan los callbacks públicos para no romper la integración existente.
+  // La pantalla de inicio ya no muestra accesos directos: la navegación general
+  // permanece en la barra inferior de MainShell.
   final ValueChanged<int> onNavigate;
   final ValueChanged<String> onSportSelected;
   final VoidCallback onTelegram;
@@ -520,721 +523,582 @@ class HomeDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: appBg,
-      appBar: AppBar(
-        titleSpacing: 12,
-        title: Row(
+      body: AppBackdrop(
+        child: CustomPaint(
+          painter: _HomeAtmospherePainter(),
+          child: SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxHeight < 520;
+                final widthLimit = constraints.maxWidth * .88;
+                final preferredWidth =
+                    (constraints.maxHeight * .56).clamp(210.0, 390.0);
+                final crestWidth = preferredWidth > widthLimit
+                    ? widthLimit
+                    : preferredWidth;
+
+                return SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: compact ? 8 : 18,
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: <Widget>[
+                          const _HomeWordmark(),
+                          SizedBox(height: compact ? 8 : 18),
+                          SizedBox(
+                            key: const ValueKey<String>('home-sports-crest'),
+                            width: crestWidth,
+                            height: crestWidth * 1.12,
+                            child: const _SportsCrest(),
+                          ),
+                          SizedBox(height: compact ? 8 : 16),
+                          Text(
+                            appText(
+                              'TODO EL DEPORTE',
+                              'ALL SPORTS',
+                              'TODO O ESPORTE',
+                              'TOUT LE SPORT',
+                            ),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: compact ? 19 : 23,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.8,
+                              height: 1.05,
+                              shadows: <Shadow>[
+                                Shadow(
+                                  color: appCyan.withAlpha(120),
+                                  blurRadius: 18,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            appText(
+                              'EN UN SOLO LUGAR',
+                              'IN ONE PLACE',
+                              'EM UM SÓ LUGAR',
+                              'AU MÊME ENDROIT',
+                            ),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: appYellow,
+                              fontSize: compact ? 18 : 22,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.6,
+                              height: 1.12,
+                              shadows: <Shadow>[
+                                Shadow(
+                                  color: appYellow.withAlpha(95),
+                                  blurRadius: 16,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            tr('tagline'),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: appMuted,
+                              fontSize: compact ? 10 : 12,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Container(
+                            width: compact ? 74 : 104,
+                            height: 2,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(4),
+                              gradient: const LinearGradient(
+                                colors: <Color>[
+                                  appCyan,
+                                  appBlue,
+                                  appPink,
+                                ],
+                              ),
+                              boxShadow: <BoxShadow>[
+                                BoxShadow(
+                                  color: appCyan.withAlpha(100),
+                                  blurRadius: 12,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeWordmark extends StatelessWidget {
+  const _HomeWordmark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: <Widget>[
+        Container(
+          width: 22,
+          height: 2,
+          decoration: BoxDecoration(
+            color: appCyan,
+            borderRadius: BorderRadius.circular(2),
+            boxShadow: <BoxShadow>[
+              BoxShadow(color: appCyan.withAlpha(150), blurRadius: 8),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          tr('title'),
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: appCyan,
+            fontSize: 13,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 2.1,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Container(
+          width: 22,
+          height: 2,
+          decoration: BoxDecoration(
+            color: appPink,
+            borderRadius: BorderRadius.circular(2),
+            boxShadow: <BoxShadow>[
+              BoxShadow(color: appPink.withAlpha(150), blurRadius: 8),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SportsCrest extends StatelessWidget {
+  const _SportsCrest();
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final height = constraints.maxHeight;
+
+        return Stack(
+          fit: StackFit.expand,
           children: <Widget>[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.asset(
-                'assets/images/app_icon.png',
-                width: 34,
-                height: 34,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const Icon(
-                  Icons.emoji_events_rounded,
-                  color: appCyan,
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _SportsCrestPainter(),
+              ),
+            ),
+            Align(
+              alignment: const Alignment(0, -.04),
+              child: Container(
+                width: width * .57,
+                height: width * .57,
+                padding: EdgeInsets.all(width * .045),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const RadialGradient(
+                    center: Alignment(-.28, -.35),
+                    radius: 1.15,
+                    colors: <Color>[
+                      Color(0xFF294C70),
+                      Color(0xFF0B1D35),
+                      Color(0xFF020815),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: appCyan.withAlpha(220),
+                    width: 2.2,
+                  ),
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: appCyan.withAlpha(105),
+                      blurRadius: width * .075,
+                      spreadRadius: 1,
+                    ),
+                    BoxShadow(
+                      color: appPink.withAlpha(55),
+                      blurRadius: width * .12,
+                      offset: Offset(0, width * .025),
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withAlpha(210),
+                      blurRadius: width * .07,
+                      offset: Offset(width * .025, width * .04),
+                    ),
+                  ],
+                ),
+                child: Container(
+                  padding: EdgeInsets.all(width * .025),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF030A18),
+                    border: Border.all(
+                      color: appYellow.withAlpha(155),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Image.asset(
+                    'assets/images/app_icon.png',
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.emoji_events_rounded,
+                      color: appYellow,
+                      size: 86,
+                    ),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(width: 9),
-            Expanded(
-              child: Text(
-                tr('title'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: appCyan,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 13,
-                  letterSpacing: .35,
+            Positioned(
+              left: width * .39,
+              top: height * .035,
+              child: _CrestSportOrb(
+                icon: Icons.emoji_events_rounded,
+                color: appYellow,
+                size: width * .22,
+              ),
+            ),
+            Positioned(
+              left: width * .035,
+              top: height * .29,
+              child: _CrestSportOrb(
+                icon: Icons.sports_soccer_rounded,
+                color: appCyan,
+                size: width * .19,
+              ),
+            ),
+            Positioned(
+              right: width * .035,
+              top: height * .29,
+              child: _CrestSportOrb(
+                icon: Icons.sports_basketball_rounded,
+                color: appPink,
+                size: width * .19,
+              ),
+            ),
+            Positioned(
+              left: width * .13,
+              bottom: height * .19,
+              child: _CrestSportOrb(
+                icon: Icons.sports_baseball_rounded,
+                color: appYellow,
+                size: width * .16,
+              ),
+            ),
+            Positioned(
+              right: width * .13,
+              bottom: height * .19,
+              child: _CrestSportOrb(
+                icon: Icons.sports_volleyball_rounded,
+                color: appGreen,
+                size: width * .16,
+              ),
+            ),
+            Positioned(
+              left: width * .22,
+              right: width * .22,
+              bottom: height * .055,
+              child: Container(
+                height: width * .135,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(width * .045),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: <Color>[
+                      Color(0xFF193B5E),
+                      Color(0xFF050D1D),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: appYellow.withAlpha(210),
+                    width: 1.4,
+                  ),
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: appYellow.withAlpha(80),
+                      blurRadius: width * .045,
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withAlpha(180),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  '360°',
+                  style: TextStyle(
+                    color: appYellow,
+                    fontSize: width * .075,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 3,
+                    shadows: <Shadow>[
+                      Shadow(
+                        color: appYellow.withAlpha(150),
+                        blurRadius: 12,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ],
-        ),
-        actions: <Widget>[
-          IconButton(
-            tooltip: tr('stats_title'),
-            onPressed: onStatistics,
-            icon: const Icon(Icons.query_stats_rounded, color: appGreen),
-          ),
-          IconButton(
-            tooltip: tr('settings'),
-            onPressed: () => onNavigate(7),
-            icon: const Icon(Icons.settings_rounded, color: appCyan),
-          ),
-        ],
-      ),
-      body: AppBackdrop(
-        child: SafeArea(
-          top: false,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                _BrandHero(),
-                const SizedBox(height: 8),
-                Text(
-                  tr('tagline'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 11,
-                    letterSpacing: .8,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: _SectionHeading(
-                        title: appText(
-                          'TODOS LOS DEPORTES',
-                          'ALL SPORTS',
-                          'TODOS OS ESPORTES',
-                          'TOUS LES SPORTS',
-                        ),
-                        icon: Icons.public_rounded,
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: onStatistics,
-                      child: Text(
-                        appText(
-                          'Explorar →',
-                          'Explore →',
-                          'Explorar →',
-                          'Explorer →',
-                        ),
-                        style: const TextStyle(color: appCyan, fontSize: 11),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 7),
-                GridView.count(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 1.55,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: <Widget>[
-                    _SportTile(
-                      title: 'FÚTBOL',
-                      subtitle: 'LaLiga • Premier • Champions',
-                      icon: Icons.sports_soccer_rounded,
-                      color: appGreen,
-                      onTap: () => onSportSelected('Fútbol'),
-                    ),
-                    _SportTile(
-                      title: 'BALONCESTO',
-                      subtitle: 'NBA • WNBA • FIBA',
-                      icon: Icons.sports_basketball_rounded,
-                      color: appYellow,
-                      onTap: () => onSportSelected('Baloncesto'),
-                    ),
-                    _SportTile(
-                      title: 'BÉISBOL',
-                      subtitle: 'MLB • WBC • WBSC',
-                      icon: Icons.sports_baseball_rounded,
-                      color: appPink,
-                      onTap: () => onSportSelected('Béisbol'),
-                    ),
-                    _SportTile(
-                      title: 'HOCKEY',
-                      subtitle: 'NHL • PWHL • IIHF',
-                      icon: Icons.sports_hockey_rounded,
-                      color: appCyan,
-                      onTap: () => onSportSelected('Hockey sobre hielo'),
-                    ),
-                    _SportTile(
-                      title: 'VOLEIBOL',
-                      subtitle: 'VNL • FIVB',
-                      icon: Icons.sports_volleyball_rounded,
-                      color: appBlue,
-                      onTap: () => onSportSelected('Voleibol'),
-                    ),
-                    _SportTile(
-                      title: 'MMA',
-                      subtitle: 'UFC • Combates',
-                      icon: Icons.sports_mma_rounded,
-                      color: appPink,
-                      onTap: () => onSportSelected('MMA'),
-                    ),
-                    _SportTile(
-                      title: 'FÚTBOL SALA',
-                      subtitle: 'Mundiales • Copas',
-                      icon: Icons.sports_soccer_rounded,
-                      color: appGreen,
-                      onTap: () => onSportSelected('Fútbol sala'),
-                    ),
-                    _SportTile(
-                      title: 'CICLISMO',
-                      subtitle: 'Tour • Giro • Vuelta',
-                      icon: Icons.directions_bike_rounded,
-                      color: appYellow,
-                      onTap: () => onSportSelected('Ciclismo'),
-                    ),
-                    _SportTile(
-                      title: 'DEPORTES DE MOTOR',
-                      subtitle: 'F1 • MotoGP',
-                      icon: Icons.sports_motorsports_rounded,
-                      color: appBlue,
-                      onTap: () => onSportSelected('Deportes de motor'),
-                    ),
-                    _SportTile(
-                      title: 'BALONMANO',
-                      subtitle: 'IHF • EHF',
-                      icon: Icons.sports_handball_rounded,
-                      color: appGreen,
-                      onTap: () => onSportSelected('Balonmano'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 17),
-                _SectionHeading(
-                  title: appText(
-                    'ACCESO RÁPIDO',
-                    'QUICK ACCESS',
-                    'ACESSO RÁPIDO',
-                    'ACCÈS RAPIDE',
-                  ),
-                  icon: Icons.bolt_rounded,
-                ),
-                const SizedBox(height: 8),
-                _HomeActionCard(
-                  title: tr('streams'),
-                  subtitle: appText(
-                    'Canales deportivos y reproducción multivista',
-                    'Sports channels and multi-view playback',
-                    'Canais esportivos e reprodução multivista',
-                    'Chaînes sportives et lecture multivue',
-                  ),
-                  icon: Icons.live_tv_rounded,
-                  color: appRed,
-                  onTap: () => onNavigate(1),
-                ),
-                const SizedBox(height: 8),
-                _HomeActionCard(
-                  title: tr('matches'),
-                  subtitle: appText(
-                    'Calendario deportivo, marcadores y filtros',
-                    'Sports schedule, scores and filters',
-                    'Calendário esportivo, placares e filtros',
-                    'Calendrier sportif, scores et filtres',
-                  ),
-                  icon: Icons.calendar_month_rounded,
-                  color: appGreen,
-                  onTap: onOpenAgenda,
-                ),
-                const SizedBox(height: 8),
-                _HomeActionCard(
-                  title: tr('telegram'),
-                  subtitle: appText(
-                    'Espacio reservado para tu canal oficial',
-                    'Reserved space for your official channel',
-                    'Espaço reservado para seu canal oficial',
-                    'Espace réservé à votre chaîne officielle',
-                  ),
-                  icon: Icons.send_rounded,
-                  color: appBlue,
-                  onTap: onTelegram,
-                ),
-                const SizedBox(height: 8),
-                _HomeActionCard(
-                  title: tr('statistics'),
-                  subtitle: appText(
-                    'Ligas, clasificaciones, pilotos y luchadores',
-                    'Leagues, standings, drivers and fighters',
-                    'Ligas, classificações, pilotos e lutadores',
-                    'Ligues, classements, pilotes et combattants',
-                  ),
-                  icon: Icons.query_stats_rounded,
-                  color: appCyan,
-                  onTap: onStatistics,
-                ),
-                const SizedBox(height: 8),
-                _HomeActionCard(
-                  title: tr('news'),
-                  subtitle: appText(
-                    'Noticias deportivas de varias fuentes RSS',
-                    'Sports news from multiple RSS sources',
-                    'Notícias esportivas de várias fontes RSS',
-                    'Actualités sportives de plusieurs flux RSS',
-                  ),
-                  icon: Icons.article_rounded,
-                  color: appYellow,
-                  onTap: () => onNavigate(3),
-                ),
-                const SizedBox(height: 8),
-                _HomeActionCard(
-                  title: appText('RESÚMENES', 'HIGHLIGHTS', 'RESUMOS', 'RÉSUMÉS'),
-                  subtitle: appText(
-                    'Goles, jugadas y vídeos deportivos',
-                    'Goals, plays and sports videos',
-                    'Gols, jogadas e vídeos esportivos',
-                    'Buts, actions et vidéos sportives',
-                  ),
-                  icon: Icons.play_circle_fill_rounded,
-                  color: appPink,
-                  onTap: () => onNavigate(6),
-                ),
-                const SizedBox(height: 8),
-                _HomeActionCard(
-                  title: 'FANTASY',
-                  subtitle: appText(
-                    'Abrir Mister Fantasy',
-                    'Open Mister Fantasy',
-                    'Abrir Mister Fantasy',
-                    'Ouvrir Mister Fantasy',
-                  ),
-                  icon: Icons.emoji_events_rounded,
-                  color: appPink,
-                  onTap: onFantasy,
-                ),
-                const SizedBox(height: 8),
-                _HomeActionCard(
-                  title: tr('public_chat'),
-                  subtitle: appText(
-                    'Sala compartida para conversar con todos',
-                    'Shared room to chat with everyone',
-                    'Sala compartilhada para conversar com todos',
-                    'Salon partagé pour discuter avec tous',
-                  ),
-                  icon: Icons.forum_rounded,
-                  color: appCyan,
-                  onTap: onChat,
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: _ActionTile(
-                        title: tr('contact'),
-                        subtitle: appText(
-                          'En caso de fallas',
-                          'For support',
-                          'Em caso de problemas',
-                          'En cas de problème',
-                        ),
-                        icon: Icons.chat_rounded,
-                        color: appGreen,
-                        onTap: onContact,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _ActionTile(
-                        title: tr('donations'),
-                        subtitle: appText(
-                          'Apoya el proyecto',
-                          'Support the project',
-                          'Apoie o projeto',
-                          'Soutenir le projet',
-                        ),
-                        icon: Icons.favorite_rounded,
-                        color: appYellow,
-                        onTap: onDonations,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 13),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    gradient: const LinearGradient(
-                      colors: <Color>[
-                        Color(0xFF07172D),
-                        Color(0xFF10113A),
-                        Color(0xFF071B2D),
-                      ],
-                    ),
-                    border: Border.all(color: appCyan.withAlpha(110)),
-                    boxShadow: <BoxShadow>[
-                      BoxShadow(color: appBlue.withAlpha(24), blurRadius: 18),
-                    ],
-                  ),
-                  child: Row(
-                    children: <Widget>[
-                      const Icon(Icons.sports_rounded, color: appPink, size: 32),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Text(
-                              appText(
-                                '¡EL DEPORTE NOS UNE!',
-                                'SPORT BRINGS US TOGETHER!',
-                                'O ESPORTE NOS UNE!',
-                                'LE SPORT NOUS UNIT !',
-                              ),
-                              style: const TextStyle(
-                                color: appCyan,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 13,
-                                letterSpacing: .4,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              appText(
-                                'Tu pasión, en todas partes.',
-                                'Your passion, everywhere.',
-                                'Sua paixão, em todos os lugares.',
-                                'Votre passion, partout.',
-                              ),
-                              style: const TextStyle(color: appMuted, fontSize: 11),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Icon(Icons.bolt_rounded, color: appYellow, size: 27),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
-class _HomeSportChip extends StatelessWidget {
-  const _HomeSportChip({
-    required this.label,
+class _CrestSportOrb extends StatelessWidget {
+  const _CrestSportOrb({
     required this.icon,
     required this.color,
-    this.onTap,
+    required this.size,
   });
 
-  final String label;
   final IconData icon;
   final Color color;
-  final VoidCallback? onTap;
+  final double size;
 
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: color.withAlpha(18),
-      borderRadius: BorderRadius.circular(9),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(9),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: color.withAlpha(130)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Icon(icon, color: color, size: 15),
-              const SizedBox(width: 5),
-              Text(
-                label,
-                style: TextStyle(
-                  color: onTap == null ? appMuted : Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HomeActionCard extends StatelessWidget {
-  const _HomeActionCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: appPanel,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 62),
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            gradient: LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-              colors: <Color>[color.withAlpha(34), appPanel],
-            ),
-            border: Border.all(color: color.withAlpha(190)),
-            boxShadow: <BoxShadow>[
-              BoxShadow(color: color.withAlpha(22), blurRadius: 13),
-            ],
-          ),
-          child: Row(
-            children: <Widget>[
-              Icon(icon, color: color, size: 29),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: appMuted, fontSize: 9),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right_rounded, color: color, size: 23),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BrandHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 148,
-      padding: const EdgeInsets.all(12),
+      width: size,
+      height: size,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(17),
+        shape: BoxShape.circle,
         gradient: const RadialGradient(
-          center: Alignment.topCenter,
-          radius: 1.25,
+          center: Alignment(-.35, -.4),
           colors: <Color>[
-            Color(0xFF10366B),
-            Color(0xFF080D25),
-            Color(0xFF040816),
+            Color(0xFF28496A),
+            Color(0xFF0A1A30),
+            Color(0xFF020713),
           ],
         ),
-        border: Border.all(color: appCyan.withAlpha(170)),
+        border: Border.all(color: color.withAlpha(225), width: 1.5),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: appCyan.withAlpha(30),
-            blurRadius: 18,
-            offset: const Offset(0, 4),
+            color: color.withAlpha(115),
+            blurRadius: size * .42,
+            spreadRadius: 1,
           ),
-          BoxShadow(color: appPink.withAlpha(18), blurRadius: 20),
+          BoxShadow(
+            color: Colors.black.withAlpha(190),
+            blurRadius: size * .18,
+            offset: Offset(size * .08, size * .1),
+          ),
         ],
       ),
-      child: Image.asset(
-        'assets/images/app_icon.png',
-        fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => const Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Icon(Icons.emoji_events_rounded, color: appYellow, size: 50),
-            SizedBox(height: 8),
-            Text(
-              'DEPORTE TOTAL 360°',
-              style: TextStyle(
-                color: appCyan,
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ],
-        ),
+      child: Icon(
+        icon,
+        color: color,
+        size: size * .52,
+        shadows: <Shadow>[
+          Shadow(color: color.withAlpha(180), blurRadius: size * .22),
+        ],
       ),
     );
   }
 }
 
-class _SectionHeading extends StatelessWidget {
-  const _SectionHeading({required this.title, required this.icon});
-  final String title;
-  final IconData icon;
+class _SportsCrestPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final width = size.width;
+    final height = size.height;
+    final shield = Path()
+      ..moveTo(width * .5, height * .025)
+      ..cubicTo(
+        width * .73,
+        height * .015,
+        width * .91,
+        height * .075,
+        width * .96,
+        height * .2,
+      )
+      ..lineTo(width * .9, height * .72)
+      ..cubicTo(
+        width * .86,
+        height * .86,
+        width * .64,
+        height * .965,
+        width * .5,
+        height * .99,
+      )
+      ..cubicTo(
+        width * .36,
+        height * .965,
+        width * .14,
+        height * .86,
+        width * .1,
+        height * .72,
+      )
+      ..lineTo(width * .04, height * .2)
+      ..cubicTo(
+        width * .09,
+        height * .075,
+        width * .27,
+        height * .015,
+        width * .5,
+        height * .025,
+      )
+      ..close();
+
+    final bounds = Offset.zero & size;
+    canvas.drawPath(
+      shield,
+      Paint()
+        ..color = appCyan.withAlpha(95)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width * .065
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, width * .035),
+    );
+    canvas.drawPath(
+      shield,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[
+            Color(0xFF1C4668),
+            Color(0xFF07162B),
+            Color(0xFF030817),
+          ],
+        ).createShader(bounds),
+    );
+    canvas.drawPath(
+      shield,
+      Paint()
+        ..color = appCyan
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width * .012,
+    );
+    canvas.drawPath(
+      shield,
+      Paint()
+        ..color = appPink.withAlpha(170)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width * .003,
+    );
+
+    final medal = Rect.fromCenter(
+      center: Offset(width * .5, height * .48),
+      width: width * .72,
+      height: height * .44,
+    );
+    canvas.drawOval(
+      medal,
+      Paint()
+        ..color = appCyan.withAlpha(65)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width * .006,
+    );
+    canvas.drawOval(
+      medal.deflate(width * .025),
+      Paint()
+        ..color = appPink.withAlpha(48)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width * .003,
+    );
+
+    final topLine = Paint()
+      ..color = appYellow.withAlpha(150)
+      ..strokeWidth = width * .004
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      Offset(width * .34, height * .13),
+      Offset(width * .66, height * .13),
+      topLine,
+    );
+    canvas.drawCircle(
+      Offset(width * .5, height * .13),
+      width * .012,
+      Paint()..color = appYellow,
+    );
+  }
 
   @override
-  Widget build(BuildContext context) => Row(
-        children: <Widget>[
-          Icon(icon, color: appCyan, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 12,
-                letterSpacing: .45,
-              ),
-            ),
-          ),
-        ],
-      );
+  bool shouldRepaint(covariant _SportsCrestPainter oldDelegate) => false;
 }
 
-class _SportTile extends StatelessWidget {
-  const _SportTile({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-
+class _HomeAtmospherePainter extends CustomPainter {
   @override
-  Widget build(BuildContext context) => InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: <Color>[color.withAlpha(32), appPanel],
-            ),
-            border: Border.all(color: color.withAlpha(175)),
-            boxShadow: <BoxShadow>[
-              BoxShadow(color: color.withAlpha(18), blurRadius: 12),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Icon(icon, color: color, size: 28),
-              const SizedBox(height: 5),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: appMuted, fontSize: 8),
-              ),
-            ],
-          ),
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width * .5, size.height * .46);
+    for (var i = 0; i < 5; i++) {
+      final opacity = 24 - (i * 3);
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: center,
+          width: size.width * (.8 + (i * .34)),
+          height: size.height * (.28 + (i * .15)),
         ),
+        Paint()
+          ..color = (i.isEven ? appCyan : appBlue).withAlpha(opacity)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = i == 0 ? 1.5 : 1,
       );
-}
+    }
 
-class _ActionTile extends StatelessWidget {
-  const _ActionTile({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
+    final beamPaint = Paint()
+      ..color = appCyan.withAlpha(17)
+      ..strokeWidth = 1;
+    canvas.drawLine(
+      Offset(0, size.height * .23),
+      Offset(size.width * .26, size.height * .43),
+      beamPaint,
+    );
+    canvas.drawLine(
+      Offset(size.width, size.height * .23),
+      Offset(size.width * .74, size.height * .43),
+      beamPaint,
+    );
+    canvas.drawLine(
+      Offset(0, size.height * .77),
+      Offset(size.width * .28, size.height * .59),
+      beamPaint,
+    );
+    canvas.drawLine(
+      Offset(size.width, size.height * .77),
+      Offset(size.width * .72, size.height * .59),
+      beamPaint,
+    );
+  }
 
   @override
-  Widget build(BuildContext context) => InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 86),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: <Color>[color.withAlpha(36), const Color(0xFF050C1D)],
-            ),
-            border: Border.all(color: color.withAlpha(215)),
-            boxShadow: <BoxShadow>[
-              BoxShadow(color: color.withAlpha(30), blurRadius: 14),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Icon(icon, color: color, size: 29),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: appMuted, fontSize: 9),
-              ),
-            ],
-          ),
-        ),
-      );
+  bool shouldRepaint(covariant _HomeAtmospherePainter oldDelegate) => false;
 }
-
-
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
