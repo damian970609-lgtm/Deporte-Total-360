@@ -156,11 +156,88 @@ List<IptvExtractedChannel> parseIptvStudioM3u(
   return result;
 }
 
+
+/// Lee las mismas listas que administra el menú secreto de IPTV Extractor 360.
+/// La pantalla pública consume esta biblioteca sin crear una segunda lista.
+Future<List<IptvExtractedChannel>> loadSavedIptvStudioChannels({
+  http.Client? httpClient,
+}) async {
+  final prefs = await SharedPreferences.getInstance();
+  final urls = prefs.getStringList(_studioUrlsKey) ?? <String>[];
+  final texts = prefs.getStringList(_studioTextsKey) ?? <String>[];
+  final ownsClient = httpClient == null;
+  final client = httpClient ?? http.Client();
+
+  Future<List<IptvExtractedChannel>> loadRemote(String url) async {
+    try {
+      final response = await client.get(
+        Uri.parse(url),
+        headers: const <String, String>{
+          'Accept': 'application/x-mpegURL, application/vnd.apple.mpegurl, text/plain, */*',
+          'User-Agent': 'DeporteTotal360-IPTV/1.0',
+          'Cache-Control': 'no-cache',
+        },
+      ).timeout(const Duration(seconds: 25));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return <IptvExtractedChannel>[];
+      }
+      if (response.bodyBytes.length > 12 * 1024 * 1024) {
+        return <IptvExtractedChannel>[];
+      }
+      final body = utf8.decode(response.bodyBytes, allowMalformed: true);
+      return await Isolate.run(
+        () => parseIptvStudioM3u(body, sourceUrl: url),
+      );
+    } catch (_) {
+      return <IptvExtractedChannel>[];
+    }
+  }
+
+  try {
+    final remoteResults = await Future.wait(
+      urls.where(_isHttpMediaUrl).map(loadRemote),
+    );
+    final channels = <IptvExtractedChannel>[];
+    for (final result in remoteResults) {
+      channels.addAll(result);
+    }
+    for (var index = 0; index < texts.length; index++) {
+      try {
+        channels.addAll(
+          parseIptvStudioM3u(
+            texts[index],
+            sourceUrl: 'Importada #' + (index + 1).toString(),
+          ),
+        );
+      } catch (_) {
+        // Una lista local dañada no impide mostrar el resto de fuentes.
+      }
+    }
+    return channels;
+  } finally {
+    if (ownsClient) client.close();
+  }
+}
+
+Future<Set<String>> loadIptvStudioFavoriteIds() async {
+  final prefs = await SharedPreferences.getInstance();
+  return (prefs.getStringList(_studioFavoritesKey) ?? <String>[]).toSet();
+}
+
+Future<void> saveIptvStudioFavoriteIds(Iterable<String> ids) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setStringList(_studioFavoritesKey, ids.toSet().toList());
+}
+
 class _IptvStudioChannelGroup {
   const _IptvStudioChannelGroup(this.channels);
   final List<IptvExtractedChannel> channels;
   IptvExtractedChannel get primary => channels.first;
 }
+
+/// Se actualiza al elegir un canal en el menú secreto; MainShell abre la pestaña pública.
+final ValueNotifier<IptvExtractedChannel?> iptvSelectedSportsChannel =
+    ValueNotifier<IptvExtractedChannel?>(null);
 
 class IptvExtractorPlayerScreen extends StatefulWidget {
   const IptvExtractorPlayerScreen({
@@ -710,15 +787,9 @@ class _IptvExtractorPlayerScreenState
   bool _isFavorite(_IptvStudioChannelGroup entry) =>
       _favoriteIds.contains(entry.primary.id);
 
-  Future<void> _openChannel(_IptvStudioChannelGroup entry) async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => _IptvStudioPlayerScreen(
-          channel: entry.primary,
-          alternatives: entry.channels.skip(1).toList(growable: false),
-        ),
-      ),
-    );
+  void _openChannel(_IptvStudioChannelGroup entry) {
+    iptvSelectedSportsChannel.value = entry.primary;
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   void _showMessage(String message) {

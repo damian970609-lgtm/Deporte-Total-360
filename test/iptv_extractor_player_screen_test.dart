@@ -70,6 +70,10 @@ void main() {
     expect(find.text('Canal Prueba'), findsOneWidget);
     expect(find.byTooltip('Acciones del canal'), findsOneWidget);
 
+    await tester.tap(find.text('Canal Prueba'));
+    expect(iptvSelectedSportsChannel.value?.name, 'Canal Prueba');
+    iptvSelectedSportsChannel.value = null;
+
     await tester.pumpWidget(const SizedBox.shrink());
     client.close();
   });

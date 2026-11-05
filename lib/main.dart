@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'automatic_live_screen.dart';
 import 'iptv_extractor_player_screen.dart';
+import 'sports_channels_screen.dart';
 
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
@@ -152,6 +153,7 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     NotificationService.liveEventNotification.addListener(_handleLivePush);
+    iptvSelectedSportsChannel.addListener(_handleIptvChannelSelected);
     if (NotificationService.liveEventNotification.value != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _handleLivePush());
     }
@@ -164,9 +166,20 @@ class _MainShellState extends State<MainShell> {
     _selectTab(_liveTab);
   }
 
+  void _handleIptvChannelSelected() {
+    final channel = iptvSelectedSportsChannel.value;
+    if (channel == null || !mounted) return;
+    setState(() {
+      _selectedSportsChannel = channel;
+      _selectedIndex = _sportsChannelsTab;
+      _visitedTabs.add(_sportsChannelsTab);
+    });
+  }
+
   @override
   void dispose() {
     NotificationService.liveEventNotification.removeListener(_handleLivePush);
+    iptvSelectedSportsChannel.removeListener(_handleIptvChannelSelected);
     super.dispose();
   }
 
@@ -178,14 +191,16 @@ class _MainShellState extends State<MainShell> {
   static const int _statisticsTab = 5;
   static const int _summariesTab = 6;
   static const int _settingsTab = 7;
+  static const int _sportsChannelsTab = 8;
 
   int _selectedIndex = _homeTab;
   String _selectedStatisticsSport = 'Fútbol';
+  IptvExtractedChannel? _selectedSportsChannel;
   bool _handlingBack = false;
   final Set<int> _visitedTabs = <int>{_homeTab};
 
   void _selectTab(int index) {
-    if (index < _homeTab || index > _settingsTab) return;
+    if (index < _homeTab || index > _sportsChannelsTab) return;
     setState(() {
       _selectedIndex = index;
       _visitedTabs.add(index);
@@ -311,7 +326,7 @@ class _MainShellState extends State<MainShell> {
       child: InkWell(
         onTap: () => _selectTab(index),
         child: SizedBox(
-          width: 82,
+          width: index == _sportsChannelsTab ? 112 : 82,
           height: 66,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -372,6 +387,9 @@ class _MainShellState extends State<MainShell> {
           ? const SportsSummariesScreen()
           : const SizedBox.shrink(),
       _visitedTabs.contains(_settingsTab) ? const SettingsScreen() : const SizedBox.shrink(),
+      _visitedTabs.contains(_sportsChannelsTab)
+          ? SportsChannelsScreen(initialChannel: _selectedSportsChannel)
+          : const SizedBox.shrink(),
     ];
 
     return PopScope<void>(
@@ -405,6 +423,7 @@ class _MainShellState extends State<MainShell> {
                   _buildBottomTab(_summariesTab, Icons.play_circle_fill_rounded,
                     appText('Resúmenes', 'Highlights', 'Resumos', 'Résumés'), appPink),
                   _buildBottomTab(_settingsTab, Icons.settings_rounded, tr('settings'), appCyan),
+                  _buildBottomTab(_sportsChannelsTab, Icons.sports_score_rounded, 'Canales deportivos', appPink),
                 ],
               ),
             ),
