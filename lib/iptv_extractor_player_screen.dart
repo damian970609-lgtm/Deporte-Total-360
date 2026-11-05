@@ -772,37 +772,31 @@ class _IptvExtractorPlayerScreenState
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(color: _studioMuted, fontSize: 10),
         ),
-        trailing: Wrap(
-          spacing: 0,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: <Widget>[
-            IconButton(
-              tooltip: 'Copiar URL directa',
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 34, height: 34),
-              onPressed: () => _copyChannelUrl(channel),
-              icon: const Icon(Icons.copy, color: _studioCyan),
+        trailing: PopupMenuButton<String>(
+          tooltip: 'Acciones del canal',
+          icon: const Icon(Icons.more_vert, color: _studioCyan),
+          onSelected: (action) {
+            if (action == 'copy') {
+              _copyChannelUrl(channel);
+            } else if (action == 'favorite') {
+              _toggleFavorite(entry);
+            } else if (action == 'sources') {
+              _showAlternatives(entry);
+            }
+          },
+          itemBuilder: (_) => <PopupMenuEntry<String>>[
+            const PopupMenuItem<String>(
+              value: 'copy',
+              child: Text('Copiar URL directa'),
             ),
-            IconButton(
-              tooltip: favorite ? 'Quitar favorito' : 'Agregar favorito',
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 34, height: 34),
-              onPressed: () => _toggleFavorite(entry),
-              icon: Icon(
-                favorite ? Icons.favorite : Icons.favorite_border,
-                color: favorite ? _studioPink : _studioMuted,
-              ),
+            PopupMenuItem<String>(
+              value: 'favorite',
+              child: Text(favorite ? 'Quitar de favoritos' : 'Agregar a favoritos'),
             ),
             if (entry.channels.length > 1)
-              IconButton(
-                tooltip: 'Fuentes alternativas',
-                visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 34, height: 34),
-                onPressed: () => _showAlternatives(entry),
-                icon: const Icon(Icons.swap_horiz, color: _studioGreen),
+              const PopupMenuItem<String>(
+                value: 'sources',
+                child: Text('Elegir fuente alternativa'),
               ),
           ],
         ),
