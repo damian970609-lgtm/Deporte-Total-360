@@ -183,6 +183,7 @@ class ChannelCatalogService {
       );
     }
   }
+
   Future<String> signIn() async {
     // Reutiliza la sesión autenticada que ya vive en memoria.
     final currentToken = _idToken;
@@ -225,7 +226,7 @@ class ChannelCatalogService {
       final detail = error.description?.trim();
       final detailSuffix = detail == null || detail.isEmpty
           ? ''
-          : '\\nDetalle de Google: ' + detail;
+          : '\nDetalle de Google: ' + detail;
       switch (error.code) {
         case GoogleSignInExceptionCode.clientConfigurationError:
           throw ChannelCatalogException(
