@@ -282,7 +282,7 @@ void main() {
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(seconds: 5)),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     expect(sportsRequests, 2);
     expect(personalRequests, 1);
