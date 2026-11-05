@@ -84,6 +84,45 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('la ruta real de DAMIAN.APK abre y carga el reproductor integrado', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'dt360_secret_iptv_playlist_cleanup_v1': true,
+    });
+    const playlist = '#EXTM3U\\n'
+        '#EXTINF:-1 group-title="Deportes",Canal del menú secreto\\n'
+        'https://media.example/secret.m3u8';
+    final client = MockClient((request) async => http.Response(playlist, 200));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SettingsScreen(
+          secretMenuBuilder: (_) => IntegratedIptvPlayerScreen(
+            parseInBackground: false,
+            httpClient: client,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    for (var tap = 0; tap < 10; tap++) {
+      await tester.tap(find.text('DAMIAN.APK'));
+    }
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
+    expect(find.text('AÑADIR LISTAS'), findsOneWidget);
+    expect(find.text('CARGAR ARCHIVOS'), findsOneWidget);
+    expect(find.text('Canal del menú secreto'), findsOneWidget);
+    expect(find.text('No se pudo mostrar esta sección'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('el menú secreto abre el reproductor IPTV integrado sin listas precargadas', (tester) async {
     Widget? destination;
     await tester.pumpWidget(
