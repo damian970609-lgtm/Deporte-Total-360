@@ -373,6 +373,21 @@ jobs:
           fi
           echo "El ID de cliente OAuth Web está configurado. Su valor permanece oculto."
 
+      - name: Verificar que APK y Cloudflare usan el mismo cliente OAuth Web
+        if: github.event_name != 'pull_request'
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+        run: |
+          set -Eeuo pipefail
+          OAUTH_CONFIG="$(curl --fail --silent --show-error --retry 3 --retry-delay 2 https://deporte-total-360-api.damian970609.workers.dev/api/channels/auth-config)"
+          node - "$OAUTH_CONFIG" <<'NODE'
+          const config = JSON.parse(process.argv[2]);
+          const appClientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+          if (!appClientId || config.configured !== true || config.clientId !== appClientId) {
+            throw new Error("El secreto GOOGLE_OAUTH_CLIENT_ID de la APK no coincide con el cliente OAuth Web publicado en Cloudflare.");
+          }
+          console.log("El cliente OAuth Web de la APK coincide con Cloudflare. El valor se mantiene oculto.");
+          NODE
       - name: Compilar APK de producción
         if: github.event_name != 'pull_request'
         env:
