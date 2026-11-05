@@ -1362,6 +1362,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   bool _hasMore = true;
   String? _email;
   String? _error;
+  String? _sourcesError;
 
   @override
   void dispose() {
@@ -1412,16 +1413,22 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
   Future<void> _loadAdmin({bool showLoading = true}) async {
     if (_email == null && _service.signedInEmail == null) return;
-    if (showLoading && mounted) setState(() => _loading = true);
+    if (showLoading && mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
+
+    // El catálogo y las fuentes son servicios independientes. Un fallo al
+    // consultar las listas IPTV no debe borrar ni bloquear los canales.
     try {
       final channels = await _service.fetchAdminChannels(
         search: _searchController.text,
       );
-      final sources = await _service.fetchSources();
       if (!mounted) return;
       setState(() {
         _channels = channels;
-        _sources = sources;
         _hasMore = channels.length == 200;
         _loading = false;
         _error = null;
@@ -1431,6 +1438,22 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       setState(() {
         _loading = false;
         _error = error.toString();
+      });
+      return;
+    }
+
+    try {
+      final sources = await _service.fetchSources();
+      if (!mounted) return;
+      setState(() {
+        _sources = sources;
+        _sourcesError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        // Conserva el catálogo ya cargado y comunica solo el fallo de fuentes.
+        _sourcesError = error.toString();
       });
     }
   }
@@ -1930,6 +1953,18 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                         ),
                       ],
                     ),
+                    if (_sourcesError != null)
+                      _adminCard(
+                        child: Text(
+                          'No se pudieron consultar las listas registradas: ' +
+                              _sourcesError!,
+                          style: const TextStyle(
+                            color: _channelYellow,
+                            fontSize: 11,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
                     if (_sources.isEmpty)
                       _adminCard(
                         child: const Text(
