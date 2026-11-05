@@ -686,6 +686,13 @@ class _IntegratedIptvPlayerScreenState
           spacing: 0,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: <Widget>[
+            if (entry.channels.length > 1)
+              IconButton(
+                tooltip: 'Elegir fuente alternativa',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _showAlternatives(entry),
+                icon: const Icon(Icons.more_horiz_rounded, color: _iptvMuted),
+              ),
             IconButton(
               tooltip: favorite ? 'Quitar de favoritos' : 'Agregar a favoritos',
               visualDensity: VisualDensity.compact,
@@ -703,9 +710,7 @@ class _IntegratedIptvPlayerScreenState
             ),
           ],
         ),
-        onTap: () => entry.channels.length > 1
-            ? _showAlternatives(entry)
-            : _playChannel(channel),
+        onTap: () => _playChannel(channel),
       ),
     );
   }
