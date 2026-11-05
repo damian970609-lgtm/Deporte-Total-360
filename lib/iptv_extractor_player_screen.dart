@@ -543,12 +543,12 @@ class _IptvExtractorPlayerScreenState
         ..clear()
         ..addAll(hiddenChannelIds);
       _refreshing = true;
+      _groups = <_IptvStudioChannelGroup>[];
       _rawChannels
         ..clear()
         ..addAll(hiddenChannels);
-      _rebuildGroups();
-      _groups = <_IptvStudioChannelGroup>[];
       _sourceStatuses.clear();
+      _rebuildGroups();
       _loadMessage = null;
       _selectedGroup = 'Todos';
     });
