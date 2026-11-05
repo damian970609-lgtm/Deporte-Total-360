@@ -30,7 +30,12 @@ void main() {
     });
 
     await tester.pumpWidget(
-      MaterialApp(home: SportsChannelsScreen(httpClient: client)),
+      MaterialApp(
+        home: SportsChannelsScreen(
+          httpClient: client,
+          parseInBackground: false,
+        ),
+      ),
     );
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 350)),

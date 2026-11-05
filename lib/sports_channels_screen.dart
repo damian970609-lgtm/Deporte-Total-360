@@ -19,10 +19,12 @@ class SportsChannelsScreen extends StatefulWidget {
     super.key,
     this.initialChannel,
     this.httpClient,
+    this.parseInBackground = true,
   });
 
   final IptvExtractedChannel? initialChannel;
   final http.Client? httpClient;
+  final bool parseInBackground;
 
   @override
   State<SportsChannelsScreen> createState() => _SportsChannelsScreenState();
@@ -99,7 +101,10 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
   Future<void> _loadLibrary() async {
     try {
       final values = await Future.wait<Object>(<Future<Object>>[
-        loadSavedIptvStudioChannels(httpClient: _client),
+        loadSavedIptvStudioChannels(
+          httpClient: _client,
+          parseInBackground: widget.parseInBackground,
+        ),
         loadIptvStudioFavoriteIds(),
       ]);
       final loaded = values[0] as List<IptvExtractedChannel>;
@@ -248,8 +253,15 @@ class _SportsChannelsScreenState extends State<SportsChannelsScreen> {
     final controller = _controller;
     final value = controller?.value;
     final initialized = value?.isInitialized == true;
-    return AspectRatio(
-      aspectRatio: 16 / 9,
+    final screenSize = MediaQuery.sizeOf(context);
+    final naturalHeight = screenSize.width / (16 / 9);
+    final compactHeight = screenSize.height * 0.33;
+    final playerHeight = _fullscreen
+        ? screenSize.height
+        : (naturalHeight < compactHeight ? naturalHeight : compactHeight);
+    return SizedBox(
+      width: double.infinity,
+      height: playerHeight,
       child: Container(
         width: double.infinity,
         color: Colors.black,

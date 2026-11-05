@@ -161,6 +161,7 @@ List<IptvExtractedChannel> parseIptvStudioM3u(
 /// La pantalla pública consume esta biblioteca sin crear una segunda lista.
 Future<List<IptvExtractedChannel>> loadSavedIptvStudioChannels({
   http.Client? httpClient,
+  bool parseInBackground = true,
 }) async {
   final prefs = await SharedPreferences.getInstance();
   final urls = prefs.getStringList(_studioUrlsKey) ?? <String>[];
@@ -185,9 +186,12 @@ Future<List<IptvExtractedChannel>> loadSavedIptvStudioChannels({
         return <IptvExtractedChannel>[];
       }
       final body = utf8.decode(response.bodyBytes, allowMalformed: true);
-      return await Isolate.run(
-        () => parseIptvStudioM3u(body, sourceUrl: url),
-      );
+      if (parseInBackground) {
+        return await Isolate.run(
+          () => parseIptvStudioM3u(body, sourceUrl: url),
+        );
+      }
+      return parseIptvStudioM3u(body, sourceUrl: url);
     } catch (_) {
       return <IptvExtractedChannel>[];
     }
