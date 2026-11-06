@@ -129,6 +129,11 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
 
   Future<void> _installAgendaEventScanner(InAppWebViewController controller) async {
     try {
+      final currentUrl = await controller.getUrl();
+      final host = currentUrl?.host.toLowerCase() ?? '';
+      // The scanner understands MARCA markup and Madrid time only. Do not run
+      // it on Futbol-Libre or overwrite native SportsAPI events.
+      if (host != 'marca.com' && host != 'www.marca.com') return;
       await controller.evaluateJavascript(source: r'''
         (() => {
           const scan = () => {
@@ -846,7 +851,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                                 .map(SportsAgendaEvent.fromJson)
                                 .whereType<SportsAgendaEvent>()
                                 .toList(growable: false);
-                            await SportsAgendaStore.save(events);
+                            await SportsAgendaStore.mergeEvents(events);
                             return events.length;
                           },
                         );
@@ -857,7 +862,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
                           if (!mounted || !_loading) return;
                           setState(() {
                             _loading = false;
-                            _errorMessage = 'MARCA está tardando demasiado en responder. Comprueba tu conexión y pulsa Recargar.';
+                            _errorMessage = 'La agenda web está tardando demasiado en responder. Comprueba tu conexión y pulsa Recargar.';
                           });
                         });
                         if (!mounted) return;
@@ -950,7 +955,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
             padding: const EdgeInsets.fromLTRB(10, 5, 10, 7),
             color: const Color(0xFF000000),
             child: const Text(
-              'La programación de MARCA es un servicio externo; sus reproductores no se utilizan. '
+              'La agenda web externa es solo una fuente de consulta; sus reproductores no se utilizan. '
               'La protección detiene dominios conocidos, pero no garantiza '
               'eliminar todos los anuncios ni que cada señal sea compatible.',
               textAlign: TextAlign.center,

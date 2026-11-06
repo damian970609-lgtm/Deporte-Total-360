@@ -470,6 +470,29 @@ class SportsAgendaStore {
     );
   }
 
+  /// Agrega eventos capturados desde una fuente web sin borrar los eventos
+  /// de otras fechas que ya conserva la agenda nativa.
+  static Future<void> mergeEvents(List<SportsAgendaEvent> events) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cutoff = DateTime.now().subtract(const Duration(hours: 4));
+    final byId = <String, SportsAgendaEvent>{
+      for (final event in await load())
+        if ((event.endsAt ??
+                event.startsAt.add(const Duration(hours: 3)))
+            .isAfter(cutoff))
+          event.id: event,
+    };
+    for (final event in events) {
+      final end =
+          event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
+      if (end.isAfter(cutoff)) byId[event.id] = event;
+    }
+    await prefs.setString(
+      _key,
+      jsonEncode(byId.values.map((event) => event.toJson()).toList()),
+    );
+  }
+
   static Future<List<SportsAgendaEvent>> load() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);

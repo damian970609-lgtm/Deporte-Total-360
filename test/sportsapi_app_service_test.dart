@@ -38,7 +38,7 @@ void main() {
             'league': {'id': 10, 'name': 'Premier League'},
             'season': {'id': 20, 'name': '2030'}
           }],
-          'meta': {'count': 1}
+          'meta': {'count': 1, 'hasNextPage': page == 0, 'complete': true}
         }), 200);
       }
       if (request.url.path.endsWith('/races')) {
@@ -54,7 +54,10 @@ void main() {
             'status': 'scheduled',
             'series': {'id': 30, 'name': 'Cycling Men'},
             'season': {'id': 40, 'name': '2030'},
-            'sessions': [{'id': 303, 'type': 'stage', 'startTime': '2030-01-01T09:00:00Z'}]
+            'sessions': [
+              {'id': 303, 'type': 'practice', 'startTime': '2030-01-01T09:00:00Z'},
+              {'id': 304, 'type': 'stage', 'startTime': '2030-01-01T12:00:00Z'}
+            ]
           }],
           'meta': {'count': 1}
         }), 200);
@@ -71,6 +74,7 @@ void main() {
       final events = await api.fetchFavoriteAgendaEvents(date: DateTime.utc(2030, 1, 1));
       expect(events.map((event) => event.id), contains('sportsapi-fixture-101'));
       expect(events.map((event) => event.id), contains('sportsapi-race-202-303'));
+      expect(events.map((event) => event.id), contains('sportsapi-race-202-304'));
       expect(events.firstWhere((event) => event.id == 'sportsapi-fixture-101').homeTeam, 'Team One');
       expect(requested.where((uri) => uri.path.endsWith('/fixtures')), hasLength(8));
       expect(requested.where((uri) => uri.path.endsWith('/races')), hasLength(2));
@@ -88,25 +92,26 @@ void main() {
       requested.add(request.url);
       if (request.url.path.endsWith('/fixtures')) {
         if (request.url.queryParameters['sport'] != 'football') {
-          return http.Response(jsonEncode({'data': [], 'meta': {}}), 200);
+          return http.Response(jsonEncode({'data': [], 'meta': {'hasNextPage': false, 'complete': true}}), 200);
         }
         final date = request.url.queryParameters['date']!;
+        final page = int.parse(request.url.queryParameters['page'] ?? '0');
         final day = int.parse(date.substring(8));
         return http.Response(jsonEncode({
           'data': [{
-            'id': day,
+            'id': day * 10 + page,
             'sport': 'football',
             'startTime': date + 'T12:00:00Z',
             'status': {'type': 'scheduled'},
-            'home': {'id': day * 2, 'name': 'Equipo ' + day.toString()},
-            'away': {'id': day * 2 + 1, 'name': 'Rival ' + day.toString()},
+            'home': {'id': day * 20 + page * 2, 'name': 'Equipo ' + day.toString() + ' ' + page.toString()},
+            'away': {'id': day * 20 + page * 2 + 1, 'name': 'Rival ' + day.toString() + ' ' + page.toString()},
             'league': {'id': 1, 'name': 'Liga de prueba'},
           }],
           'meta': {'count': 1}
         }), 200);
       }
       if (request.url.path.endsWith('/races')) {
-        return http.Response(jsonEncode({'data': [], 'meta': {}}), 200);
+        return http.Response(jsonEncode({'data': [], 'meta': {'complete': true}}), 200);
       }
       return http.Response(jsonEncode({'data': {}, 'meta': {}}), 200);
     });
@@ -121,9 +126,9 @@ void main() {
 
       expect(window.days, 7);
       expect(window.unavailableDates, isEmpty);
-      expect(window.events, hasLength(7));
-      expect(window.events.map((event) => event.id).toSet(), hasLength(7));
-      expect(requested.where((uri) => uri.path.endsWith('/fixtures')), hasLength(56));
+      expect(window.events, hasLength(14));
+      expect(window.events.map((event) => event.id).toSet(), hasLength(14));
+      expect(requested.where((uri) => uri.path.endsWith('/fixtures')), hasLength(63));
       expect(requested.where((uri) => uri.path.endsWith('/races')), hasLength(14));
 
       final cached = await api.fetchFavoriteAgendaWindow(
@@ -131,7 +136,7 @@ void main() {
         days: 7,
       );
       expect(cached.events, hasLength(7));
-      expect(requested, hasLength(70));
+      expect(requested, hasLength(77));
     } finally {
       sportsApiBaseUrl.value = previousBase;
       client.close();

@@ -252,8 +252,15 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
     try {
       final window = await _loadWindow();
       if (!mounted || version != _refreshVersion) return;
+      final availableSports = window.events
+          .map((event) => event.sport.trim())
+          .where((sport) => sport.isNotEmpty)
+          .toSet();
       setState(() {
         _events = window.events;
+        if (!availableSports.contains(_selectedSport)) {
+          _selectedSport = 'Todos';
+        }
         _unavailableDates = window.unavailableDates;
         _loading = false;
         _hasLoaded = true;
@@ -288,7 +295,6 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
     try {
       final prefs = await SharedPreferences.getInstance();
       final enabled = prefs.getBool('notifications_enabled') ?? false;
-      NotificationService.matchRemindersEnabled.value = enabled;
       if (!enabled) {
         await NotificationService.cancelMatchReminders();
         return;
@@ -343,8 +349,8 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
   }
 
   bool _isLive(SportsAgendaEvent event) {
-    final status = event.status.toLowerCase().replaceAll(' ', '');
-    if (status == 'live' || status == 'inprogress' || status == 'in_play') {
+    final status = event.status.toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '');
+    if (status == 'live' || status == 'inprogress' || status == 'inplay') {
       return true;
     }
     if (_isFinished(event)) return false;
@@ -354,7 +360,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
   }
 
   bool _isFinished(SportsAgendaEvent event) {
-    final status = event.status.toLowerCase().replaceAll(' ', '');
+    final status = event.status.toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '');
     if (status == 'finished' ||
         status == 'complete' ||
         status == 'completed' ||
@@ -641,7 +647,9 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
 
   Widget _buildFilters() {
     final sports = _sportOptions;
-    if (!sports.contains(_selectedSport)) _selectedSport = 'Todos';
+    final selectedSport = sports.contains(_selectedSport)
+        ? _selectedSport
+        : 'Todos';
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 5),
       child: Column(
@@ -711,7 +719,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     key: const ValueKey<String>('agenda-sport-filter'),
-                    value: _selectedSport,
+                    value: selectedSport,
                     dropdownColor: _agendaPanel,
                     iconEnabledColor: _agendaCyan,
                     style: const TextStyle(
