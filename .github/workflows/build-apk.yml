@@ -288,7 +288,20 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
           chmod 600 "$KEYSTORE"
           test -s "$KEYSTORE"
-          keytool -list -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias dt360 >/dev/null
+          echo "Tipo y tamaño de la keystore decodificada:"
+          file "$KEYSTORE"
+          stat -c 'Tamaño: %s bytes' "$KEYSTORE"
+
+          # Primero validamos la contraseña y enumeramos alias sin exponer secretos.
+          if ! keytool -list -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD"; then
+            echo "::error::La keystore decodificada no se puede abrir con ANDROID_KEYSTORE_PASSWORD. Revisa que ANDROID_KEYSTORE_BASE64 corresponda al archivo JKS original y que ANDROID_KEYSTORE_PASSWORD sea exactamente su contraseña."
+            exit 1
+          fi
+
+          if ! keytool -list -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias dt360 >/dev/null; then
+            echo "::error::La keystore se abrió, pero no contiene el alias dt360. No se modificará ni reemplazará la llave."
+            exit 1
+          fi
 
           KEYSTORE_SHA1="$(keytool -list -v -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias dt360 | sed -n 's/^[[:space:]]*SHA1: //Ip' | head -n 1 | tr -d '[:space:]')"
           if [[ -z "$KEYSTORE_SHA1" ]]; then
