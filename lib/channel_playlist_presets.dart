@@ -3,7 +3,7 @@
 /// Las URLs son distintas entre sí. Algunas listas generales o regionales
 /// pueden contener canales también presentes en otras fuentes; el catálogo
 /// del servidor conserva el identificador de cada canal cuando está disponible.
-const int maxChannelPlaylistSources = 16;
+const int maxChannelPlaylistSources = 24;
 
 class ChannelPlaylistPreset {
   const ChannelPlaylistPreset({
@@ -19,6 +19,61 @@ class ChannelPlaylistPreset {
 
 const List<ChannelPlaylistPreset> channelPlaylistPresets =
     <ChannelPlaylistPreset>[
+  ChannelPlaylistPreset(
+    label: 'IPTV Validated · Catálogo verificado',
+    url: 'https://raw.githubusercontent.com/AdeelWajid/iptv_validated_list/main/playlist.m3u',
+    description: 'Catálogo público con comprobación diaria de disponibilidad y prioridad para señales sin restricciones',
+  ),
+  ChannelPlaylistPreset(
+    label: 'FreecastHub · Noticias públicas',
+    url: 'https://raw.githubusercontent.com/freecasthub/public-iptv/main/news.m3u',
+    description: 'Canales informativos gratuitos de emisoras públicas y oficiales',
+  ),
+  ChannelPlaylistPreset(
+    label: 'FreecastHub · Educación pública',
+    url: 'https://raw.githubusercontent.com/freecasthub/public-iptv/main/education.m3u',
+    description: 'Canales educativos gratuitos de fuentes públicas',
+  ),
+  ChannelPlaylistPreset(
+    label: 'FreecastHub · Clima y tiempo',
+    url: 'https://raw.githubusercontent.com/freecasthub/public-iptv/main/weather.m3u',
+    description: 'Canales públicos dedicados al clima y la información meteorológica',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Documentales',
+    url: 'https://iptv-org.github.io/iptv/categories/documentary.m3u',
+    description: 'Emisoras públicas y canales abiertos de documentales',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Infantil',
+    url: 'https://iptv-org.github.io/iptv/categories/kids.m3u',
+    description: 'Canales infantiles de acceso público',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Películas',
+    url: 'https://iptv-org.github.io/iptv/categories/movies.m3u',
+    description: 'Canales abiertos de películas y cine',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Música',
+    url: 'https://iptv-org.github.io/iptv/categories/music.m3u',
+    description: 'Canales musicales de libre acceso',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Cultura',
+    url: 'https://iptv-org.github.io/iptv/categories/culture.m3u',
+    description: 'Canales culturales y de divulgación públicos',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Noticias',
+    url: 'https://iptv-org.github.io/iptv/categories/news.m3u',
+    description: 'Canales informativos abiertos de distintos países',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Entretenimiento',
+    url: 'https://iptv-org.github.io/iptv/categories/entertainment.m3u',
+    description: 'Canales gratuitos de entretenimiento de fuentes públicas',
+  ),
   ChannelPlaylistPreset(
     label: 'IPTV-org · Deportes',
     url: 'https://iptv-org.github.io/iptv/categories/sports.m3u',
