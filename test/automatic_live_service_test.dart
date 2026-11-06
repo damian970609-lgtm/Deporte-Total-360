@@ -272,7 +272,7 @@ void main() {
       expect(settings.playlistUrls[1], contains('languages/spa.m3u'));
       expect(settings.playlistUrls[2], contains('countries/es.m3u'));
       expect(settings.epgUrls.first, contains('epg-es.xml'));
-      expect(settings.epgUrls[18], contains('teleonline/listas/main/epg.xml.gz'));
+      expect(settings.epgUrls, contains('https://raw.githubusercontent.com/teleonline/listas/main/epg.xml.gz'));
       expect(settings.isConfigured, isTrue);
     });
 
