@@ -305,7 +305,6 @@ class _AppAccessGateState extends State<AppAccessGate> {
   _AccessGateStage _stage = _AccessGateStage.loading;
   String? _email;
   String? _message;
-  String? _licenseType;
   bool _working = false;
 
   @override
@@ -353,7 +352,6 @@ class _AppAccessGateState extends State<AppAccessGate> {
       if (!mounted) return;
       setState(() {
         _email = email;
-        _licenseType = license.licenseType;
         _stage = license.allowed
             ? _AccessGateStage.authorized
             : _AccessGateStage.denied;
@@ -397,7 +395,6 @@ class _AppAccessGateState extends State<AppAccessGate> {
       _working = true;
       _stage = _AccessGateStage.signInRequired;
       _email = null;
-      _licenseType = null;
       _message = null;
     });
     try {
