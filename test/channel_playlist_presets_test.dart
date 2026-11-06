@@ -2,14 +2,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:deporte_total_360/channel_playlist_presets.dart';
 
 void main() {
-  test('ofrece exactamente 12 listas públicas con URLs HTTPS únicas', () {
-    expect(channelPlaylistPresets, hasLength(maxChannelPlaylistSources));
+  test('ofrece las 13 listas predeterminadas con URLs HTTPS únicas', () {
+    expect(channelPlaylistPresets, hasLength(13));
+    expect(maxChannelPlaylistSources, greaterThanOrEqual(channelPlaylistPresets.length));
 
     final normalizedUrls = channelPlaylistPresets
         .map((preset) => normalizeChannelPlaylistUrl(preset.url))
         .toSet();
 
-    expect(normalizedUrls, hasLength(maxChannelPlaylistSources));
+    expect(normalizedUrls, hasLength(channelPlaylistPresets.length));
     expect(
       channelPlaylistPresets.every(
         (preset) => Uri.parse(preset.url).scheme == 'https',
@@ -19,6 +20,25 @@ void main() {
   });
 
   test('incluye la lista de TV de TDTChannels solicitada', () {
+    expect(
+      channelPlaylistPresets.any(
+        (preset) =>
+            preset.label == 'TDTChannels · TV España' &&
+            preset.url == 'https://www.tdtchannels.com/lists/tv.m3u',
+      ),
+      isTrue,
+    );
+  });
+
+  test('incluye el índice global completo de IPTV-org sin quitar TDTChannels', () {
+    expect(
+      channelPlaylistPresets.any(
+        (preset) =>
+            preset.label == 'IPTV-org · Catálogo global completo' &&
+            preset.url == 'https://iptv-org.github.io/iptv/index.m3u',
+      ),
+      isTrue,
+    );
     expect(
       channelPlaylistPresets.any(
         (preset) =>
