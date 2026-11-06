@@ -152,7 +152,7 @@ class DeporteTotal360App extends StatelessWidget {
         title: tr('title'),
         locale: Locale(languageCode(language)),
         supportedLocales: const <Locale>[
-          Locale('es'), Locale('en'), Locale('pt'), Locale('fr'),
+          Locale('es'), Locale('en'),
         ],
         localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
           GlobalMaterialLocalizations.delegate,
@@ -1499,14 +1499,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       DropdownMenuItem(
                         value: AppLanguage.english,
                         child: Text('English'),
-                      ),
-                      DropdownMenuItem(
-                        value: AppLanguage.portuguese,
-                        child: Text('Português'),
-                      ),
-                      DropdownMenuItem(
-                        value: AppLanguage.french,
-                        child: Text('Français'),
                       ),
                     ],
                     onChanged: _setLanguage,
