@@ -69,11 +69,6 @@ class ChannelCatalogScreen extends StatefulWidget {
 class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
   final ChannelCatalogService _service = channelCatalogService;
   final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _licenseEmailController = TextEditingController();
-  final TextEditingController _licenseNoteController = TextEditingController();
-  String _licenseType = 'free';
-  List<AppLicenseRecord> _licenseRecords = <AppLicenseRecord>[];
-  String? _licensesError;
   final ScrollController _scrollController = ScrollController();
   final Set<String> _favorites = <String>{};
   List<SportsChannel> _channels = <SportsChannel>[];
@@ -1477,7 +1472,12 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _labelController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _licenseEmailController = TextEditingController();
+  final TextEditingController _licenseNoteController = TextEditingController();
   final ScrollController _adminScrollController = ScrollController();
+  String _licenseType = 'free';
+  List<AppLicenseRecord> _licenseRecords = <AppLicenseRecord>[];
+  String? _licensesError;
   List<SportsChannel> _channels = <SportsChannel>[];
   SportsChannel? _previewChannel;
   List<ChannelPlaylistSource> _sources = <ChannelPlaylistSource>[];
