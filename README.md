@@ -69,7 +69,12 @@ Android para el package name y la huella SHA-1 del certificado de firma
 utilizado por GitHub Actions. El Worker comprueba el ID token, su audiencia y
 correo verificado; solo `damian970609@gmail.com` administra el catálogo.
 Los favoritos individuales se sincronizan en Cloudflare al iniciar sesión
-con Google; sin iniciar sesión solo se guardan localmente.
+con Google; sin iniciar sesión solo se guardan localmente. La aplicación también guarda localmente una
+instantánea de hasta 2.000 canales publicados. Si Cloudflare agota la cuota o
+pierde conexión, la lista y el reproductor siguen mostrando la última copia
+disponible en ese teléfono; al restablecerse el servicio se actualiza de nuevo.
+La sincronización de favoritos fusiona lo local con lo remoto para no borrar
+selecciones cuando una respuesta del servidor llegue vacía o incompleta.
 
 El package name Android que ya usa la APK es `com.example.deporte_total_360`.
 El workflow comprueba que no cambie y, después de compilar, publica en el resumen
