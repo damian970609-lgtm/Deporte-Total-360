@@ -9,6 +9,7 @@ import 'package:video_player/video_player.dart';
 import 'package:volume_controller/volume_controller.dart';
 
 import 'channel_catalog_service.dart';
+import 'channel_playlist_presets.dart';
 
 const Color _channelBg = Color(0xFF000000);
 const Color _channelPanel = Color(0xFF07090D);
@@ -21,39 +22,6 @@ const Color _channelYellow = Color(0xFFFFFFFF);
 const Color _channelMuted = Color(0xFFEAF0F8);
 const String _channelFavoritesKey = 'dt360_channel_catalog_favorites_v1';
 
-const String _defaultSportsPlaylistUrl =
-    'https://iptv-org.github.io/iptv/categories/sports.m3u';
-
-class _SuggestedSportsPlaylist {
-  const _SuggestedSportsPlaylist({
-    required this.label,
-    required this.url,
-    required this.description,
-  });
-
-  final String label;
-  final String url;
-  final String description;
-}
-
-const List<_SuggestedSportsPlaylist> _suggestedSportsPlaylists = <
-    _SuggestedSportsPlaylist>[
-  _SuggestedSportsPlaylist(
-    label: 'IPTV-org · Deportes',
-    url: _defaultSportsPlaylistUrl,
-    description: 'Fuente principal · categoría deportiva pública',
-  ),
-  _SuggestedSportsPlaylist(
-    label: 'IPTV Validated · Deportes',
-    url: 'https://raw.githubusercontent.com/AdeelWajid/iptv_validated_list/main/playlists/categories/sports.m3u',
-    description: 'Lista comunitaria con comprobación diaria de señales',
-  ),
-  _SuggestedSportsPlaylist(
-    label: 'Free-TV · Lista pública',
-    url: 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8',
-    description: 'Selección pública general; no es exclusiva de deportes',
-  ),
-];
 
 T? _firstOrNull<T>(Iterable<T> items) {
   final iterator = items.iterator;
@@ -1607,25 +1575,41 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
     try {
       var sources = await _service.fetchSources();
+      final registeredUrls = <String>{
+        for (final source in sources)
+          normalizeChannelPlaylistUrl(source.url),
+      };
+      var addedSources = 0;
 
-      // La primera fuente se registra automáticamente en el servidor cuando
-      // el administrador abre este menú por primera vez. No duplica la URL.
-      final hasDefaultSource = sources.any(
-        (source) => source.url.trim() == _defaultSportsPlaylistUrl,
-      );
-      if (!hasDefaultSource) {
+      // Completa las plazas disponibles con las 12 fuentes predeterminadas.
+      // Conserva las listas personales ya registradas y nunca repite una URL.
+      for (final playlist in channelPlaylistPresets) {
+        if (sources.length + addedSources >= maxChannelPlaylistSources) {
+          break;
+        }
+        if (!registeredUrls.add(
+          normalizeChannelPlaylistUrl(playlist.url),
+        )) {
+          continue;
+        }
         await _service.addPlaylist(
-          url: _defaultSportsPlaylistUrl,
-          label: 'IPTV-org · Deportes (principal)',
+          url: playlist.url,
+          label: playlist.label,
         );
+        addedSources++;
+      }
+
+      if (addedSources > 0) {
         await _service.refreshSources();
         sources = await _service.fetchSources();
       }
 
       if (!mounted) return;
       sources.sort((a, b) {
-        final aDefault = a.url.trim() == _defaultSportsPlaylistUrl;
-        final bDefault = b.url.trim() == _defaultSportsPlaylistUrl;
+        final aDefault = normalizeChannelPlaylistUrl(a.url) ==
+            normalizeChannelPlaylistUrl(channelPlaylistPresets.first.url);
+        final bDefault = normalizeChannelPlaylistUrl(b.url) ==
+            normalizeChannelPlaylistUrl(channelPlaylistPresets.first.url);
         if (aDefault == bDefault) return 0;
         return aDefault ? -1 : 1;
       });
@@ -1682,6 +1666,10 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   }
 
   Future<void> _addPlaylist() async {
+    if (_sources.length >= maxChannelPlaylistSources) {
+      _message('Ya tienes las 12 listas registradas. No se pueden agregar más.');
+      return;
+    }
     final uri = Uri.tryParse(_urlController.text.trim());
     if (uri == null ||
         uri.scheme != 'https' ||
@@ -1691,7 +1679,10 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       return;
     }
     final normalizedUrl = uri.toString();
-    if (_sources.any((source) => source.url.trim() == normalizedUrl)) {
+    if (containsChannelPlaylistUrl(
+      _sources.map((source) => source.url),
+      normalizedUrl,
+    )) {
       _message('Esta lista ya está guardada en tu catálogo.');
       return;
     }
@@ -1711,30 +1702,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       setState(() => _rightsConfirmed = false);
       _message('Lista guardada en Cloudflare. La importación continuará en segundo plano aunque cierres la APK.');
       await _loadAdmin(showLoading: false);
-    } catch (error) {
-      _message(error.toString());
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
-  }
-
-  Future<void> _importSuggestedPlaylist(
-    _SuggestedSportsPlaylist playlist,
-  ) async {
-    final alreadyAdded = _sources.any(
-      (source) => source.url.trim() == playlist.url,
-    );
-    if (alreadyAdded) {
-      _message('Esta lista ya está registrada.');
-      return;
-    }
-
-    setState(() => _working = true);
-    try {
-      await _service.addPlaylist(url: playlist.url, label: playlist.label);
-      await _service.refreshSources();
-      await _loadAdmin(showLoading: false);
-      _message('Lista agregada. El servidor comenzó a importarla.');
     } catch (error) {
       _message(error.toString());
     } finally {
@@ -2186,7 +2153,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
                           const Text(
-                            'FUENTES PÚBLICAS PARA IMPORTAR',
+                            'CATÁLOGO DE 12 LISTAS PÚBLICAS',
                             style: TextStyle(
                               color: _channelCyan,
                               fontWeight: FontWeight.w900,
@@ -2195,75 +2162,13 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                           ),
                           const SizedBox(height: 5),
                           const Text(
-                            'La primera fuente se registra automáticamente. Las demás se agregan cuando las selecciones.',
+                            'Al iniciar sesión, el menú completa automáticamente hasta 12 fuentes distintas, incluida TDTChannels de GitHub. Se conservan tus listas existentes y no se registra dos veces la misma URL. Los canales importados permanecen ocultos hasta que actives su visibilidad.',
                             style: TextStyle(
                               color: _channelMuted,
                               fontSize: 10,
                               height: 1.4,
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          for (final playlist in _suggestedSportsPlaylists)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 7),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _channelPanel2,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: _channelLine),
-                                ),
-                                child: Row(
-                                  children: <Widget>[
-                                    const Icon(
-                                      Icons.playlist_play_rounded,
-                                      color: _channelGreen,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: <Widget>[
-                                          Text(
-                                            playlist.label,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w800,
-                                              fontSize: 11,
-                                            ),
-                                          ),
-                                          Text(
-                                            playlist.description,
-                                            style: const TextStyle(
-                                              color: _channelMuted,
-                                              fontSize: 9,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 5),
-                                    Builder(
-                                      builder: (context) {
-                                        final added = _sources.any(
-                                          (source) => source.url.trim() == playlist.url,
-                                        );
-                                        return OutlinedButton(
-                                          onPressed: _working || added
-                                              ? null
-                                              : () => _importSuggestedPlaylist(playlist),
-                                          child: Text(added ? 'AGREGADA' : 'AGREGAR'),
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
                         ],
                       ),
                     ),
@@ -2323,9 +2228,16 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                           SizedBox(
                             width: double.infinity,
                             child: FilledButton.icon(
-                              onPressed: _working ? null : _addPlaylist,
+                              onPressed: _working ||
+                                      _sources.length >= maxChannelPlaylistSources
+                                  ? null
+                                  : _addPlaylist,
                               icon: const Icon(Icons.cloud_download_rounded),
-                              label: const Text('GUARDAR LISTA E IMPORTAR'),
+                              label: Text(
+                                _sources.length >= maxChannelPlaylistSources
+                                    ? 'LÍMITE DE 12 LISTAS COMPLETO'
+                                    : 'GUARDAR LISTA E IMPORTAR',
+                              ),
                               style: FilledButton.styleFrom(
                                 backgroundColor: _channelGreen,
                                 foregroundColor: _channelBg,
@@ -2356,6 +2268,17 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             ),
                           ),
                         ),
+                        Text(
+                          _sources.length.toString() +
+                              ' / ' +
+                              maxChannelPlaylistSources.toString(),
+                          style: const TextStyle(
+                            color: _channelCyan,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
                         IconButton(
                           onPressed: _working ? null : _refreshSources,
                           icon: const Icon(
