@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'app_i18n.dart';
@@ -16,18 +18,18 @@ import 'sportsapi_statistics_screen.dart';
 import 'sports_summaries_screen.dart';
 import 'marca_agenda_screen.dart';
 
-// Identidad visual de DEPORTE TOTAL 360°: azul noche, cian, rosa y verde neón.
-const Color appBg = Color(0xFF030814);
-const Color appPanel = Color(0xFF071326);
-const Color appPanel2 = Color(0xFF0B1B31);
-const Color appLine = Color(0xFF123D65);
-const Color appCyan = Color(0xFF00E5FF);
-const Color appBlue = Color(0xFF087BFF);
-const Color appPink = Color(0xFFFF28CF);
-const Color appGreen = Color(0xFF39FF9C);
-const Color appYellow = Color(0xFFFFD600);
-const Color appRed = Color(0xFFFF3155);
-const Color appMuted = Color(0xFFA9BDD6);
+// Identidad visual unificada: blanco, negro, azul, rojo y verde neón.
+const Color appBg = Color(0xFF000000);
+const Color appPanel = Color(0xFF07090D);
+const Color appPanel2 = Color(0xFF0D1118);
+const Color appLine = Color(0xFF0047FF);
+const Color appCyan = Color(0xFF00A3FF); // Alias histórico: azul neón.
+const Color appBlue = Color(0xFF00A3FF);
+const Color appPink = Color(0xFFFF1744); // Alias histórico: rojo neón.
+const Color appGreen = Color(0xFF39FF14);
+const Color appYellow = Color(0xFFFFFFFF); // Alias histórico: blanco.
+const Color appRed = Color(0xFFFF1744);
+const Color appMuted = Color(0xFFEAF0F8);
 
 const String contactUrl = 'https://wa.me/5927214741';
 const String settingsPhotoAsset =
@@ -122,6 +124,15 @@ Future<void> main() async {
       ),
     );
   };
+  // Primero se muestra la interfaz; la inicialización de plugins no bloquea
+  // ni impide el primer arranque de la aplicación.
+  runApp(const DeporteTotal360App());
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_initializeAppServices());
+  });
+}
+
+Future<void> _initializeAppServices() async {
   try {
     final prefs = await SharedPreferences.getInstance();
     appLanguage.value = parseLanguage(prefs.getString('app_language'));
@@ -130,15 +141,18 @@ Future<void> main() async {
     sportsApiBaseUrl.value =
         SportsApiService.normalizeBaseUrl(savedApiUrl ?? '') ??
         defaultSportsApiBaseUrl;
-  } catch (_) {
-    // La app puede abrirse aunque el almacenamiento local no esté disponible.
+  } catch (error, stackTrace) {
+    debugPrint('No se pudieron cargar las preferencias iniciales: $error');
+    debugPrintStack(stackTrace: stackTrace);
   }
+
   try {
     await NotificationService.initialize();
-  } catch (_) {
-    // La app continúa funcionando aunque el dispositivo no admita avisos.
+  } catch (error, stackTrace) {
+    // Un fallo del plugin de notificaciones nunca debe impedir abrir Inicio.
+    debugPrint('Las notificaciones no pudieron inicializarse: $error');
+    debugPrintStack(stackTrace: stackTrace);
   }
-  runApp(const DeporteTotal360App());
 }
 
 class DeporteTotal360App extends StatelessWidget {
@@ -557,13 +571,13 @@ class SettingsBackdrop extends StatelessWidget {
 }
 
 // Paleta exclusiva de Inicio: no altera los colores de las demás secciones.
-const Color _homeBlack = Color(0xFF02050B);
-const Color _homePanel = Color(0xFF091321);
-const Color _homeSteel = Color(0xFFB9C7D8);
-const Color _homeWhite = Color(0xFFF7FBFF);
-const Color _homeBlue = Color(0xFF00A8FF);
-const Color _homeRed = Color(0xFFFF304F);
-const Color _homeGreen = Color(0xFF36F58A);
+const Color _homeBlack = Color(0xFF020204);
+const Color _homePanel = Color(0xFF07090D);
+const Color _homeSteel = Color(0xFFEAF0F8);
+const Color _homeWhite = Color(0xFFFFFFFF);
+const Color _homeBlue = Color(0xFF00A3FF);
+const Color _homeRed = Color(0xFFFF1744);
+const Color _homeGreen = Color(0xFF39FF14);
 
 class HomeDashboard extends StatelessWidget {
   const HomeDashboard({
@@ -603,7 +617,7 @@ class HomeDashboard extends StatelessWidget {
                 center: Alignment(0, -.35),
                 radius: 1.2,
                 colors: <Color>[
-                  Color(0xFF10243C),
+                  Color(0xFF05080D),
                   _homePanel,
                   _homeBlack,
                 ],
@@ -639,7 +653,7 @@ class HomeDashboard extends StatelessWidget {
                             key: const ValueKey<String>('home-sports-crest'),
                             width: crestWidth,
                             height: crestWidth * 1.12,
-                            child: const _SportsCrest(),
+                            child: const RepaintBoundary(child: _SportsCrest()),
                           ),
                           SizedBox(height: compact ? 5 : 12),
                           Text(
@@ -778,7 +792,7 @@ class _HomeEnergyRail extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: item.$1.withAlpha(180), width: 1),
             boxShadow: <BoxShadow>[
-              BoxShadow(color: item.$1.withAlpha(35), blurRadius: 12),
+              BoxShadow(color: item.$1.withAlpha(30), blurRadius: 6),
             ],
           ),
           child: Text(
@@ -827,14 +841,13 @@ class _SportsCrest extends StatelessWidget {
                       Color(0xFF52677F),
                       Color(0xFF111C2A),
                       Color(0xFF8295AA),
-                      Color(0xFF050A12),
+                      Color(0xFF030303),
                     ],
                     stops: <double>[0, .22, .52, .76, 1],
                   ),
                   boxShadow: <BoxShadow>[
-                    BoxShadow(color: _homeBlue.withAlpha(115), blurRadius: width * .09, spreadRadius: 2),
-                    BoxShadow(color: _homeRed.withAlpha(55), blurRadius: width * .15, offset: Offset(width * .04, width * .05)),
-                    BoxShadow(color: Colors.black.withAlpha(235), blurRadius: width * .1, offset: Offset(width * .045, width * .065)),
+                    BoxShadow(color: _homeBlue.withAlpha(85), blurRadius: width * .045),
+                    BoxShadow(color: Colors.black.withAlpha(220), blurRadius: width * .055, offset: Offset(width * .035, width * .045)),
                   ],
                 ),
                 child: Container(
@@ -851,8 +864,8 @@ class _SportsCrest extends StatelessWidget {
                       gradient: const RadialGradient(
                         center: Alignment(-.3, -.4),
                         colors: <Color>[
-                          Color(0xFF243D59),
-                          Color(0xFF0B1727),
+                          Color(0xFF333333),
+                          Color(0xFF080808),
                           Color(0xFF02050B),
                         ],
                       ),
@@ -909,9 +922,9 @@ class _SportsCrest extends StatelessWidget {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: <Color>[
-                      Color(0xFF536B84),
-                      Color(0xFF172638),
-                      Color(0xFF050A12),
+                      Color(0xFFC6CFDA),
+                      Color(0xFF090909),
+                      Color(0xFF030303),
                     ],
                   ),
                   border: Border.all(color: _homeBlue, width: 1.5),
@@ -963,15 +976,15 @@ class _CrestSportOrb extends StatelessWidget {
         gradient: const RadialGradient(
           center: Alignment(-.35, -.4),
           colors: <Color>[
-            Color(0xFF536A82),
-            Color(0xFF18283B),
-            Color(0xFF030811),
+            Color(0xFF454545),
+            Color(0xFF111111),
+            Color(0xFF020204),
           ],
         ),
         border: Border.all(color: color, width: 1.7),
         boxShadow: <BoxShadow>[
-          BoxShadow(color: color.withAlpha(125), blurRadius: size * .48, spreadRadius: 1),
-          BoxShadow(color: Colors.black.withAlpha(220), blurRadius: size * .2, offset: Offset(size * .09, size * .12)),
+          BoxShadow(color: color.withAlpha(100), blurRadius: size * .24),
+          BoxShadow(color: Colors.black.withAlpha(210), blurRadius: size * .12, offset: Offset(size * .06, size * .08)),
         ],
       ),
       child: Container(
@@ -1016,7 +1029,7 @@ class _SportsCrestPainter extends CustomPainter {
         ..color = _homeBlue.withAlpha(115)
         ..style = PaintingStyle.stroke
         ..strokeWidth = width * .075
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, width * .045),
+        
     );
     canvas.save();
     canvas.translate(width * .012, height * .014);
@@ -1026,7 +1039,7 @@ class _SportsCrestPainter extends CustomPainter {
         ..color = Colors.black.withAlpha(235)
         ..style = PaintingStyle.stroke
         ..strokeWidth = width * .055
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, width * .018),
+        
     );
     canvas.restore();
 
@@ -1038,10 +1051,10 @@ class _SportsCrestPainter extends CustomPainter {
           end: Alignment.bottomRight,
           colors: <Color>[
             Color(0xFFE6EDF5),
-            Color(0xFF5D7188),
-            Color(0xFF15263A),
-            Color(0xFF050A12),
-            Color(0xFF243B53),
+            Color(0xFFB8C1CC),
+            Color(0xFF101010),
+            Color(0xFF030303),
+            Color(0xFF202020),
           ],
           stops: <double>[0, .18, .43, .76, 1],
         ).createShader(bounds),
