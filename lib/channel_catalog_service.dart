@@ -193,8 +193,10 @@ class ChannelCatalogService {
     }
   }
 
-  Future<String> signIn() async {
-    // Reutiliza la sesión autenticada que ya vive en memoria.
+  /// Recupera una cuenta de Google ya autorizada sin forzar una nueva
+  /// selección. El SDK puede devolver null cuando no existe una sesión
+  /// ligera disponible; en ese caso la pantalla conserva el botón de acceso.
+  Future<String?> restoreSession() async {
     final currentToken = _idToken;
     final currentEmail = signedInEmail;
     if (currentToken != null && currentToken.isNotEmpty &&
@@ -204,33 +206,51 @@ class ChannelCatalogService {
 
     await validateGoogleOAuthConfiguration();
     await _initializeGoogle();
+
+    try {
+      final Future<GoogleSignInAccount?>? attempt =
+          _google.attemptLightweightAuthentication();
+      if (attempt == null) return null;
+      final account = await attempt;
+      if (account == null) return null;
+      return _rememberGoogleAccount(account);
+    } on GoogleSignInException {
+      // La recuperación ligera nunca debe bloquear el acceso manual.
+      _idToken = null;
+      signedInEmail = null;
+      return null;
+    }
+  }
+
+  String _rememberGoogleAccount(GoogleSignInAccount account) {
+    final token = account.authentication.idToken;
+    if (token == null || token.isEmpty) {
+      throw const ChannelCatalogException(
+        'Google no entregó un ID token. Comprueba el cliente OAuth Web.',
+      );
+    }
+    _idToken = token;
+    signedInEmail = account.email;
+    return account.email;
+  }
+
+  Future<String> signIn() async {
+    // Primero intenta recuperar la sesión previa. No ejecutar signOut aquí:
+    // hacerlo elimina la autorización que permitiría reutilizar la cuenta.
+    final restoredEmail = await restoreSession();
+    if (restoredEmail != null) return restoredEmail;
+
     if (!_google.supportsAuthenticate()) {
       throw const ChannelCatalogException(
         'El inicio de sesión Google no está disponible en este dispositivo.',
       );
     }
     try {
-      // Credential Manager puede conservar una relación de cuenta entre
-      // ejecuciones. Limpia el estado nativo antes de abrir una sesión nueva.
-      await _google.signOut();
       final account = await _google.authenticate();
-      final token = account.authentication.idToken;
-      if (token == null || token.isEmpty) {
-        throw const ChannelCatalogException(
-          'Google no entregó un ID token. Comprueba que GOOGLE_OAUTH_CLIENT_ID sea el cliente OAuth Web.',
-        );
-      }
-      _idToken = token;
-      signedInEmail = account.email;
-      return account.email;
+      return _rememberGoogleAccount(account);
     } on GoogleSignInException catch (error) {
       _idToken = null;
       signedInEmail = null;
-      try {
-        await _google.signOut();
-      } catch (_) {
-        // No ocultar el error original de Google.
-      }
 
       final detail = error.description?.trim();
       final detailSuffix = detail == null || detail.isEmpty
@@ -260,6 +280,7 @@ class ChannelCatalogService {
       }
     }
   }
+
   Future<void> signOut() async {
     try {
       await _initializeGoogle();
