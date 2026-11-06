@@ -2430,7 +2430,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                           ),
                           const SizedBox(height: 8),
                           DropdownButtonFormField<String>(
-                            value: _licenseType,
+                            initialValue: _licenseType,
                             dropdownColor: _channelPanel2,
                             decoration: const InputDecoration(
                               labelText: 'Tipo de acceso',
