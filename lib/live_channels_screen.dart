@@ -1411,7 +1411,10 @@ class LivePlayerBoard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: _livePanel,
                       borderRadius: BorderRadius.circular(11),
-                      border: Border.all(color: _liveLine),
+                      border: Border.all(color: _liveCyan.withAlpha(150), width: 1.1),
+                      boxShadow: <BoxShadow>[
+                        BoxShadow(color: _liveCyan.withAlpha(24), blurRadius: 12),
+                      ],
                     ),
                     child: Column(
                       children: <Widget>[
@@ -1591,7 +1594,10 @@ class _WaitingLivePlayerTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF050A13),
         borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: _liveLine),
+        border: Border.all(color: _livePink.withAlpha(170), width: 1.1),
+          boxShadow: <BoxShadow>[
+            BoxShadow(color: _livePink.withAlpha(22), blurRadius: 10),
+          ],
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -1615,7 +1621,28 @@ class _WaitingLivePlayerTile extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-              child: const _OfflineSportsArtwork(compact: true),
+              child: Column(
+                children: <Widget>[
+                  const Expanded(
+                    child: _OfflineSportsArtwork(compact: true),
+                  ),
+                  if (event != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        '${event!.heading} · ${event!.match} · ${event!.startLabel}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: _liveMuted,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
           const Padding(
