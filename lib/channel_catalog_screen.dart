@@ -1480,6 +1480,9 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   bool _working = false;
   bool _rightsConfirmed = false;
   bool _hasMore = true;
+  int _catalogTotal = 0;
+  bool _diagnosingPreview = false;
+  String? _diagnosticResult;
   String? _email;
   String? _error;
   String? _sourcesError;
@@ -1545,22 +1548,24 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     // El catálogo y las fuentes son servicios independientes. Un fallo al
     // consultar las listas IPTV no debe borrar ni bloquear los canales.
     try {
-      final channels = await _service.fetchAdminChannels(
+      final page = await _service.fetchAdminChannelPage(
         search: _searchController.text,
+        offset: 0,
       );
       if (!mounted) return;
       setState(() {
-        _channels = channels;
+        _channels = page.channels;
+        _catalogTotal = page.total;
         final previewId = _previewChannel?.id;
         if (previewId != null) {
-          for (final channel in channels) {
+          for (final channel in page.channels) {
             if (channel.id == previewId) {
               _previewChannel = channel;
               break;
             }
           }
         }
-        _hasMore = channels.length == 200;
+        _hasMore = page.hasMore;
         _loading = false;
         _error = null;
       });
@@ -1646,14 +1651,18 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     if (_loading || !_hasMore) return;
     setState(() => _loading = true);
     try {
-      final more = await _service.fetchAdminChannels(
+      final page = await _service.fetchAdminChannelPage(
         search: _searchController.text,
         offset: _channels.length,
       );
       if (!mounted) return;
       setState(() {
-        _channels.addAll(more);
-        _hasMore = more.length == 200;
+        final knownIds = _channels.map((channel) => channel.id).toSet();
+        _channels.addAll(
+          page.channels.where((channel) => knownIds.add(channel.id)),
+        );
+        _catalogTotal = page.total;
+        _hasMore = page.hasMore;
         _loading = false;
       });
     } catch (error) {
@@ -1723,7 +1732,10 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   }
 
   void _previewChannelInAdmin(SportsChannel channel) {
-    setState(() => _previewChannel = channel);
+    setState(() {
+      _previewChannel = channel;
+      _diagnosticResult = null;
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_adminScrollController.hasClients) return;
       _adminScrollController.animateTo(
@@ -1732,6 +1744,22 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         curve: Curves.easeOutCubic,
       );
     });
+  }
+
+  Future<void> _diagnosePreviewChannel() async {
+    final channel = _previewChannel;
+    if (channel == null || _diagnosingPreview) return;
+    setState(() {
+      _diagnosingPreview = true;
+      _diagnosticResult = null;
+    });
+    try {
+      final result = await _service.diagnoseStream(channel.url);
+      if (!mounted) return;
+      setState(() => _diagnosticResult = result);
+    } finally {
+      if (mounted) setState(() => _diagnosingPreview = false);
+    }
   }
 
   Future<void> _toggleVisibility(SportsChannel channel) async {
@@ -2133,6 +2161,40 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                               ),
                               channel: _previewChannel,
                             ),
+                            const SizedBox(height: 7),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: _diagnosingPreview
+                                    ? null
+                                    : _diagnosePreviewChannel,
+                                icon: _diagnosingPreview
+                                    ? const SizedBox(
+                                        width: 15,
+                                        height: 15,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(Icons.travel_explore_rounded),
+                                label: Text(
+                                  _diagnosingPreview
+                                      ? 'ANALIZANDO CONEXIÓN...'
+                                      : 'DIAGNOSTICAR CONEXIÓN / GEO',
+                                ),
+                              ),
+                            ),
+                            if (_diagnosticResult != null) ...<Widget>[
+                              const SizedBox(height: 6),
+                              Text(
+                                _diagnosticResult!,
+                                style: const TextStyle(
+                                  color: _channelYellow,
+                                  fontSize: 10,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 6),
                             Text(
                               _previewChannel!.visible
@@ -2145,6 +2207,30 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                               ),
                             ),
                           ],
+                        ],
+                      ),
+                    ),
+                    _adminCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          const Text(
+                            'PROTECCIÓN Y RESTRICCIONES REGIONALES',
+                            style: TextStyle(
+                              color: _channelGreen,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          const Text(
+                            'El diagnóstico identifica enlaces caídos, errores de autorización y posibles restricciones regionales sin cambiar ni borrar las URL originales. No existe un desbloqueador universal: si el emisor autoriza el acceso desde otra región, puedes usar una VPN legítima configurada por ti en Android. La APK no elude licencias, cuentas ni DRM.',
+                            style: TextStyle(
+                              color: _channelMuted,
+                              fontSize: 10,
+                              height: 1.4,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -2364,7 +2450,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                           ),
                         ),
                         Text(
-                          _channels.length.toString() + ' cargados',
+                          _catalogTotal.toString() + ' total · ' +
+                              _channels.length.toString() + ' cargados',
                           style: const TextStyle(
                             color: _channelMuted,
                             fontSize: 9,
