@@ -8,7 +8,6 @@ import 'automatic_live_service.dart';
 import 'notification_service.dart';
 import 'sports_api_service.dart';
 import 'sportsapi_app_service.dart';
-import 'web_agenda_screen.dart';
 
 const Color _agendaBg = Color(0xFF000000);
 const Color _agendaPanel = Color(0xFF07090D);
@@ -23,8 +22,8 @@ typedef AgendaEventsLoader = Future<List<SportsAgendaEvent>?> Function();
 
 /// Agenda principal: consulta hoy y los seis días siguientes, conserva una
 /// caché por fecha y permite abrir en Deportes en vivo el evento seleccionado.
-class MarcaAgendaScreen extends StatefulWidget {
-  const MarcaAgendaScreen({
+class SportsAgendaScreen extends StatefulWidget {
+  const SportsAgendaScreen({
     super.key,
     required this.onOpenLive,
     this.isActive = true,
@@ -40,10 +39,10 @@ class MarcaAgendaScreen extends StatefulWidget {
   final AgendaEventsLoader? loadEvents;
 
   @override
-  State<MarcaAgendaScreen> createState() => _MarcaAgendaScreenState();
+  State<SportsAgendaScreen> createState() => _SportsAgendaScreenState();
 }
 
-class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
+class _SportsAgendaScreenState extends State<SportsAgendaScreen>
     with WidgetsBindingObserver {
   static const int _windowDays = 7;
   late DateTime _windowStartDate;
@@ -82,7 +81,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
   }
 
   @override
-  void didUpdateWidget(covariant MarcaAgendaScreen oldWidget) {
+  void didUpdateWidget(covariant SportsAgendaScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isActive != widget.isActive) {
       _syncRefreshTimer();
@@ -144,7 +143,8 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
         startDate: _windowStartDate,
         days: _windowDays,
       );
-      if (window.unavailableDates.length == window.days) {
+      if (window.unavailableDates.length == window.days &&
+          window.events.isEmpty) {
         throw const SportsApiException(
           'No respondió ninguna fecha de la agenda.',
         );
@@ -184,41 +184,35 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
         unavailableDates: unavailable,
       );
     } catch (_) {
-      // Si falla SportsAPI por completo, intenta primero el calendario
-      // central publicado y después la última captura local disponible.
+      // El calendario automático puede contener solo el próximo evento.
+      // Nunca debe sustituir silenciosamente la ventana completa de SportAPI.
+      final end = _windowStartDate.add(const Duration(days: _windowDays));
+      final byId = <String, SportsAgendaEvent>{};
       final published = await AutomaticLiveService().fetchPublishedSchedule();
       if (published != null) {
-        final end = _windowStartDate.add(const Duration(days: _windowDays));
-        final events = published
-            .map((item) => item.event)
-            .where((event) {
-              final start = event.startsAt.toLocal();
-              return !start.isBefore(_windowStartDate) && start.isBefore(end);
-            })
-            .toList(growable: false);
-        await SportsAgendaStore.saveWindow(
-          events,
-          startDate: _windowStartDate,
-          days: _windowDays,
-        );
-        return SportsAgendaWindow(
-          startDate: _windowStartDate,
-          days: _windowDays,
-          events: events,
-        );
+        for (final item in published) {
+          final event = item.event;
+          final localStart = event.startsAt.toLocal();
+          if (!localStart.isBefore(_windowStartDate) &&
+              localStart.isBefore(end)) {
+            byId[event.id] = event;
+          }
+        }
       }
-
-      final stored = await SportsAgendaStore.load();
-      final end = _windowStartDate.add(const Duration(days: _windowDays));
-      final cached = stored.where((event) {
-        final start = event.startsAt.toLocal();
-        return !start.isBefore(_windowStartDate) && start.isBefore(end);
-      }).toList(growable: false);
-      if (cached.isNotEmpty) {
+      for (final event in await SportsAgendaStore.load()) {
+        final localStart = event.startsAt.toLocal();
+        if (!localStart.isBefore(_windowStartDate) &&
+            localStart.isBefore(end)) {
+          byId.putIfAbsent(event.id, () => event);
+        }
+      }
+      final fallbackEvents = byId.values.toList(growable: false)
+        ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+      if (fallbackEvents.isNotEmpty) {
         return SportsAgendaWindow(
           startDate: _windowStartDate,
           days: _windowDays,
-          events: cached,
+          events: fallbackEvents,
           unavailableDates: List<DateTime>.generate(
             _windowDays,
             (index) => _windowStartDate.add(Duration(days: index)),
@@ -570,23 +564,6 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
             ),
           ],
         ],
-      ),
-    );
-  }
-
-  Future<void> _openAgendaWeb() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => WebAgendaScreen(
-          pageTitle: 'AGENDA WEB',
-          onExit: () => Navigator.of(context).pop(),
-          onOpenLive: () {
-            Navigator.of(context).pop();
-            if (_filteredEvents.isNotEmpty) {
-              widget.onOpenLive(_filteredEvents.first.id);
-            }
-          },
-        ),
       ),
     );
   }
@@ -1011,14 +988,6 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
               color: _loading ? _agendaMuted : _agendaCyan,
             ),
           ),
-          IconButton(
-            tooltip: 'Abrir agenda web de respaldo',
-            onPressed: _openAgendaWeb,
-            icon: const Icon(
-              Icons.open_in_browser_rounded,
-              color: _agendaGreen,
-            ),
-          ),
         ],
       ),
       body: Column(
@@ -1191,15 +1160,6 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _agendaCyan,
                       side: const BorderSide(color: _agendaCyan),
-                    ),
-                  ),
-                  FilledButton.icon(
-                    onPressed: _openAgendaWeb,
-                    icon: const Icon(Icons.open_in_browser_rounded),
-                    label: const Text('ABRIR AGENDA WEB'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: _agendaGreen,
-                      foregroundColor: _agendaBg,
                     ),
                   ),
                 ],

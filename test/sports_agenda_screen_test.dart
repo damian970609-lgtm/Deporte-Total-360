@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:deporte_total_360/automatic_live_service.dart';
-import 'package:deporte_total_360/marca_agenda_screen.dart';
+import 'package:deporte_total_360/sports_agenda_screen.dart';
 
 void main() {
   testWidgets('muestra los eventos que publica la agenda sincronizada', (tester) async {
@@ -9,12 +9,12 @@ void main() {
     final start = DateTime(now.year, now.month, now.day, 12);
     await tester.pumpWidget(
       MaterialApp(
-        home: MarcaAgendaScreen(
+        home: SportsAgendaScreen(
           isActive: false,
           onOpenLive: (_) {},
           loadEvents: () async => <SportsAgendaEvent>[
             SportsAgendaEvent(
-              id: 'marca-test-1',
+              id: 'sportsapi-test-1',
               title: 'Equipo A vs Equipo B',
               sport: 'Fútbol',
               competition: 'Liga de prueba',
@@ -23,7 +23,7 @@ void main() {
               homeTeamLogo: 'https://img.example/equipo-a.png',
               awayTeamLogo: 'https://img.example/equipo-b.png',
               startsAt: start,
-              detailUrl: 'https://www.marca.com/programacion-tv.html',
+              detailUrl: 'https://sportsapi.app/',
             ),
           ],
         ),
@@ -47,7 +47,7 @@ void main() {
     final start = DateTime(now.year, now.month, now.day, 14);
     await tester.pumpWidget(
       MaterialApp(
-        home: MarcaAgendaScreen(
+        home: SportsAgendaScreen(
           isActive: false,
           onOpenLive: (_) {},
           loadEvents: () async => <SportsAgendaEvent>[
@@ -69,7 +69,7 @@ void main() {
                 ),
               ],
               startsAt: start,
-              detailUrl: 'https://www.marca.com/programacion-tv.html',
+              detailUrl: 'https://sportsapi.app/',
             ),
           ],
         ),
@@ -98,7 +98,7 @@ void main() {
           title: 'Evento de hoy $index',
           sport: 'Fútbol',
           startsAt: today.add(Duration(minutes: index * 10)),
-          detailUrl: 'https://www.marca.com/programacion-tv.html',
+          detailUrl: 'https://sportsapi.app/',
         ),
       for (var index = 0; index < 63; index++)
         SportsAgendaEvent(
@@ -106,13 +106,13 @@ void main() {
           title: 'Evento de otra jornada $index',
           sport: 'Tenis',
           startsAt: today.add(Duration(days: index.isEven ? 1 : -1, minutes: index)),
-          detailUrl: 'https://www.marca.com/programacion-tv.html',
+          detailUrl: 'https://sportsapi.app/',
         ),
     ];
 
     await tester.pumpWidget(
       MaterialApp(
-        home: MarcaAgendaScreen(
+        home: SportsAgendaScreen(
           isActive: false,
           onOpenLive: (_) {},
           loadEvents: () async => mixedEvents,
@@ -148,7 +148,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: MarcaAgendaScreen(
+        home: SportsAgendaScreen(
           isActive: false,
           initialDate: today,
           onOpenLive: (eventId) => openedEventId = eventId,
@@ -160,7 +160,7 @@ void main() {
               homeTeam: 'Team A',
               awayTeam: 'Team B',
               startsAt: today.add(const Duration(hours: 2)),
-              detailUrl: 'https://www.marca.com/programacion-tv.html',
+              detailUrl: 'https://sportsapi.app/',
             ),
             SportsAgendaEvent(
               id: 'event-tomorrow',
@@ -169,7 +169,7 @@ void main() {
               homeTeam: 'Team C',
               awayTeam: 'Team D',
               startsAt: today.add(const Duration(days: 1, hours: 3)),
-              detailUrl: 'https://www.marca.com/programacion-tv.html',
+              detailUrl: 'https://sportsapi.app/',
             ),
           ],
         ),
@@ -193,10 +193,10 @@ void main() {
     expect(openedEventId, 'event-tomorrow');
   });
 
-  testWidgets('muestra un estado visible cuando el servidor aún no publica eventos', (tester) async {
+  testWidgets('muestra un estado vacío cuando SportAPI no publica eventos', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: MarcaAgendaScreen(
+        home: SportsAgendaScreen(
           isActive: false,
           onOpenLive: (_) {},
           loadEvents: () async => <SportsAgendaEvent>[],

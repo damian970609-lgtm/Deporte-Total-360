@@ -20,7 +20,7 @@ import 'public_chat_screen.dart';
 import 'sports_api_service.dart';
 import 'sportsapi_statistics_screen.dart';
 import 'sports_summaries_screen.dart';
-import 'marca_agenda_screen.dart';
+import 'sports_agenda_screen.dart';
 
 // Identidad visual unificada: blanco, negro, azul, rojo y verde neón.
 const Color appBg = Color(0xFF000000);
@@ -699,7 +699,7 @@ class _MainShellState extends State<MainShell> {
 
   void _openStatistics() => _selectTab(_statisticsTab);
 
-  void _openWebAgenda() => _selectTab(_agendaTab);
+  void _openAgenda() => _selectTab(_agendaTab);
 
   void _openPublicChat() => _selectTab(_chatTab);
 
@@ -902,7 +902,7 @@ class _MainShellState extends State<MainShell> {
         onDonations: _openDonations,
         onFantasy: _openFantasy,
         onStatistics: _openStatistics,
-        onOpenAgenda: _openWebAgenda,
+        onOpenAgenda: _openAgenda,
         onChat: _openPublicChat,
       ),
       _visitedTabs.contains(_liveTab)
@@ -916,7 +916,7 @@ class _MainShellState extends State<MainShell> {
           ? const ChannelCatalogScreen()
           : const SizedBox.shrink(),
       _visitedTabs.contains(_agendaTab)
-          ? MarcaAgendaScreen(
+          ? SportsAgendaScreen(
               isActive: _selectedIndex == _agendaTab,
               onOpenLive: (eventId) {
                 _selectedAgendaEventId = eventId;

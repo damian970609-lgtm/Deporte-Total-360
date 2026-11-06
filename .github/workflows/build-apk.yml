@@ -271,6 +271,8 @@ jobs:
         run: flutter analyze lib test --no-fatal-infos --no-fatal-warnings
 
       - name: Ejecutar pruebas automatizadas
+        env:
+          TZ: America/Guyana
         run: flutter test
 
       # La llave privada de distribución se conserva en GitHub Secrets, nunca en caché ni en el repositorio.

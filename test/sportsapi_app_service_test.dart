@@ -128,15 +128,39 @@ void main() {
       expect(window.unavailableDates, isEmpty);
       expect(window.events, hasLength(14));
       expect(window.events.map((event) => event.id).toSet(), hasLength(14));
-      expect(requested.where((uri) => uri.path.endsWith('/fixtures')), hasLength(63));
-      expect(requested.where((uri) => uri.path.endsWith('/races')), hasLength(14));
+      final localStart = DateTime(start.year, start.month, start.day);
+      final localEnd = localStart.add(const Duration(days: 7));
+      final firstUtc = localStart.toUtc();
+      final lastUtc = localEnd.toUtc().subtract(
+        const Duration(milliseconds: 1),
+      );
+      final firstUtcDay = DateTime.utc(firstUtc.year, firstUtc.month, firstUtc.day);
+      final lastUtcDay = DateTime.utc(lastUtc.year, lastUtc.month, lastUtc.day);
+      final utcDays = lastUtcDay.difference(firstUtcDay).inDays + 1;
+      final eventLocalDays = window.events.map((event) {
+        final local = event.startsAt.toLocal();
+        return '${local.year}-${local.month}-${local.day}';
+      }).toSet();
+      expect(eventLocalDays, hasLength(7));
+      expect(
+        eventLocalDays,
+        contains('${localStart.year}-${localStart.month}-${localStart.day}'),
+      );
+      expect(
+        requested.where((uri) => uri.path.endsWith('/fixtures')),
+        hasLength(utcDays * 9),
+      );
+      expect(
+        requested.where((uri) => uri.path.endsWith('/races')),
+        hasLength(utcDays * 2),
+      );
 
       final cached = await api.fetchFavoriteAgendaWindow(
         startDate: start,
         days: 7,
       );
       expect(cached.events, hasLength(14));
-      expect(requested, hasLength(77));
+      expect(requested, hasLength(utcDays * 11));
     } finally {
       sportsApiBaseUrl.value = previousBase;
       client.close();
