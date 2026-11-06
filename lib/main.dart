@@ -1,5 +1,6 @@
 import 'app_section_design.dart';
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -39,6 +40,16 @@ const String settingsPhotoAsset =
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    unawaited(NotificationService.recordFlutterFatalError(details));
+  };
+  ui.PlatformDispatcher.instance.onError = (error, stackTrace) {
+    debugPrint('Error no controlado en el isolate principal: $error');
+    debugPrintStack(stackTrace: stackTrace);
+    unawaited(NotificationService.recordFatalError(error, stackTrace));
+    return true;
+  };
   ErrorWidget.builder = (details) {
     final message = details.exceptionAsString();
     final contextDescription = details.context?.toDescription() ?? '';
@@ -136,6 +147,13 @@ void main() {
 
 Future<void> _initializeAppServices() async {
   try {
+    await NotificationService.initializeCrashlytics();
+  } catch (error, stackTrace) {
+    debugPrint('Crashlytics no está disponible: $error');
+    debugPrintStack(stackTrace: stackTrace);
+  }
+
+  try {
     final prefs = await SharedPreferences.getInstance();
     appLanguage.value = parseLanguage(prefs.getString('app_language'));
     telegramLink.value = prefs.getString('telegram_public_link') ?? '';
@@ -205,6 +223,62 @@ class DeporteTotal360App extends StatelessWidget {
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: appCyan, width: 1.4),
+            ),
+          ),
+          dividerColor: appLine,
+          progressIndicatorTheme: const ProgressIndicatorThemeData(
+            color: appGreen,
+            circularTrackColor: appPanel2,
+            linearTrackColor: appPanel2,
+          ),
+          filledButtonTheme: FilledButtonThemeData(
+            style: FilledButton.styleFrom(
+              backgroundColor: appCyan,
+              foregroundColor: appBg,
+              disabledBackgroundColor: appPanel2,
+              disabledForegroundColor: appMuted,
+              minimumSize: const Size(44, 44),
+              textStyle: const TextStyle(
+                fontWeight: FontWeight.w900,
+                letterSpacing: .45,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: appCyan, width: .8),
+              ),
+            ),
+          ),
+          elevatedButtonTheme: ElevatedButtonThemeData(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: appPanel2,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              minimumSize: const Size(44, 44),
+              textStyle: const TextStyle(fontWeight: FontWeight.w800),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: appLine),
+              ),
+            ),
+          ),
+          outlinedButtonTheme: OutlinedButtonThemeData(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: appCyan,
+              minimumSize: const Size(44, 44),
+              side: const BorderSide(color: appCyan),
+              textStyle: const TextStyle(fontWeight: FontWeight.w900),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          snackBarTheme: const SnackBarThemeData(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: appPanel2,
+            contentTextStyle: TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),
@@ -766,7 +840,17 @@ class _MainShellState extends State<MainShell> {
       },
       child: Scaffold(
         backgroundColor: appBg,
-        body: IndexedStack(index: _selectedIndex, children: pages),
+        body: IndexedStack(
+          index: _selectedIndex,
+          children: List<Widget>.generate(
+            pages.length,
+            (index) => TickerMode(
+              enabled: index == _selectedIndex,
+              child: RepaintBoundary(child: pages[index]),
+            ),
+            growable: false,
+          ),
+        ),
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
             color: const Color(0xFF000000),
