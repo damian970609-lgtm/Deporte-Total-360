@@ -36,9 +36,20 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   ErrorWidget.builder = (details) {
     final message = details.exceptionAsString();
+    final contextDescription = details.context?.toDescription() ?? '';
+    final stack = details.stack?.toString() ?? '';
+    final diagnostic = <String>[
+      message,
+      if (contextDescription.isNotEmpty)
+        'Widget: ' + contextDescription,
+      if (stack.isNotEmpty) 'Traza:\n' + stack,
+    ].join('\n\n');
     final visibleMessage = message.length > 180
         ? '${message.substring(0, 177)}…'
         : message;
+    final stackPreview = stack.isEmpty
+        ? 'Flutter no proporcionó una traza para este error.'
+        : stack.split('\n').take(12).join('\n');
     return Directionality(
       textDirection: TextDirection.ltr,
       child: ColoredBox(
@@ -46,7 +57,7 @@ Future<void> main() async {
         child: SafeArea(
           child: Center(
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(18),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
@@ -62,6 +73,45 @@ Future<void> main() async {
                     visibleMessage,
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: appMuted, fontSize: 11, height: 1.4),
+                  ),
+                  if (contextDescription.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Widget: ' + contextDescription,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: appCyan, fontSize: 10),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 150),
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(9),
+                    decoration: BoxDecoration(
+                      color: appPanel,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: appLine),
+                    ),
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        stackPreview,
+                        style: const TextStyle(
+                          color: appMuted,
+                          fontSize: 9,
+                          height: 1.3,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: diagnostic));
+                    },
+                    icon: const Icon(Icons.copy_rounded, size: 16),
+                    label: const Text('COPIAR DIAGNÓSTICO'),
+                    style: TextButton.styleFrom(foregroundColor: appCyan),
                   ),
                 ],
               ),
