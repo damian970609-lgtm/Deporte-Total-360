@@ -97,6 +97,10 @@ const String defaultAutoLiveEpgUrl =
     'https://iptv-epg.org/files/epg-pa.xml\n'
     'https://iptv-epg.org/files/epg-cw.xml\n'
     'https://iptv-epg.org/files/epg-jm.xml\n'
+    'https://iptv-epg.org/files/epg-do.xml\n'
+    'https://iptv-epg.org/files/epg-sv.xml\n'
+    'https://iptv-epg.org/files/epg-pt.xml\n'
+    'https://iptv-epg.org/files/epg-gb.xml\n'
     'https://iptv-epg.org/files/epg-br.xml\n'
     'https://raw.githubusercontent.com/teleonline/listas/main/epg.xml.gz\n'
     'https://dearbulut.github.io/iptv/epg/guide.xml.gz';
