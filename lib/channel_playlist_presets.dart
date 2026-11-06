@@ -3,7 +3,7 @@
 /// Las URLs son distintas entre sí. Algunas listas generales o regionales
 /// pueden contener canales también presentes en otras fuentes; el catálogo
 /// del servidor conserva el identificador de cada canal cuando está disponible.
-const int maxChannelPlaylistSources = 12;
+const int maxChannelPlaylistSources = 16;
 
 class ChannelPlaylistPreset {
   const ChannelPlaylistPreset({
@@ -23,6 +23,11 @@ const List<ChannelPlaylistPreset> channelPlaylistPresets =
     label: 'IPTV-org · Deportes',
     url: 'https://iptv-org.github.io/iptv/categories/sports.m3u',
     description: 'Catálogo internacional organizado por categoría deportiva',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Catálogo global completo',
+    url: 'https://iptv-org.github.io/iptv/index.m3u',
+    description: 'Índice mundial completo del proyecto IPTV-org, con canales públicos de múltiples países',
   ),
   ChannelPlaylistPreset(
     label: 'TDTChannels · TV España',
