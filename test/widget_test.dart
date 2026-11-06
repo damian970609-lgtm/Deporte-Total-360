@@ -119,7 +119,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('muestra las nueve secciones principales y deja Chat como acceso auxiliar', (tester) async {
+  testWidgets('muestra las diez secciones principales y presenta Chat antes de Ajustes', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
     // Pintar un segundo frame comprueba el render inicial de Inicio, no solo
     // que el árbol de widgets se pueda construir.
@@ -137,11 +137,23 @@ void main() {
     expect(find.text('Mister Fantasy'), findsOneWidget);
     expect(find.text('Estadísticas'), findsWidgets);
     expect(find.text('Resúmenes'), findsOneWidget);
+    expect(find.text('Chat'), findsOneWidget);
     expect(find.text('Ajustes'), findsOneWidget);
-    expect(find.text('Chat'), findsNothing);
+    // La sala pública no arranca hasta seleccionar su pestaña.
     expect(find.text('CHAT PÚBLICO'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('Chat abre dentro de la navegación principal', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: MainShell()));
+    await tester.pump();
+    final chatTab = find.text('Chat');
+    await tester.ensureVisible(chatTab);
+    await tester.tap(chatTab);
+    await tester.pump();
+    expect(find.text('CHAT PÚBLICO'), findsOneWidget);
+    expect(find.text('Ajustes'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
 }

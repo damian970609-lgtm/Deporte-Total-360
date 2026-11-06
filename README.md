@@ -2,10 +2,10 @@
 
 Aplicación Android en Flutter. El APK se compila en GitHub Actions; la carpeta Android se genera en el runner.
 
-Navegación principal: Inicio, Deportes en vivo, Agenda de hoy, Noticias, Mister Fantasy, Estadísticas, Resúmenes y Ajustes. Inicio, Agenda, Estadísticas y Resúmenes utilizan los diez deportes favoritos configurados en SportsAPI.app; Deportes en vivo busca señales por separado en los catálogos M3U/XMLTV. Chat, Telegram, contacto y donaciones permanecen como accesos auxiliares.
+Navegación principal: Inicio, Deportes en vivo, Canales deportivos, Agenda de hoy, Noticias, Mister Fantasy, Estadísticas, Resúmenes, Chat y Ajustes. Chat es una pestaña de primer nivel y conserva la sala pública compartida del Worker. Inicio, Agenda, Estadísticas y Resúmenes utilizan los diez deportes favoritos configurados en SportsAPI.app; Deportes en vivo busca señales por separado en los catálogos M3U/XMLTV.
 
 Archivos principales:
-- lib/main.dart: navegación de ocho secciones, inicio y ajustes.
+- lib/main.dart: navegación de diez secciones, inicio, chat y ajustes.
 - lib/automatic_live_service.dart y lib/automatic_live_screen.dart: captura de eventos de agenda, lectura de M3U/XMLTV, clasificación y asignación automática de señales a cuatro reproductores fijos y retiro de señales al terminar su horario EPG.
 - lib/live_media_format.dart y lib/live_channels_screen.dart: detección explícita de HLS, DASH, Smooth Streaming y vídeo progresivo, adaptación de calidad automática con ExoPlayer, selector manual por pistas y transición fullscreen/miniatura sin recrear el controlador.
 - lib/sports_summaries_screen.dart: categorías deportivas y reproducción de YouTube dentro de la app mediante WebView.

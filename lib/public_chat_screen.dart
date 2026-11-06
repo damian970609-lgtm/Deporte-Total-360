@@ -8,12 +8,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app_i18n.dart';
 import 'sports_api_service.dart';
 
-const Color _chatBg = Color(0xFF030814);
-const Color _chatPanel = Color(0xFF071326);
-const Color _chatLine = Color(0xFF123D65);
-const Color _chatCyan = Color(0xFF00E5FF);
-const Color _chatGreen = Color(0xFF39FF9C);
-const Color _chatMuted = Color(0xFFA9BDD6);
+const Color _chatBg = Color(0xFF000000);
+const Color _chatPanel = Color(0xFF07090D);
+const Color _chatLine = Color(0xFF0047FF);
+const Color _chatCyan = Color(0xFF00A3FF);
+const Color _chatGreen = Color(0xFF39FF14);
+const Color _chatMuted = Color(0xFFEAF0F8);
 
 class PublicChatMessage {
   const PublicChatMessage({

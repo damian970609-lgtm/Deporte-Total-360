@@ -6,8 +6,8 @@ import 'automatic_live_service.dart';
 import 'sportsapi_app_service.dart';
 import 'live_channels_screen.dart';
 
-const Color _autoBg = Color(0xFF030814);
-const Color _autoCyan = Color(0xFF00E5FF);
+const Color _autoBg = Color(0xFF000000);
+const Color _autoCyan = Color(0xFF00A3FF);
 
 class AutomaticLiveScreen extends StatefulWidget {
   const AutomaticLiveScreen({
@@ -254,7 +254,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     return Scaffold(
       backgroundColor: _autoBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF020B19),
+        backgroundColor: const Color(0xFF000000),
         title: const Text(
           'TRANSMISIONES EN VIVO',
           style: TextStyle(

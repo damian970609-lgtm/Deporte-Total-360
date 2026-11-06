@@ -10,15 +10,15 @@ import 'live_media_format.dart';
 
 import 'sports_api_service.dart';
 
-const Color _liveBg = Color(0xFF030814);
-const Color _livePanel = Color(0xFF071326);
-const Color _livePanel2 = Color(0xFF0B1B31);
-const Color _liveLine = Color(0xFF123D65);
-const Color _liveCyan = Color(0xFF00E5FF);
-const Color _livePink = Color(0xFFFF28CF);
-const Color _liveGreen = Color(0xFF39FF9C);
-const Color _liveRed = Color(0xFFFF3155);
-const Color _liveMuted = Color(0xFFA9BDD6);
+const Color _liveBg = Color(0xFF000000);
+const Color _livePanel = Color(0xFF07090D);
+const Color _livePanel2 = Color(0xFF0D1118);
+const Color _liveLine = Color(0xFF0047FF);
+const Color _liveCyan = Color(0xFF00A3FF);
+const Color _livePink = Color(0xFFFF1744);
+const Color _liveGreen = Color(0xFF39FF14);
+const Color _liveRed = Color(0xFFFF1744);
+const Color _liveMuted = Color(0xFFEAF0F8);
 
 const String _savedStreamsKey = 'deporte_total_authorized_live_sources_v1';
 const String _savedFavoritesKey = 'deporte_total_live_favorites_v1';
@@ -866,7 +866,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
                 onPressed: () => _toggleFavorite(fixture),
                 icon: Icon(
                   favorite ? Icons.star_rounded : Icons.star_outline_rounded,
-                  color: favorite ? const Color(0xFFFFD600) : _liveMuted,
+                  color: favorite ? const Color(0xFFFFFFFF) : _liveMuted,
                 ),
                 tooltip: favorite ? 'Quitar favorito' : 'Guardar favorito',
               ),
@@ -1043,7 +1043,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
     return Scaffold(
       backgroundColor: _liveBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF020B19),
+        backgroundColor: const Color(0xFF000000),
         title: const Text(
           'DEPORTES EN VIVO',
           style: TextStyle(
@@ -1214,7 +1214,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
           if (_selectedForMultiView.isNotEmpty)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              color: const Color(0xFF101329),
+              color: const Color(0xFF0D1118),
               child: Row(
                 children: <Widget>[
                   Expanded(
@@ -1487,9 +1487,9 @@ class _OfflineSportsArtwork extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: <Color>[
-            Color(0xFF071A31),
-            Color(0xFF030711),
-            Color(0xFF16091D),
+            Color(0xFF07090D),
+            Color(0xFF000000),
+            Color(0xFF0D1118),
           ],
         ),
       ),
@@ -1592,7 +1592,7 @@ class _WaitingLivePlayerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF050A13),
+        color: const Color(0xFF07090D),
         borderRadius: BorderRadius.circular(11),
         border: Border.all(color: _livePink.withAlpha(170), width: 1.1),
           boxShadow: <BoxShadow>[
@@ -1768,7 +1768,7 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF020B19),
+        backgroundColor: const Color(0xFF000000),
         title: Text(
           safeSources.length == 1
               ? 'REPRODUCTOR EN VIVO'
@@ -2060,7 +2060,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
       },
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF050A13),
+          color: const Color(0xFF07090D),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: _liveLine),
         ),

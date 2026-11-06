@@ -248,7 +248,8 @@ class _MainShellState extends State<MainShell> {
   static const int _fantasyTab = 5;
   static const int _statisticsTab = 6;
   static const int _summariesTab = 7;
-  static const int _settingsTab = 8;
+  static const int _chatTab = 8;
+  static const int _settingsTab = 9;
 
   int _selectedIndex = _homeTab;
   String _selectedStatisticsSport = 'Fútbol';
@@ -275,11 +276,7 @@ class _MainShellState extends State<MainShell> {
 
   void _openWebAgenda() => _selectTab(_agendaTab);
 
-  Future<void> _openPublicChat() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const PublicChatScreen()),
-    );
-  }
+  void _openPublicChat() => _selectTab(_chatTab);
 
   void _openFantasy() => _selectTab(_fantasyTab);
 
@@ -447,6 +444,9 @@ class _MainShellState extends State<MainShell> {
       _visitedTabs.contains(_summariesTab)
           ? const SportsSummariesScreen()
           : const SizedBox.shrink(),
+      _visitedTabs.contains(_chatTab)
+          ? PublicChatScreen(isActive: _selectedIndex == _chatTab)
+          : const SizedBox.shrink(),
       _visitedTabs.contains(_settingsTab) ? const SettingsScreen() : const SizedBox.shrink(),
     ];
 
@@ -460,7 +460,7 @@ class _MainShellState extends State<MainShell> {
         body: IndexedStack(index: _selectedIndex, children: pages),
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF020B19),
+            color: const Color(0xFF000000),
             border: const Border(top: BorderSide(color: appLine)),
             boxShadow: <BoxShadow>[
               BoxShadow(color: appCyan.withAlpha(18), blurRadius: 18, offset: const Offset(0, -4)),
@@ -480,8 +480,9 @@ class _MainShellState extends State<MainShell> {
                   _buildBottomTab(_fantasyTab, Icons.emoji_events_rounded, 'Mister Fantasy', appYellow),
                   _buildBottomTab(_statisticsTab, Icons.query_stats_rounded, tr('statistics'), appCyan),
                   _buildBottomTab(_summariesTab, Icons.play_circle_fill_rounded,
-                    appText('Resúmenes', 'Highlights', 'Resumos', 'Résumés'), appPink),
-                  _buildBottomTab(_settingsTab, Icons.settings_rounded, tr('settings'), appCyan),
+                    appText('Resúmenes', 'Highlights', 'Resumos', 'Résumés'), appRed),
+                  _buildBottomTab(_chatTab, Icons.forum_rounded, tr('chat'), appGreen),
+                  _buildBottomTab(_settingsTab, Icons.settings_rounded, tr('settings'), appBlue),
                 ],
               ),
             ),
@@ -507,9 +508,9 @@ class AppBackdrop extends StatelessWidget {
               center: Alignment.topCenter,
               radius: 1.25,
               colors: <Color>[
-                Color(0xFF101B42),
+                Color(0xFF07090D),
                 appBg,
-                Color(0xFF08071B),
+                Color(0xFF000000),
               ],
             ),
           ),
@@ -1352,9 +1353,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 borderRadius: BorderRadius.circular(16),
                 gradient: const LinearGradient(
                   colors: <Color>[
-                    Color(0xDD06152D),
-                    Color(0xCC15082D),
-                    Color(0xDD031E2B),
+                    Color(0xDD07090D),
+                    Color(0xCC0D1118),
+                    Color(0xDD000000),
                   ],
                 ),
                 border: Border.all(color: appCyan.withAlpha(200)),

@@ -9,15 +9,15 @@ import 'package:volume_controller/volume_controller.dart';
 
 import 'channel_catalog_service.dart';
 
-const Color _channelBg = Color(0xFF030814);
-const Color _channelPanel = Color(0xFF071326);
-const Color _channelPanel2 = Color(0xFF0B1B31);
-const Color _channelLine = Color(0xFF123D65);
-const Color _channelCyan = Color(0xFF00E5FF);
-const Color _channelPink = Color(0xFFFF28CF);
-const Color _channelGreen = Color(0xFF39FF9C);
-const Color _channelYellow = Color(0xFFFFD600);
-const Color _channelMuted = Color(0xFFA9BDD6);
+const Color _channelBg = Color(0xFF000000);
+const Color _channelPanel = Color(0xFF07090D);
+const Color _channelPanel2 = Color(0xFF0D1118);
+const Color _channelLine = Color(0xFF0047FF);
+const Color _channelCyan = Color(0xFF00A3FF);
+const Color _channelPink = Color(0xFFFF1744);
+const Color _channelGreen = Color(0xFF39FF14);
+const Color _channelYellow = Color(0xFFFFFFFF);
+const Color _channelMuted = Color(0xFFEAF0F8);
 const String _channelFavoritesKey = 'dt360_channel_catalog_favorites_v1';
 
 const String _defaultSportsPlaylistUrl =
@@ -331,9 +331,9 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
           center: Alignment.topCenter,
           radius: 1.45,
           colors: <Color>[
-            Color(0xFF102B50),
+            Color(0xFF0D1118),
             _channelBg,
-            Color(0xFF02050C),
+            Color(0xFF000000),
           ],
           stops: <double>[0, 0.56, 1],
         ),
@@ -468,7 +468,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
     return Scaffold(
       backgroundColor: _channelBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF041021),
+        backgroundColor: const Color(0xFF07090D),
         title: const Text(
           'CANALES DEPORTIVOS',
           style: TextStyle(
@@ -2011,7 +2011,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     return Scaffold(
       backgroundColor: _channelBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF041021),
+        backgroundColor: const Color(0xFF07090D),
         title: const Text(
           'ADMINISTRACIÓN · DAMIÁN.APK',
           style: TextStyle(
@@ -2035,9 +2035,9 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
             center: Alignment.topCenter,
             radius: 1.4,
             colors: <Color>[
-              Color(0xFF10213D),
+              Color(0xFF0D1118),
               _channelBg,
-              Color(0xFF02050C),
+              Color(0xFF000000),
             ],
             stops: <double>[0, 0.55, 1],
           ),

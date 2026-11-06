@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'app_i18n.dart';
 import 'sports_api_service.dart';
 
-const Color _statsBg = Color(0xFF030814);
-const Color _statsPanel = Color(0xFF071326);
-const Color _statsLine = Color(0xFF123D65);
-const Color _statsCyan = Color(0xFF00E5FF);
-const Color _statsBlue = Color(0xFF087BFF);
-const Color _statsMuted = Color(0xFFA9BDD6);
+const Color _statsBg = Color(0xFF000000);
+const Color _statsPanel = Color(0xFF07090D);
+const Color _statsLine = Color(0xFF0047FF);
+const Color _statsCyan = Color(0xFF00A3FF);
+const Color _statsBlue = Color(0xFF00A3FF);
+const Color _statsMuted = Color(0xFFEAF0F8);
 
 class _SportOption {
   const _SportOption(this.id, this.name, this.icon, this.mode);
@@ -466,7 +466,7 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
       height: 42,
       padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
-        color: const Color(0xFF0B1B31),
+        color: const Color(0xFF0D1118),
         shape: BoxShape.circle,
         border: Border.all(color: _statsLine),
       ),
@@ -654,7 +654,7 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
               final country = _name(row['country']);
               final seasons = _leagueSeasons(row);
               return Card(
-                color: selected ? const Color(0xFF102746) : _statsPanel,
+                color: selected ? const Color(0xFF0D1118) : _statsPanel,
                 shape: RoundedRectangleBorder(
                     side: BorderSide(color: selected ? _statsCyan : _statsLine),
                     borderRadius: BorderRadius.circular(11)),
@@ -708,8 +708,8 @@ class _SportsStatisticsScreenState extends State<SportsStatisticsScreen> {
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: const Color(0xFF2A1424),
-                  border: Border.all(color: const Color(0xFFFF28CF)),
+              decoration: BoxDecoration(color: const Color(0xFF07090D),
+                  border: Border.all(color: const Color(0xFFFF1744)),
                   borderRadius: BorderRadius.circular(11)),
               child: Text(_error!,
                   style: const TextStyle(color: Colors.white, fontSize: 12)),

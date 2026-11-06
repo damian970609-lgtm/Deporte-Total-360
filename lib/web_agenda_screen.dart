@@ -7,14 +7,14 @@ import 'web_protection_policy.dart';
 import 'app_i18n.dart';
 import 'automatic_live_service.dart';
 
-const Color _brandBg = Color(0xFF030814);
-const Color _brandPanel = Color(0xFF071326);
-const Color _brandLine = Color(0xFF123D65);
-const Color _brandCyan = Color(0xFF00E5FF);
-const Color _brandBlue = Color(0xFF087BFF);
-const Color _brandGreen = Color(0xFF39FF9C);
-const Color _brandMuted = Color(0xFFA9BDD6);
-const Color _brandRed = Color(0xFFFF3155);
+const Color _brandBg = Color(0xFF000000);
+const Color _brandPanel = Color(0xFF07090D);
+const Color _brandLine = Color(0xFF0047FF);
+const Color _brandCyan = Color(0xFF00A3FF);
+const Color _brandBlue = Color(0xFF00A3FF);
+const Color _brandGreen = Color(0xFF39FF14);
+const Color _brandMuted = Color(0xFFEAF0F8);
+const Color _brandRed = Color(0xFFFF1744);
 
 /// Web de agenda dentro de la identidad visual de Deporte Total 360°.
 /// El contenido de la web y sus reproductores siguen perteneciendo al proveedor.
@@ -646,7 +646,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
     return Scaffold(
       backgroundColor: _brandBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF020B19),
+        backgroundColor: const Color(0xFF000000),
         titleSpacing: 8,
         leading: IconButton(
           tooltip: _canGoBack ? 'Volver a la página anterior' : 'Volver a Inicio',
@@ -705,8 +705,8 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 colors: <Color>[
-                  Color(0xFF071A39),
-                  Color(0xFF150B30),
+                  Color(0xFF07090D),
+                  Color(0xFF0D1118),
                 ],
               ),
               border: Border(bottom: BorderSide(color: _brandLine)),
@@ -739,7 +739,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
           ),
           if (_noticeMessage != null)
             Material(
-              color: const Color(0xFF10243A),
+              color: const Color(0xFF0D1118),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 7, 6, 7),
                 child: Row(
@@ -948,7 +948,7 @@ class WebAgendaScreenState extends State<WebAgendaScreen> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(10, 5, 10, 7),
-            color: const Color(0xFF020B19),
+            color: const Color(0xFF000000),
             child: const Text(
               'La programación de MARCA es un servicio externo; sus reproductores no se utilizan. '
               'La protección detiene dominios conocidos, pero no garantiza '

@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'app_i18n.dart';
 
-const Color _fantasyBg = Color(0xFF030814);
-const Color _fantasyPanel = Color(0xFF071326);
-const Color _fantasyLine = Color(0xFF123D65);
-const Color _fantasyCyan = Color(0xFF00E5FF);
-const Color _fantasyBlue = Color(0xFF087BFF);
-const Color _fantasyPink = Color(0xFFFF28CF);
-const Color _fantasyMuted = Color(0xFFA9BDD6);
+const Color _fantasyBg = Color(0xFF000000);
+const Color _fantasyPanel = Color(0xFF07090D);
+const Color _fantasyLine = Color(0xFF0047FF);
+const Color _fantasyCyan = Color(0xFF00A3FF);
+const Color _fantasyBlue = Color(0xFF00A3FF);
+const Color _fantasyPink = Color(0xFFFF1744);
+const Color _fantasyMuted = Color(0xFFEAF0F8);
 
 /// Contenedor con la identidad Deporte Total 360° para el servicio oficial
 /// Mister Fantasy. No copia ni modifica el código, marca o interfaz interna
@@ -119,7 +119,7 @@ class _FantasyScreenState extends State<FantasyScreen> {
       child: Scaffold(
         backgroundColor: _fantasyBg,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF020B19),
+          backgroundColor: const Color(0xFF000000),
           leading: IconButton(
             tooltip: appText('Atrás', 'Back', 'Voltar', 'Retour'),
             onPressed: _handleBackRequest,
@@ -170,8 +170,8 @@ class _FantasyScreenState extends State<FantasyScreen> {
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: <Color>[
-                    Color(0xFF071A39),
-                    Color(0xFF150B30),
+                    Color(0xFF07090D),
+                    Color(0xFF0D1118),
                   ],
                 ),
                 border: Border(bottom: BorderSide(color: _fantasyLine)),
@@ -297,7 +297,7 @@ class _FantasyScreenState extends State<FantasyScreen> {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
-              color: const Color(0xFF020B19),
+              color: const Color(0xFF000000),
               child: const Text(
                 'Mister Fantasy es un servicio externo. Su cuenta, marca, contenido y funciones se rigen por sus condiciones y disponibilidad.',
                 textAlign: TextAlign.center,

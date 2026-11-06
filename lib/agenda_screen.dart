@@ -9,15 +9,15 @@ import 'app_i18n.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'sports_statistics_screen.dart';
 
-const Color agendaBg = Color(0xFF030814);
-const Color agendaPanel = Color(0xFF071326);
-const Color agendaLine = Color(0xFF123D65);
-const Color agendaCyan = Color(0xFF00E5FF);
-const Color agendaBlue = Color(0xFF087BFF);
-const Color agendaPink = Color(0xFFFF28CF);
-const Color agendaGreen = Color(0xFF39FF9C);
-const Color agendaRed = Color(0xFFFF3155);
-const Color agendaMuted = Color(0xFFA9BDD6);
+const Color agendaBg = Color(0xFF000000);
+const Color agendaPanel = Color(0xFF07090D);
+const Color agendaLine = Color(0xFF0047FF);
+const Color agendaCyan = Color(0xFF00A3FF);
+const Color agendaBlue = Color(0xFF00A3FF);
+const Color agendaPink = Color(0xFFFF1744);
+const Color agendaGreen = Color(0xFF39FF14);
+const Color agendaRed = Color(0xFFFF1744);
+const Color agendaMuted = Color(0xFFEAF0F8);
 
 enum MatchStatus { live, scheduled, finished }
 
@@ -723,9 +723,9 @@ class _AgendaScreenState extends State<AgendaScreen> {
             center: Alignment.topCenter,
             radius: 1.2,
             colors: <Color>[
-              Color(0xFF101B42),
+              Color(0xFF07090D),
               agendaBg,
-              Color(0xFF08071B),
+              Color(0xFF000000),
             ],
           ),
         ),
@@ -922,14 +922,14 @@ class _AgendaScreenState extends State<AgendaScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2A2414),
-                      border: Border.all(color: const Color(0xFFFFD166)),
+                      color: const Color(0xFF07090D),
+                      border: Border.all(color: const Color(0xFFFF1744)),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        const Icon(Icons.warning_amber_rounded, color: Color(0xFFFFD166), size: 18),
+                        const Icon(Icons.warning_amber_rounded, color: Color(0xFFFF1744), size: 18),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -1358,9 +1358,9 @@ class MatchDetailScreen extends StatelessWidget {
             center: Alignment.topCenter,
             radius: 1.1,
             colors: <Color>[
-              Color(0xFF101B42),
+              Color(0xFF07090D),
               agendaBg,
-              Color(0xFF08071B),
+              Color(0xFF000000),
             ],
           ),
         ),

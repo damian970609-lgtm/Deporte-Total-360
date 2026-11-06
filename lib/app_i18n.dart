@@ -74,6 +74,12 @@ const Map<String, Map<AppLanguage, String>> _labels =
     AppLanguage.portuguese: 'Notícias',
     AppLanguage.french: 'Actualités',
   },
+  'chat': <AppLanguage, String>{
+    AppLanguage.spanish: 'Chat',
+    AppLanguage.english: 'Chat',
+    AppLanguage.portuguese: 'Chat',
+    AppLanguage.french: 'Chat',
+  },
   'settings': <AppLanguage, String>{
     AppLanguage.spanish: 'Ajustes',
     AppLanguage.english: 'Settings',

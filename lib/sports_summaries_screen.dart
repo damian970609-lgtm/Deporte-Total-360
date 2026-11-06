@@ -3,12 +3,12 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'app_i18n.dart';
 
-const Color _summaryBg = Color(0xFF030814);
-const Color _summaryPanel = Color(0xFF071326);
-const Color _summaryLine = Color(0xFF123D65);
-const Color _summaryCyan = Color(0xFF00E5FF);
-const Color _summaryPink = Color(0xFFFF28CF);
-const Color _summaryMuted = Color(0xFFA9BDD6);
+const Color _summaryBg = Color(0xFF000000);
+const Color _summaryPanel = Color(0xFF07090D);
+const Color _summaryLine = Color(0xFF0047FF);
+const Color _summaryCyan = Color(0xFF00A3FF);
+const Color _summaryPink = Color(0xFFFF1744);
+const Color _summaryMuted = Color(0xFFEAF0F8);
 
 class _SummaryCategory {
   const _SummaryCategory(this.name, this.query, this.icon, this.color);
@@ -53,7 +53,7 @@ class SportsSummariesScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: _summaryBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF020B19),
+        backgroundColor: const Color(0xFF000000),
         title: Text(
           appText('RESÚMENES DEPORTIVOS', 'SPORTS HIGHLIGHTS', 'RESUMOS ESPORTIVOS', 'RÉSUMÉS SPORTIFS'),
           style: const TextStyle(
@@ -189,7 +189,7 @@ class _YouTubeHighlightsPlayerScreenState
       child: Scaffold(
         backgroundColor: _summaryBg,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF020B19),
+          backgroundColor: const Color(0xFF000000),
           leading: IconButton(
             onPressed: _handleBack,
             icon: const Icon(Icons.arrow_back_rounded, color: _summaryCyan),

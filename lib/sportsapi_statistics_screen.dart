@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import 'automatic_live_service.dart';
 import 'sportsapi_app_service.dart';
 
-const Color _apiStatsBg = Color(0xFF030814);
-const Color _apiStatsPanel = Color(0xFF071326);
-const Color _apiStatsLine = Color(0xFF123D65);
-const Color _apiStatsCyan = Color(0xFF00E5FF);
-const Color _apiStatsPink = Color(0xFFFF28CF);
-const Color _apiStatsMuted = Color(0xFFA9BDD6);
+const Color _apiStatsBg = Color(0xFF000000);
+const Color _apiStatsPanel = Color(0xFF07090D);
+const Color _apiStatsLine = Color(0xFF0047FF);
+const Color _apiStatsCyan = Color(0xFF00A3FF);
+const Color _apiStatsPink = Color(0xFFFF1744);
+const Color _apiStatsMuted = Color(0xFFEAF0F8);
 
 class _FavouriteSport {
   const _FavouriteSport(this.id, this.name, this.icon);
@@ -309,7 +309,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     return Scaffold(
       backgroundColor: _apiStatsBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF020B19),
+        backgroundColor: const Color(0xFF000000),
         title: const Text(
           'ESTADÍSTICAS SPORTSAPI',
           style: TextStyle(color: _apiStatsCyan, fontSize: 14, fontWeight: FontWeight.w900),
@@ -395,7 +395,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
                       children: competitionNames.map((name) => Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0B203A),
+                          color: const Color(0xFF0D1118),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(color: _apiStatsLine),
                         ),

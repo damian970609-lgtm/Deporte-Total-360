@@ -8,14 +8,14 @@ import 'package:xml/xml.dart';
 import 'web_protection_policy.dart';
 import 'app_i18n.dart';
 
-const Color _newsBg = Color(0xFF030814);
-const Color _newsPanel = Color(0xFF071326);
-const Color _newsLine = Color(0xFF123D65);
-const Color _newsCyan = Color(0xFF00E5FF);
-const Color _newsBlue = Color(0xFF087BFF);
-const Color _newsPink = Color(0xFFFF28CF);
-const Color _newsGreen = Color(0xFF39FF9C);
-const Color _newsMuted = Color(0xFFA9BDD6);
+const Color _newsBg = Color(0xFF000000);
+const Color _newsPanel = Color(0xFF07090D);
+const Color _newsLine = Color(0xFF0047FF);
+const Color _newsCyan = Color(0xFF00A3FF);
+const Color _newsBlue = Color(0xFF00A3FF);
+const Color _newsPink = Color(0xFFFF1744);
+const Color _newsGreen = Color(0xFF39FF14);
+const Color _newsMuted = Color(0xFFEAF0F8);
 
 class NewsSource {
   const NewsSource({
@@ -373,7 +373,7 @@ class _NewsScreenState extends State<NewsScreen> {
     return Scaffold(
       backgroundColor: _newsBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF020B19),
+        backgroundColor: const Color(0xFF000000),
         title: Text(
           appText('NOTICIAS DEPORTIVAS', 'SPORTS NEWS', 'NOTÍCIAS ESPORTIVAS', 'ACTUALITÉS SPORTIVES'),
           style: TextStyle(
@@ -825,7 +825,7 @@ class _NewsArticleReaderState extends State<NewsArticleReader> {
       child: Scaffold(
         backgroundColor: _newsBg,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF020B19),
+          backgroundColor: const Color(0xFF000000),
           leading: IconButton(
             onPressed: _back,
             icon: const Icon(Icons.arrow_back_rounded, color: _newsCyan),

@@ -6,14 +6,14 @@ import 'automatic_live_service.dart';
 import 'sportsapi_app_service.dart';
 import 'web_agenda_screen.dart';
 
-const Color _agendaBg = Color(0xFF030814);
-const Color _agendaPanel = Color(0xFF071326);
-const Color _agendaLine = Color(0xFF123D65);
-const Color _agendaCyan = Color(0xFF00E5FF);
-const Color _agendaGreen = Color(0xFF39FF9C);
-const Color _agendaPink = Color(0xFFFF28CF);
-const Color _agendaMuted = Color(0xFFA9BDD6);
-const Color _agendaRed = Color(0xFFFF3155);
+const Color _agendaBg = Color(0xFF000000);
+const Color _agendaPanel = Color(0xFF07090D);
+const Color _agendaLine = Color(0xFF0047FF);
+const Color _agendaCyan = Color(0xFF00A3FF);
+const Color _agendaGreen = Color(0xFF39FF14);
+const Color _agendaPink = Color(0xFFFF1744);
+const Color _agendaMuted = Color(0xFFEAF0F8);
+const Color _agendaRed = Color(0xFFFF1744);
 
 typedef AgendaEventsLoader = Future<List<SportsAgendaEvent>?> Function();
 
@@ -249,7 +249,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: const Color(0xFF0B203A),
+        color: const Color(0xFF0D1118),
         border: Border.all(color: _agendaLine, width: 1.2),
       ),
       child: ClipOval(
@@ -302,7 +302,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
       constraints: const BoxConstraints(minWidth: 104, maxWidth: 145),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
       decoration: BoxDecoration(
-        color: const Color(0xFF0A1B31),
+        color: const Color(0xFF0D1118),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: _agendaLine),
       ),
@@ -366,7 +366,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
     return Scaffold(
       backgroundColor: _agendaBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF020B19),
+        backgroundColor: const Color(0xFF000000),
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -411,7 +411,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: <Color>[Color(0xFF071A39), Color(0xFF150B30)],
+                colors: <Color>[Color(0xFF07090D), Color(0xFF0D1118)],
               ),
               border: Border(bottom: BorderSide(color: _agendaLine)),
             ),
