@@ -1492,6 +1492,25 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   void initState() {
     super.initState();
     _adminScrollController.addListener(_handleAdminScroll);
+    _working = true;
+    unawaited(_restoreAdminSession());
+  }
+
+  /// Al abrir el menú intenta recuperar la cuenta previa de Google.
+  /// Si el SDK no puede hacerlo sin interacción, deja disponible el botón
+  /// de acceso manual y conserva intactas las listas del servidor.
+  Future<void> _restoreAdminSession() async {
+    try {
+      final email = await _service.restoreSession();
+      if (!mounted || email == null) return;
+      setState(() => _email = email);
+      await _loadAdmin();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
   }
 
   void _handleAdminScroll() {
