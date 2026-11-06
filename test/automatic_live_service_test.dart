@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:deporte_total_360/automatic_live_service.dart';
+import 'package:deporte_total_360/channel_catalog_service.dart';
 import 'package:deporte_total_360/live_channels_screen.dart';
 import 'package:deporte_total_360/live_media_format.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
