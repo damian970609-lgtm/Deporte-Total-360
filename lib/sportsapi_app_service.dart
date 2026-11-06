@@ -27,9 +27,31 @@ class _AgendaDayResult {
     required this.date,
     required this.events,
     this.failed = false,
+    this.incomplete = false,
   });
 
   final DateTime date;
+  final List<SportsAgendaEvent> events;
+  final bool failed;
+  final bool incomplete;
+}
+
+class _AgendaSportsResult {
+  const _AgendaSportsResult({
+    required this.events,
+    this.incomplete = false,
+  });
+
+  final List<SportsAgendaEvent> events;
+  final bool incomplete;
+}
+
+class _AgendaSportResult {
+  const _AgendaSportResult({
+    required this.events,
+    this.failed = false,
+  });
+
   final List<SportsAgendaEvent> events;
   final bool failed;
 }
@@ -129,12 +151,12 @@ class SportsApiAppService {
     return _text(value);
   }
 
-  static final Map<String, List<SportsAgendaEvent>> _agendaCache =
-      <String, List<SportsAgendaEvent>>{};
+  static final Map<String, _AgendaSportsResult> _agendaCache =
+      <String, _AgendaSportsResult>{};
   static final Map<String, DateTime> _agendaCacheExpiry =
       <String, DateTime>{};
-  static final Map<String, Future<List<SportsAgendaEvent>>> _agendaInFlight =
-      <String, Future<List<SportsAgendaEvent>>>{};
+  static final Map<String, Future<_AgendaSportsResult>> _agendaInFlight =
+      <String, Future<_AgendaSportsResult>>{};
   static final Map<String, ({
     SportsAgendaWindow window,
     DateTime expiresAt,
@@ -146,26 +168,31 @@ class SportsApiAppService {
 
   Future<List<SportsAgendaEvent>> fetchFavoriteAgendaEvents({
     DateTime? date,
-  }) {
-    // SportsAPI date parameters represent UTC calendar days, not local days.
-    final selected = date ?? DateTime.now().toUtc();
-    final utcDay = DateTime.utc(selected.year, selected.month, selected.day);
+  }) async {
+    final requested = date ?? DateTime.now().toUtc();
+    final result = await _fetchCachedAgendaDay(requested);
+    return result.events;
+  }
+
+  Future<_AgendaSportsResult> _fetchCachedAgendaDay(DateTime date) {
+    final utcDay = DateTime.utc(date.year, date.month, date.day);
     final day = utcDay.year.toString().padLeft(4, '0') + '-' +
         utcDay.month.toString().padLeft(2, '0') + '-' +
         utcDay.day.toString().padLeft(2, '0');
     final cached = _agendaCache[day];
     final expires = _agendaCacheExpiry[day];
     if (cached != null && expires != null && DateTime.now().isBefore(expires)) {
-      return Future<List<SportsAgendaEvent>>.value(cached);
+      return Future<_AgendaSportsResult>.value(cached);
     }
     final pending = _agendaInFlight[day];
     if (pending != null) return pending;
     final future = _fetchFavoriteAgendaEvents(day);
     _agendaInFlight[day] = future;
-    return future.then((events) {
-      _agendaCache[day] = events;
-      _agendaCacheExpiry[day] = DateTime.now().add(const Duration(minutes: 2));
-      return events;
+    return future.then((result) {
+      _agendaCache[day] = result;
+      _agendaCacheExpiry[day] =
+          DateTime.now().add(const Duration(minutes: 2));
+      return result;
     }).whenComplete(() {
       _agendaInFlight.remove(day);
     });
@@ -271,8 +298,12 @@ class SportsApiAppService {
       final batch = await Future.wait<_AgendaDayResult>(
         dates.map((date) async {
           try {
-            final rows = await fetchFavoriteAgendaEvents(date: date);
-            return _AgendaDayResult(date: date, events: rows);
+            final result = await _fetchCachedAgendaDay(date);
+            return _AgendaDayResult(
+              date: date,
+              events: result.events,
+              incomplete: result.incomplete,
+            );
           } catch (_) {
             return _AgendaDayResult(
               date: date,
@@ -284,7 +315,7 @@ class SportsApiAppService {
       );
 
       for (final result in batch) {
-        if (result.failed) {
+        if (result.failed || result.incomplete) {
           markUnavailableUtcDay(result.date);
           continue;
         }
@@ -311,8 +342,7 @@ class SportsApiAppService {
     );
   }
 
-  Future<List<SportsAgendaEvent>> _fetchFavoriteAgendaEvents(String day) async {
-    var successfulSports = 0;
+  Future<_AgendaSportsResult> _fetchFavoriteAgendaEvents(String day) async {
 
     Future<Map<String, dynamic>> fetchCompleteEnvelope(
       String route,
@@ -347,7 +377,8 @@ class SportsApiAppService {
       return envelope;
     }
 
-    final results = await Future.wait(_sportNames.entries.map((entry) async {
+    final results = await Future.wait<_AgendaSportResult>(
+      _sportNames.entries.map((entry) async {
       try {
         final isRace = entry.key == 'cycling' || entry.key == 'motorsport';
         final rows = <Map<String, dynamic>>[];
@@ -403,33 +434,42 @@ class SportsApiAppService {
           }
         }
 
-        successfulSports++;
-        if (isRace) {
-          return rows
-              .expand((row) => _raceEvents(row, entry.value, day))
-              .toList(growable: false);
-        }
-        return rows
-            .map((row) => _fixtureEvent(row, entry.value))
-            .whereType<SportsAgendaEvent>()
-            .toList(growable: false);
+        final events = isRace
+            ? rows
+                .expand((row) => _raceEvents(row, entry.value, day))
+                .toList(growable: false)
+            : rows
+                .map((row) => _fixtureEvent(row, entry.value))
+                .whereType<SportsAgendaEvent>()
+                .toList(growable: false);
+        return _AgendaSportResult(events: events);
       } catch (_) {
-        // Una disciplina temporalmente incompleta no bloquea las demás.
-        return <SportsAgendaEvent>[];
+        // Una disciplina temporalmente incompleta no bloquea las demás,
+        // pero se informa a la Agenda para que no muestre cobertura total.
+        return const _AgendaSportResult(
+          events: <SportsAgendaEvent>[],
+          failed: true,
+        );
       }
-    }));
+    }),
+    );
 
+    final successfulSports = results.where((result) => !result.failed).length;
     if (successfulSports == 0) {
       throw const SportsApiException(
         'No se pudo consultar ninguno de tus diez deportes favoritos en SportsAPI.',
       );
     }
     final unique = <String, SportsAgendaEvent>{};
-    for (final event in results.expand((items) => items)) {
+    for (final event in results.expand((result) => result.events)) {
       unique[event.id] = event;
     }
-    return unique.values.toList()
+    final events = unique.values.toList()
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+    return _AgendaSportsResult(
+      events: events,
+      incomplete: results.any((result) => result.failed),
+    );
   }
 
   SportsAgendaEvent? _fixtureEvent(
