@@ -240,6 +240,60 @@ void main() {
     client.close();
   });
 
+  test('el canal DASH se conserva como señal multimedia compatible', () {
+    final channel = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'sports-dash-1',
+      'identifier': 'sports-dash-1',
+      'name': 'Sports DASH',
+      'url': 'https://media.example/live/manifest.mpd?token=sample',
+      'isSports': true,
+      'visible': false,
+    });
+
+    expect(channel.url, contains('.mpd'));
+    expect(channel.isSports, isTrue);
+    expect(channel.visible, isFalse);
+  });
+
+  test('eliminar un canal usa DELETE autenticado en la ruta del canal', () async {
+    http.Request? sent;
+    final client = MockClient((request) async {
+      sent = request;
+      return http.Response(jsonEncode(<String, Object>{
+        'deleted': true,
+        'blockedFromReimport': true,
+      }), 200);
+    });
+    final service = ChannelCatalogService(
+      client: client,
+      accessTokenProvider: () => 'test-google-id-token',
+    );
+
+    await service.deleteChannel('sports-channel-123');
+
+    expect(sent?.method, 'DELETE');
+    expect(
+      sent?.url.path,
+      endsWith('/api/channels/admin/channels/sports-channel-123'),
+    );
+    expect(sent?.headers['Authorization'], 'Bearer test-google-id-token');
+    client.close();
+  });
+
+  test('eliminar un canal rechaza identificadores inseguros', () async {
+    final client = MockClient((request) async => http.Response('{}', 200));
+    final service = ChannelCatalogService(
+      client: client,
+      accessTokenProvider: () => 'test-google-id-token',
+    );
+
+    await expectLater(
+      service.deleteChannel('../channel'),
+      throwsA(isA<ChannelCatalogException>()),
+    );
+    client.close();
+  });
+
   test('reintentar una fuente vuelve a ponerla en cola en el servidor', () async {
     http.Request? sent;
     final client = MockClient((request) async {

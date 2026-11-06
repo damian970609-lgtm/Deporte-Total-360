@@ -46,19 +46,21 @@ En Firebase crea una aplicación Android para el paquete de esta APK y copia los
 
 La nueva pestaña **Canales deportivos** muestra únicamente señales aprobadas y
 publicadas desde el catálogo central de Cloudflare. El reproductor se desplaza
-con la lista, admite HLS/MP4/MPEG-TS, controles ocultables a los cinco segundos,
+con la lista y admite HLS, DASH, Smooth Streaming y los formatos progresivos
+que clasifica el proyecto, con controles ocultables a los cinco segundos,
 bloqueo, pantalla completa, ajuste gestual de brillo de la aplicación y
 volumen multimedia, además de calidad automática y pistas publicadas por el
 proveedor. La calidad automática depende de las variantes disponibles en la
 señal; no puede crear resoluciones que el proveedor no publique.
 
-El acceso de diez pulsaciones sobre `DAMIÁN.APK` abre ahora el panel privado
-de importación. Inicia sesión con Google. Añade una lista M3U HTTPS y confirma
-que tienes autorización para distribuir las señales. Cloudflare descarga y
-procesa la lista en segundo plano; los nuevos canales permanecen ocultos.
-Desde el catálogo general puedes copiar su identificador o URL de señal y
-activar/desactivar el ojo de visibilidad para publicar u ocultar cada señal
-deportiva a todos los usuarios.
+El acceso de diez pulsaciones sobre `DAMIÁN.APK` abre el panel privado de
+importación. Inicia sesión con Google y añade listas M3U, PLS, XSPF/XML, JSON o
+TXT mediante HTTPS; confirma que tienes autorización para distribuir las
+señales. Cloudflare descarga y procesa las listas en segundo plano; los nuevos
+canales permanecen ocultos. Desde el catálogo privado puedes probar una señal,
+copiar su identificador o URL, asignar idioma, publicarla u ocultarla y eliminar
+un canal permanentemente. El borrado bloquea la URL para que las actualizaciones
+posteriores no vuelvan a añadir esa misma señal.
 
 Configura `GOOGLE_OAUTH_CLIENT_ID` como secreto de GitHub Actions del
 repositorio de la APK y del repositorio del Worker. Debe ser el **ID de cliente
@@ -78,9 +80,10 @@ parece un ID OAuth Web; nunca imprime el valor del secreto.
 
 El reproductor modifica el brillo de la aplicación, no el brillo global del
 sistema, por lo que no necesita el permiso especial de Android. El control
-gestual de volumen utiliza el volumen multimedia de Android. Las importaciones
-solo aceptan playlists M3U HTTPS y direcciones HLS/MP4/MPEG-TS directas; no extraen
-páginas de reproducción ni evaden DRM, cuentas o restricciones regionales.
+gestual de volumen utiliza el volumen multimedia de Android. El reproductor
+comparte el mismo clasificador de formatos que el catálogo: HLS, DASH, Smooth
+Streaming y vídeo progresivo compatible, siempre mediante enlaces HTTPS directos.
+No extrae páginas de reproducción ni evade DRM, cuentas o restricciones regionales.
 
 
 ### Idioma de los canales

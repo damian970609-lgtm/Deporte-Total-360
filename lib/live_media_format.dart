@@ -46,3 +46,15 @@ LiveMediaFormat? liveMediaFormatForUrl(String value) {
   }
   return null;
 }
+
+// The public catalogue accepts only direct HTTPS media streams. Keep the
+// player's gate aligned with the URL classifier used while parsing channels.
+bool isSupportedChannelPlaybackUrl(String value) {
+  final uri = Uri.tryParse(value.trim());
+  return uri != null &&
+      uri.scheme == 'https' &&
+      uri.hasAuthority &&
+      uri.host.isNotEmpty &&
+      uri.userInfo.isEmpty &&
+      liveMediaFormatForUrl(value) != null;
+}

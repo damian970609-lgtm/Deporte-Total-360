@@ -10,6 +10,7 @@ import 'package:volume_controller/volume_controller.dart';
 
 import 'channel_catalog_service.dart';
 import 'channel_playlist_presets.dart';
+import 'live_media_format.dart';
 
 const Color _channelBg = Color(0xFF000000);
 const Color _channelPanel = Color(0xFF07090D);
@@ -809,20 +810,14 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
       return;
     }
 
-    final uri = Uri.tryParse(channel.url);
-    if (uri == null ||
-        uri.scheme != 'https' ||
-        uri.host.isEmpty ||
-        uri.userInfo.isNotEmpty ||
-        !(uri.path.toLowerCase().endsWith('.m3u8') ||
-            uri.path.toLowerCase().endsWith('.mp4') ||
-            uri.path.toLowerCase().endsWith('.ts'))) {
+    if (!isSupportedChannelPlaybackUrl(channel.url)) {
       setState(() {
         _loading = false;
-        _error = 'La fuente no es un enlace HLS, MP4 o MPEG-TS directo seguro.';
+        _error = 'La fuente no es una señal HTTPS directa compatible (HLS, DASH, Smooth Streaming o vídeo progresivo).';
       });
       return;
     }
+    final uri = Uri.parse(channel.url.trim());
 
     setState(() {
       _loading = true;
@@ -1975,6 +1970,58 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
+  Future<void> _deleteChannel(SportsChannel channel) async {
+    if (_working) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _channelPanel,
+        title: const Text(
+          'ELIMINAR CANAL',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+        ),
+        content: Text(
+          'Se eliminará "${channel.name}" del catálogo y se bloqueará su URL para que las próximas importaciones no lo vuelvan a agregar. Esta acción no se puede deshacer desde la APK.',
+          style: const TextStyle(color: _channelMuted, height: 1.4),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('CANCELAR'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: _channelPink,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('ELIMINAR'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _working = true);
+    try {
+      await _service.deleteChannel(channel.id);
+      if (!mounted) return;
+      if (_previewChannel?.id == channel.id) {
+        setState(() {
+          _previewChannel = null;
+          _diagnosticResult = null;
+        });
+      }
+      await _loadAdmin(showLoading: false);
+      if (!mounted) return;
+      _message('Canal eliminado. Su URL quedó bloqueada para futuras importaciones.');
+    } catch (error) {
+      _message('No se pudo eliminar el canal: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   Future<void> _setChannelLanguage(
     SportsChannel channel,
     String language,
@@ -2171,12 +2218,24 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           IconButton(
             tooltip: channel.visible ? 'Ocultar a todos' : 'Publicar para todos',
             visualDensity: VisualDensity.compact,
-            onPressed: sport ? () => _toggleVisibility(channel) : null,
+            onPressed: sport && !_working
+                ? () => _toggleVisibility(channel)
+                : null,
             icon: Icon(
               channel.visible
                   ? Icons.visibility_rounded
                   : Icons.visibility_off_rounded,
               color: channel.visible ? _channelGreen : _channelMuted,
+            ),
+          ),
+          IconButton(
+            tooltip: 'Eliminar permanentemente',
+            visualDensity: VisualDensity.compact,
+            onPressed: _working ? null : () => _deleteChannel(channel),
+            icon: const Icon(
+              Icons.delete_forever_rounded,
+              color: _channelPink,
+              size: 19,
             ),
           ),
         ],
