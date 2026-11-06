@@ -38,7 +38,7 @@ void main() {
             'league': {'id': 10, 'name': 'Premier League'},
             'season': {'id': 20, 'name': '2030'}
           }],
-          'meta': {'count': 1, 'hasNextPage': page == 0, 'complete': true}
+          'meta': {'count': 1, 'hasNextPage': false, 'complete': true}
         }), 200);
       }
       if (request.url.path.endsWith('/races')) {
@@ -107,7 +107,7 @@ void main() {
             'away': {'id': day * 20 + page * 2 + 1, 'name': 'Rival ' + day.toString() + ' ' + page.toString()},
             'league': {'id': 1, 'name': 'Liga de prueba'},
           }],
-          'meta': {'count': 1}
+          'meta': {'count': 1, 'hasNextPage': page == 0, 'complete': true}
         }), 200);
       }
       if (request.url.path.endsWith('/races')) {
@@ -135,7 +135,7 @@ void main() {
         startDate: start,
         days: 7,
       );
-      expect(cached.events, hasLength(7));
+      expect(cached.events, hasLength(14));
       expect(requested, hasLength(77));
     } finally {
       sportsApiBaseUrl.value = previousBase;
