@@ -1883,27 +1883,19 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                 ),
                 Align(
                   alignment: Alignment.centerRight,
-                  child: TextButton.icon(
+                  child: IconButton(
+                    tooltip: 'PROBAR CANAL',
                     onPressed: () => _previewChannelInAdmin(channel),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 30,
+                      height: 30,
+                    ),
                     icon: const Icon(
                       Icons.play_circle_outline_rounded,
-                      size: 15,
-                    ),
-                    label: const Text(
-                      'PROBAR CANAL',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    style: TextButton.styleFrom(
-                      foregroundColor: _channelCyan,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 2,
-                      ),
-                      minimumSize: const Size(0, 27),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      color: _channelCyan,
+                      size: 20,
                     ),
                   ),
                 ),
