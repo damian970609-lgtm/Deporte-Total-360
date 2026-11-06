@@ -74,6 +74,19 @@ void main() {
     expect(channel.language, 'es');
   });
 
+  test('canal rechaza HTTP aunque el enlace termine en una extensión compatible', () {
+    expect(
+      () => SportsChannel.fromJson(<String, dynamic>{
+        'id': 'unsafe-http',
+        'identifier': 'unsafe-http',
+        'name': 'Canal HTTP',
+        'url': 'http://media.example/live.m3u8',
+        'isSports': true,
+      }),
+      throwsFormatException,
+    );
+  });
+
   test('canal admite señales MPEG-TS directas de listas M3U', () {
     final channel = SportsChannel.fromJson(<String, dynamic>{
       'id': 'canal-ts',

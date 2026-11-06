@@ -60,9 +60,9 @@ class SportsChannel {
     if (id.isEmpty || identifier.isEmpty || name.isEmpty || url.isEmpty) {
       throw const FormatException('El canal recibido está incompleto.');
     }
-    if (liveMediaFormatForUrl(url) == null) {
+    if (!isSupportedChannelPlaybackUrl(url)) {
       throw const FormatException(
-        'El canal no contiene una señal HLS, DASH, Smooth Streaming o vídeo directo compatible.',
+        'El canal no contiene una señal HTTPS directa HLS, DASH, Smooth Streaming o de vídeo progresivo compatible.',
       );
     }
     return SportsChannel(
@@ -515,8 +515,8 @@ class ChannelCatalogService {
   /// autenticación o política del proveedor; no se presenta como certeza.
   Future<String> diagnoseStream(String value) async {
     final uri = Uri.tryParse(value.trim());
-    if (uri == null || liveMediaFormatForUrl(value) == null) {
-      return 'ENLACE NO COMPATIBLE: revisa la URL o el formato de la señal.';
+    if (uri == null || !isSupportedChannelPlaybackUrl(value)) {
+      return 'ENLACE NO COMPATIBLE: se necesita una URL HTTPS directa con formato multimedia admitido.';
     }
     try {
       final result = await _client.get(
