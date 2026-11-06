@@ -650,6 +650,40 @@ class ChannelCatalogService {
     _decode(result);
   }
 
+  /// Retira una fuente de la cola de actualización. Los canales que ya fueron
+  /// importados permanecen disponibles en el catálogo para publicarlos o
+  /// volverlos a ocultar individualmente.
+  Future<void> deletePlaylistSource({required String id}) async {
+    final safeId = id.trim();
+    if (safeId.isEmpty) {
+      throw const ChannelCatalogException('El identificador de la lista no es válido.');
+    }
+    final result = await _client.delete(
+      Uri.parse(_baseUrl + '/api/channels/admin/sources/' +
+          Uri.encodeComponent(safeId)),
+      headers: _authHeaders(),
+    ).timeout(const Duration(seconds: 20));
+    _decode(result);
+  }
+
+  /// Vuelve a poner en cola una lista que falló durante la importación.
+  Future<void> retryPlaylistSource({required String id}) async {
+    final safeId = id.trim();
+    if (safeId.isEmpty) {
+      throw const ChannelCatalogException('El identificador de la lista no es válido.');
+    }
+    final result = await _client.post(
+      Uri.parse(_baseUrl + '/api/channels/admin/sources/' +
+          Uri.encodeComponent(safeId) + '/retry'),
+      headers: <String, String>{
+        ..._authHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    ).timeout(const Duration(seconds: 20));
+    _decode(result);
+  }
+
   Future<void> setVisibility(
     String channelId, {
     required bool visible,
