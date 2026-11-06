@@ -1468,7 +1468,7 @@ class _SportsCrestState extends State<_SportsCrest>
               );
             },
           ),
-        ),
+        );
       },
     );
   }
