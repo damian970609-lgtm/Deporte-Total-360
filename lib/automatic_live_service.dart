@@ -768,10 +768,9 @@ class AutomaticLiveService {
         }
       }
     }
+    // La guía es complementaria: si las fuentes EPG fallan, el catálogo de
+    // canales sigue disponible y la guía se volverá a intentar en otra carga.
     final programmes = programmesByKey.values.toList(growable: false);
-    if (programmes.isEmpty) {
-      throw const FormatException('Ninguna guía EPG/XMLTV respondió con programas legibles.');
-    }
 
     final catalog = AutoLiveCatalog(channels: channels, programmes: programmes);
     _cachedCatalog = catalog;
