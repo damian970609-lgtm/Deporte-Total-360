@@ -147,15 +147,12 @@ class SportsApiAppService {
   Future<List<SportsAgendaEvent>> fetchFavoriteAgendaEvents({
     DateTime? date,
   }) {
-    // SportsAPI date is a UTC calendar day. Use the phone's calendar
-    // date deliberately so the native Agenda tab stays aligned with the
-    // user's local day; returned instants are converted to local time below.
     // SportsAPI date parameters represent UTC calendar days, not local days.
     final selected = date ?? DateTime.now().toUtc();
     final utcDay = DateTime.utc(selected.year, selected.month, selected.day);
     final day = utcDay.year.toString().padLeft(4, '0') + '-' +
-        selected.month.toString().padLeft(2, '0') + '-' +
-        selected.day.toString().padLeft(2, '0');
+        utcDay.month.toString().padLeft(2, '0') + '-' +
+        utcDay.day.toString().padLeft(2, '0');
     final cached = _agendaCache[day];
     final expires = _agendaCacheExpiry[day];
     if (cached != null && expires != null && DateTime.now().isBefore(expires)) {
@@ -212,6 +209,91 @@ class SportsApiAppService {
     DateTime startDate,
     int days,
   ) async {
+    final localStart = DateTime(startDate.year, startDate.month, startDate.day);
+    final localEnd = localStart.add(Duration(days: days));
+
+    // A local seven-day window may overlap eight UTC calendar dates in
+    // UTC-negative time zones. SportsAPI accepts UTC dates, so query every
+    // UTC date whose interval intersects the requested local window.
+    final firstUtcInstant = localStart.toUtc();
+    final lastUtcInstant = localEnd.toUtc().subtract(
+      const Duration(milliseconds: 1),
+    );
+    final firstUtcDay = DateTime.utc(
+      firstUtcInstant.year,
+      firstUtcInstant.month,
+      firstUtcInstant.day,
+    );
+    final lastUtcDay = DateTime.utc(
+      lastUtcInstant.year,
+      lastUtcInstant.month,
+      lastUtcInstant.day,
+    );
+    final utcDays = lastUtcDay.difference(firstUtcDay).inDays + 1;
+
+    final resultsById = <String, SportsAgendaEvent>{};
+    final unavailableLocalDays = <DateTime>{};
+
+    void markUnavailableUtcDay(DateTime utcDay) {
+      final utcEnd = utcDay
+          .add(const Duration(days: 1))
+          .subtract(const Duration(microseconds: 1));
+      final firstLocal = utcDay.toLocal();
+      final lastLocal = utcEnd.toLocal();
+      var localDay = DateTime(
+        firstLocal.year,
+        firstLocal.month,
+        firstLocal.day,
+      );
+      final lastLocalDay = DateTime(
+        lastLocal.year,
+        lastLocal.month,
+        lastLocal.day,
+      );
+      while (!localDay.isAfter(lastLocalDay)) {
+        if (!localDay.isBefore(localStart) && localDay.isBefore(localEnd)) {
+          unavailableLocalDays.add(localDay);
+        }
+        localDay = localDay.add(const Duration(days: 1));
+      }
+    }
+
+    // Two UTC dates per batch keep the number of concurrent requests bounded.
+    for (var batchStart = 0; batchStart < utcDays; batchStart += 2) {
+      final batchLength = (utcDays - batchStart) < 2
+          ? utcDays - batchStart
+          : 2;
+      final dates = List<DateTime>.generate(
+        batchLength,
+        (index) => firstUtcDay.add(Duration(days: batchStart + index)),
+        growable: false,
+      );
+      final batch = await Future.wait<_AgendaDayResult>(
+        dates.map((date) async {
+          try {
+            final rows = await fetchFavoriteAgendaEvents(date: date);
+            return _AgendaDayResult(date: date, events: rows);
+          } catch (_) {
+            return _AgendaDayResult(
+              date: date,
+              events: const <SportsAgendaEvent>[],
+              failed: true,
+            );
+          }
+        }),
+      );
+
+      for (final result in batch) {
+        if (result.failed) {
+          markUnavailableUtcDay(result.date);
+          continue;
+        }
+        for (final event in result.events) {
+          resultsById[event.id] = event;
+        }
+      }
+    }
+
     final events = resultsById.values.where((event) {
       final localEventStart = event.startsAt.toLocal();
       return !localEventStart.isBefore(localStart) &&
@@ -227,8 +309,6 @@ class SportsApiAppService {
       events: events,
       unavailableDates: unavailableDates,
     );
-  }
-
   }
 
   Future<List<SportsAgendaEvent>> _fetchFavoriteAgendaEvents(String day) async {
@@ -326,7 +406,7 @@ class SportsApiAppService {
         successfulSports++;
         if (isRace) {
           return rows
-              .expand((row) => _raceEvents(row, entry.key, entry.value, day))
+              .expand((row) => _raceEvents(row, entry.value, day))
               .toList(growable: false);
         }
         return rows
@@ -352,7 +432,7 @@ class SportsApiAppService {
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
   }
 
-    SportsAgendaEvent? _fixtureEvent(
+  SportsAgendaEvent? _fixtureEvent(
     Map<String, dynamic> row,
     String sportName,
   ) {
@@ -409,7 +489,6 @@ class SportsApiAppService {
 
   List<SportsAgendaEvent> _raceEvents(
     Map<String, dynamic> row,
-    String sportId,
     String sportName,
     String utcDay,
   ) {
