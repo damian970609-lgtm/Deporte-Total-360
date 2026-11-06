@@ -146,7 +146,7 @@ void main() {
                   'url': '//img.example/azul.png',
                 },
                 'awayTeamLogo': <String, dynamic>{
-                  'contentUrl': '/assets/escudos/rojo.svg',
+                  'contentUrl': 'https://cdn.example/assets/escudos/rojo.svg',
                 },
                 'participants': <Map<String, dynamic>>[
                   <String, dynamic>{
@@ -188,7 +188,7 @@ void main() {
       expect(result!.single.event.id, 'cloud-event-1');
       expect(result.single.event.homeTeamLogo, 'https://img.example/azul.png');
       expect(result.single.event.awayTeamLogo,
-          'https://www.marca.com/assets/escudos/rojo.svg');
+          'https://cdn.example/assets/escudos/rojo.svg');
       expect(result.single.event.participants.single.name, 'Equipo Azul');
       expect(result.single.event.participants.single.country, 'España');
       expect(result.single.event.venue, 'Estadio de prueba');

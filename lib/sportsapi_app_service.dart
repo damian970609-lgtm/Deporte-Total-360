@@ -191,7 +191,7 @@ class SportsApiAppService {
     return future.then((result) {
       _agendaCache[day] = result;
       _agendaCacheExpiry[day] =
-          DateTime.now().add(const Duration(minutes: 2));
+          DateTime.now().add(const Duration(minutes: 5));
       return result;
     }).whenComplete(() {
       _agendaInFlight.remove(day);
@@ -224,7 +224,7 @@ class SportsApiAppService {
     return future.then((window) {
       _agendaWindowCache[cacheKey] = (
         window: window,
-        expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+        expiresAt: DateTime.now().add(const Duration(minutes: 5)),
       );
       return window;
     }).whenComplete(() {

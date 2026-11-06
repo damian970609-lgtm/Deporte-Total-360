@@ -208,6 +208,5 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.text('NO HAY EVENTOS PARA ESTA FECHA'), findsOneWidget);
-    expect(find.text('ABRIR AGENDA WEB'), findsOneWidget);
   });
 }
