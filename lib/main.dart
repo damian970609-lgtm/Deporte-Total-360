@@ -556,6 +556,15 @@ class SettingsBackdrop extends StatelessWidget {
   }
 }
 
+// Paleta exclusiva de Inicio: no altera los colores de las demás secciones.
+const Color _homeBlack = Color(0xFF02050B);
+const Color _homePanel = Color(0xFF091321);
+const Color _homeSteel = Color(0xFFB9C7D8);
+const Color _homeWhite = Color(0xFFF7FBFF);
+const Color _homeBlue = Color(0xFF00A8FF);
+const Color _homeRed = Color(0xFFFF304F);
+const Color _homeGreen = Color(0xFF36F58A);
+
 class HomeDashboard extends StatelessWidget {
   const HomeDashboard({
     super.key,
@@ -570,9 +579,7 @@ class HomeDashboard extends StatelessWidget {
     required this.onChat,
   });
 
-  // Se conservan los callbacks públicos para no romper la integración existente.
-  // La pantalla de inicio ya no muestra accesos directos: la navegación general
-  // permanece en la barra inferior de MainShell.
+  // Se mantienen todos los callbacks y contratos existentes.
   final ValueChanged<int> onNavigate;
   final ValueChanged<String> onSportSelected;
   final VoidCallback onTelegram;
@@ -586,44 +593,55 @@ class HomeDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: appBg,
-      body: AppBackdrop(
-        child: CustomPaint(
-          painter: _HomeAtmospherePainter(),
-          child: SafeArea(
+      backgroundColor: _homeBlack,
+      body: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(0, -.35),
+                radius: 1.2,
+                colors: <Color>[
+                  Color(0xFF10243C),
+                  Color(0xFF050C17),
+                  _homeBlack,
+                ],
+              ),
+            ),
+          ),
+          CustomPaint(painter: _HomeAtmospherePainter()),
+          SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final compact = constraints.maxHeight < 520;
-                final widthLimit = constraints.maxWidth * .88;
+                final compact = constraints.maxHeight < 540;
+                final widthLimit = constraints.maxWidth * .92;
                 final preferredWidth =
-                    (constraints.maxHeight * .56).clamp(210.0, 390.0).toDouble();
-                final crestWidth = preferredWidth > widthLimit
-                    ? widthLimit
-                    : preferredWidth;
+                    (constraints.maxHeight * .58).clamp(220.0, 410.0).toDouble();
+                final crestWidth =
+                    preferredWidth > widthLimit ? widthLimit : preferredWidth;
 
                 return SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: constraints.maxHeight,
-                    ),
+                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
                     child: Padding(
                       padding: EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: compact ? 8 : 18,
+                        horizontal: 14,
+                        vertical: compact ? 7 : 15,
                       ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: <Widget>[
                           const _HomeWordmark(),
-                          SizedBox(height: compact ? 8 : 18),
+                          SizedBox(height: compact ? 5 : 12),
                           SizedBox(
                             key: const ValueKey<String>('home-sports-crest'),
                             width: crestWidth,
                             height: crestWidth * 1.12,
                             child: const _SportsCrest(),
                           ),
-                          SizedBox(height: compact ? 8 : 16),
+                          SizedBox(height: compact ? 5 : 12),
                           Text(
                             appText(
                               'TODO EL DEPORTE',
@@ -633,19 +651,18 @@ class HomeDashboard extends StatelessWidget {
                             ),
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: Colors.white,
-                              fontSize: compact ? 19 : 23,
+                              color: _homeWhite,
+                              fontSize: compact ? 19 : 24,
                               fontWeight: FontWeight.w900,
-                              letterSpacing: 1.8,
-                              height: 1.05,
+                              letterSpacing: 2.0,
+                              height: 1.02,
                               shadows: <Shadow>[
-                                Shadow(
-                                  color: appCyan.withAlpha(120),
-                                  blurRadius: 18,
-                                ),
+                                Shadow(color: _homeBlue.withAlpha(180), blurRadius: 20),
+                                const Shadow(color: Colors.black, blurRadius: 5, offset: Offset(0, 3)),
                               ],
                             ),
                           ),
+                          const SizedBox(height: 3),
                           Text(
                             appText(
                               'EN UN SOLO LUGAR',
@@ -655,16 +672,13 @@ class HomeDashboard extends StatelessWidget {
                             ),
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: appYellow,
-                              fontSize: compact ? 18 : 22,
+                              color: _homeBlue,
+                              fontSize: compact ? 17 : 21,
                               fontWeight: FontWeight.w900,
-                              letterSpacing: 1.6,
+                              letterSpacing: 2.2,
                               height: 1.12,
                               shadows: <Shadow>[
-                                Shadow(
-                                  color: appYellow.withAlpha(95),
-                                  blurRadius: 16,
-                                ),
+                                Shadow(color: _homeBlue.withAlpha(170), blurRadius: 16),
                               ],
                             ),
                           ),
@@ -673,33 +687,14 @@ class HomeDashboard extends StatelessWidget {
                             tr('tagline'),
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: appMuted,
-                              fontSize: compact ? 10 : 12,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 1.5,
+                              color: _homeSteel.withAlpha(220),
+                              fontSize: compact ? 9 : 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.8,
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          Container(
-                            width: compact ? 74 : 104,
-                            height: 2,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(4),
-                              gradient: const LinearGradient(
-                                colors: <Color>[
-                                  appCyan,
-                                  appBlue,
-                                  appPink,
-                                ],
-                              ),
-                              boxShadow: <BoxShadow>[
-                                BoxShadow(
-                                  color: appCyan.withAlpha(100),
-                                  blurRadius: 12,
-                                ),
-                              ],
-                            ),
-                          ),
+                          const SizedBox(height: 10),
+                          const _HomeEnergyRail(),
                         ],
                       ),
                     ),
@@ -708,7 +703,7 @@ class HomeDashboard extends StatelessWidget {
               },
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -724,45 +719,79 @@ class _HomeWordmark extends StatelessWidget {
         fit: BoxFit.scaleDown,
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            Container(
-              width: 22,
-              height: 2,
-              decoration: BoxDecoration(
-                color: appCyan,
-                borderRadius: BorderRadius.circular(2),
-                boxShadow: <BoxShadow>[
-                  BoxShadow(color: appCyan.withAlpha(150), blurRadius: 8),
-                ],
-              ),
-            ),
+            _homeWordmarkLine(_homeBlue),
             const SizedBox(width: 10),
             Text(
               tr('title'),
               textAlign: TextAlign.center,
               style: const TextStyle(
-                color: appCyan,
+                color: _homeWhite,
                 fontSize: 13,
                 fontWeight: FontWeight.w900,
-                letterSpacing: 2.1,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Container(
-              width: 22,
-              height: 2,
-              decoration: BoxDecoration(
-                color: appPink,
-                borderRadius: BorderRadius.circular(2),
-                boxShadow: <BoxShadow>[
-                  BoxShadow(color: appPink.withAlpha(150), blurRadius: 8),
+                letterSpacing: 2.2,
+                shadows: <Shadow>[
+                  Shadow(color: _homeBlue, blurRadius: 12),
                 ],
               ),
             ),
+            const SizedBox(width: 10),
+            _homeWordmarkLine(_homeRed),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _homeWordmarkLine(Color color) => Container(
+        width: 24,
+        height: 2.5,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(3),
+          boxShadow: <BoxShadow>[
+            BoxShadow(color: color.withAlpha(190), blurRadius: 10),
+          ],
+        ),
+      );
+}
+
+class _HomeEnergyRail extends StatelessWidget {
+  const _HomeEnergyRail();
+
+  @override
+  Widget build(BuildContext context) {
+    final items = <(Color, String)>[
+      (_homeBlue, '360°'),
+      (_homeRed, 'SPORT'),
+      (_homeGreen, 'LIVE'),
+    ];
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 8,
+      runSpacing: 7,
+      children: items.map((item) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: item.$1.withAlpha(18),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: item.$1.withAlpha(180), width: 1),
+            boxShadow: <BoxShadow>[
+              BoxShadow(color: item.$1.withAlpha(35), blurRadius: 12),
+            ],
+          ),
+          child: Text(
+            item.$2,
+            style: TextStyle(
+              color: item.$1,
+              fontSize: 9,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.5,
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 }
@@ -780,67 +809,63 @@ class _SportsCrest extends StatelessWidget {
         return Stack(
           fit: StackFit.expand,
           children: <Widget>[
-            Positioned.fill(
-              child: CustomPaint(
-                painter: _SportsCrestPainter(),
-              ),
-            ),
+            Positioned.fill(child: CustomPaint(painter: _SportsCrestPainter())),
+            // Aro mecánico exterior con bisel metálico y sombra profunda.
             Align(
               alignment: const Alignment(0, -.04),
               child: Container(
-                width: width * .57,
-                height: width * .57,
-                padding: EdgeInsets.all(width * .045),
+                width: width * .59,
+                height: width * .59,
+                padding: EdgeInsets.all(width * .035),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: const RadialGradient(
-                    center: Alignment(-.28, -.35),
-                    radius: 1.15,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                     colors: <Color>[
-                      Color(0xFF294C70),
-                      Color(0xFF0B1D35),
-                      Color(0xFF020815),
+                      Color(0xFFF1F6FC),
+                      Color(0xFF52677F),
+                      Color(0xFF111C2A),
+                      Color(0xFF8295AA),
+                      Color(0xFF050A12),
                     ],
-                  ),
-                  border: Border.all(
-                    color: appCyan.withAlpha(220),
-                    width: 2.2,
+                    stops: <double>[0, .22, .52, .76, 1],
                   ),
                   boxShadow: <BoxShadow>[
-                    BoxShadow(
-                      color: appCyan.withAlpha(105),
-                      blurRadius: width * .075,
-                      spreadRadius: 1,
-                    ),
-                    BoxShadow(
-                      color: appPink.withAlpha(55),
-                      blurRadius: width * .12,
-                      offset: Offset(0, width * .025),
-                    ),
-                    BoxShadow(
-                      color: Colors.black.withAlpha(210),
-                      blurRadius: width * .07,
-                      offset: Offset(width * .025, width * .04),
-                    ),
+                    BoxShadow(color: _homeBlue.withAlpha(115), blurRadius: width * .09, spreadRadius: 2),
+                    BoxShadow(color: _homeRed.withAlpha(55), blurRadius: width * .15, offset: Offset(width * .04, width * .05)),
+                    BoxShadow(color: Colors.black.withAlpha(235), blurRadius: width * .1, offset: Offset(width * .045, width * .065)),
                   ],
                 ),
                 child: Container(
-                  padding: EdgeInsets.all(width * .025),
+                  padding: EdgeInsets.all(width * .035),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: const Color(0xFF030A18),
-                    border: Border.all(
-                      color: appYellow.withAlpha(155),
-                      width: 1.2,
-                    ),
+                    color: _homeBlack,
+                    border: Border.all(color: _homeBlue.withAlpha(220), width: 2),
                   ),
-                  child: Image.asset(
-                    'assets/images/app_icon.png',
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Icon(
-                      Icons.emoji_events_rounded,
-                      color: appYellow,
-                      size: 86,
+                  child: Container(
+                    padding: EdgeInsets.all(width * .025),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const RadialGradient(
+                        center: Alignment(-.3, -.4),
+                        colors: <Color>[
+                          Color(0xFF243D59),
+                          Color(0xFF0B1727),
+                          Color(0xFF02050B),
+                        ],
+                      ),
+                      border: Border.all(color: _homeSteel.withAlpha(130), width: 1),
+                    ),
+                    child: Image.asset(
+                      'assets/images/app_icon.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => Icon(
+                        Icons.emoji_events_rounded,
+                        color: _homeWhite,
+                        size: width * .22,
+                      ),
                     ),
                   ),
                 ),
@@ -848,55 +873,35 @@ class _SportsCrest extends StatelessWidget {
             ),
             Positioned(
               left: width * .39,
-              top: height * .035,
-              child: _CrestSportOrb(
-                icon: Icons.emoji_events_rounded,
-                color: appYellow,
-                size: width * .22,
-              ),
+              top: height * .025,
+              child: _CrestSportOrb(icon: Icons.smart_toy_rounded, color: _homeWhite, size: width * .22),
             ),
             Positioned(
-              left: width * .035,
+              left: width * .025,
               top: height * .29,
-              child: _CrestSportOrb(
-                icon: Icons.sports_soccer_rounded,
-                color: appCyan,
-                size: width * .19,
-              ),
+              child: _CrestSportOrb(icon: Icons.sports_soccer_rounded, color: _homeBlue, size: width * .2),
             ),
             Positioned(
-              right: width * .035,
+              right: width * .025,
               top: height * .29,
-              child: _CrestSportOrb(
-                icon: Icons.sports_basketball_rounded,
-                color: appPink,
-                size: width * .19,
-              ),
+              child: _CrestSportOrb(icon: Icons.sports_basketball_rounded, color: _homeRed, size: width * .2),
             ),
             Positioned(
-              left: width * .13,
-              bottom: height * .19,
-              child: _CrestSportOrb(
-                icon: Icons.sports_baseball_rounded,
-                color: appYellow,
-                size: width * .16,
-              ),
+              left: width * .12,
+              bottom: height * .18,
+              child: _CrestSportOrb(icon: Icons.sports_baseball_rounded, color: _homeWhite, size: width * .16),
             ),
             Positioned(
-              right: width * .13,
-              bottom: height * .19,
-              child: _CrestSportOrb(
-                icon: Icons.sports_volleyball_rounded,
-                color: appGreen,
-                size: width * .16,
-              ),
+              right: width * .12,
+              bottom: height * .18,
+              child: _CrestSportOrb(icon: Icons.sports_volleyball_rounded, color: _homeGreen, size: width * .16),
             ),
             Positioned(
-              left: width * .22,
-              right: width * .22,
-              bottom: height * .055,
+              left: width * .2,
+              right: width * .2,
+              bottom: height * .045,
               child: Container(
-                height: width * .135,
+                height: width * .14,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(width * .045),
@@ -904,38 +909,26 @@ class _SportsCrest extends StatelessWidget {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: <Color>[
-                      Color(0xFF193B5E),
-                      Color(0xFF050D1D),
+                      Color(0xFF536B84),
+                      Color(0xFF172638),
+                      Color(0xFF050A12),
                     ],
                   ),
-                  border: Border.all(
-                    color: appYellow.withAlpha(210),
-                    width: 1.4,
-                  ),
+                  border: Border.all(color: _homeBlue, width: 1.5),
                   boxShadow: <BoxShadow>[
-                    BoxShadow(
-                      color: appYellow.withAlpha(80),
-                      blurRadius: width * .045,
-                    ),
-                    BoxShadow(
-                      color: Colors.black.withAlpha(180),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    ),
+                    BoxShadow(color: _homeBlue.withAlpha(105), blurRadius: width * .05),
+                    BoxShadow(color: Colors.black.withAlpha(210), blurRadius: 9, offset: const Offset(0, 5)),
                   ],
                 ),
                 child: Text(
                   '360°',
                   style: TextStyle(
-                    color: appYellow,
-                    fontSize: width * .075,
+                    color: _homeWhite,
+                    fontSize: width * .078,
                     fontWeight: FontWeight.w900,
-                    letterSpacing: 3,
+                    letterSpacing: 4,
                     shadows: <Shadow>[
-                      Shadow(
-                        color: appYellow.withAlpha(150),
-                        blurRadius: 12,
-                      ),
+                      Shadow(color: _homeBlue.withAlpha(220), blurRadius: 14),
                     ],
                   ),
                 ),
@@ -970,32 +963,31 @@ class _CrestSportOrb extends StatelessWidget {
         gradient: const RadialGradient(
           center: Alignment(-.35, -.4),
           colors: <Color>[
-            Color(0xFF28496A),
-            Color(0xFF0A1A30),
-            Color(0xFF020713),
+            Color(0xFF536A82),
+            Color(0xFF18283B),
+            Color(0xFF030811),
           ],
         ),
-        border: Border.all(color: color.withAlpha(225), width: 1.5),
+        border: Border.all(color: color, width: 1.7),
         boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: color.withAlpha(115),
-            blurRadius: size * .42,
-            spreadRadius: 1,
-          ),
-          BoxShadow(
-            color: Colors.black.withAlpha(190),
-            blurRadius: size * .18,
-            offset: Offset(size * .08, size * .1),
-          ),
+          BoxShadow(color: color.withAlpha(125), blurRadius: size * .48, spreadRadius: 1),
+          BoxShadow(color: Colors.black.withAlpha(220), blurRadius: size * .2, offset: Offset(size * .09, size * .12)),
         ],
       ),
-      child: Icon(
-        icon,
-        color: color,
-        size: size * .52,
-        shadows: <Shadow>[
-          Shadow(color: color.withAlpha(180), blurRadius: size * .22),
-        ],
+      child: Container(
+        margin: EdgeInsets.all(size * .09),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: _homeSteel.withAlpha(75), width: .8),
+        ),
+        child: Icon(
+          icon,
+          color: color,
+          size: size * .49,
+          shadows: <Shadow>[
+            Shadow(color: color.withAlpha(205), blurRadius: size * .25),
+          ],
+        ),
       ),
     );
   }
@@ -1007,52 +999,37 @@ class _SportsCrestPainter extends CustomPainter {
     final width = size.width;
     final height = size.height;
     final shield = Path()
-      ..moveTo(width * .5, height * .025)
-      ..cubicTo(
-        width * .73,
-        height * .015,
-        width * .91,
-        height * .075,
-        width * .96,
-        height * .2,
-      )
+      ..moveTo(width * .5, height * .018)
+      ..cubicTo(width * .72, height * .008, width * .92, height * .07, width * .97, height * .2)
       ..lineTo(width * .9, height * .72)
-      ..cubicTo(
-        width * .86,
-        height * .86,
-        width * .64,
-        height * .965,
-        width * .5,
-        height * .99,
-      )
-      ..cubicTo(
-        width * .36,
-        height * .965,
-        width * .14,
-        height * .86,
-        width * .1,
-        height * .72,
-      )
-      ..lineTo(width * .04, height * .2)
-      ..cubicTo(
-        width * .09,
-        height * .075,
-        width * .27,
-        height * .015,
-        width * .5,
-        height * .025,
-      )
+      ..cubicTo(width * .86, height * .87, width * .64, height * .97, width * .5, height * .99)
+      ..cubicTo(width * .36, height * .97, width * .14, height * .87, width * .1, height * .72)
+      ..lineTo(width * .03, height * .2)
+      ..cubicTo(width * .08, height * .07, width * .28, height * .008, width * .5, height * .018)
       ..close();
 
     final bounds = Offset.zero & size;
+    // Halo azul y rojo detrás de la silueta.
     canvas.drawPath(
       shield,
       Paint()
-        ..color = appCyan.withAlpha(95)
+        ..color = _homeBlue.withAlpha(115)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = width * .065
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, width * .035),
+        ..strokeWidth = width * .075
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, width * .045),
     );
+    canvas.save();
+    canvas.translate(width * .012, height * .014);
+    canvas.drawPath(
+      shield,
+      Paint()
+        ..color = Colors.black.withAlpha(235)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width * .055
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, width * .018),
+    );
+    canvas.restore();
+
     canvas.drawPath(
       shield,
       Paint()
@@ -1060,61 +1037,91 @@ class _SportsCrestPainter extends CustomPainter {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: <Color>[
-            Color(0xFF1C4668),
-            Color(0xFF07162B),
-            Color(0xFF030817),
+            Color(0xFFE6EDF5),
+            Color(0xFF5D7188),
+            Color(0xFF15263A),
+            Color(0xFF050A12),
+            Color(0xFF243B53),
           ],
+          stops: <double>[0, .18, .43, .76, 1],
         ).createShader(bounds),
     );
     canvas.drawPath(
       shield,
       Paint()
-        ..color = appCyan
+        ..color = _homeWhite
         ..style = PaintingStyle.stroke
         ..strokeWidth = width * .012,
     );
     canvas.drawPath(
       shield,
       Paint()
-        ..color = appPink.withAlpha(170)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = width * .003,
-    );
-
-    final medal = Rect.fromCenter(
-      center: Offset(width * .5, height * .48),
-      width: width * .72,
-      height: height * .44,
-    );
-    canvas.drawOval(
-      medal,
-      Paint()
-        ..color = appCyan.withAlpha(65)
+        ..color = _homeBlue
         ..style = PaintingStyle.stroke
         ..strokeWidth = width * .006,
     );
+
+    // Paneles angulares que dan aspecto de armadura robótica.
+    final armor = Paint()
+      ..color = _homeSteel.withAlpha(105)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width * .006
+      ..strokeJoin = StrokeJoin.round;
+    final leftPlate = Path()
+      ..moveTo(width * .13, height * .22)
+      ..lineTo(width * .29, height * .16)
+      ..lineTo(width * .24, height * .39)
+      ..lineTo(width * .15, height * .48)
+      ..close();
+    final rightPlate = Path()
+      ..moveTo(width * .87, height * .22)
+      ..lineTo(width * .71, height * .16)
+      ..lineTo(width * .76, height * .39)
+      ..lineTo(width * .85, height * .48)
+      ..close();
+    canvas.drawPath(leftPlate, armor);
+    canvas.drawPath(rightPlate, armor);
+
+    final centerRing = Rect.fromCenter(
+      center: Offset(width * .5, height * .48),
+      width: width * .76,
+      height: height * .47,
+    );
     canvas.drawOval(
-      medal.deflate(width * .025),
+      centerRing,
       Paint()
-        ..color = appPink.withAlpha(48)
+        ..color = _homeBlue.withAlpha(95)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = width * .003,
+        ..strokeWidth = width * .009,
+    );
+    canvas.drawOval(
+      centerRing.deflate(width * .025),
+      Paint()
+        ..color = _homeRed.withAlpha(95)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width * .004,
     );
 
-    final topLine = Paint()
-      ..color = appYellow.withAlpha(150)
+    // Circuitos laterales y remaches luminosos.
+    final circuit = Paint()
+      ..color = _homeGreen.withAlpha(175)
       ..strokeWidth = width * .004
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    for (final side in <double>[-1, 1]) {
+      final x = side < 0 ? width * .2 : width * .8;
+      canvas.drawLine(Offset(x, height * .53), Offset(x + side * width * .055, height * .61), circuit);
+      canvas.drawLine(Offset(x + side * width * .055, height * .61), Offset(x + side * width * .035, height * .69), circuit);
+      canvas.drawCircle(Offset(x, height * .53), width * .009, Paint()..color = _homeGreen);
+    }
+
+    final topLine = Paint()
+      ..color = _homeRed
+      ..strokeWidth = width * .006
       ..strokeCap = StrokeCap.round;
-    canvas.drawLine(
-      Offset(width * .34, height * .13),
-      Offset(width * .66, height * .13),
-      topLine,
-    );
-    canvas.drawCircle(
-      Offset(width * .5, height * .13),
-      width * .012,
-      Paint()..color = appYellow,
-    );
+    canvas.drawLine(Offset(width * .34, height * .105), Offset(width * .66, height * .105), topLine);
+    canvas.drawCircle(Offset(width * .5, height * .105), width * .014, Paint()..color = _homeWhite);
+    canvas.drawCircle(Offset(width * .5, height * .105), width * .027, Paint()..color = _homeBlue.withAlpha(65));
   }
 
   @override
@@ -1125,44 +1132,36 @@ class _HomeAtmospherePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width * .5, size.height * .46);
-    for (var i = 0; i < 5; i++) {
-      final opacity = 24 - (i * 3);
+    for (var i = 0; i < 6; i++) {
+      final opacity = 25 - (i * 3);
       canvas.drawOval(
         Rect.fromCenter(
           center: center,
-          width: size.width * (.8 + (i * .34)),
-          height: size.height * (.28 + (i * .15)),
+          width: size.width * (.76 + (i * .34)),
+          height: size.height * (.25 + (i * .13)),
         ),
         Paint()
-          ..color = (i.isEven ? appCyan : appBlue).withAlpha(opacity)
+          ..color = (i % 3 == 0 ? _homeRed : (i.isEven ? _homeBlue : _homeGreen)).withAlpha(opacity)
           ..style = PaintingStyle.stroke
           ..strokeWidth = i == 0 ? 1.5 : 1,
       );
     }
 
-    final beamPaint = Paint()
-      ..color = appCyan.withAlpha(17)
-      ..strokeWidth = 1;
-    canvas.drawLine(
-      Offset(0, size.height * .23),
-      Offset(size.width * .26, size.height * .43),
-      beamPaint,
-    );
-    canvas.drawLine(
-      Offset(size.width, size.height * .23),
-      Offset(size.width * .74, size.height * .43),
-      beamPaint,
-    );
-    canvas.drawLine(
-      Offset(0, size.height * .77),
-      Offset(size.width * .28, size.height * .59),
-      beamPaint,
-    );
-    canvas.drawLine(
-      Offset(size.width, size.height * .77),
-      Offset(size.width * .72, size.height * .59),
-      beamPaint,
-    );
+    final blueBeam = Paint()..color = _homeBlue.withAlpha(24)..strokeWidth = 1.2;
+    final redBeam = Paint()..color = _homeRed.withAlpha(20)..strokeWidth = 1;
+    final greenBeam = Paint()..color = _homeGreen.withAlpha(18)..strokeWidth = 1;
+    canvas.drawLine(Offset(0, size.height * .23), Offset(size.width * .28, size.height * .43), blueBeam);
+    canvas.drawLine(Offset(size.width, size.height * .23), Offset(size.width * .72, size.height * .43), redBeam);
+    canvas.drawLine(Offset(0, size.height * .77), Offset(size.width * .28, size.height * .59), greenBeam);
+    canvas.drawLine(Offset(size.width, size.height * .77), Offset(size.width * .72, size.height * .59), blueBeam);
+
+    // Puntos tipo interfaz HUD alrededor del escudo.
+    final dotPaint = Paint()..color = _homeWhite.withAlpha(85);
+    for (var i = 0; i < 18; i++) {
+      final x = size.width * ((i * 37 % 97) / 100);
+      final y = size.height * ((i * 53 % 91) / 100);
+      canvas.drawCircle(Offset(x, y), i % 3 == 0 ? 1.7 : 1, dotPaint);
+    }
   }
 
   @override
