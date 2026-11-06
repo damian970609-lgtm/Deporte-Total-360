@@ -693,9 +693,9 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
     setState(() {
       if (_selectedForMultiView.contains(fixture.id)) {
         _selectedForMultiView.remove(fixture.id);
-      } else if (_selectedForMultiView.length >= 4) {
+      } else if (_selectedForMultiView.length >= 6) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('La multivista admite hasta cuatro cuadros.')),
+          const SnackBar(content: Text('La multivista admite hasta seis cuadros.')),
         );
       } else {
         _selectedForMultiView.add(fixture.id);
@@ -1219,7 +1219,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
                 children: <Widget>[
                   Expanded(
                     child: Text(
-                      '${_selectedForMultiView.length}/4 cuadros seleccionados',
+                      '${_selectedForMultiView.length}/6 cuadros seleccionados',
                       style: const TextStyle(
                         color: _liveCyan,
                         fontWeight: FontWeight.w800,
@@ -1383,10 +1383,10 @@ class LivePlayerBoard extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth > constraints.maxHeight ? 4 : 2;
-        final activeSources = sources.take(4).toList(growable: false);
+        final columns = constraints.maxWidth > constraints.maxHeight ? 3 : 2;
+        final activeSources = sources.take(6).toList(growable: false);
         final waiting = waitingEvents
-            .take(4 - activeSources.length)
+            .take(6 - activeSources.length)
             .toList(growable: false);
         return Center(
           child: ConstrainedBox(
@@ -1395,7 +1395,7 @@ class LivePlayerBoard extends StatelessWidget {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               padding: const EdgeInsets.all(8),
-              itemCount: 4,
+              itemCount: 6,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
                 crossAxisSpacing: 8,
@@ -1469,6 +1469,113 @@ class LivePlayerBoard extends StatelessWidget {
   }
 }
 
+class _OfflineSportsArtwork extends StatelessWidget {
+  const _OfflineSportsArtwork({this.compact = false});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[
+            Color(0xFF071A31),
+            Color(0xFF030711),
+            Color(0xFF16091D),
+          ],
+        ),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: <Widget>[
+          Positioned(
+            top: -22,
+            right: -18,
+            child: Icon(
+              Icons.sports_soccer_rounded,
+              size: compact ? 78 : 112,
+              color: _liveCyan.withAlpha(24),
+            ),
+          ),
+          Positioned(
+            bottom: -26,
+            left: -20,
+            child: Icon(
+              Icons.sports_basketball_rounded,
+              size: compact ? 78 : 112,
+              color: _livePink.withAlpha(22),
+            ),
+          ),
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(
+                Icons.sports_soccer_rounded,
+                size: compact ? 29 : 42,
+                color: _liveCyan,
+              ),
+              const SizedBox(height: 5),
+              Text(
+                'DEPORTE TOTAL 360°',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _liveCyan,
+                  fontSize: compact ? 8 : 11,
+                  letterSpacing: 1.2,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 9 : 14,
+                  vertical: compact ? 4 : 6,
+                ),
+                decoration: BoxDecoration(
+                  color: _liveRed.withAlpha(28),
+                  border: Border.all(color: _liveRed, width: 1.2),
+                  borderRadius: BorderRadius.circular(5),
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(color: _liveRed.withAlpha(55), blurRadius: 12),
+                  ],
+                ),
+                child: Text(
+                  'FUERA DE LÍNEA',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: _liveRed,
+                    fontSize: compact ? 9 : 13,
+                    letterSpacing: 1.1,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              if (!compact) ...<Widget>[
+                const SizedBox(height: 5),
+                const Text(
+                  'ESPERANDO TRANSMISIÓN',
+                  style: TextStyle(
+                    color: _liveMuted,
+                    fontSize: 8,
+                    letterSpacing: 1,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _WaitingLivePlayerTile extends StatelessWidget {
   const _WaitingLivePlayerTile({
     required this.channelNumber,
@@ -1508,14 +1615,7 @@ class _WaitingLivePlayerTile extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-              child: event == null
-                  ? const Center(
-                      child: Icon(
-                        Icons.play_circle_outline_rounded,
-                        color: _liveMuted,
-                        size: 42,
-                      ),
-                    )
+              child: const _OfflineSportsArtwork(compact: true)
                   : Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: <Widget>[
@@ -1584,8 +1684,7 @@ class _WaitingLivePlayerTile extends StatelessWidget {
   }
 }
 
-/// Un reproductor de 1 a 4 cuadros. Cada cuadro administra su propio player nativo.
-/// Un reproductor de 1 a 4 cuadros. Cada cuadro administra su propio player nativo.
+/// Multivista de hasta seis cuadros. Cada cuadro administra su propio player nativo.
 class LivePlayerGridScreen extends StatefulWidget {
   const LivePlayerGridScreen({
     super.key,
@@ -1641,7 +1740,7 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
       if (!mounted) return;
       final next = updated
           .where((source) => isSupportedAuthorizedMediaUrl(source.url))
-          .take(4)
+          .take(6)
           .toList(growable: false);
       setState(() => _sources = next);
     } catch (_) {
@@ -1661,9 +1760,10 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
   Widget build(BuildContext context) {
     final safeSources = _sources
         .where((source) => isSupportedAuthorizedMediaUrl(source.url))
-        .take(4)
+        .take(6)
         .toList(growable: false);
-    final columns = safeSources.length <= 1 ? 1 : 2;
+    final columns = safeSources.length <= 1 ? 1 :
+        MediaQuery.sizeOf(context).width > MediaQuery.sizeOf(context).height ? 3 : 2;
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -1671,7 +1771,7 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
         title: Text(
           safeSources.length == 1
               ? 'REPRODUCTOR EN VIVO'
-              : 'MULTIVISTA · ${safeSources.length}/4 EVENTOS',
+              : 'MULTIVISTA · ${safeSources.length}/6 EVENTOS',
           style: const TextStyle(
             color: _liveCyan,
             fontSize: 13,
@@ -1701,7 +1801,7 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
                 crossAxisCount: columns,
                 crossAxisSpacing: 7,
                 mainAxisSpacing: 7,
-                childAspectRatio: safeSources.length == 1 ? 16 / 9 : 1.32,
+                childAspectRatio: safeSources.length == 1 ? 16 / 9 : 1.42,
               ),
               itemBuilder: (context, index) => _LiveVideoTile(
                 key: ValueKey<String>(safeSources[index].url),
@@ -1986,16 +2086,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
                 ),
               )
             else
-              const ColoredBox(
-                color: Colors.black,
-                child: Center(
-                  child: Icon(
-                    Icons.live_tv_rounded,
-                    size: 34,
-                    color: _liveMuted,
-                  ),
-                ),
-              ),
+              const _OfflineSportsArtwork(compact: true),
             if (!_loading &&
                 _error == null &&
                 (!initialized || !isPlaying) &&
@@ -2017,38 +2108,30 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
                 child: CircularProgressIndicator(color: _liveCyan),
               ),
             if (_error != null)
-              ColoredBox(
-                color: const Color(0xDD000000),
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        const Icon(Icons.error_outline_rounded,
-                            color: _liveRed, size: 28),
-                        const SizedBox(height: 7),
-                        Text(
-                          _error!,
-                          textAlign: TextAlign.center,
-                          maxLines: 4,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            height: 1.35,
+              Stack(
+                fit: StackFit.expand,
+                children: <Widget>[
+                  const _OfflineSportsArtwork(compact: true),
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: TextButton.icon(
+                        onPressed: _initialize,
+                        icon: const Icon(Icons.refresh_rounded, size: 15),
+                        label: const Text('REINTENTAR'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          backgroundColor: Colors.black.withAlpha(170),
+                          textStyle: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
                           ),
                         ),
-                        const SizedBox(height: 6),
-                        TextButton.icon(
-                          onPressed: _initialize,
-                          icon: const Icon(Icons.refresh_rounded, size: 16),
-                          label: const Text('REINTENTAR'),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
             if (initialized && controller!.value.isBuffering && !_isFullscreen)
               const Positioned(
