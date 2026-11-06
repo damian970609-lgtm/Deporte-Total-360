@@ -432,6 +432,19 @@ https://media.example/backup.m3u8
       expect(catalog.programmes, hasLength(1));
     });
 
+    test('acepta enlaces DASH en el catálogo de canales', () {
+      final channel = SportsChannel.fromJson(<String, dynamic>{
+        'id': 'dash-1',
+        'identifier': 'dash-1',
+        'name': 'Canal DASH',
+        'url': 'https://media.example/live/manifest.mpd',
+        'isSports': true,
+        'visible': true,
+      });
+
+      expect(channel.url, 'https://media.example/live/manifest.mpd');
+    });
+
     test('clasifica un 403 como posible bloqueo regional', () async {
       final client = MockClient((request) async =>
           http.Response('Forbidden', 403));
