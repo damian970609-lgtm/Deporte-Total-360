@@ -25,6 +25,11 @@ const List<ChannelPlaylistPreset> channelPlaylistPresets =
     description: 'Catálogo internacional organizado por categoría deportiva',
   ),
   ChannelPlaylistPreset(
+    label: 'TDTChannels · TV España',
+    url: 'https://www.tdtchannels.com/lists/tv.m3u',
+    description: 'Televisión en abierto; incluye canales españoles e internacionales',
+  ),
+  ChannelPlaylistPreset(
     label: 'IPTV Validated · Deportes',
     url: 'https://raw.githubusercontent.com/AdeelWajid/iptv_validated_list/main/playlists/categories/sports.m3u',
     description: 'Selección deportiva pública con comprobación periódica',
@@ -33,11 +38,6 @@ const List<ChannelPlaylistPreset> channelPlaylistPresets =
     label: 'Free-TV · Global',
     url: 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8',
     description: 'Canales gratuitos internacionales, selección general',
-  ),
-  ChannelPlaylistPreset(
-    label: 'TDTChannels · TV España',
-    url: 'https://www.tdtchannels.com/lists/tv.m3u',
-    description: 'Televisión en abierto; incluye canales españoles e internacionales',
   ),
   ChannelPlaylistPreset(
     label: 'FreecastHub · Deportes libres',
