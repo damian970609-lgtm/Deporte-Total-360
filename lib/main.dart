@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'app_i18n.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -152,6 +153,11 @@ class DeporteTotal360App extends StatelessWidget {
         locale: Locale(languageCode(language)),
         supportedLocales: const <Locale>[
           Locale('es'), Locale('en'), Locale('pt'), Locale('fr'),
+        ],
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
         ],
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
