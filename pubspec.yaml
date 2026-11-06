@@ -9,6 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   video_player: ^2.14.1
   google_sign_in: ^7.2.0
   screen_brightness: ^2.1.11
