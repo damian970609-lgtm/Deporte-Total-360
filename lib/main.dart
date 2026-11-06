@@ -1,3 +1,4 @@
+import 'app_section_design.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -496,39 +497,8 @@ class _MainShellState extends State<MainShell> {
 class AppBackdrop extends StatelessWidget {
   const AppBackdrop({super.key, required this.child});
   final Widget child;
-
   @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: <Widget>[
-        const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: RadialGradient(
-              center: Alignment.topCenter,
-              radius: 1.25,
-              colors: <Color>[
-                Color(0xFF07090D),
-                appBg,
-                Color(0xFF000000),
-              ],
-            ),
-          ),
-        ),
-        IgnorePointer(
-          child: Opacity(
-            opacity: .035,
-            child: Image.asset(
-              'assets/images/app_icon.png',
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-            ),
-          ),
-        ),
-        child,
-      ],
-    );
-  }
+  Widget build(BuildContext context) => ColoredBox(color: appBg, child: child);
 }
 
 /// Fondo original de Ajustes: conserva la fotografía del proyecto y la oscurece
@@ -536,39 +506,8 @@ class AppBackdrop extends StatelessWidget {
 class SettingsBackdrop extends StatelessWidget {
   const SettingsBackdrop({super.key, required this.child});
   final Widget child;
-
   @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: <Widget>[
-        Image.asset(
-          settingsPhotoAsset,
-          fit: BoxFit.cover,
-          alignment: Alignment.topCenter,
-          errorBuilder: (_, __, ___) => Image.asset(
-            'assets/images/app_icon.png',
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => const ColoredBox(color: appBg),
-          ),
-        ),
-        const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: <Color>[
-                Color(0x66020817),
-                Color(0xB3020817),
-                Color(0xF2020817),
-              ],
-            ),
-          ),
-        ),
-        child,
-      ],
-    );
-  }
+  Widget build(BuildContext context) => ColoredBox(color: appBg, child: child);
 }
 
 // Tonos del escudo y del fondo de Inicio, usando solo la identidad de cinco colores.
@@ -1333,13 +1272,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       backgroundColor: appBg,
       appBar: AppBar(
-        title: Text(
-          tr('settings').toUpperCase(),
-          style: const TextStyle(
-            color: appCyan,
-            fontWeight: FontWeight.w900,
-            fontSize: 14,
-          ),
+        title: AppSectionTitle(
+          icon: Icons.settings_rounded,
+          title: tr('settings').toUpperCase(),
+          accent: appCyan,
+          subtitle: 'PERSONALIZA DEPORTE TOTAL 360°',
         ),
       ),
       body: SettingsBackdrop(
@@ -1351,17 +1288,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
-                gradient: const LinearGradient(
-                  colors: <Color>[
-                    Color(0xDD07090D),
-                    Color(0xCC0D1118),
-                    Color(0xDD000000),
-                  ],
-                ),
-                border: Border.all(color: appCyan.withAlpha(200)),
-                boxShadow: <BoxShadow>[
-                  BoxShadow(color: appCyan.withAlpha(25), blurRadius: 18),
-                ],
+                color: appPanel,
+                border: Border.all(color: appCyan.withAlpha(170)),
               ),
               child: Row(
                 children: <Widget>[
@@ -1725,13 +1653,11 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
     return Scaffold(
       backgroundColor: appBg,
       appBar: AppBar(
-        title: Text(
-          appText('SERVIDOR Y DATOS DEPORTIVOS', 'SPORTS DATA SERVER', 'SERVIDOR E DADOS ESPORTIVOS', 'SERVEUR ET DONNÉES SPORTIVES'),
-          style: TextStyle(
-            color: appCyan,
-            fontWeight: FontWeight.w900,
-            fontSize: 13,
-          ),
+        title: AppSectionTitle(
+          icon: Icons.storage_rounded,
+          title: appText('SERVIDOR Y DATOS DEPORTIVOS', 'SPORTS DATA SERVER', 'SERVIDOR E DADOS ESPORTIVOS', 'SERVEUR ET DONNÉES SPORTIVES'),
+          accent: appCyan,
+          subtitle: 'CONEXIÓN Y CONFIGURACIÓN',
         ),
       ),
       body: AppBackdrop(

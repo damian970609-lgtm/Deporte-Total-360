@@ -1,3 +1,4 @@
+import 'app_section_design.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -374,13 +375,11 @@ class _NewsScreenState extends State<NewsScreen> {
       backgroundColor: _newsBg,
       appBar: AppBar(
         backgroundColor: const Color(0xFF000000),
-        title: Text(
-          appText('NOTICIAS DEPORTIVAS', 'SPORTS NEWS', 'NOTÍCIAS ESPORTIVAS', 'ACTUALITÉS SPORTIVES'),
-          style: TextStyle(
-            color: _newsCyan,
-            fontSize: 14,
-            fontWeight: FontWeight.w900,
-          ),
+        title: AppSectionTitle(
+          icon: Icons.article_rounded,
+          title: appText('NOTICIAS DEPORTIVAS', 'SPORTS NEWS', 'NOTÍCIAS ESPORTIVAS', 'ACTUALITÉS SPORTIVES'),
+          accent: _newsCyan,
+          subtitle: 'ACTUALIDAD DEL MUNDO DEL DEPORTE',
         ),
         actions: <Widget>[
           IconButton(

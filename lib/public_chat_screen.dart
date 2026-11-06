@@ -1,3 +1,4 @@
+import 'app_section_design.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -305,26 +306,11 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
       backgroundColor: _chatBg,
       appBar: AppBar(
         backgroundColor: _chatBg,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              tr('public_chat'),
-              style: const TextStyle(
-                color: _chatCyan,
-                fontSize: 14,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            Text(
-              tr('public_chat_online'),
-              style: const TextStyle(
-                color: _chatGreen,
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
+        title: AppSectionTitle(
+          icon: Icons.forum_rounded,
+          title: tr('public_chat').toUpperCase(),
+          accent: _chatCyan,
+          subtitle: tr('public_chat_online'),
         ),
         actions: <Widget>[
           IconButton(

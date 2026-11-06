@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'app_section_design.dart';
 import 'automatic_live_service.dart';
 import 'sportsapi_app_service.dart';
 
@@ -310,9 +311,11 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       backgroundColor: _apiStatsBg,
       appBar: AppBar(
         backgroundColor: const Color(0xFF000000),
-        title: const Text(
-          'ESTADÍSTICAS SPORTSAPI',
-          style: TextStyle(color: _apiStatsCyan, fontSize: 14, fontWeight: FontWeight.w900),
+        title: const AppSectionTitle(
+          icon: Icons.analytics_rounded,
+          title: 'ESTADÍSTICAS SPORTSAPI',
+          accent: _apiStatsCyan,
+          subtitle: 'RESULTADOS Y DETALLES POR DEPORTE',
         ),
         actions: <Widget>[
           if (widget.onOpenAgenda != null)

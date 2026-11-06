@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
+import 'app_section_design.dart';
 import 'app_i18n.dart';
 
 const Color _summaryBg = Color(0xFF000000);
@@ -54,13 +55,11 @@ class SportsSummariesScreen extends StatelessWidget {
       backgroundColor: _summaryBg,
       appBar: AppBar(
         backgroundColor: const Color(0xFF000000),
-        title: Text(
-          appText('RESÚMENES DEPORTIVOS', 'SPORTS HIGHLIGHTS', 'RESUMOS ESPORTIVOS', 'RÉSUMÉS SPORTIFS'),
-          style: const TextStyle(
-            color: _summaryCyan,
-            fontWeight: FontWeight.w900,
-            fontSize: 14,
-          ),
+        title: AppSectionTitle(
+          icon: Icons.play_circle_fill_rounded,
+          title: appText('RESÚMENES DEPORTIVOS', 'SPORTS HIGHLIGHTS', 'RESUMOS ESPORTIVOS', 'RÉSUMÉS SPORTIFS'),
+          accent: _summaryCyan,
+          subtitle: 'GOLES Y MEJORES JUGADAS',
         ),
       ),
       body: ListView(

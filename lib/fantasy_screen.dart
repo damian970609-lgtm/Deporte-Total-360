@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'app_section_design.dart';
 import 'app_i18n.dart';
 
 const Color _fantasyBg = Color(0xFF000000);
@@ -128,25 +129,11 @@ class _FantasyScreenState extends State<FantasyScreen> {
               color: _fantasyCyan,
             ),
           ),
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                appText('FANTASY DEPORTE TOTAL 360°', 'TOTAL SPORTS 360° FANTASY', 'FANTASY ESPORTE TOTAL 360°', 'FANTASY SPORT TOTAL 360°'),
-                style: TextStyle(
-                  color: _fantasyCyan,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              Text(
-                appText('Servicio oficial de Mister Fantasy', 'Official Mister Fantasy service', 'Serviço oficial do Mister Fantasy', 'Service officiel de Mister Fantasy'),
-                style: TextStyle(
-                  color: _fantasyMuted,
-                  fontSize: 9,
-                ),
-              ),
-            ],
+          title: AppSectionTitle(
+            icon: Icons.emoji_events_rounded,
+            title: appText('FANTASY DEPORTE TOTAL 360°', 'TOTAL SPORTS 360° FANTASY', 'FANTASY ESPORTE TOTAL 360°', 'FANTASY SPORT TOTAL 360°'),
+            accent: _fantasyCyan,
+            subtitle: appText('Servicio oficial de Mister Fantasy', 'Official Mister Fantasy service', 'Serviço oficial do Mister Fantasy', 'Service officiel de Mister Fantasy'),
           ),
           actions: <Widget>[
             IconButton(
@@ -168,12 +155,7 @@ class _FantasyScreenState extends State<FantasyScreen> {
                 vertical: 7,
               ),
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: <Color>[
-                    Color(0xFF07090D),
-                    Color(0xFF0D1118),
-                  ],
-                ),
+                color: _fantasyPanel,
                 border: Border(bottom: BorderSide(color: _fantasyLine)),
               ),
               child: const Row(

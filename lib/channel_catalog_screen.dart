@@ -1,3 +1,4 @@
+import 'app_section_design.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -325,21 +326,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
   }
 
   Widget _background(Widget child) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment.topCenter,
-          radius: 1.45,
-          colors: <Color>[
-            Color(0xFF0D1118),
-            _channelBg,
-            Color(0xFF000000),
-          ],
-          stops: <double>[0, 0.56, 1],
-        ),
-      ),
-      child: child,
-    );
+    return ColoredBox(color: _channelBg, child: child);
   }
 
   Widget _sectionHeading(String title, {IconData icon = Icons.sports_soccer}) {
@@ -469,14 +456,11 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
       backgroundColor: _channelBg,
       appBar: AppBar(
         backgroundColor: const Color(0xFF07090D),
-        title: const Text(
-          'CANALES DEPORTIVOS',
-          style: TextStyle(
-            color: _channelCyan,
-            fontWeight: FontWeight.w900,
-            fontSize: 14,
-            letterSpacing: 0.7,
-          ),
+        title: const AppSectionTitle(
+          icon: Icons.grid_view_rounded,
+          title: 'CANALES DEPORTIVOS',
+          accent: _channelCyan,
+          subtitle: 'CATÁLOGO Y REPRODUCTOR',
         ),
         actions: <Widget>[
           IconButton(
@@ -2012,13 +1996,11 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       backgroundColor: _channelBg,
       appBar: AppBar(
         backgroundColor: const Color(0xFF07090D),
-        title: const Text(
-          'ADMINISTRACIÓN · DAMIÁN.APK',
-          style: TextStyle(
-            color: _channelPink,
-            fontWeight: FontWeight.w900,
-            fontSize: 12,
-          ),
+        title: const AppSectionTitle(
+          icon: Icons.admin_panel_settings_rounded,
+          title: 'ADMINISTRACIÓN · DAMIÁN.APK',
+          accent: _channelPink,
+          subtitle: 'GESTIÓN DE LISTAS Y CANALES',
         ),
         actions: <Widget>[
           if (loggedIn)
@@ -2030,18 +2012,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         ],
       ),
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment.topCenter,
-            radius: 1.4,
-            colors: <Color>[
-              Color(0xFF0D1118),
-              _channelBg,
-              Color(0xFF000000),
-            ],
-            stops: <double>[0, 0.55, 1],
-          ),
-        ),
+        decoration: const BoxDecoration(color: _channelBg),
         child: !loggedIn
             ? Center(
                 child: SingleChildScrollView(

@@ -1,3 +1,4 @@
+import 'app_section_design.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -255,13 +256,11 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
       backgroundColor: _autoBg,
       appBar: AppBar(
         backgroundColor: const Color(0xFF000000),
-        title: const Text(
-          'TRANSMISIONES EN VIVO',
-          style: TextStyle(
-            color: _autoCyan,
-            fontSize: 14,
-            fontWeight: FontWeight.w900,
-          ),
+        title: const AppSectionTitle(
+          icon: Icons.live_tv_rounded,
+          title: 'TRANSMISIONES EN VIVO',
+          accent: _autoCyan,
+          subtitle: 'PARTIDOS Y EVENTOS EN DIRECTO',
         ),
         actions: <Widget>[
           IconButton(

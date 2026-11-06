@@ -1,3 +1,4 @@
+import 'app_section_design.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -367,26 +368,11 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
       backgroundColor: _agendaBg,
       appBar: AppBar(
         backgroundColor: const Color(0xFF000000),
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              'AGENDA DEPORTIVA',
-              style: TextStyle(
-                color: _agendaCyan,
-                fontSize: 14,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            Text(
-              'AGENDA AUTOMÁTICA · SPORTSAPI.APP',
-              style: TextStyle(
-                color: _agendaMuted,
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
+        title: const AppSectionTitle(
+          icon: Icons.calendar_month_rounded,
+          title: 'AGENDA DEPORTIVA',
+          accent: _agendaCyan,
+          subtitle: 'AGENDA AUTOMÁTICA · SPORTSAPI.APP',
         ),
         actions: <Widget>[
           IconButton(
@@ -410,9 +396,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: <Color>[Color(0xFF07090D), Color(0xFF0D1118)],
-              ),
+              color: _agendaPanel,
               border: Border(bottom: BorderSide(color: _agendaLine)),
             ),
             child: Row(
