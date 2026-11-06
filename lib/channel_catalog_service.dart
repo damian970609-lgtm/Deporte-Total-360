@@ -8,6 +8,19 @@ import 'sports_api_service.dart';
 const String _googleServerClientId =
     String.fromEnvironment('GOOGLE_OAUTH_CLIENT_ID');
 
+/// Etiqueta compacta que se muestra en las tarjetas de los canales.
+/// Los canales sin idioma confirmado no reciben una bandera inventada.
+String? channelLanguageDisplayLabel(String language) {
+  switch (language.trim().toLowerCase()) {
+    case 'es':
+      return 'IDIOMA 🇪🇸';
+    case 'en':
+      return 'IDIOMA 🇺🇸';
+    default:
+      return null;
+  }
+}
+
 class SportsChannel {
   const SportsChannel({
     required this.id,
