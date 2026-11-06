@@ -122,18 +122,26 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         events = localEvents;
       }
 
-      // El endpoint público contiene solo canales deportivos visibles del panel
-      // privado del propietario; son las URL exactas que él seleccionó.
-      final selectedChannels = await _loadSelectedSportsChannels(forceRefresh: force);
-      final latest = selectedChannels.isNotEmpty
-          ? await _service.schedule(
-              events: events,
-              now: DateTime.now(),
-              settings: settings,
-              availableChannels: selectedChannels,
-              forceRefresh: force,
-            )
-          : <ScheduledLiveEvent>[];      if (!mounted) return;
+      // Primero se consume el calendario persistente que prepara Cloudflare
+      // aunque ningún teléfono tenga la APK abierta. Si el Worker aún no lo ha
+      // generado o está temporalmente fuera de línea, se conserva el motor local.
+      final published = await _service.fetchPublishedSchedule();
+      List<ScheduledLiveEvent> latest;
+      if (published != null) {
+        latest = published;
+      } else {
+        final selectedChannels =
+            await _loadSelectedSportsChannels(forceRefresh: force);
+        latest = selectedChannels.isNotEmpty
+            ? await _service.schedule(
+                events: events,
+                now: DateTime.now(),
+                settings: settings,
+                availableChannels: selectedChannels,
+                forceRefresh: force,
+              )
+            : <ScheduledLiveEvent>[];
+      }      if (!mounted) return;
       setState(() {
         _agendaEvents = events;
         _scheduled = latest;
