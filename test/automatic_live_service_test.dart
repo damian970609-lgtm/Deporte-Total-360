@@ -191,6 +191,23 @@ void main() {
       expect(result, isNull);
       sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
     });
+
+    test('usa el respaldo local cuando el snapshot central está obsoleto', () async {
+      sportsApiBaseUrl.value = 'https://worker.example';
+      final client = MockClient((request) async => http.Response(
+        jsonEncode(<String, dynamic>{
+          'status': 'stale',
+          'events': <dynamic>[],
+        }),
+        200,
+      ));
+
+      final result = await AutomaticLiveService(client: client)
+          .fetchPublishedSchedule();
+
+      expect(result, isNull);
+      sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
+    });
   });
 
   group('tablero fijo de transmisiones', () {
