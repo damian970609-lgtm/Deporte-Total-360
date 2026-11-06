@@ -194,7 +194,7 @@ void main() {
   });
 
   group('tablero fijo de transmisiones', () {
-    testWidgets('mantiene seis cuadros visibles con desplazamiento cuando es necesario', (tester) async {
+    testWidgets('mantiene ocho cuadros visibles con desplazamiento cuando es necesario', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -203,13 +203,13 @@ void main() {
         ),
       );
 
-      for (var channel = 1; channel <= 6; channel++) {
+      for (var channel = 1; channel <= 8; channel++) {
         expect(
           find.text('DEPORTE TOTAL 360° CANAL $channel'),
           findsOneWidget,
         );
       }
-      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(6));
+      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(8));
       final grid = tester.widget<GridView>(find.byType(GridView));
       expect(grid.physics, isA<BouncingScrollPhysics>());
     });
@@ -235,7 +235,7 @@ void main() {
       expect(find.text('Fútbol · Liga de prueba'), findsOneWidget);
       expect(find.text('Equipo Azul vs Equipo Rojo'), findsOneWidget);
       expect(find.text('Comienza 19:30'), findsOneWidget);
-      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(6));
+      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(8));
     });
 
     testWidgets('muestra el evento asignado y espera en los otros cinco canales', (tester) async {
@@ -681,7 +681,7 @@ https://media.example/sports.mpd
       expect(result.single.sources.single.available, isTrue);
     });
 
-    test('prioriza un canal en español antes que una señal extranjera de mayor resolución', () async {
+    test('elige la mejor señal española y la mejor inglesa cuando ambas existen', () async {
       final start = DateTime.now().add(const Duration(minutes: 10));
       final stop = start.add(const Duration(hours: 2));
       const playlist = '''
@@ -724,8 +724,64 @@ https://media.example/spanish.m3u8
       );
 
       expect(result, hasLength(1));
-      expect(result.single.sources.single.channelName, 'Teledeporte');
-      expect(result.single.sources.single.languagePriority, 2);
+      expect(result.single.sources, hasLength(2));
+      expect(result.single.sources.map((source) => source.channelName),
+          <String>['Teledeporte', 'Sports HD 1080p']);
+      expect(result.single.sources.map((source) => source.languagePriority),
+          <int>[2, 1]);
+    });
+
+    test('prueba los canales elegidos en Damián APK y devuelve español e inglés', () async {
+      final start = DateTime.now().add(const Duration(minutes: 10));
+      final stop = start.add(const Duration(hours: 2));
+      final xml = '<tv>'
+          '<programme channel="sports.es.offline" start="${_xmlTime(start)}" stop="${_xmlTime(stop)}"><title>Equipo Azul vs Equipo Rojo</title></programme>'
+          '<programme channel="sports.es" start="${_xmlTime(start)}" stop="${_xmlTime(stop)}"><title>Equipo Azul vs Equipo Rojo</title></programme>'
+          '<programme channel="sports.en" start="${_xmlTime(start)}" stop="${_xmlTime(stop)}"><title>Equipo Azul vs Equipo Rojo</title></programme>'
+          '</tv>';
+      final requested = <Uri>[];
+      final client = MockClient((request) async {
+        requested.add(request.url);
+        if (request.url.path.endsWith('.xml')) return http.Response(xml, 200);
+        if (request.url.path.endsWith('spanish-offline.m3u8')) return http.Response('offline', 503);
+        if (request.url.path.endsWith('.ts')) return http.Response('segment bytes', 200);
+        if (request.url.path.endsWith('.m3u8')) {
+          return http.Response('#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\nsegment.ts\n', 200);
+        }
+        return http.Response('', 404);
+      });
+      final event = SportsAgendaEvent(
+        id: 'dual-language-selected',
+        title: 'Equipo Azul vs Equipo Rojo',
+        sport: 'Fútbol',
+        homeTeam: 'Equipo Azul',
+        awayTeam: 'Equipo Rojo',
+        startsAt: start,
+        detailUrl: 'https://www.marca.com/programacion-tv.html',
+      );
+      final result = await AutomaticLiveService(client: client).schedule(
+        events: <SportsAgendaEvent>[event],
+        now: start.subtract(const Duration(minutes: 10)),
+        settings: const AutoLiveSettings(
+          playlistUrl: 'https://provider.example/not-used.m3u',
+          epgUrl: 'https://provider.example/guide.xml',
+          authorizationConfirmed: true,
+        ),
+        availableChannels: const <M3uChannel>[
+          M3uChannel(name: 'Teledeporte SD', url: 'https://media.example/spanish-offline.m3u8', tvgId: 'sports.es.offline', language: 'es'),
+          M3uChannel(name: 'Teledeporte HD 1080p', url: 'https://media.example/spanish.m3u8', tvgId: 'sports.es', language: 'es'),
+          M3uChannel(name: 'Sports International HD', url: 'https://media.example/english.m3u8', tvgId: 'sports.en', language: 'en'),
+        ],
+      );
+      expect(result, hasLength(1));
+      expect(result.single.sources, hasLength(2));
+      expect(result.single.sources.map((source) => source.languagePriority), <int>[2, 1]);
+      expect(result.single.sources.map((source) => source.channelName),
+          <String>['Teledeporte HD 1080p', 'Sports International HD']);
+      expect(requested.any((uri) => uri.path.endsWith('spanish-offline.m3u8')), isTrue);
+      expect(requested.any((uri) => uri.path.endsWith('spanish.m3u8')), isTrue);
+      expect(requested.any((uri) => uri.path.endsWith('english.m3u8')), isTrue);
+      expect(requested.any((uri) => uri.path.endsWith('.m3u')), isFalse);
     });
 
     test('usa otros idiomas solo cuando ninguna señal española está disponible', () async {
@@ -773,6 +829,26 @@ https://media.example/international.m3u8
 
       expect(result, hasLength(1));
       expect(result.single.sources.single.channelName, 'Sports International HD');
+    });
+
+    test('cruza eventos individuales con nombres de participantes', () {
+      final event = SportsAgendaEvent(
+        id: 'tour-de-france-stage',
+        title: 'Etapa 5 del Tour de France',
+        sport: 'Ciclismo',
+        competition: 'Tour de France',
+        participants: const <SportsAgendaParticipant>[
+          SportsAgendaParticipant(name: 'Tadej Pogacar'),
+          SportsAgendaParticipant(name: 'Jonas Vingegaard'),
+        ],
+        startsAt: DateTime.now().add(const Duration(hours: 1)),
+        detailUrl: 'https://www.marca.com/programacion-tv.html',
+      );
+      expect(
+        AutomaticLiveService.programmeMatchesEvent(
+          'Tour de France etapa 5 con Tadej Pogacar', event),
+        isTrue,
+      );
     });
 
     test('reconoce abreviaturas de equipos al cruzar el EPG', () {

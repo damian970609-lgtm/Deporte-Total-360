@@ -693,9 +693,9 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
     setState(() {
       if (_selectedForMultiView.contains(fixture.id)) {
         _selectedForMultiView.remove(fixture.id);
-      } else if (_selectedForMultiView.length >= 6) {
+      } else if (_selectedForMultiView.length >= 8) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('La multivista admite hasta seis cuadros.')),
+          const SnackBar(content: Text('La multivista admite hasta ocho cuadros.')),
         );
       } else {
         _selectedForMultiView.add(fixture.id);
@@ -704,21 +704,22 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
   }
 
   Future<void> _openSelectedMultiView() async {
-    final selected = _fixtures
-        .where((fixture) =>
-            fixture.status == LiveFixtureStatus.live &&
-            _selectedForMultiView.contains(fixture.id))
-        .map((fixture) {
-          final streams = _sourcesFor(fixture.id);
-          if (streams.isEmpty) return null;
-          final source = streams.first;
-          return LivePlayerSource(
-            title: '${fixture.displayTitle} · ${source.name}',
-            url: source.url,
-          );
-        })
-        .whereType<LivePlayerSource>()
-        .toList(growable: false);
+    final selected = <LivePlayerSource>[];
+    for (final fixture in _fixtures.where((fixture) =>
+        fixture.status == LiveFixtureStatus.live &&
+        _selectedForMultiView.contains(fixture.id))) {
+      final streams = _sourcesFor(fixture.id);
+      for (final source in streams) {
+        if (selected.length >= 8) break;
+        selected.add(LivePlayerSource(
+          title: '${fixture.displayTitle} · ${source.name}',
+          url: source.url,
+          subtitle: '${fixture.sport} · ${fixture.competition} · ${source.name}',
+          eventId: fixture.id,
+        ));
+      }
+      if (selected.length >= 8) break;
+    }
     if (selected.isEmpty) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -726,7 +727,6 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
       ),
     );
   }
-
   Future<void> _openSource(
     LiveFixture fixture,
     LiveStreamSource source,
@@ -1219,7 +1219,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
                 children: <Widget>[
                   Expanded(
                     child: Text(
-                      '${_selectedForMultiView.length}/6 cuadros seleccionados',
+                      '${_selectedForMultiView.length}/8 cuadros seleccionados',
                       style: const TextStyle(
                         color: _liveCyan,
                         fontWeight: FontWeight.w800,
@@ -1384,9 +1384,9 @@ class LivePlayerBoard extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth > constraints.maxHeight ? 3 : 2;
-        final activeSources = sources.take(6).toList(growable: false);
+        final activeSources = sources.take(8).toList(growable: false);
         final waiting = waitingEvents
-            .take(6 - activeSources.length)
+            .take(8 - activeSources.length)
             .toList(growable: false);
         return Center(
           child: ConstrainedBox(
@@ -1395,7 +1395,7 @@ class LivePlayerBoard extends StatelessWidget {
               shrinkWrap: true,
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.all(8),
-              itemCount: 6,
+              itemCount: 8,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
                 crossAxisSpacing: 8,
@@ -1685,7 +1685,7 @@ class _WaitingLivePlayerTile extends StatelessWidget {
   }
 }
 
-/// Multivista de hasta seis cuadros. Cada cuadro administra su propio player nativo.
+/// Multivista de hasta ocho cuadros. Cada cuadro administra su propio player nativo.
 class LivePlayerGridScreen extends StatefulWidget {
   const LivePlayerGridScreen({
     super.key,
@@ -1741,7 +1741,7 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
       if (!mounted) return;
       final next = updated
           .where((source) => isSupportedAuthorizedMediaUrl(source.url))
-          .take(6)
+          .take(8)
           .toList(growable: false);
       setState(() => _sources = next);
     } catch (_) {
@@ -1761,7 +1761,7 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
   Widget build(BuildContext context) {
     final safeSources = _sources
         .where((source) => isSupportedAuthorizedMediaUrl(source.url))
-        .take(6)
+        .take(8)
         .toList(growable: false);
     final columns = safeSources.length <= 1 ? 1 :
         MediaQuery.sizeOf(context).width > MediaQuery.sizeOf(context).height ? 3 : 2;
@@ -1772,7 +1772,7 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
         title: Text(
           safeSources.length == 1
               ? 'REPRODUCTOR EN VIVO'
-              : 'MULTIVISTA · ${safeSources.length}/6 EVENTOS',
+              : 'MULTIVISTA · ${safeSources.length}/8 EVENTOS',
           style: const TextStyle(
             color: _liveCyan,
             fontSize: 13,

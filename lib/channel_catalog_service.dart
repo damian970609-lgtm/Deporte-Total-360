@@ -399,10 +399,13 @@ class ChannelCatalogService {
   Future<ChannelCatalogPage> fetchPublicChannelPage({
     String search = '',
     int offset = 0,
+    int limit = 200,
   }) async {
     final normalizedOffset = offset.clamp(0, 100000).toInt();
+    final normalizedLimit = limit.clamp(1, 2000).toInt();
     final query = <String, String>{
       'offset': normalizedOffset.toString(),
+      'limit': normalizedLimit.toString(),
       if (search.trim().isNotEmpty) 'q': search.trim(),
     };
     final uri = Uri.parse(_baseUrl + '/api/channels').replace(

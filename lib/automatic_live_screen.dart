@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'automatic_live_service.dart';
+import 'channel_catalog_service.dart';
 import 'sportsapi_app_service.dart';
 import 'live_channels_screen.dart';
 
@@ -27,6 +28,9 @@ class AutomaticLiveScreen extends StatefulWidget {
 class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     with WidgetsBindingObserver {
   final AutomaticLiveService _service = AutomaticLiveService();
+  final ChannelCatalogService _channelCatalog = channelCatalogService;
+  List<SportsChannel>? _selectedChannelCache;
+  DateTime? _selectedChannelCacheAt;
   List<ScheduledLiveEvent> _scheduled = <ScheduledLiveEvent>[];
   List<SportsAgendaEvent> _agendaEvents = <SportsAgendaEvent>[];
   final Map<String, DateTime> _knownEventEndTimes = <String, DateTime>{};
@@ -67,60 +71,69 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     super.dispose();
   }
 
+  Future<List<M3uChannel>> _loadSelectedSportsChannels({bool forceRefresh = false}) async {
+    final now = DateTime.now();
+    final cached = _selectedChannelCache;
+    if (!forceRefresh && cached != null && _selectedChannelCacheAt != null &&
+        now.difference(_selectedChannelCacheAt!) < const Duration(minutes: 30)) {
+      return cached.map((channel) => M3uChannel(
+        name: channel.name, url: channel.url, tvgId: channel.identifier,
+        tvgName: channel.name, group: channel.groupTitle, language: channel.language,
+      )).toList(growable: false);
+    }
+    final selected = <SportsChannel>[];
+    var offset = 0;
+    for (var pageNumber = 0; pageNumber < 100; pageNumber++) {
+      final page = await _channelCatalog.fetchPublicChannelPage(offset: offset, limit: 2000);
+      selected.addAll(page.channels.where((channel) => channel.isSports && channel.visible));
+      if (!page.hasMore || page.channels.isEmpty) break;
+      if (pageNumber == 99) {
+        throw StateError('El catálogo seleccionado supera el límite seguro de páginas.');
+      }
+      final nextOffset = page.offset + page.channels.length;
+      if (nextOffset <= offset) throw StateError('El catálogo no avanzó a la siguiente página.');
+      offset = nextOffset;
+    }
+    _selectedChannelCache = List<SportsChannel>.unmodifiable(selected);
+    _selectedChannelCacheAt = now;
+    return selected.map((channel) => M3uChannel(
+      name: channel.name, url: channel.url, tvgId: channel.identifier,
+      tvgName: channel.name, group: channel.groupTitle, language: channel.language,
+    )).toList(growable: false);
+  }
+
   Future<void> _refresh({bool force = false}) async {
     if (_refreshing) return;
     _refreshing = true;
     if (mounted) setState(() {});
 
     try {
-      // La nube es la fuente principal: prepara los eventos y canales
-      // aunque este dispositivo no sea el que ejecuta el planificador.
+      // SportsAPI proporciona el calendario; el catálogo del propietario
+      // aporta las URL directas que se pueden asignar a cada evento.
       final settings = await AutoLiveSettings.load();
       final localEvents = await SportsAgendaStore.load();
       List<SportsAgendaEvent> events;
-      var loadedFromSportsApi = false;
       try {
         // El tablero Live obtiene primero los diez deportes favoritos, aunque
         // el usuario nunca haya abierto la pestaña Agenda.
         events = await SportsApiAppService().fetchFavoriteAgendaEvents();
-        loadedFromSportsApi = true;
         await SportsAgendaStore.save(events);
       } catch (_) {
         events = localEvents;
       }
 
-      final published = await _service.fetchPublishedSchedule();
-      List<ScheduledLiveEvent> latest;
-      if (!loadedFromSportsApi && published != null) {
-        // Respaldo del calendario compartido si SportsAPI no responde.
-        latest = published;
-      } else {
-        final publishedForCurrentAgenda = (published ?? <ScheduledLiveEvent>[])
-            .where((item) => events.any((event) => event.id == item.event.id))
-            .toList(growable: false);
-        final publishedIds = publishedForCurrentAgenda
-            .map((item) => item.event.id)
-            .toSet();
-        final eventsWithoutPublishedSources = events
-            .where((event) => !publishedIds.contains(event.id))
-            .toList(growable: false);
-        final locallyScheduled = settings.isConfigured &&
-                eventsWithoutPublishedSources.isNotEmpty
-            ? await _service.schedule(
-                events: eventsWithoutPublishedSources,
-                now: DateTime.now(),
-                settings: settings,
-                forceRefresh: force,
-              )
-            : <ScheduledLiveEvent>[];
-        final merged = <String, ScheduledLiveEvent>{
-          for (final item in publishedForCurrentAgenda) item.event.id: item,
-          for (final item in locallyScheduled) item.event.id: item,
-        };
-        latest = merged.values.toList(growable: false);
-      }
-
-      if (!mounted) return;
+      // El endpoint público contiene solo canales deportivos visibles del panel
+      // privado del propietario; son las URL exactas que él seleccionó.
+      final selectedChannels = await _loadSelectedSportsChannels(forceRefresh: force);
+      final latest = selectedChannels.isNotEmpty
+          ? await _service.schedule(
+              events: events,
+              now: DateTime.now(),
+              settings: settings,
+              availableChannels: selectedChannels,
+              forceRefresh: force,
+            )
+          : <ScheduledLiveEvent>[];      if (!mounted) return;
       setState(() {
         _agendaEvents = events;
         _scheduled = latest;
@@ -134,50 +147,39 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     }
   }
 
-  /// Solo asigna señales a eventos que ya comenzaron y siguen en curso.
-  /// Una misma URL nunca ocupa dos reproductores simultáneamente.
+  /// Cada evento puede ocupar dos cuadros: mejor canal español y mejor inglés.
   List<LivePlayerSource> _playerSources() {
     final now = DateTime.now();
     final ordered = List<ScheduledLiveEvent>.of(_scheduled)
       ..sort((a, b) => a.event.startsAt.compareTo(b.event.startsAt));
     final usedUrls = <String>{};
     final result = <LivePlayerSource>[];
-
     for (final item in ordered) {
-      if (result.length == 6) break;
-      if (now.isBefore(item.event.startsAt) || !now.isBefore(item.removeAt)) {
-        continue;
-      }
-
-      ScheduledLiveSource? selected;
-      for (final candidate in item.sources) {
-        if (candidate.available &&
-            isDirectPlayableStream(candidate.url) &&
-            !usedUrls.contains(candidate.url)) {
-          selected = candidate;
-          break;
-        }
-      }
-      if (selected == null) continue;
-      usedUrls.add(selected.url);
-
+      if (result.length >= 8) break;
+      if (now.isBefore(item.event.startsAt) || !now.isBefore(item.removeAt)) continue;
       final event = item.event;
       final teams = event.homeTeam.isNotEmpty && event.awayTeam.isNotEmpty
           ? '${event.homeTeam} vs ${event.awayTeam}'
           : event.title;
-      final details = <String>[
-        event.sport,
-        if (event.competition.isNotEmpty) event.competition,
-        teams,
-        selected.channelName,
-      ];
-
-      result.add(LivePlayerSource(
-        title: 'DEPORTE TOTAL 360° CANAL ${result.length + 1}',
-        url: selected.url,
-        subtitle: details.join(' · '),
-        eventId: event.id,
-      ));
+      for (final candidate in item.sources) {
+        if (result.length >= 8) break;
+        if (!candidate.available || !isDirectPlayableStream(candidate.url) ||
+            !usedUrls.add(candidate.url)) continue;
+        final languageLabel = candidate.languagePriority == 2
+            ? 'ESPAÑOL'
+            : candidate.languagePriority == 1 ? 'ENGLISH' : 'IDIOMA NO CONFIRMADO';
+        final details = <String>[
+          event.sport,
+          if (event.competition.isNotEmpty) event.competition,
+          teams, languageLabel, candidate.channelName,
+        ];
+        result.add(LivePlayerSource(
+          title: 'DEPORTE TOTAL 360° CANAL ${result.length + 1} · $languageLabel',
+          url: candidate.url,
+          subtitle: details.join(' · '),
+          eventId: event.id,
+        ));
+      }
     }
     return result;
   }
@@ -202,7 +204,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
 
     return upcoming
-        .take(6 - activeSources.length)
+        .take(8 - activeSources.length)
         .map((event) {
           final teams = event.homeTeam.isNotEmpty && event.awayTeam.isNotEmpty
               ? '${event.homeTeam} vs ${event.awayTeam}'

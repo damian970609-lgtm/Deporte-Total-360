@@ -23,10 +23,26 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pump();
     expect(refreshes, 1);
-    expect(find.text('MULTIVISTA · 2/6 EVENTOS'), findsOneWidget);
+    expect(find.text('MULTIVISTA · 2/8 EVENTOS'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+
+  testWidgets('la multivista admite ocho reproductores', (tester) async {
+    final sources = List<LivePlayerSource>.generate(
+      8,
+      (index) => LivePlayerSource(
+        title: 'Evento ${index + 1}',
+        url: 'https://media.example/channel-${index + 1}.m3u8',
+        subtitle: 'Canal ${index + 1}',
+      ),
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: LivePlayerGridScreen(sources: sources),
+    ));
+    expect(find.text('MULTIVISTA · 8/8 EVENTOS'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   group('selector de resolución', () {
     test('presenta la altura disponible como resolución legible', () {

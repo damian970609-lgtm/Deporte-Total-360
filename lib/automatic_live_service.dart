@@ -456,8 +456,11 @@ class M3uChannel {
   final String language;
   final String country;
 
-  /// 2 = español; 0 = cualquier idioma como respaldo.
+  /// 2 = español, 1 = inglés y 0 = idioma sin confirmar.
   int get languagePriority {
+    final explicit = language.trim().toLowerCase();
+    if (const <String>{'es', 'spa', 'spanish', 'espanol'}.contains(explicit)) return 2;
+    if (const <String>{'en', 'eng', 'english'}.contains(explicit)) return 1;
     final metadata = AutomaticLiveService.normalizeText(
       '$language $country $group $name $tvgName',
     );
@@ -466,14 +469,18 @@ class M3uChannel {
       'mexico', 'argentina', 'colombia', 'venezuela', 'chile',
       'peru', 'uruguay', 'paraguay', 'bolivia', 'ecuador',
       'costa rica', 'guatemala', 'honduras', 'nicaragua',
-      'panama', 'dominicana', 'puerto rico',
-      'teledeporte', 'esport 3', 'etb deportes',
-      'real madrid tv', 'betis tv',
+      'panama', 'dominicana', 'puerto rico', 'teledeporte',
+      'esport 3', 'etb deportes', 'real madrid tv', 'betis tv',
+    ];
+    const englishMarkers = <String>[
+      'english', 'united kingdom', 'great britain',
+      'sky sports', 'bt sport', 'nbc sports', 'cbs sports network',
+      'espn uk', 'tnt sports uk',
     ];
     if (spanishMarkers.any(metadata.contains) ||
-        RegExp(r'(^| )(es|spa)( |$)').hasMatch(metadata)) {
-      return 2;
-    }
+        RegExp(r'(^| )(es|spa)( |$)').hasMatch(metadata)) return 2;
+    if (englishMarkers.any(metadata.contains) ||
+        RegExp(r'(^| )(en|eng)( |$)').hasMatch(metadata)) return 1;
     return 0;
   }
 }
@@ -691,17 +698,22 @@ class AutomaticLiveService {
 
   Future<AutoLiveCatalog> loadCatalog({
     required String playlistUrl, required String epgUrl,
+    List<M3uChannel>? availableChannels,
     bool forceRefresh = false,
   }) async {
     final playlistUrls = _splitPlaylistUrls(playlistUrl);
     final epgUrls = _splitPlaylistUrls(epgUrl);
-    if (playlistUrls.isEmpty ||
-        !playlistUrls.every(isSafeHttpUrl) ||
+    if ((availableChannels == null &&
+            (playlistUrls.isEmpty || !playlistUrls.every(isSafeHttpUrl))) ||
         epgUrls.isEmpty ||
         !epgUrls.every(isSafeHttpUrl)) {
-      throw const FormatException('Configura listas M3U y guías XMLTV/EPG con direcciones HTTP o HTTPS válidas.');
+      throw const FormatException('Configura una guía XMLTV/EPG válida y canales deportivos seleccionados.');
     }
-    final playlistCacheKey = playlistUrls.join('\n');
+    final playlistCacheKey = availableChannels == null
+        ? playlistUrls.join('\n')
+        : 'selected-catalog:' + availableChannels.map((channel) =>
+            <String>[channel.tvgId, channel.name, channel.url, channel.language].join('|'),
+          ).join('\n');
     final epgCacheKey = epgUrls.join('\n');
     final now = DateTime.now();
     final cached = _cachedCatalog;
@@ -711,40 +723,39 @@ class AutomaticLiveService {
       return cached;
     }
 
-    // Se descargan tres listas a la vez para limitar memoria y conexiones.
-    // Una lista caída no bloquea el resto del catálogo.
     final channelsByUrl = <String, M3uChannel>{};
-    for (var batchStart = 0; batchStart < playlistUrls.length; batchStart += 3) {
-      final batch = playlistUrls.skip(batchStart).take(3).toList(growable: false);
-      final playlistBodies = await Future.wait<String?>(
-        batch.map((url) async {
-          try {
-            return await _downloadText(
-              url,
-              maxBytes: 12 * 1024 * 1024,
-              timeout: const Duration(seconds: 18),
-            );
-          } catch (_) {
-            return null;
-          }
-        }),
-      );
-      for (var index = 0; index < playlistBodies.length; index++) {
-        final body = playlistBodies[index];
-        if (body == null) continue;
-        // Algunas M3U contienen rutas relativas; se resuelven contra la
-        // dirección de la propia lista antes de pasar la URL al reproductor.
-        final baseUri = Uri.tryParse(batch[index]);
-        for (final channel in parseM3u(body, baseUri: baseUri)) {
+    if (availableChannels != null) {
+      // Utiliza exclusivamente los canales visibles/deportivos publicados
+      // desde Ajustes > Damián APK; no consulta listas IPTV ajenas.
+      for (final channel in availableChannels) {
+        if (isDirectPlayableStream(channel.url)) {
           channelsByUrl.putIfAbsent(channel.url, () => channel);
         }
       }
+    } else {
+      // Compatibilidad con el modo anterior, que todavía puede leer M3U.
+      for (var batchStart = 0; batchStart < playlistUrls.length; batchStart += 3) {
+        final batch = playlistUrls.skip(batchStart).take(3).toList(growable: false);
+        final playlistBodies = await Future.wait<String?>(
+          batch.map((url) async {
+            try {
+              return await _downloadText(url, maxBytes: 12 * 1024 * 1024,
+                timeout: const Duration(seconds: 18));
+            } catch (_) { return null; }
+          }),
+        );
+        for (var index = 0; index < playlistBodies.length; index++) {
+          final body = playlistBodies[index];
+          if (body == null) continue;
+          final baseUri = Uri.tryParse(batch[index]);
+          for (final channel in parseM3u(body, baseUri: baseUri)) {
+            channelsByUrl.putIfAbsent(channel.url, () => channel);
+          }
+        }
+      }
     }
-    // Reutiliza temporalmente canales de la misma configuración si las
-    // fuentes fallan; nunca sustituye ni mezcla las listas del usuario.
-    if (cached != null &&
-        _cachedPlaylist == playlistCacheKey &&
-        _cachedAt != null &&
+    if (availableChannels == null && cached != null &&
+        _cachedPlaylist == playlistCacheKey && _cachedAt != null &&
         now.difference(_cachedAt!) < const Duration(hours: 12)) {
       for (final channel in cached.channels) {
         channelsByUrl.putIfAbsent(channel.url, () => channel);
@@ -752,9 +763,17 @@ class AutomaticLiveService {
     }
     final channels = channelsByUrl.values.toList(growable: false);
     if (channels.isEmpty) {
-      throw const FormatException('No respondió ninguna lista M3U compatible.');
+      if (availableChannels == null) {
+        throw const FormatException('No respondió ninguna lista M3U compatible.');
+      }
+      final empty = AutoLiveCatalog(channels: const <M3uChannel>[],
+        programmes: const <XmltvProgramme>[]);
+      _cachedCatalog = empty;
+      _cachedAt = now;
+      _cachedPlaylist = playlistCacheKey;
+      _cachedEpg = epgCacheKey;
+      return empty;
     }
-
     // Se fusionan varias guías. Si una EPG no responde o publica XML inválido,
     // las demás siguen aportando programas. Las guías regionales tienen un
     // límite menor para cuidar la memoria del teléfono.
@@ -958,13 +977,21 @@ class AutomaticLiveService {
   Future<List<ScheduledLiveEvent>> schedule({
     required List<SportsAgendaEvent> events,
     required DateTime now, required AutoLiveSettings settings,
+    List<M3uChannel>? availableChannels,
     bool forceRefresh = false,
   }) async {
-    if (!settings.isConfigured) return <ScheduledLiveEvent>[];
+    final canUseSelectedChannels = availableChannels != null &&
+        settings.epgUrls.isNotEmpty && settings.epgUrls.every(isSafeHttpUrl);
+    if (availableChannels == null ? !settings.isConfigured : !canUseSelectedChannels) {
+      return <ScheduledLiveEvent>[];
+    }
     final catalog = await loadCatalog(
-      playlistUrl: settings.playlistUrl, epgUrl: settings.epgUrl,
+      playlistUrl: settings.playlistUrl,
+      epgUrl: settings.epgUrl,
+      availableChannels: availableChannels,
       forceRefresh: forceRefresh,
     );
+    if (catalog.channels.isEmpty) return <ScheduledLiveEvent>[];
     final byId = <String, List<M3uChannel>>{};
     final byName = <String, List<M3uChannel>>{};
     for (final channel in catalog.channels) {
@@ -1023,54 +1050,32 @@ class AutomaticLiveService {
         }
       }
       if (candidates.isEmpty) continue;
-      // Una sola señal por evento: primero la resolución anunciada, después
-      // indicadores HD/FHD/UHD y finalmente un orden estable del proveedor.
+      // Se comprueban todos los canales cuyo programa EPG coincide con el evento.
+      // Las comprobaciones se realizan por lotes para no saturar la conexión.
       candidates.sort((a, b) {
         final language = b.languagePriority.compareTo(a.languagePriority);
-        return language != 0
-            ? language
-            : b.qualityScore.compareTo(a.qualityScore);
+        return language != 0 ? language : b.qualityScore.compareTo(a.qualityScore);
       });
-      final spanishCandidates = candidates
-          .where((candidate) => candidate.languagePriority > 0)
-          .take(12)
-          .toList(growable: false);
-      final otherLanguageCandidates = candidates
-          .where((candidate) => candidate.languagePriority == 0)
-          .take(12)
-          .toList(growable: false);
-
-      // Primero se intentan señales en español. Solo si ninguna responde se
-      // consulta el grupo internacional, sin mezclar idiomas en la prioridad.
-      var checkedCandidates = await Future.wait<ScheduledLiveSource>(
-        (spanishCandidates.isNotEmpty
-                ? spanishCandidates
-                : otherLanguageCandidates)
-            .map(_probeCandidate),
-      );
-      var verifiedCandidates = checkedCandidates
-          .where((candidate) => candidate.available)
-          .toList(growable: true);
-      if (verifiedCandidates.isEmpty && spanishCandidates.isNotEmpty) {
-        checkedCandidates = await Future.wait<ScheduledLiveSource>(
-          otherLanguageCandidates.map(_probeCandidate),
+      final verifiedCandidates = <ScheduledLiveSource>[];
+      for (var batchStart = 0; batchStart < candidates.length; batchStart += 8) {
+        final batch = candidates.skip(batchStart).take(8).toList(growable: false);
+        final checked = await Future.wait<ScheduledLiveSource>(
+          batch.map(_probeCandidate),
         );
-        verifiedCandidates = checkedCandidates
-            .where((candidate) => candidate.available)
-            .toList(growable: true);
+        verifiedCandidates.addAll(checked.where((candidate) => candidate.available));
       }
-      // Solo se programa una fuente cuya lista de reproducción respondió
-      // correctamente a la comprobación. No se asignan señales no verificadas.
       if (verifiedCandidates.isEmpty) continue;
-      // Entre las señales disponibles, se conserva una sola: la de mayor
-      // calidad anunciada y confirmada por la lista HLS.
       verifiedCandidates.sort((a, b) {
         final language = b.languagePriority.compareTo(a.languagePriority);
-        return language != 0
-            ? language
-            : b.qualityScore.compareTo(a.qualityScore);
+        return language != 0 ? language : b.qualityScore.compareTo(a.qualityScore);
       });
-      final sources = <ScheduledLiveSource>[verifiedCandidates.first];
+      final sources = <ScheduledLiveSource>[];
+      final spanish = verifiedCandidates.where((item) => item.languagePriority == 2);
+      final english = verifiedCandidates.where((item) => item.languagePriority == 1);
+      if (spanish.isNotEmpty) sources.add(spanish.first);
+      if (english.isNotEmpty) sources.add(english.first);
+      // Si no se identificó ningún idioma, se conserva la mejor señal válida.
+      if (sources.isEmpty) sources.add(verifiedCandidates.first);
       final programmeEnd = sources.map((s) => s.programmeEndsAt).reduce(
         (a, b) => a.isAfter(b) ? a : b,
       );
@@ -1139,6 +1144,23 @@ class AutomaticLiveService {
     final away = normalizeText(event.awayTeam);
     final sport = normalizeText(event.sport);
     final competition = normalizeText(event.competition);
+    final participantNames = event.participants
+        .map((participant) => participant.name.trim())
+        .where((name) => name.isNotEmpty)
+        .toList(growable: false);
+    if (participantNames.isNotEmpty) {
+      final matchedParticipants = participantNames.where(
+        (name) => _teamMatchesProgramme(name, programme),
+      ).length;
+      final individualSport = const <String>{
+        'mma', 'ufc', 'ciclismo', 'cycling', 'formula 1', 'formula uno',
+        'deportes de motor', 'motorsport', 'tenis', 'golf', 'boxeo',
+      }.contains(sport);
+      final requiredParticipants = individualSport || participantNames.length == 1
+          ? 1
+          : 2;
+      if (matchedParticipants >= requiredParticipants) return true;
+    }
 
     // UFC suele anunciar el evento y no necesariamente ambos luchadores.
     if (sport == 'mma' && competition.isNotEmpty &&
