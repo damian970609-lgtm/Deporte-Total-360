@@ -1393,7 +1393,7 @@ class LivePlayerBoard extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 960),
             child: GridView.builder(
               shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
+              physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.all(8),
               itemCount: 6,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -1626,21 +1626,41 @@ class _WaitingLivePlayerTile extends StatelessWidget {
                   const Expanded(
                     child: _OfflineSportsArtwork(compact: true),
                   ),
-                  if (event != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 3),
-                      child: Text(
-                        '${event!.heading} · ${event!.match} · ${event!.startLabel}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: _liveMuted,
-                          fontSize: 8,
-                          fontWeight: FontWeight.w700,
-                        ),
+                  if (event != null) ...<Widget>[
+                    const SizedBox(height: 3),
+                    Text(
+                      event!.heading,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: _liveCyan,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
+                    Text(
+                      event!.match,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      event!.startLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: _liveMuted,
+                        fontSize: 7,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
