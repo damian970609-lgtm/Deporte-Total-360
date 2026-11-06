@@ -45,6 +45,18 @@ class SportsChannel {
   final bool visible;
   final String language;
 
+  Map<String, Object> toJson() => <String, Object>{
+        'id': id,
+        'identifier': identifier,
+        'name': name,
+        'url': url,
+        'logoUrl': logoUrl,
+        'groupTitle': groupTitle,
+        'isSports': isSports,
+        'visible': visible,
+        'language': language,
+      };
+
   factory SportsChannel.fromJson(Map<String, dynamic> json) {
     final id = (json['id'] ?? json['identifier'] ?? '').toString().trim();
     final identifier =
