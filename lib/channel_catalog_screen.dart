@@ -69,6 +69,11 @@ class ChannelCatalogScreen extends StatefulWidget {
 class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
   final ChannelCatalogService _service = channelCatalogService;
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _licenseEmailController = TextEditingController();
+  final TextEditingController _licenseNoteController = TextEditingController();
+  String _licenseType = 'free';
+  List<AppLicenseRecord> _licenseRecords = <AppLicenseRecord>[];
+  String? _licensesError;
   final ScrollController _scrollController = ScrollController();
   final Set<String> _favorites = <String>{};
   List<SportsChannel> _channels = <SportsChannel>[];
@@ -1529,6 +1534,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     _urlController.dispose();
     _labelController.dispose();
     _searchController.dispose();
+    _licenseEmailController.dispose();
+    _licenseNoteController.dispose();
     _adminScrollController.dispose();
     super.dispose();
   }
@@ -1568,6 +1575,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _email = null;
         _channels = <SportsChannel>[];
         _sources = <ChannelPlaylistSource>[];
+        _licenseRecords = <AppLicenseRecord>[];
         _previewChannel = null;
         _catalogTotal = 0;
         _nextAdminOffset = 0;
@@ -1669,6 +1677,83 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         // Conserva el catálogo ya cargado y comunica solo el fallo de fuentes.
         _sourcesError = error.toString();
       });
+    }
+    await _loadLicenses();
+  }
+
+  Future<void> _loadLicenses() async {
+    try {
+      final licenses = await _service.fetchAdminLicenses();
+      if (!mounted) return;
+      setState(() {
+        _licenseRecords = licenses;
+        _licensesError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _licensesError = error.toString());
+    }
+  }
+
+  Future<void> _grantLicense() async {
+    final email = _licenseEmailController.text.trim().toLowerCase();
+    if (!email.contains('@') || !email.contains('.')) {
+      _message('Introduce el correo Google de la persona.');
+      return;
+    }
+    setState(() => _working = true);
+    try {
+      await _service.grantAppLicense(
+        email: email,
+        licenseType: _licenseType,
+        note: _licenseNoteController.text,
+      );
+      _licenseEmailController.clear();
+      _licenseNoteController.clear();
+      await _loadLicenses();
+      _message(_licenseType == 'free'
+          ? 'Pase gratuito concedido a $email.'
+          : 'Licencia de pago activada para $email.');
+    } catch (error) {
+      _message('No se pudo guardar la licencia: $error');
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _revokeLicense(AppLicenseRecord license) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _channelPanel,
+        title: const Text('Revocar acceso', style: TextStyle(color: _channelPink)),
+        content: Text(
+          '¿Quieres retirar la licencia de ${license.email}?',
+          style: const TextStyle(color: _channelMuted),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('CANCELAR'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: _channelPink),
+            child: const Text('REVOCAR'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _working = true);
+    try {
+      await _service.revokeAppLicense(email: license.email);
+      await _loadLicenses();
+      _message('Acceso revocado para ${license.email}.');
+    } catch (error) {
+      _message('No se pudo revocar la licencia: $error');
+    } finally {
+      if (mounted) setState(() => _working = false);
     }
   }
 
@@ -2314,6 +2399,206 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
                           const Text(
+                            'LICENCIAS · VENTAS Y REGALOS',
+                            style: TextStyle(
+                              color: _channelGreen,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          const Text(
+                            'Concede acceso de por vida a una cuenta Google. Usa PAGO después de confirmar el cobro o GRATIS para las personas que quieras invitar. La autorización no se transfiere al compartir el APK.',
+                            style: TextStyle(
+                              color: _channelMuted,
+                              fontSize: 10,
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: _licenseEmailController,
+                            keyboardType: TextInputType.emailAddress,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: const InputDecoration(
+                              labelText: 'Correo Google del comprador o invitado',
+                              hintText: 'persona@gmail.com',
+                              prefixIcon: Icon(Icons.mail_outline_rounded),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<String>(
+                            value: _licenseType,
+                            dropdownColor: _channelPanel2,
+                            decoration: const InputDecoration(
+                              labelText: 'Tipo de acceso',
+                            ),
+                            items: const <DropdownMenuItem<String>>[
+                              DropdownMenuItem(
+                                value: 'paid',
+                                child: Text('LICENCIA DE PAGO · VITALICIA'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'free',
+                                child: Text('PASE GRATUITO · INVITACIÓN'),
+                              ),
+                            ],
+                            onChanged: _working
+                                ? null
+                                : (value) => setState(
+                                    () => _licenseType = value ?? 'free',
+                                  ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _licenseNoteController,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: const InputDecoration(
+                              labelText: 'Nota opcional (referencia del pago, regalo, etc.)',
+                            ),
+                          ),
+                          const SizedBox(height: 9),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: _working ? null : _grantLicense,
+                              icon: const Icon(Icons.verified_user_rounded),
+                              label: const Text('CONCEDER ACCESO'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: _channelGreen,
+                                foregroundColor: _channelBg,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: <Widget>[
+                              const Expanded(
+                                child: Text(
+                                  'LICENCIAS REGISTRADAS',
+                                  style: TextStyle(
+                                    color: _channelCyan,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                _licenseRecords.length.toString(),
+                                style: const TextStyle(
+                                  color: _channelMuted,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: _working ? null : _loadLicenses,
+                                tooltip: 'Actualizar licencias',
+                                icon: const Icon(
+                                  Icons.refresh_rounded,
+                                  color: _channelCyan,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_licensesError != null)
+                            Text(
+                              'No se pudieron consultar las licencias: $_licensesError',
+                              style: const TextStyle(
+                                color: _channelPink,
+                                fontSize: 10,
+                              ),
+                            ),
+                          if (_licenseRecords.isEmpty)
+                            const Text(
+                              'Todavía no hay licencias concedidas.',
+                              style: TextStyle(
+                                color: _channelMuted,
+                                fontSize: 10,
+                              ),
+                            ),
+                          for (final license in _licenseRecords)
+                            Container(
+                              margin: const EdgeInsets.only(top: 7),
+                              padding: const EdgeInsets.all(9),
+                              decoration: BoxDecoration(
+                                color: _channelPanel2,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: license.status == 'active'
+                                      ? (license.licenseType == 'paid'
+                                          ? _channelCyan
+                                          : _channelGreen)
+                                      : _channelPink,
+                                ),
+                              ),
+                              child: Row(
+                                children: <Widget>[
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: <Widget>[
+                                        Text(
+                                          license.email,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          (license.licenseType == 'paid'
+                                                  ? 'PAGO'
+                                                  : 'GRATIS') +
+                                              ' · ' +
+                                              (license.status == 'active'
+                                                  ? 'ACTIVA'
+                                                  : 'REVOCADA'),
+                                          style: TextStyle(
+                                            color: license.status == 'active'
+                                                ? (license.licenseType == 'paid'
+                                                    ? _channelCyan
+                                                    : _channelGreen)
+                                                : _channelPink,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
+                                        if (license.note.isNotEmpty)
+                                          Text(
+                                            license.note,
+                                            style: const TextStyle(
+                                              color: _channelMuted,
+                                              fontSize: 9,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (license.status == 'active')
+                                    IconButton(
+                                      onPressed: _working
+                                          ? null
+                                          : () => _revokeLicense(license),
+                                      tooltip: 'Revocar acceso',
+                                      icon: const Icon(
+                                        Icons.block_rounded,
+                                        color: _channelPink,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    _adminCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          const Text(
                             'AÑADIR LISTA MANUALMENTE',
                             style: TextStyle(
                               color: _channelCyan,
@@ -2372,7 +2657,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                               icon: const Icon(Icons.cloud_download_rounded),
                               label: Text(
                                 _sources.length >= maxChannelPlaylistSources
-                                    ? 'LÍMITE DE 12 LISTAS COMPLETO'
+                                    ? 'LÍMITE DE 24 LISTAS COMPLETO'
                                     : 'GUARDAR LISTA E IMPORTAR',
                               ),
                               style: FilledButton.styleFrom(
