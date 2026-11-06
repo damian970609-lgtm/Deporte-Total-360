@@ -432,6 +432,22 @@ https://media.example/backup.m3u8
       expect(catalog.programmes, hasLength(1));
     });
 
+    test('clasifica un 403 como posible bloqueo regional', () async {
+      final client = MockClient((request) async =>
+          http.Response('Forbidden', 403));
+      final service = ChannelCatalogService(
+        client: client,
+        googleServerClientId: 'test-client',
+      );
+
+      final result = await service.diagnoseStream(
+        'https://media.example/sports.m3u8',
+      );
+
+      expect(result, contains('posible restricción regional'));
+      expect(result, contains('No se puede confirmar'));
+    });
+
     test('mantiene los canales aunque todas las guías EPG estén caídas', () async {
       const playlist = '''
 #EXTM3U
