@@ -86,7 +86,7 @@ class WebProtectionPolicy {
         ),
         action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
       );
-    }).toList(growable: false)
+    }).toList()
       ..add(
         ContentBlocker(
           trigger: ContentBlockerTrigger(
