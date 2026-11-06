@@ -6,6 +6,43 @@ import 'package:http/testing.dart';
 import 'package:deporte_total_360/channel_catalog_service.dart';
 
 void main() {
+  test('parsea el permiso permanente de compra del servidor', () {
+    final license = AppLicenseStatus.fromJson(<String, dynamic>{
+      'allowed': true,
+      'status': 'active',
+      'licenseType': 'paid',
+      'email': 'buyer@example.com',
+    });
+
+    expect(license.allowed, isTrue);
+    expect(license.status, 'active');
+    expect(license.licenseType, 'paid');
+    expect(license.email, 'buyer@example.com');
+  });
+
+  test('parsea un pase gratuito y una licencia revocada', () {
+    final free = AppLicenseRecord.fromJson(<String, dynamic>{
+      'email': 'guest@example.com',
+      'license_type': 'free',
+      'status': 'active',
+      'note': 'Invitación',
+      'granted_at': '2026-11-06T12:00:00Z',
+      'granted_by': 'damian970609@gmail.com',
+    });
+    final revoked = AppLicenseStatus.fromJson(<String, dynamic>{
+      'allowed': false,
+      'status': 'revoked',
+      'licenseType': 'paid',
+      'email': 'buyer@example.com',
+    });
+
+    expect(free.licenseType, 'free');
+    expect(free.status, 'active');
+    expect(free.note, 'Invitación');
+    expect(revoked.allowed, isFalse);
+    expect(revoked.status, 'revoked');
+  });
+
   test('las etiquetas compactas distinguen español e inglés', () {
     expect(channelLanguageDisplayLabel('es'), 'IDIOMA 🇪🇸');
     expect(channelLanguageDisplayLabel('en'), 'IDIOMA 🇺🇸');
