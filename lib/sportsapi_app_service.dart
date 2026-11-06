@@ -315,10 +315,11 @@ class SportsApiAppService {
       );
 
       for (final result in batch) {
-        if (result.failed || result.incomplete) {
+        if (result.failed) {
           markUnavailableUtcDay(result.date);
           continue;
         }
+        if (result.incomplete) markUnavailableUtcDay(result.date);
         for (final event in result.events) {
           resultsById[event.id] = event;
         }

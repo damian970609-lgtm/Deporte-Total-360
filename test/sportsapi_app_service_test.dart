@@ -143,6 +143,64 @@ void main() {
     }
   });
 
+  test('marca cobertura parcial si falla un deporte sin descartar los demás', () async {
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-partial.example';
+    final failedDate = '2033-03-04';
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/fixtures')) {
+        final date = request.url.queryParameters['date']!;
+        final sport = request.url.queryParameters['sport'];
+        if (date == failedDate && sport == 'basketball') {
+          return http.Response(
+            jsonEncode({'error': 'basketball temporarily unavailable'}),
+            503,
+          );
+        }
+        final rows = date == failedDate && sport == 'football'
+            ? [{
+                'id': 404,
+                'sport': 'football',
+                'startTime': failedDate + 'T12:00:00Z',
+                'status': {'type': 'scheduled'},
+                'home': {'id': 1, 'name': 'Equipo A'},
+                'away': {'id': 2, 'name': 'Equipo B'},
+                'league': {'id': 1, 'name': 'Liga de prueba'},
+              }]
+            : <Map<String, dynamic>>[];
+        return http.Response(jsonEncode({
+          'data': rows,
+          'meta': {'hasNextPage': false, 'complete': true},
+        }), 200);
+      }
+      if (request.url.path.endsWith('/races')) {
+        return http.Response(jsonEncode({
+          'data': [],
+          'meta': {'complete': true},
+        }), 200);
+      }
+      return http.Response(jsonEncode({'data': {}, 'meta': {}}), 200);
+    });
+
+    try {
+      final window = await SportsApiAppService(client: client)
+          .fetchFavoriteAgendaWindow(
+        startDate: DateTime(2033, 3, 4),
+        days: 7,
+      );
+      expect(
+        window.unavailableDates.any((date) =>
+            date.year == 2033 && date.month == 3 && date.day == 4),
+        isTrue,
+      );
+      expect(window.events, hasLength(1));
+      expect(window.events.single.id, 'sportsapi-fixture-404');
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
+  });
+
   test('solicita estadísticas por la ruta correcta de SportsAPI', () async {
     final previousBase = sportsApiBaseUrl.value;
     sportsApiBaseUrl.value = 'https://worker.example';

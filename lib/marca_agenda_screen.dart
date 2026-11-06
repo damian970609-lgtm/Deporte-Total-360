@@ -1087,9 +1087,9 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                   const SizedBox(width: 5),
                   Expanded(
                     child: Text(
-                      'Cobertura parcial: ' +
+                      'Cobertura parcial en: ' +
                           _unavailableDates.map(_dateSubtitle).join(', ') +
-                          ' no respondió; se conserva la caché cuando está disponible.',
+                          '. Una o más fuentes deportivas no respondieron; se conserva la caché cuando existe.',
                       style: const TextStyle(
                         color: _agendaMuted,
                         fontSize: 9,
