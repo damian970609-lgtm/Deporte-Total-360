@@ -77,6 +77,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
   int _catalogRequestId = 0;
   int _nextCatalogOffset = 0;
   int _catalogTotal = 0;
+  int _nextAdminOffset = 0;
   bool _hasMoreChannels = false;
   bool _loadingMoreChannels = false;
   String? _loadMoreError;
@@ -685,7 +686,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
                       child: TextButton.icon(
                         onPressed: _loadMoreChannels,
                         icon: const Icon(Icons.expand_more_rounded),
-                        label: const Text('CARGAR MÁS CANALES'),
+                        label: const Text('CARGAR SIGUIENTES CANALES · DESLIZA PARA SEGUIR'),
                       ),
                     ),
                   ),
@@ -1488,7 +1489,24 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   String? _sourcesError;
 
   @override
+  void initState() {
+    super.initState();
+    _adminScrollController.addListener(_handleAdminScroll);
+  }
+
+  void _handleAdminScroll() {
+    if (!_adminScrollController.hasClients ||
+        _loading || _working || !_hasMore || _error != null) {
+      return;
+    }
+    if (_adminScrollController.position.extentAfter < 650) {
+      unawaited(_loadMore());
+    }
+  }
+
+  @override
   void dispose() {
+    _adminScrollController.removeListener(_handleAdminScroll);
     _urlController.dispose();
     _labelController.dispose();
     _searchController.dispose();
@@ -1532,6 +1550,9 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _channels = <SportsChannel>[];
         _sources = <ChannelPlaylistSource>[];
         _previewChannel = null;
+        _catalogTotal = 0;
+        _nextAdminOffset = 0;
+        _hasMore = false;
       });
     }
   }
@@ -1556,6 +1577,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       setState(() {
         _channels = page.channels;
         _catalogTotal = page.total;
+        _nextAdminOffset = page.offset + page.channels.length;
         final previewId = _previewChannel?.id;
         if (previewId != null) {
           for (final channel in page.channels) {
@@ -1586,7 +1608,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       };
       var addedSources = 0;
 
-      // Completa las plazas disponibles con las 12 fuentes predeterminadas.
+      // Completa las plazas disponibles con las fuentes predeterminadas.
       // Conserva las listas personales ya registradas y nunca repite una URL.
       for (final playlist in channelPlaylistPresets) {
         if (sources.length + addedSources >= maxChannelPlaylistSources) {
@@ -1649,12 +1671,20 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
   Future<void> _loadMore() async {
     if (_loading || !_hasMore) return;
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final page = await _service.fetchAdminChannelPage(
         search: _searchController.text,
-        offset: _channels.length,
+        offset: _nextAdminOffset,
       );
+      if (page.channels.isEmpty && page.hasMore) {
+        throw const ChannelCatalogException(
+          'El servidor no entregó la siguiente página del catálogo. Vuelve a intentarlo.',
+        );
+      }
       if (!mounted) return;
       setState(() {
         final knownIds = _channels.map((channel) => channel.id).toSet();
@@ -1662,8 +1692,10 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           page.channels.where((channel) => knownIds.add(channel.id)),
         );
         _catalogTotal = page.total;
+        _nextAdminOffset = page.offset + page.channels.length;
         _hasMore = page.hasMore;
         _loading = false;
+        _error = null;
       });
     } catch (error) {
       if (!mounted) return;
@@ -1676,7 +1708,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
   Future<void> _addPlaylist() async {
     if (_sources.length >= maxChannelPlaylistSources) {
-      _message('Ya tienes las 12 listas registradas. No se pueden agregar más.');
+      _message('Ya tienes las 16 listas registradas. No se pueden agregar más.');
       return;
     }
     final uri = Uri.tryParse(_urlController.text.trim());
