@@ -88,7 +88,7 @@ void main() {
   });
 
 
-  testWidgets('solo muestra la jornada local de hoy y permite desplazarse por una agenda extensa', (tester) async {
+  testWidgets('muestra solo la fecha seleccionada y permite desplazarse por una agenda extensa', (tester) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final mixedEvents = <SportsAgendaEvent>[
@@ -129,7 +129,10 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Evento de hoy 39'),
       500,
-      scrollable: find.byType(Scrollable),
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey<String>('agenda-event-list')),
+        matching: find.byType(Scrollable),
+      ),
     );
     await tester.pump();
 
