@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 
+import 'live_media_format.dart';
 import 'sports_api_service.dart';
 
 const String _googleServerClientId =
@@ -59,15 +60,10 @@ class SportsChannel {
     if (id.isEmpty || identifier.isEmpty || name.isEmpty || url.isEmpty) {
       throw const FormatException('El canal recibido está incompleto.');
     }
-    final uri = Uri.tryParse(url);
-    if (uri == null ||
-        uri.scheme != 'https' ||
-        uri.host.isEmpty ||
-        uri.userInfo.isNotEmpty ||
-        !(uri.path.toLowerCase().endsWith('.m3u8') ||
-            uri.path.toLowerCase().endsWith('.mp4') ||
-            uri.path.toLowerCase().endsWith('.ts'))) {
-      throw const FormatException('El canal no contiene una señal HTTPS directa válida.');
+    if (liveMediaFormatForUrl(url) == null) {
+      throw const FormatException(
+        'El canal no contiene una señal HLS, DASH, Smooth Streaming o vídeo directo compatible.',
+      );
     }
     return SportsChannel(
       id: id,
@@ -371,27 +367,106 @@ class ChannelCatalogService {
     return (await fetchPublicChannelPage()).channels;
   }
 
-  Future<List<SportsChannel>> fetchAdminChannels({
+  /// Devuelve página y total real del catálogo privado; el total no depende
+  /// de cuántos registros haya cargado la interfaz en memoria.
+  Future<ChannelCatalogPage> fetchAdminChannelPage({
     String search = '',
     int offset = 0,
   }) async {
+    final normalizedOffset = offset.clamp(0, 100000).toInt();
     final uri = Uri.parse(_baseUrl + '/api/channels/admin/catalog').replace(
       queryParameters: <String, String>{
         if (search.trim().isNotEmpty) 'q': search.trim(),
-        'offset': offset.toString(),
+        'offset': normalizedOffset.toString(),
       },
     );
     final result = await _client.get(uri, headers: _authHeaders())
-        .timeout(const Duration(seconds: 20));
+        .timeout(const Duration(seconds: 25));
     final payload = _decode(result);
     final rows = payload['channels'];
-    if (rows is! List) return <SportsChannel>[];
-    return rows
+    if (rows is! List) {
+      throw const ChannelCatalogException(
+        'El servidor no devolvió un catálogo privado válido.',
+      );
+    }
+    final page = rows
         .whereType<Map>()
         .map((row) => SportsChannel.fromJson(
               Map<String, dynamic>.from(row),
             ))
         .toList(growable: false);
+    final responseOffset = int.tryParse(
+          (payload['offset'] ?? normalizedOffset).toString(),
+        ) ??
+        normalizedOffset;
+    final total = int.tryParse(
+          (payload['total'] ?? (responseOffset + page.length)).toString(),
+        ) ??
+        responseOffset + page.length;
+    final hasMore = payload['hasMore'] == true ||
+        responseOffset + page.length < total;
+    return ChannelCatalogPage(
+      channels: page,
+      total: total,
+      offset: responseOffset,
+      hasMore: hasMore,
+    );
+  }
+
+  /// Compatibilidad con pantallas antiguas que solo necesitan la primera
+  /// página; no cambia la firma pública ya utilizada por el resto de la APK.
+  Future<List<SportsChannel>> fetchAdminChannels({
+    String search = '',
+    int offset = 0,
+  }) async {
+    return (await fetchAdminChannelPage(
+      search: search,
+      offset: offset,
+    )).channels;
+  }
+
+  /// Diagnóstico de conectividad. Un HTTP 403 puede ser geobloqueo,
+  /// autenticación o política del proveedor; no se presenta como certeza.
+  Future<String> diagnoseStream(String value) async {
+    final uri = Uri.tryParse(value.trim());
+    if (uri == null || liveMediaFormatForUrl(value) == null) {
+      return 'ENLACE NO COMPATIBLE: revisa la URL o el formato de la señal.';
+    }
+    try {
+      final result = await _client.get(
+        uri,
+        headers: const <String, String>{
+          'Accept': '*/*',
+          'Range': 'bytes=0-2047',
+        },
+      ).timeout(const Duration(seconds: 10));
+      switch (result.statusCode) {
+        case 200:
+        case 206:
+          return 'RESPONDE: el servidor permite la conexión inicial. La reproducción todavía depende del reproductor y de los segmentos.';
+        case 401:
+          return 'ACCESO DENEGADO (401): el proveedor requiere credenciales o autorización.';
+        case 403:
+          return 'ACCESO DENEGADO (403): posible restricción regional, permisos o bloqueo del proveedor. No se puede confirmar que sea GeoIP solo con este código.';
+        case 404:
+          return 'FUENTE NO ENCONTRADA (404): el enlace puede haber caducado o haber sido retirado.';
+        case 451:
+          return 'RESTRICCIÓN LEGAL O REGIONAL (451): el proveedor limita esta transmisión.';
+        case 429:
+          return 'LÍMITE DEL PROVEEDOR (429): espera y vuelve a intentarlo más tarde.';
+        default:
+          if (result.statusCode >= 500) {
+            return 'SERVIDOR NO DISPONIBLE (' + result.statusCode.toString() + '): prueba más tarde o utiliza una fuente autorizada alternativa.';
+          }
+          return 'RESPUESTA HTTP ' + result.statusCode.toString() + ': revisa la fuente con el proveedor.';
+      }
+    } on Exception catch (error) {
+      final message = error.toString().toLowerCase();
+      if (message.contains('timeout')) {
+        return 'TIEMPO AGOTADO: el servidor no respondió a tiempo.';
+      }
+      return 'NO SE PUDO CONECTAR: comprueba Internet, la fuente y vuelve a probar.';
+    }
   }
 
   Future<List<ChannelPlaylistSource>> fetchSources() async {
