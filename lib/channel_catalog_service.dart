@@ -136,6 +136,58 @@ class ChannelCatalogException implements Exception {
   String toString() => message;
 }
 
+class AppLicenseStatus {
+  const AppLicenseStatus({
+    required this.allowed,
+    required this.status,
+    required this.licenseType,
+    required this.email,
+  });
+
+  final bool allowed;
+  final String status;
+  final String licenseType;
+  final String email;
+
+  factory AppLicenseStatus.fromJson(Map<String, dynamic> json) {
+    return AppLicenseStatus(
+      allowed: json['allowed'] == true,
+      status: (json['status'] ?? 'unknown').toString(),
+      licenseType: (json['licenseType'] ?? '').toString(),
+      email: (json['email'] ?? '').toString(),
+    );
+  }
+}
+
+class AppLicenseRecord {
+  const AppLicenseRecord({
+    required this.email,
+    required this.licenseType,
+    required this.status,
+    this.note = '',
+    this.grantedAt = '',
+    this.grantedBy = '',
+  });
+
+  final String email;
+  final String licenseType;
+  final String status;
+  final String note;
+  final String grantedAt;
+  final String grantedBy;
+
+  factory AppLicenseRecord.fromJson(Map<String, dynamic> json) {
+    return AppLicenseRecord(
+      email: (json['email'] ?? '').toString(),
+      licenseType: (json['license_type'] ?? json['licenseType'] ?? '').toString(),
+      status: (json['status'] ?? 'unknown').toString(),
+      note: (json['note'] ?? '').toString(),
+      grantedAt: (json['granted_at'] ?? json['grantedAt'] ?? '').toString(),
+      grantedBy: (json['granted_by'] ?? json['grantedBy'] ?? '').toString(),
+    );
+  }
+}
+
 class ChannelCatalogService {
   ChannelCatalogService({http.Client? client, String? googleServerClientId})
       : _client = client ?? http.Client(),
@@ -488,6 +540,69 @@ class ChannelCatalogService {
       }
       return 'NO SE PUDO CONECTAR: comprueba Internet, la fuente y vuelve a probar.';
     }
+  }
+
+  /// Comprueba la licencia comercial o el pase gratuito de la cuenta Google
+  /// actual. El servidor decide el acceso; no se confía en datos locales.
+  Future<AppLicenseStatus> fetchAppLicenseStatus() async {
+    final result = await _client.get(
+      Uri.parse(_baseUrl + '/api/license'),
+      headers: _authHeaders(),
+    ).timeout(const Duration(seconds: 15));
+    final payload = _decode(result);
+    return AppLicenseStatus.fromJson(payload);
+  }
+
+  Future<List<AppLicenseRecord>> fetchAdminLicenses() async {
+    final result = await _client.get(
+      Uri.parse(_baseUrl + '/api/channels/admin/licenses'),
+      headers: _authHeaders(),
+    ).timeout(const Duration(seconds: 20));
+    final rows = _decode(result)['licenses'];
+    if (rows is! List) return <AppLicenseRecord>[];
+    return rows
+        .whereType<Map>()
+        .map((row) => AppLicenseRecord.fromJson(
+              Map<String, dynamic>.from(row),
+            ))
+        .toList(growable: false);
+  }
+
+  Future<void> grantAppLicense({
+    required String email,
+    required String licenseType,
+    String note = '',
+  }) async {
+    if (!const <String>{'paid', 'free'}.contains(licenseType)) {
+      throw ArgumentError.value(licenseType, 'licenseType');
+    }
+    final result = await _client.post(
+      Uri.parse(_baseUrl + '/api/channels/admin/licenses'),
+      headers: <String, String>{
+        ..._authHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(<String, String>{
+        'email': email.trim().toLowerCase(),
+        'licenseType': licenseType,
+        'note': note.trim(),
+      }),
+    ).timeout(const Duration(seconds: 20));
+    _decode(result);
+  }
+
+  Future<void> revokeAppLicense({required String email}) async {
+    final result = await _client.patch(
+      Uri.parse(_baseUrl + '/api/channels/admin/licenses/revoke'),
+      headers: <String, String>{
+        ..._authHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(<String, String>{
+        'email': email.trim().toLowerCase(),
+      }),
+    ).timeout(const Duration(seconds: 20));
+    _decode(result);
   }
 
   Future<List<ChannelPlaylistSource>> fetchSources() async {
