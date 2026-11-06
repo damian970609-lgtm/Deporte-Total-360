@@ -16,10 +16,12 @@ class AutomaticLiveScreen extends StatefulWidget {
     super.key,
     required this.onOpenAgenda,
     this.isActive = true,
+    this.selectedEventId,
   });
 
   final VoidCallback onOpenAgenda;
   final bool isActive;
+  final String? selectedEventId;
 
   @override
   State<AutomaticLiveScreen> createState() => _AutomaticLiveScreenState();
@@ -53,7 +55,10 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
   @override
   void didUpdateWidget(covariant AutomaticLiveScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!oldWidget.isActive && widget.isActive) _refresh(force: true);
+    if ((!oldWidget.isActive && widget.isActive) ||
+        oldWidget.selectedEventId != widget.selectedEventId) {
+      _refresh(force: true);
+    }
   }
 
   @override
@@ -117,7 +122,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         // El tablero Live obtiene primero los diez deportes favoritos, aunque
         // el usuario nunca haya abierto la pestaña Agenda.
         events = await SportsApiAppService().fetchFavoriteAgendaEvents();
-        await SportsAgendaStore.save(events);
+        await SportsAgendaStore.saveWindow(events, startDate: DateTime.now(), days: 1);
       } catch (_) {
         events = localEvents;
       }
@@ -159,7 +164,12 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
   List<LivePlayerSource> _playerSources() {
     final now = DateTime.now();
     final ordered = List<ScheduledLiveEvent>.of(_scheduled)
-      ..sort((a, b) => a.event.startsAt.compareTo(b.event.startsAt));
+      ..sort((a, b) {
+        final aSelected = a.event.id == widget.selectedEventId;
+        final bSelected = b.event.id == widget.selectedEventId;
+        if (aSelected != bSelected) return aSelected ? -1 : 1;
+        return a.event.startsAt.compareTo(b.event.startsAt);
+      });
     final usedUrls = <String>{};
     final result = <LivePlayerSource>[];
     for (final item in ordered) {
@@ -209,7 +219,12 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
           event.startsAt.add(const Duration(hours: 3));
       return now.isBefore(end);
     }).toList()
-      ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+      ..sort((a, b) {
+        final aSelected = a.id == widget.selectedEventId;
+        final bSelected = b.id == widget.selectedEventId;
+        if (aSelected != bSelected) return aSelected ? -1 : 1;
+        return a.startsAt.compareTo(b.startsAt);
+      });
 
     return upcoming
         .take(8 - activeSources.length)
@@ -287,6 +302,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         sources: activeSources,
         waitingEvents: waitingEvents,
         isActive: widget.isActive,
+        prioritizedEventId: widget.selectedEventId,
       ),
     );
   }

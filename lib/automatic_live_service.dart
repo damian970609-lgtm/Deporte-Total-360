@@ -423,6 +423,52 @@ class SportsAgendaStore {
     );
   }
 
+  /// Sustituye solamente las fechas incluidas y conserva las demás jornadas
+  /// que ya están guardadas para que actualizar hoy no borre mañana.
+  static Future<void> saveWindow(
+    List<SportsAgendaEvent> events, {
+    required DateTime startDate,
+    int days = 7,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final start = DateTime(startDate.year, startDate.month, startDate.day);
+    final safeDays = days.clamp(1, 7).toInt();
+    final end = start.add(Duration(days: safeDays));
+    final cutoff = DateTime.now().subtract(const Duration(hours: 4));
+    final byId = <String, SportsAgendaEvent>{};
+
+    String dayKey(DateTime value) {
+      final local = value.toLocal();
+      return '\${local.year}-\${local.month}-\${local.day}';
+    }
+
+    final replacedDays = <String>{
+      for (var index = 0; index < safeDays; index++)
+        dayKey(start.add(Duration(days: index))),
+    };
+
+    for (final event in await load()) {
+      final localStart = event.startsAt.toLocal();
+      final eventEnd =
+          event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
+      if (replacedDays.contains(dayKey(localStart))) continue;
+      if (eventEnd.isAfter(cutoff)) byId[event.id] = event;
+    }
+
+    for (final event in events) {
+      final localStart = event.startsAt.toLocal();
+      final eventEnd =
+          event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
+      if (localStart.isBefore(start) || !localStart.isBefore(end)) continue;
+      if (eventEnd.isAfter(cutoff)) byId[event.id] = event;
+    }
+
+    await prefs.setString(
+      _key,
+      jsonEncode(byId.values.map((event) => event.toJson()).toList()),
+    );
+  }
+
   static Future<List<SportsAgendaEvent>> load() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);

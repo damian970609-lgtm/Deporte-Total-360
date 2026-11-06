@@ -618,6 +618,7 @@ class _MainShellState extends State<MainShell> {
   void _handleLivePush() {
     final eventId = NotificationService.liveEventNotification.value;
     if (eventId == null || !mounted) return;
+    _selectedAgendaEventId = eventId;
     NotificationService.liveEventNotification.value = null;
     _selectTab(_liveTab);
   }
@@ -676,6 +677,7 @@ class _MainShellState extends State<MainShell> {
 
   int _selectedIndex = _homeTab;
   String _selectedStatisticsSport = 'Fútbol';
+  String? _selectedAgendaEventId;
   bool _handlingBack = false;
   final Set<int> _visitedTabs = <int>{_homeTab};
 
@@ -907,6 +909,7 @@ class _MainShellState extends State<MainShell> {
           ? AutomaticLiveScreen(
               onOpenAgenda: () => _selectTab(_agendaTab),
               isActive: _selectedIndex == _liveTab,
+              selectedEventId: _selectedAgendaEventId,
             )
           : const SizedBox.shrink(),
       _visitedTabs.contains(_channelsTab)
@@ -1760,8 +1763,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadNotificationPreference() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (mounted) setState(() => _notificationsEnabled =
-          prefs.getBool('notifications_enabled') ?? false);
+      if (mounted) {
+        final enabled = prefs.getBool('notifications_enabled') ?? false;
+        NotificationService.matchRemindersEnabled.value = enabled;
+        setState(() => _notificationsEnabled = enabled);
+      }
     } catch (_) {}
   }
 
@@ -1786,6 +1792,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await prefs.setBool('notifications_enabled', enabled);
     } catch (_) {}
     if (enabled) await NotificationService.registerCurrentDevice();
+    NotificationService.matchRemindersEnabled.value = enabled;
     if (mounted) setState(() => _notificationsEnabled = enabled);
   }
 

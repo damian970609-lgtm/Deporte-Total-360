@@ -1373,11 +1373,13 @@ class LivePlayerBoard extends StatelessWidget {
     required this.sources,
     this.waitingEvents = const <LivePlayerWaitingEvent>[],
     this.isActive = true,
+    this.prioritizedEventId,
   });
 
   final List<LivePlayerSource> sources;
   final List<LivePlayerWaitingEvent> waitingEvents;
   final bool isActive;
+  final String? prioritizedEventId;
 
   @override
   Widget build(BuildContext context) {
@@ -1428,7 +1430,8 @@ class LivePlayerBoard extends StatelessWidget {
                                 ),
                                 source: source,
                                 initiallyMuted: index > 0,
-                                autoStart: false,
+                                autoStart: prioritizedEventId != null &&
+                                    source.eventId == prioritizedEventId,
                                 isActive: isActive,
                               ),
                             ),

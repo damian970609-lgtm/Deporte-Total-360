@@ -8,6 +8,32 @@ import 'automatic_live_service.dart';
 
 /// Cliente seguro del adaptador SportsAPI.app publicado en Cloudflare.
 /// La clave del proveedor nunca se incluye en la APK.
+class SportsAgendaWindow {
+  const SportsAgendaWindow({
+    required this.startDate,
+    required this.days,
+    required this.events,
+    this.unavailableDates = const <DateTime>[],
+  });
+
+  final DateTime startDate;
+  final int days;
+  final List<SportsAgendaEvent> events;
+  final List<DateTime> unavailableDates;
+}
+
+class _AgendaDayResult {
+  const _AgendaDayResult({
+    required this.date,
+    required this.events,
+    this.failed = false,
+  });
+
+  final DateTime date;
+  final List<SportsAgendaEvent> events;
+  final bool failed;
+}
+
 class SportsApiAppService {
   SportsApiAppService({http.Client? client}) : _client = client ?? http.Client();
 
@@ -105,6 +131,14 @@ class SportsApiAppService {
       <String, DateTime>{};
   static final Map<String, Future<List<SportsAgendaEvent>>> _agendaInFlight =
       <String, Future<List<SportsAgendaEvent>>>{};
+  static final Map<String, ({
+    SportsAgendaWindow window,
+    DateTime expiresAt,
+  })> _agendaWindowCache =
+      <String, ({SportsAgendaWindow window, DateTime expiresAt})>{};
+  static final Map<String, Future<SportsAgendaWindow>> _agendaWindowInFlight =
+      <String, Future<SportsAgendaWindow>>{};
+
 
   Future<List<SportsAgendaEvent>> fetchFavoriteAgendaEvents({
     DateTime? date,
@@ -132,6 +166,95 @@ class SportsApiAppService {
     }).whenComplete(() {
       _agendaInFlight.remove(day);
     });
+  }
+
+  /// Descarga hoy y los seis días siguientes. Se consultan dos fechas a la
+  /// vez para limitar el número de conexiones concurrentes al Worker.
+  Future<SportsAgendaWindow> fetchFavoriteAgendaWindow({
+    DateTime? startDate,
+    int days = 7,
+  }) {
+    final requested = startDate ?? DateTime.now();
+    final firstDay = DateTime(requested.year, requested.month, requested.day);
+    final safeDays = days.clamp(1, 7).toInt();
+    final firstKey = '\${firstDay.year.toString().padLeft(4, '0')}-'
+        '\${firstDay.month.toString().padLeft(2, '0')}-'
+        '\${firstDay.day.toString().padLeft(2, '0')}';
+    final cacheKey = '$firstKey:$safeDays';
+    final now = DateTime.now();
+    final cached = _agendaWindowCache[cacheKey];
+    if (cached != null && now.isBefore(cached.expiresAt)) {
+      return Future<SportsAgendaWindow>.value(cached.window);
+    }
+    final pending = _agendaWindowInFlight[cacheKey];
+    if (pending != null) return pending;
+
+    final future = _fetchFavoriteAgendaWindow(firstDay, safeDays);
+    _agendaWindowInFlight[cacheKey] = future;
+    return future.then((window) {
+      _agendaWindowCache[cacheKey] = (
+        window: window,
+        expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+      );
+      return window;
+    }).whenComplete(() {
+      _agendaWindowInFlight.remove(cacheKey);
+    });
+  }
+
+  Future<SportsAgendaWindow> _fetchFavoriteAgendaWindow(
+    DateTime startDate,
+    int days,
+  ) async {
+    final resultsById = <String, SportsAgendaEvent>{};
+    final unavailableDates = <DateTime>[];
+
+    for (var batchStart = 0; batchStart < days; batchStart += 2) {
+      final batchLength = (days - batchStart) < 2 ? days - batchStart : 2;
+      final dates = List<DateTime>.generate(
+        batchLength,
+        (index) => startDate.add(Duration(days: batchStart + index)),
+        growable: false,
+      );
+      final batch = await Future.wait<_AgendaDayResult>(
+        dates.map((date) async {
+          try {
+            final rows = await fetchFavoriteAgendaEvents(date: date);
+            return _AgendaDayResult(date: date, events: rows);
+          } catch (_) {
+            return _AgendaDayResult(
+              date: date,
+              events: const <SportsAgendaEvent>[],
+              failed: true,
+            );
+          }
+        }),
+      );
+      for (final result in batch) {
+        if (result.failed) {
+          unavailableDates.add(result.date);
+          continue;
+        }
+        for (final event in result.events) {
+          resultsById[event.id] = event;
+        }
+      }
+    }
+
+    final start = DateTime(startDate.year, startDate.month, startDate.day);
+    final end = start.add(Duration(days: days));
+    final events = resultsById.values.where((event) {
+      final localStart = event.startsAt.toLocal();
+      return !localStart.isBefore(start) && localStart.isBefore(end);
+    }).toList()
+      ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+
+    return SportsAgendaWindow(
+      startDate: start,
+      days: days,
+      events: events,
+      unavailableDates: unavailableDates,
+    );
   }
 
   Future<List<SportsAgendaEvent>> _fetchFavoriteAgendaEvents(String day) async {
