@@ -966,7 +966,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                 color: _agendaPink,
               ),
               label: Text(
-                live ? 'VER TRANSMISIÓN' : 'BUSCAR TRANSMISIÓN',
+                'VER TRANSMISIONES',
                 style: const TextStyle(
                   color: _agendaPink,
                   fontSize: 9,

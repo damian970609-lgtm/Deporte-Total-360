@@ -439,7 +439,8 @@ class SportsAgendaStore {
 
     String dayKey(DateTime value) {
       final local = value.toLocal();
-      return '\${local.year}-\${local.month}-\${local.day}';
+      return local.year.toString() + '-' +
+          local.month.toString() + '-' + local.day.toString();
     }
 
     final replacedDays = <String>{

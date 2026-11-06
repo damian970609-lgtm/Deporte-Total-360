@@ -918,7 +918,10 @@ class _MainShellState extends State<MainShell> {
       _visitedTabs.contains(_agendaTab)
           ? MarcaAgendaScreen(
               isActive: _selectedIndex == _agendaTab,
-              onOpenLive: () => _selectTab(_liveTab),
+              onOpenLive: (eventId) {
+                _selectedAgendaEventId = eventId;
+                _selectTab(_liveTab);
+              },
             )
           : const SizedBox.shrink(),
       _visitedTabs.contains(_newsTab) ? const NewsScreen() : const SizedBox.shrink(),

@@ -177,10 +177,10 @@ class SportsApiAppService {
     final requested = startDate ?? DateTime.now();
     final firstDay = DateTime(requested.year, requested.month, requested.day);
     final safeDays = days.clamp(1, 7).toInt();
-    final firstKey = '\${firstDay.year.toString().padLeft(4, '0')}-'
-        '\${firstDay.month.toString().padLeft(2, '0')}-'
-        '\${firstDay.day.toString().padLeft(2, '0')}';
-    final cacheKey = '$firstKey:$safeDays';
+    final firstKey = firstDay.year.toString().padLeft(4, '0') + '-' +
+        firstDay.month.toString().padLeft(2, '0') + '-' +
+        firstDay.day.toString().padLeft(2, '0');
+    final cacheKey = firstKey + ':' + safeDays.toString();
     final now = DateTime.now();
     final cached = _agendaWindowCache[cacheKey];
     if (cached != null && now.isBefore(cached.expiresAt)) {

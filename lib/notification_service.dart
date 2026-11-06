@@ -325,7 +325,8 @@ class NotificationService {
       for (final minutesBefore in <int>[60, 30, 15, 5]) {
         if (start.subtract(Duration(minutes: minutesBefore)).isAfter(now)) {
           desiredIds.add(_stableId(
-            '\${event['sport']}:\${event['id']}:$minutesBefore',
+            event['sport'].toString() + ':' +
+                event['id'].toString() + ':' + minutesBefore.toString(),
           ));
         }
       }
@@ -345,7 +346,8 @@ class NotificationService {
       for (final minutesBefore in <int>[60, 30, 15, 5]) {
         final reminderAt = start.subtract(Duration(minutes: minutesBefore));
         final id = _stableId(
-          '\${event['sport']}:\${event['id']}:$minutesBefore',
+          event['sport'].toString() + ':' +
+              event['id'].toString() + ':' + minutesBefore.toString(),
         );
         if (!reminderAt.isAfter(now) || pendingIds.contains(id)) continue;
         await scheduleMatchReminder(
