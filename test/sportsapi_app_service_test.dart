@@ -80,6 +80,64 @@ void main() {
     }
   });
 
+  test('carga y reutiliza la ventana de los próximos siete días', () async {
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-window.example';
+    final requested = <Uri>[];
+    final client = MockClient((request) async {
+      requested.add(request.url);
+      if (request.url.path.endsWith('/fixtures')) {
+        if (request.url.queryParameters['sport'] != 'football') {
+          return http.Response(jsonEncode({'data': [], 'meta': {}}), 200);
+        }
+        final date = request.url.queryParameters['date']!;
+        final day = int.parse(date.substring(8));
+        return http.Response(jsonEncode({
+          'data': [{
+            'id': day,
+            'sport': 'football',
+            'startTime': date + 'T12:00:00Z',
+            'status': {'type': 'scheduled'},
+            'home': {'id': day * 2, 'name': 'Equipo ' + day.toString()},
+            'away': {'id': day * 2 + 1, 'name': 'Rival ' + day.toString()},
+            'league': {'id': 1, 'name': 'Liga de prueba'},
+          }],
+          'meta': {'count': 1}
+        }), 200);
+      }
+      if (request.url.path.endsWith('/races')) {
+        return http.Response(jsonEncode({'data': [], 'meta': {}}), 200);
+      }
+      return http.Response(jsonEncode({'data': {}, 'meta': {}}), 200);
+    });
+
+    try {
+      final api = SportsApiAppService(client: client);
+      final start = DateTime(2031, 2, 3);
+      final window = await api.fetchFavoriteAgendaWindow(
+        startDate: start,
+        days: 7,
+      );
+
+      expect(window.days, 7);
+      expect(window.unavailableDates, isEmpty);
+      expect(window.events, hasLength(7));
+      expect(window.events.map((event) => event.id).toSet(), hasLength(7));
+      expect(requested.where((uri) => uri.path.endsWith('/fixtures')), hasLength(56));
+      expect(requested.where((uri) => uri.path.endsWith('/races')), hasLength(14));
+
+      final cached = await api.fetchFavoriteAgendaWindow(
+        startDate: start,
+        days: 7,
+      );
+      expect(cached.events, hasLength(7));
+      expect(requested, hasLength(70));
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
+  });
+
   test('solicita estadísticas por la ruta correcta de SportsAPI', () async {
     final previousBase = sportsApiBaseUrl.value;
     sportsApiBaseUrl.value = 'https://worker.example';

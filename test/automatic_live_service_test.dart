@@ -89,6 +89,41 @@ void main() {
     });
   });
 
+  group('caché de agenda por fecha', () {
+    test('actualizar hoy no elimina los eventos guardados de mañana', () async {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      SportsAgendaEvent event(String id, DateTime startsAt) =>
+          SportsAgendaEvent(
+            id: id,
+            title: 'Evento ' + id,
+            sport: 'Fútbol',
+            startsAt: startsAt,
+            detailUrl: 'https://www.marca.com/programacion-tv.html',
+          );
+
+      final todayEvent = event('today', today.add(const Duration(hours: 4)));
+      final tomorrowEvent = event(
+        'tomorrow',
+        today.add(const Duration(days: 1, hours: 4)),
+      );
+      await SportsAgendaStore.saveWindow(
+        <SportsAgendaEvent>[todayEvent, tomorrowEvent],
+        startDate: today,
+        days: 7,
+      );
+
+      await SportsAgendaStore.saveWindow(
+        const <SportsAgendaEvent>[],
+        startDate: today,
+        days: 1,
+      );
+
+      final stored = await SportsAgendaStore.load();
+      expect(stored.map((item) => item.id), <String>['tomorrow']);
+    });
+  });
+
   group('agenda y transmisiones publicadas desde Cloudflare', () {
     test('recibe eventos y señales verificadas desde el endpoint central', () async {
       final start = DateTime.now().add(const Duration(minutes: 5));
