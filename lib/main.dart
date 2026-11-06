@@ -604,7 +604,7 @@ class HomeDashboard extends StatelessWidget {
                 radius: 1.2,
                 colors: <Color>[
                   Color(0xFF10243C),
-                  Color(0xFF050C17),
+                  _homePanel,
                   _homeBlack,
                 ],
               ),
