@@ -37,6 +37,9 @@ LiveMediaFormat? liveMediaFormatForUrl(String value) {
     '.mpeg',
     '.mpg',
     '.flv',
+    '.m2ts',
+    '.2ts',
+    '.mts',
   ];
   if (progressiveExtensions.any(path.endsWith)) {
     return LiveMediaFormat.progressive;

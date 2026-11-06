@@ -228,7 +228,10 @@ void main() {
         'preservedChannels': true,
       }), 200);
     });
-    final service = ChannelCatalogService(client: client);
+    final service = ChannelCatalogService(
+      client: client,
+      accessTokenProvider: () => 'test-google-id-token',
+    );
 
     await service.deletePlaylistSource(id: 'source-123');
 
@@ -245,7 +248,10 @@ void main() {
         'queued': true,
       }), 202);
     });
-    final service = ChannelCatalogService(client: client);
+    final service = ChannelCatalogService(
+      client: client,
+      accessTokenProvider: () => 'test-google-id-token',
+    );
 
     await service.retryPlaylistSource(id: 'source-123');
 

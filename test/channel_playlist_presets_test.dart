@@ -4,7 +4,7 @@ import 'package:deporte_total_360/channel_playlist_presets.dart';
 void main() {
   test('ofrece exactamente 24 listas predeterminadas con URLs HTTPS únicas', () {
     expect(channelPlaylistPresets, hasLength(24));
-    expect(maxChannelPlaylistSources, equals(24));
+    expect(maxChannelPlaylistSources, equals(48));
 
     final normalizedUrls = channelPlaylistPresets
         .map((preset) => normalizeChannelPlaylistUrl(preset.url))
@@ -46,6 +46,20 @@ void main() {
             preset.url == 'https://www.tdtchannels.com/lists/tv.m3u',
       ),
       isTrue,
+    );
+  });
+
+  test('incluye ocho fuentes deportivas públicas adicionales', () {
+    expect(channelSportsPlaylistPresets, hasLength(8));
+    expect(
+      channelSportsPlaylistPresets.every(
+        (preset) => Uri.parse(preset.url).scheme == 'https',
+      ),
+      isTrue,
+    );
+    expect(
+      channelSportsPlaylistPresets.map((preset) => preset.url).toSet(),
+      hasLength(8),
     );
   });
 

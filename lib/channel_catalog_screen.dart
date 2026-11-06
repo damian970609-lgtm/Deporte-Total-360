@@ -1476,6 +1476,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   final TextEditingController _licenseNoteController = TextEditingController();
   final ScrollController _adminScrollController = ScrollController();
   String _licenseType = 'free';
+  String _selectedSportsPresetUrl = channelSportsPlaylistPresets.first.url;
   List<AppLicenseRecord> _licenseRecords = <AppLicenseRecord>[];
   String? _licensesError;
   List<SportsChannel> _channels = <SportsChannel>[];
@@ -1590,11 +1591,12 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       setState(() {
         _loading = true;
         _error = null;
+        _sourcesError = null;
       });
     }
 
-    // El catálogo y las fuentes son servicios independientes. Un fallo al
-    // consultar las listas IPTV no debe borrar ni bloquear los canales.
+    // El catálogo, las fuentes y las licencias se consultan por separado.
+    // Un error en una ruta no impide mostrar las otras secciones del panel.
     try {
       final page = await _service.fetchAdminChannelPage(
         search: _searchController.text,
@@ -1624,48 +1626,15 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _loading = false;
         _error = error.toString();
       });
-      return;
     }
 
     try {
-      var sources = await _service.fetchSources();
-      final registeredUrls = <String>{
-        for (final source in sources)
-          normalizeChannelPlaylistUrl(source.url),
-      };
-      var addedSources = 0;
-
-      // Completa las plazas disponibles con las fuentes predeterminadas.
-      // Conserva las listas personales ya registradas y nunca repite una URL.
-      for (final playlist in channelPlaylistPresets) {
-        if (sources.length + addedSources >= maxChannelPlaylistSources) {
-          break;
-        }
-        if (!registeredUrls.add(
-          normalizeChannelPlaylistUrl(playlist.url),
-        )) {
-          continue;
-        }
-        await _service.addPlaylist(
-          url: playlist.url,
-          label: playlist.label,
-        );
-        addedSources++;
-      }
-
-      if (addedSources > 0) {
-        await _service.refreshSources();
-        sources = await _service.fetchSources();
-      }
-
+      final sources = await _service.fetchSources();
       if (!mounted) return;
       sources.sort((a, b) {
-        final aDefault = normalizeChannelPlaylistUrl(a.url) ==
-            normalizeChannelPlaylistUrl(channelPlaylistPresets.first.url);
-        final bDefault = normalizeChannelPlaylistUrl(b.url) ==
-            normalizeChannelPlaylistUrl(channelPlaylistPresets.first.url);
-        if (aDefault == bDefault) return 0;
-        return aDefault ? -1 : 1;
+        if (a.status == 'error' && b.status != 'error') return -1;
+        if (b.status == 'error' && a.status != 'error') return 1;
+        return a.label.toLowerCase().compareTo(b.label.toLowerCase());
       });
       setState(() {
         _sources = sources;
@@ -1674,10 +1643,10 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        // Conserva el catálogo ya cargado y comunica solo el fallo de fuentes.
         _sourcesError = error.toString();
       });
     }
+
     await _loadLicenses();
   }
 
@@ -1854,6 +1823,40 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
+  Future<void> _addSportsPreset() async {
+    if (_sources.length >= maxChannelPlaylistSources) {
+      _message('Has alcanzado el límite de $maxChannelPlaylistSources listas.');
+      return;
+    }
+    final preset = channelSportsPlaylistPresets.firstWhere(
+      (item) => item.url == _selectedSportsPresetUrl,
+      orElse: () => channelSportsPlaylistPresets.first,
+    );
+    if (containsChannelPlaylistUrl(
+      _sources.map((source) => source.url),
+      preset.url,
+    )) {
+      _message('Esta fuente deportiva ya está registrada.');
+      return;
+    }
+    setState(() => _working = true);
+    try {
+      await _service.addPlaylist(url: preset.url, label: preset.label);
+      await _service.refreshSources();
+      final sources = await _service.fetchSources();
+      if (!mounted) return;
+      setState(() {
+        _sources = sources;
+        _sourcesError = null;
+      });
+      _message('Fuente añadida: ' + preset.label + '. Se está importando.');
+    } catch (error) {
+      _message('No se pudo añadir la fuente deportiva: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   Future<void> _refreshSources() async {
     setState(() => _working = true);
     try {
@@ -1862,6 +1865,67 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       _message('Actualización solicitada al servidor.');
     } catch (error) {
       _message(error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _removePlaylistSource(ChannelPlaylistSource source) async {
+    if (source.status != 'error') return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _channelPanel,
+        title: const Text(
+          'Quitar lista con error',
+          style: TextStyle(color: _channelPink),
+        ),
+        content: Text(
+          '¿Quieres quitar "' + source.label +
+              '" del catálogo de fuentes? Los canales ya importados se conservarán.',
+          style: const TextStyle(color: _channelMuted),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('CANCELAR'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: _channelPink),
+            child: const Text('QUITAR'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _working = true);
+    try {
+      await _service.deletePlaylistSource(id: source.id);
+      if (!mounted) return;
+      setState(() {
+        _sources.removeWhere((item) => item.id == source.id);
+      });
+      _message('Lista quitada. Los canales ya importados se conservaron.');
+    } catch (error) {
+      _message('No se pudo quitar la lista: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _retryPlaylistSource(ChannelPlaylistSource source) async {
+    if (_working) return;
+    setState(() => _working = true);
+    try {
+      await _service.retryPlaylistSource(id: source.id);
+      await _service.refreshSources();
+      final sources = await _service.fetchSources();
+      if (!mounted) return;
+      setState(() => _sources = sources);
+      _message('Reintento solicitado para "' + source.label + '".');
+    } catch (error) {
+      _message('No se pudo reintentar la lista: ' + error.toString());
     } finally {
       if (mounted) setState(() => _working = false);
     }
@@ -2375,7 +2439,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
                           const Text(
-                            'CATÁLOGO DE 12 LISTAS PÚBLICAS',
+                            'CATÁLOGO DE FUENTES DEPORTIVAS',
                             style: TextStyle(
                               color: _channelCyan,
                               fontWeight: FontWeight.w900,
@@ -2384,10 +2448,57 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                           ),
                           const SizedBox(height: 5),
                           const Text(
-                            'Al iniciar sesión, el menú completa automáticamente hasta 12 fuentes distintas, incluida TDTChannels de GitHub. Se conservan tus listas existentes y no se registra dos veces la misma URL. Los canales importados permanecen ocultos hasta que actives su visibilidad.',
+                            'Fuentes deportivas públicas y listas generales filtradas por deporte. Añade solo las que necesites; una lista eliminada no volverá a registrarse automáticamente.',
                             style: TextStyle(
                               color: _channelMuted,
                               fontSize: 10,
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          DropdownButtonFormField<String>(
+                            initialValue: _selectedSportsPresetUrl,
+                            isExpanded: true,
+                            dropdownColor: _channelPanel2,
+                            decoration: const InputDecoration(
+                              labelText: 'Elegir fuente deportiva',
+                            ),
+                            items: channelSportsPlaylistPresets
+                                .map((preset) => DropdownMenuItem<String>(
+                                      value: preset.url,
+                                      child: Text(
+                                        preset.label,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ))
+                                .toList(growable: false),
+                            onChanged: _working
+                                ? null
+                                : (value) => setState(
+                                      () => _selectedSportsPresetUrl =
+                                          value ?? channelSportsPlaylistPresets.first.url,
+                                    ),
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: _working ? null : _addSportsPreset,
+                              icon: const Icon(Icons.add_link_rounded),
+                              label: const Text('AÑADIR FUENTE DEPORTIVA'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: _channelCyan,
+                                foregroundColor: _channelBg,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'La importación reconoce M3U/M3U8, PLS, XSPF/XML, JSON y TXT. Cada señal se valida antes de aparecer en el catálogo.',
+                            style: TextStyle(
+                              color: _channelMuted,
+                              fontSize: 9,
                               height: 1.4,
                             ),
                           ),
@@ -2623,8 +2734,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             enableSuggestions: false,
                             style: const TextStyle(color: Colors.white),
                             decoration: const InputDecoration(
-                              labelText: 'URL HTTPS de la lista M3U',
-                              hintText: 'https://servidor/lista.m3u',
+                              labelText: 'URL HTTPS de la lista o archivo multimedia',
+                              hintText: 'M3U, PLS, XSPF, JSON o TXT',
                               prefixIcon: Icon(Icons.link_rounded),
                             ),
                           ),
@@ -2764,12 +2875,48 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                               ),
                               Text(
                                 source.importedCount.toString() +
-                                    ' canales procesados',
+                                    ' canales procesados' +
+                                    (source.format.isEmpty
+                                        ? ''
+                                        : ' · FORMATO ' + source.format.toUpperCase()),
                                 style: const TextStyle(
                                   color: _channelMuted,
                                   fontSize: 9,
                                 ),
                               ),
+                              if (source.status == 'error') ...<Widget>[
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 6,
+                                  children: <Widget>[
+                                    OutlinedButton.icon(
+                                      onPressed: _working
+                                          ? null
+                                          : () => _retryPlaylistSource(source),
+                                      icon: const Icon(Icons.refresh_rounded, size: 16),
+                                      label: const Text('REINTENTAR'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: _channelCyan,
+                                        side: const BorderSide(color: _channelCyan),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed: _working
+                                          ? null
+                                          : () => _removePlaylistSource(source),
+                                      icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                                      label: const Text('QUITAR'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: _channelPink,
+                                        side: const BorderSide(color: _channelPink),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ],
                           ),
                         ),

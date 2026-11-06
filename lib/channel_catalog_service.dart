@@ -85,6 +85,7 @@ class ChannelPlaylistSource {
     required this.url,
     required this.label,
     required this.status,
+    this.format = '',
     this.lastError = '',
     this.importedCount = 0,
     this.lastImportedAt = '',
@@ -94,6 +95,7 @@ class ChannelPlaylistSource {
   final String url;
   final String label;
   final String status;
+  final String format;
   final String lastError;
   final int importedCount;
   final String lastImportedAt;
@@ -104,6 +106,7 @@ class ChannelPlaylistSource {
       url: (json['url'] ?? '').toString(),
       label: (json['label'] ?? 'Lista IPTV').toString(),
       status: (json['status'] ?? 'queued').toString(),
+      format: (json['format'] ?? '').toString(),
       lastError: (json['last_error'] ?? '').toString(),
       importedCount: int.tryParse(
             (json['imported_count'] ?? 0).toString(),
@@ -189,12 +192,19 @@ class AppLicenseRecord {
 }
 
 class ChannelCatalogService {
-  ChannelCatalogService({http.Client? client, String? googleServerClientId})
-      : _client = client ?? http.Client(),
-        _serverClientId = googleServerClientId ?? _googleServerClientId;
+  ChannelCatalogService({
+    http.Client? client,
+    String? googleServerClientId,
+    String? Function()? accessTokenProvider,
+  })  : _client = client ?? http.Client(),
+        _serverClientId = googleServerClientId ?? _googleServerClientId,
+        _accessTokenProvider = accessTokenProvider;
 
   final http.Client _client;
   final String _serverClientId;
+  // Inyectable para pruebas e integraciones que ya gestionen un token.
+  // El Worker siempre verifica el ID token de Google antes de autorizar.
+  final String? Function()? _accessTokenProvider;
   static final GoogleSignIn _google = GoogleSignIn.instance;
   static Future<void>? _initialization;
   String? _idToken;
@@ -372,7 +382,7 @@ class ChannelCatalogService {
   }
 
   Map<String, String> _authHeaders() {
-    final token = _idToken;
+    final token = _idToken ?? _accessTokenProvider?.call();
     if (token == null || token.isEmpty) {
       throw const ChannelCatalogException(
         'Inicia sesión con Google para continuar.',

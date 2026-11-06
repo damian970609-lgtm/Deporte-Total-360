@@ -3,7 +3,7 @@
 /// Las URLs son distintas entre sí. Algunas listas generales o regionales
 /// pueden contener canales también presentes en otras fuentes; el catálogo
 /// del servidor conserva el identificador de cada canal cuando está disponible.
-const int maxChannelPlaylistSources = 24;
+const int maxChannelPlaylistSources = 48;
 
 class ChannelPlaylistPreset {
   const ChannelPlaylistPreset({
@@ -165,3 +165,51 @@ bool containsChannelPlaylistUrl(
     (url) => normalizeChannelPlaylistUrl(url) == candidate,
   );
 }
+
+
+/// Fuentes deportivas públicas adicionales. Las listas generales se importan
+/// pero el catálogo solo publica como deportivos los canales reconocidos por
+/// nombre o categoría.
+const List<ChannelPlaylistPreset> channelSportsPlaylistPresets =
+    <ChannelPlaylistPreset>[
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Deportes',
+    url: 'https://iptv-org.github.io/iptv/categories/sports.m3u',
+    description: 'Categoría deportiva del directorio comunitario IPTV-org',
+  ),
+  ChannelPlaylistPreset(
+    label: 'FreecastHub · Deportes públicos',
+    url: 'https://raw.githubusercontent.com/freecasthub/public-iptv/main/sports.m3u',
+    description: 'Canales deportivos que el repositorio identifica como públicos y gratuitos',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV Validated · Deportes',
+    url: 'https://raw.githubusercontent.com/AdeelWajid/iptv_validated_list/main/playlists/categories/sports.m3u',
+    description: 'Selección deportiva con comprobación periódica de disponibilidad',
+  ),
+  ChannelPlaylistPreset(
+    label: 'Doubo · Deportes públicos',
+    url: 'https://cdn.jsdelivr.net/gh/streamline-iptv/iptv-playlists@dist/categories/sports.m3u',
+    description: 'Categoría deportiva de un directorio público actualizado',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV By Shovo · Global con filtro deportivo',
+    url: 'https://shovo127.github.io/IPTV-By-Shovo/index.m3u',
+    description: 'Directorio global; la app conserva únicamente los canales detectados como deportivos',
+  ),
+  ChannelPlaylistPreset(
+    label: 'Free-TV · Global con filtro deportivo',
+    url: 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8',
+    description: 'Directorio público general; la app filtra canales por nombre y categoría deportiva',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Deportes al aire libre',
+    url: 'https://iptv-org.github.io/iptv/categories/outdoor.m3u',
+    description: 'Actividades deportivas y canales de exteriores',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Motor y automoción',
+    url: 'https://iptv-org.github.io/iptv/categories/auto.m3u',
+    description: 'Canales de motor y automoción; pueden incluir contenido deportivo',
+  ),
+];
