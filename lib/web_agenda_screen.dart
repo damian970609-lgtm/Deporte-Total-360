@@ -32,7 +32,7 @@ class WebAgendaScreen extends StatefulWidget {
   final String pageTitle;
   final bool showLiveButton;
 
-  static const String initialUrl = 'https://www.marca.com/programacion-tv.html';
+  static const String initialUrl = 'https://futbol-libre.cam/';
 
   @override
   State<WebAgendaScreen> createState() => WebAgendaScreenState();

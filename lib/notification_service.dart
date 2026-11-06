@@ -271,7 +271,9 @@ class NotificationService {
     final reminderAt = startsAt.toLocal().subtract(Duration(minutes: minutesBefore));
     if (!reminderAt.isAfter(DateTime.now())) return;
 
-    final id = _stableId('$sport:$eventId:$minutesBefore');
+    final id = _stableId(
+      '$sport:$eventId:$minutesBefore:${startsAt.millisecondsSinceEpoch}',
+    );
     final channelName = tr('notifications');
     await _plugin.zonedSchedule(
       id: id,
@@ -326,7 +328,8 @@ class NotificationService {
         if (start.subtract(Duration(minutes: minutesBefore)).isAfter(now)) {
           desiredIds.add(_stableId(
             event['sport'].toString() + ':' +
-                event['id'].toString() + ':' + minutesBefore.toString(),
+                event['id'].toString() + ':' + minutesBefore.toString() + ':' +
+                (event['startsAt'] as DateTime).millisecondsSinceEpoch.toString(),
           ));
         }
       }
@@ -347,7 +350,8 @@ class NotificationService {
         final reminderAt = start.subtract(Duration(minutes: minutesBefore));
         final id = _stableId(
           event['sport'].toString() + ':' +
-              event['id'].toString() + ':' + minutesBefore.toString(),
+              event['id'].toString() + ':' + minutesBefore.toString() + ':' +
+                  (event['startsAt'] as DateTime).millisecondsSinceEpoch.toString(),
         );
         if (!reminderAt.isAfter(now) || pendingIds.contains(id)) continue;
         await scheduleMatchReminder(

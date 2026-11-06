@@ -1430,7 +1430,8 @@ class LivePlayerBoard extends StatelessWidget {
                                 ),
                                 source: source,
                                 initiallyMuted: index > 0,
-                                autoStart: prioritizedEventId != null &&
+                                autoStart: index == 0 &&
+                                    prioritizedEventId != null &&
                                     source.eventId == prioritizedEventId,
                                 isActive: isActive,
                               ),

@@ -121,8 +121,16 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
       try {
         // El tablero Live obtiene primero los diez deportes favoritos, aunque
         // el usuario nunca haya abierto la pestaña Agenda.
-        events = await SportsApiAppService().fetchFavoriteAgendaEvents();
-        await SportsAgendaStore.saveWindow(events, startDate: DateTime.now(), days: 1);
+        final window = await SportsApiAppService().fetchFavoriteAgendaWindow(
+          startDate: DateTime.now(),
+          days: 7,
+        );
+        events = window.events;
+        await SportsAgendaStore.saveWindow(
+          events,
+          startDate: window.startDate,
+          days: window.days,
+        );
       } catch (_) {
         events = localEvents;
       }
