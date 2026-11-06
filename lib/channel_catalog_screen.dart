@@ -1658,6 +1658,22 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
+  Future<void> _searchChannels() async {
+    if (_loading) return;
+    await _loadAdmin();
+    if (!mounted) return;
+    if (_error == null) {
+      _message(_channels.isEmpty
+          ? 'No se encontraron canales con ese nombre.'
+          : 'Canales encontrados: ' + _channels.length.toString());
+    }
+  }
+
+  Future<void> _clearChannelSearch() async {
+    _searchController.clear();
+    await _loadAdmin();
+  }
+
   Future<void> _loadMore() async {
     if (_loading || !_hasMore) return;
     setState(() => _loading = true);
@@ -1690,6 +1706,11 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       _message('Introduce una URL HTTPS pública de una lista M3U.');
       return;
     }
+    final normalizedUrl = uri.toString();
+    if (_sources.any((source) => source.url.trim() == normalizedUrl)) {
+      _message('Esta lista ya está guardada en tu catálogo.');
+      return;
+    }
     if (!_rightsConfirmed) {
       _message('Confirma que tienes derecho a distribuir esas señales.');
       return;
@@ -1697,14 +1718,14 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     setState(() => _working = true);
     try {
       await _service.addPlaylist(
-        url: uri.toString(),
+        url: normalizedUrl,
         label: _labelController.text.trim(),
       );
       if (!mounted) return;
       _urlController.clear();
       _labelController.clear();
       setState(() => _rightsConfirmed = false);
-      _message('Lista añadida. Cloudflare la importará en segundo plano.');
+      _message('Lista guardada en Cloudflare. La importación continuará en segundo plano aunque cierres la APK.');
       await _loadAdmin(showLoading: false);
     } catch (error) {
       _message(error.toString());
@@ -2280,7 +2301,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
                           const Text(
-                            'AGREGAR LISTA IPTV',
+                            'AÑADIR LISTA MANUALMENTE',
                             style: TextStyle(
                               color: _channelCyan,
                               fontWeight: FontWeight.w900,
@@ -2333,7 +2354,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             child: FilledButton.icon(
                               onPressed: _working ? null : _addPlaylist,
                               icon: const Icon(Icons.cloud_download_rounded),
-                              label: const Text('IMPORTAR EN CLOUDFLARE'),
+                              label: const Text('GUARDAR LISTA E IMPORTAR'),
                               style: FilledButton.styleFrom(
                                 backgroundColor: _channelGreen,
                                 foregroundColor: _channelBg,
@@ -2342,7 +2363,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                           ),
                           const SizedBox(height: 6),
                           const Text(
-                            'La lista se procesa en el servidor aunque la APK se cierre. Los canales nuevos entran ocultos y no se publican hasta que actives su ojo.',
+                            'La URL queda guardada en tu catálogo de Cloudflare y no se pierde al cerrar o reinstalar la APK. Los canales nuevos entran ocultos y solo se publican cuando activas su ojo.',
                             style: TextStyle(
                               color: _channelMuted,
                               fontSize: 9,
@@ -2460,20 +2481,37 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: _searchController,
-                      onSubmitted: (_) => _loadAdmin(),
+                      onSubmitted: (_) => _searchChannels(),
+                      textInputAction: TextInputAction.search,
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
-                        hintText: 'Buscar canal por nombre...',
+                        labelText: 'Buscar canal por nombre',
+                        hintText: 'Ej. ESPN, FOX Sports, TUDN...',
                         prefixIcon: const Icon(
                           Icons.search_rounded,
                           color: _channelCyan,
                         ),
-                        suffixIcon: IconButton(
-                          onPressed: _loadAdmin,
-                          icon: const Icon(
-                            Icons.arrow_forward_rounded,
-                            color: _channelGreen,
-                          ),
+                        suffixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            if (_searchController.text.isNotEmpty)
+                              IconButton(
+                                tooltip: 'Limpiar búsqueda',
+                                onPressed: _loading ? null : _clearChannelSearch,
+                                icon: const Icon(
+                                  Icons.close_rounded,
+                                  color: _channelMuted,
+                                ),
+                              ),
+                            IconButton(
+                              tooltip: 'Buscar canal',
+                              onPressed: _loading ? null : _searchChannels,
+                              icon: const Icon(
+                                Icons.search_rounded,
+                                color: _channelGreen,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
