@@ -292,8 +292,30 @@ jobs:
           file "$KEYSTORE"
           stat -c 'Tamaño: %s bytes' "$KEYSTORE"
 
-          # Corrige únicamente saltos de línea finales que pueden quedar al copiar un secreto desde una terminal.
-          ANDROID_KEYSTORE_PASSWORD="${ANDROID_KEYSTORE_PASSWORD%
+          # Elimina CR/LF accidentales al final del secreto copiado desde una terminal.
+          ANDROID_KEYSTORE_PASSWORD="$(printf '%s' "$ANDROID_KEYSTORE_PASSWORD" | tr -d '\r\n')"
+
+          # Detecta explícitamente JKS o PKCS12 y valida la contraseña sin exponerla.
+          KEYSTORE_TYPE=""
+          for candidate_type in JKS PKCS12; do
+            if keytool -list -storetype "$candidate_type" -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" >/dev/null 2>&1; then
+              KEYSTORE_TYPE="$candidate_type"
+              break
+            fi
+          done
+
+          if [[ -z "$KEYSTORE_TYPE" ]]; then
+            echo "::error::El archivo decodificado es un almacén Java, pero no se puede abrir. La contraseña del secreto no coincide o ANDROID_KEYSTORE_BASE64 no corresponde a la keystore privada original."
+            exit 1
+          fi
+          echo "Formato de keystore validado: $KEYSTORE_TYPE"
+
+          if ! keytool -list -storetype "$KEYSTORE_TYPE" -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias dt360 >/dev/null; then
+            echo "::error::La keystore se abrió, pero no contiene el alias dt360. No se modificará ni reemplazará la llave."
+            exit 1
+          fi
+
+          KEYSTORE_SHA1="$(keytool -list -v -storetype "$KEYSTORE_TYPE" -keystore "$KEYSTORE" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias dt360 | sed -n 's/^[[:space:]]*SHA1: //Ip' | head -n 1 | tr -d '[:space:]')"
           if [[ -z "$KEYSTORE_SHA1" ]]; then
             echo "::error::No se pudo leer el SHA-1 de la llave Android privada."
             exit 1
