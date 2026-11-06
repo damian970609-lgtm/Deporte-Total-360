@@ -716,9 +716,19 @@ class AutomaticLiveService {
         }
       }
     }
+    // Reutiliza temporalmente canales de la misma configuración si las
+    // fuentes fallan; nunca sustituye ni mezcla las listas del usuario.
+    if (cached != null &&
+        _cachedPlaylist == playlistCacheKey &&
+        _cachedAt != null &&
+        now.difference(_cachedAt!) < const Duration(hours: 12)) {
+      for (final channel in cached.channels) {
+        channelsByUrl.putIfAbsent(channel.url, () => channel);
+      }
+    }
     final channels = channelsByUrl.values.toList(growable: false);
     if (channels.isEmpty) {
-      throw const FormatException('Ninguna lista M3U respondió con señales HLS, DASH o vídeo directo compatibles.');
+      throw const FormatException('No respondió ninguna lista M3U compatible.');
     }
 
     // Se fusionan varias guías. Si una EPG no responde o publica XML inválido,
