@@ -1616,7 +1616,6 @@ class _WaitingLivePlayerTile extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
               child: const _OfflineSportsArtwork(compact: true),
-                    ),
             ),
           ),
           const Padding(
