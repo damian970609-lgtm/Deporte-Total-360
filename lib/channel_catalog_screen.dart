@@ -222,7 +222,15 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
         _loading = false;
         _catalogNotice = null;
         if (search.isEmpty) {
-          _cachedChannels = List<SportsChannel>.from(page.channels);
+          final cachedById = <String, SportsChannel>{
+            for (final channel in _cachedChannels) channel.id: channel,
+          };
+          for (final channel in page.channels) {
+            cachedById[channel.id] = channel;
+          }
+          _cachedChannels = cachedById.values
+              .take(_maxCachedChannels)
+              .toList();
         }
       });
       if (search.isEmpty) unawaited(_saveLocalCatalog());
