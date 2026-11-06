@@ -1,6 +1,7 @@
 import 'app_section_design.dart';
 import 'dart:async';
 import 'dart:ui' as ui;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -598,10 +599,17 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 class _MainShellState extends State<MainShell> {
+  late final ScrollController _bottomNavigationController;
+  bool _bottomCanScrollLeft = false;
+  bool _bottomCanScrollRight = false;
+
   @override
   void initState() {
     super.initState();
+    _bottomNavigationController = ScrollController()
+      ..addListener(_syncBottomNavigation);
     NotificationService.liveEventNotification.addListener(_handleLivePush);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncBottomNavigation());
     if (NotificationService.liveEventNotification.value != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _handleLivePush());
     }
@@ -617,7 +625,42 @@ class _MainShellState extends State<MainShell> {
   @override
   void dispose() {
     NotificationService.liveEventNotification.removeListener(_handleLivePush);
+    _bottomNavigationController
+      ..removeListener(_syncBottomNavigation)
+      ..dispose();
     super.dispose();
+  }
+
+  void _syncBottomNavigation() {
+    if (!mounted || !_bottomNavigationController.hasClients) return;
+    final position = _bottomNavigationController.position;
+    final canScrollLeft = position.pixels > 2;
+    final canScrollRight = position.maxScrollExtent - position.pixels > 2;
+    if (canScrollLeft == _bottomCanScrollLeft &&
+        canScrollRight == _bottomCanScrollRight) {
+      return;
+    }
+    setState(() {
+      _bottomCanScrollLeft = canScrollLeft;
+      _bottomCanScrollRight = canScrollRight;
+    });
+  }
+
+  void _scrollBottomNavigation(bool forward) {
+    if (!_bottomNavigationController.hasClients) return;
+    final position = _bottomNavigationController.position;
+    final direction = forward ? 1.0 : -1.0;
+    final target = (position.pixels +
+            direction * position.viewportDimension * .72)
+        .clamp(0.0, position.maxScrollExtent)
+        .toDouble();
+    unawaited(
+      _bottomNavigationController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      ),
+    );
   }
 
   static const int _homeTab = 0;
@@ -750,8 +793,18 @@ class _MainShellState extends State<MainShell> {
     }
   }
 
+  double _bottomNavigationItemWidth(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    if (width < 360) return 72;
+    if (width < 480) return 76;
+    if (width < 700) return 82;
+    if (width < 1000) return 90;
+    return 98;
+  }
+
   Widget _buildBottomTab(int index, IconData icon, String label, Color accent) {
     final selected = _selectedIndex == index;
+    final tabWidth = _bottomNavigationItemWidth(context);
     return Semantics(
       button: true,
       selected: selected,
@@ -759,24 +812,77 @@ class _MainShellState extends State<MainShell> {
       child: InkWell(
         onTap: () => _selectTab(index),
         child: SizedBox(
-          width: 82,
+          width: tabWidth,
           height: 66,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              Icon(icon, size: 20, color: selected ? accent : appMuted),
+              Icon(icon, size: 19, color: selected ? accent : appMuted),
               const SizedBox(height: 3),
               Text(
                 label,
-                maxLines: 1,
+                maxLines: 2,
+                textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: selected ? accent : appMuted,
-                  fontSize: 9,
+                  fontSize: tabWidth < 78 ? 8 : 8.5,
+                  height: 1.0,
                   fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomScrollCue({required bool forward}) {
+    final label = forward
+        ? 'Desplazar navegación a la derecha'
+        : 'Desplazar navegación a la izquierda';
+    return Positioned(
+      left: forward ? null : 2,
+      right: forward ? 2 : null,
+      top: 7,
+      bottom: 7,
+      child: Tooltip(
+        message: label,
+        child: Semantics(
+          button: true,
+          label: label,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              key: ValueKey<String>(
+                forward ? 'bottom-nav-scroll-right' : 'bottom-nav-scroll-left',
+              ),
+              borderRadius: BorderRadius.circular(20),
+              onTap: () => _scrollBottomNavigation(forward),
+              child: Container(
+                width: 34,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xF507090D),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: appCyan.withAlpha(185)),
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: appCyan.withAlpha(55),
+                      blurRadius: 10,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  forward
+                      ? Icons.chevron_right_rounded
+                      : Icons.chevron_left_rounded,
+                  color: appCyan,
+                  size: 25,
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -858,21 +964,48 @@ class _MainShellState extends State<MainShell> {
           ),
           child: SafeArea(
             top: false,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
+            child: SizedBox(
+              height: 66,
+              child: Stack(
+                fit: StackFit.expand,
+                clipBehavior: Clip.hardEdge,
                 children: <Widget>[
-                  _buildBottomTab(_homeTab, Icons.home_rounded, tr('home'), appCyan),
-                  _buildBottomTab(_liveTab, Icons.live_tv_rounded, 'Deportes en vivo', appPink),
-                  _buildBottomTab(_channelsTab, Icons.grid_view_rounded, 'Canales deportivos', appCyan),
-                  _buildBottomTab(_agendaTab, Icons.calendar_month_rounded, 'Agenda de hoy', appGreen),
-                  _buildBottomTab(_newsTab, Icons.article_rounded, tr('news'), appGreen),
-                  _buildBottomTab(_fantasyTab, Icons.emoji_events_rounded, 'Mister Fantasy', appYellow),
-                  _buildBottomTab(_statisticsTab, Icons.query_stats_rounded, tr('statistics'), appCyan),
-                  _buildBottomTab(_summariesTab, Icons.play_circle_fill_rounded,
-                    appText('Resúmenes', 'Highlights', 'Resumos', 'Résumés'), appRed),
-                  _buildBottomTab(_chatTab, Icons.forum_rounded, tr('chat'), appGreen),
-                  _buildBottomTab(_settingsTab, Icons.settings_rounded, tr('settings'), appBlue),
+                  NotificationListener<ScrollMetricsNotification>(
+                    onNotification: (_) {
+                      WidgetsBinding.instance.addPostFrameCallback(
+                        (_) => _syncBottomNavigation(),
+                      );
+                      return false;
+                    },
+                    child: SingleChildScrollView(
+                      controller: _bottomNavigationController,
+                      physics: const BouncingScrollPhysics(),
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: <Widget>[
+                          _buildBottomTab(_homeTab, Icons.home_rounded, tr('home'), appCyan),
+                          _buildBottomTab(_liveTab, Icons.live_tv_rounded, 'Deportes en vivo', appPink),
+                          _buildBottomTab(_channelsTab, Icons.grid_view_rounded, 'Canales deportivos', appCyan),
+                          _buildBottomTab(_agendaTab, Icons.calendar_month_rounded, 'Agenda de hoy', appGreen),
+                          _buildBottomTab(_newsTab, Icons.article_rounded, tr('news'), appGreen),
+                          _buildBottomTab(_fantasyTab, Icons.emoji_events_rounded, 'Mister Fantasy', appYellow),
+                          _buildBottomTab(_statisticsTab, Icons.query_stats_rounded, tr('statistics'), appCyan),
+                          _buildBottomTab(
+                            _summariesTab,
+                            Icons.play_circle_fill_rounded,
+                            appText('Resúmenes', 'Highlights', 'Resumos', 'Résumés'),
+                            appRed,
+                          ),
+                          _buildBottomTab(_chatTab, Icons.forum_rounded, tr('chat'), appGreen),
+                          _buildBottomTab(_settingsTab, Icons.settings_rounded, tr('settings'), appBlue),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_bottomCanScrollLeft)
+                    _buildBottomScrollCue(forward: false),
+                  if (_bottomCanScrollRight)
+                    _buildBottomScrollCue(forward: true),
                 ],
               ),
             ),
@@ -957,12 +1090,24 @@ class HomeDashboard extends StatelessWidget {
           SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final compact = constraints.maxHeight < 540;
+                final compactLandscape =
+                    constraints.maxWidth > constraints.maxHeight * 1.3 &&
+                    constraints.maxHeight < 560;
+                final compact = constraints.maxHeight < 540 ||
+                    constraints.maxWidth < 360 ||
+                    compactLandscape;
                 final widthLimit = constraints.maxWidth * .92;
-                final preferredWidth =
-                    (constraints.maxHeight * .58).clamp(220.0, 410.0).toDouble();
-                final crestWidth =
-                    preferredWidth > widthLimit ? widthLimit : preferredWidth;
+                final preferredWidth = compactLandscape
+                    ? (constraints.maxHeight * .40)
+                        .clamp(148.0, 260.0)
+                        .toDouble()
+                    : (constraints.maxHeight * .55)
+                        .clamp(210.0, 410.0)
+                        .toDouble();
+                final crestWidth = math.min(
+                  math.min(preferredWidth, widthLimit),
+                  compactLandscape ? 260.0 : 410.0,
+                ).toDouble();
 
                 return SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
@@ -978,11 +1123,20 @@ class HomeDashboard extends StatelessWidget {
                         children: <Widget>[
                           const _HomeWordmark(),
                           SizedBox(height: compact ? 5 : 12),
-                          SizedBox(
-                            key: const ValueKey<String>('home-sports-crest'),
-                            width: crestWidth,
-                            height: crestWidth * 1.12,
-                            child: const RepaintBoundary(child: _SportsCrest()),
+                          Semantics(
+                            image: true,
+                            label: appText(
+                              'Escudo deportivo de Deporte Total 360 grados, con iluminación azul, roja y verde.',
+                              'Deporte Total 360 sports crest with blue, red and green lighting.',
+                              'Escudo esportivo Deporte Total 360 graus com iluminação azul, vermelha e verde.',
+                              'Écusson sportif Deporte Total 360 degrés avec éclairage bleu, rouge et vert.',
+                            ),
+                            child: SizedBox(
+                              key: const ValueKey<String>('home-sports-crest'),
+                              width: crestWidth,
+                              height: crestWidth * 1.12,
+                              child: const RepaintBoundary(child: _SportsCrest()),
+                            ),
                           ),
                           SizedBox(height: compact ? 5 : 12),
                           Text(
@@ -1139,145 +1293,182 @@ class _HomeEnergyRail extends StatelessWidget {
   }
 }
 
-class _SportsCrest extends StatelessWidget {
+class _SportsCrest extends StatefulWidget {
   const _SportsCrest();
 
   @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final height = constraints.maxHeight;
+  State<_SportsCrest> createState() => _SportsCrestState();
+}
 
-        return Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-            Positioned.fill(child: CustomPaint(painter: _SportsCrestPainter())),
-            // Aro mecánico exterior con bisel metálico y sombra profunda.
-            Align(
-              alignment: const Alignment(0, -.04),
-              child: Container(
-                width: width * .59,
-                height: width * .59,
-                padding: EdgeInsets.all(width * .035),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: <Color>[
-                      Color(0xFFF1F6FC),
-                      Color(0xFF52677F),
-                      Color(0xFF111C2A),
-                      Color(0xFF8295AA),
-                      Color(0xFF030303),
-                    ],
-                    stops: <double>[0, .22, .52, .76, 1],
+class _SportsCrestState extends State<_SportsCrest>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _motion;
+
+  @override
+  void initState() {
+    super.initState();
+    _motion = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 9),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _motion.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _motion,
+      builder: (context, _) {
+        final progress = _motion.value;
+        final pulse = 1 + math.sin(progress * math.pi * 2) * .004;
+        return Transform.scale(
+          scale: pulse,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              final height = constraints.maxHeight;
+      
+              return Stack(
+                fit: StackFit.expand,
+                children: <Widget>[
+                  Positioned.fill(
+                    child: CustomPaint(painter: _SportsCrestPainter(progress)),
                   ),
-                  boxShadow: <BoxShadow>[
-                    BoxShadow(color: _homeBlue.withAlpha(85), blurRadius: width * .045),
-                    BoxShadow(color: Colors.black.withAlpha(220), blurRadius: width * .055, offset: Offset(width * .035, width * .045)),
-                  ],
-                ),
-                child: Container(
-                  padding: EdgeInsets.all(width * .035),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _homeBlack,
-                    border: Border.all(color: _homeBlue.withAlpha(220), width: 2),
-                  ),
-                  child: Container(
-                    padding: EdgeInsets.all(width * .025),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: const RadialGradient(
-                        center: Alignment(-.3, -.4),
-                        colors: <Color>[
-                          Color(0xFF333333),
-                          Color(0xFF080808),
-                          Color(0xFF02050B),
+                  // Aro mecánico exterior con bisel metálico y sombra profunda.
+                  Align(
+                    alignment: const Alignment(0, -.04),
+                    child: Container(
+                      width: width * .59,
+                      height: width * .59,
+                      padding: EdgeInsets.all(width * .035),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: <Color>[
+                            Color(0xFFF1F6FC),
+                            Color(0xFF52677F),
+                            Color(0xFF111C2A),
+                            Color(0xFF8295AA),
+                            Color(0xFF030303),
+                          ],
+                          stops: <double>[0, .22, .52, .76, 1],
+                        ),
+                        boxShadow: <BoxShadow>[
+                          BoxShadow(color: _homeBlue.withAlpha(85), blurRadius: width * .045),
+                          BoxShadow(color: Colors.black.withAlpha(220), blurRadius: width * .055, offset: Offset(width * .035, width * .045)),
                         ],
                       ),
-                      border: Border.all(color: _homeSteel.withAlpha(130), width: 1),
-                    ),
-                    child: Image.asset(
-                      'assets/images/app_icon.png',
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => Icon(
-                        Icons.emoji_events_rounded,
-                        color: _homeWhite,
-                        size: width * .22,
+                      child: Container(
+                        padding: EdgeInsets.all(width * .035),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _homeBlack,
+                          border: Border.all(color: _homeBlue.withAlpha(220), width: 2),
+                        ),
+                        child: Container(
+                          padding: EdgeInsets.all(width * .025),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const RadialGradient(
+                              center: Alignment(-.3, -.4),
+                              colors: <Color>[
+                                Color(0xFF333333),
+                                Color(0xFF080808),
+                                Color(0xFF02050B),
+                              ],
+                            ),
+                            border: Border.all(color: _homeSteel.withAlpha(130), width: 1),
+                          ),
+                          child: Image.asset(
+                            'assets/images/app_icon.png',
+                            fit: BoxFit.contain,
+                            cacheWidth: 640,
+                            cacheHeight: 640,
+                            errorBuilder: (_, __, ___) => Icon(
+                              Icons.emoji_events_rounded,
+                              color: _homeWhite,
+                              size: width * .22,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-            ),
-            Positioned(
-              left: width * .39,
-              top: height * .025,
-              child: _CrestSportOrb(icon: Icons.smart_toy_rounded, color: _homeWhite, size: width * .22),
-            ),
-            Positioned(
-              left: width * .025,
-              top: height * .29,
-              child: _CrestSportOrb(icon: Icons.sports_soccer_rounded, color: _homeBlue, size: width * .2),
-            ),
-            Positioned(
-              right: width * .025,
-              top: height * .29,
-              child: _CrestSportOrb(icon: Icons.sports_basketball_rounded, color: _homeRed, size: width * .2),
-            ),
-            Positioned(
-              left: width * .12,
-              bottom: height * .18,
-              child: _CrestSportOrb(icon: Icons.sports_baseball_rounded, color: _homeWhite, size: width * .16),
-            ),
-            Positioned(
-              right: width * .12,
-              bottom: height * .18,
-              child: _CrestSportOrb(icon: Icons.sports_volleyball_rounded, color: _homeGreen, size: width * .16),
-            ),
-            Positioned(
-              left: width * .2,
-              right: width * .2,
-              bottom: height * .045,
-              child: Container(
-                height: width * .14,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(width * .045),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: <Color>[
-                      Color(0xFFC6CFDA),
-                      Color(0xFF090909),
-                      Color(0xFF030303),
-                    ],
+                  Positioned(
+                    left: width * .39,
+                    top: height * .025,
+                    child: _CrestSportOrb(icon: Icons.smart_toy_rounded, color: _homeWhite, size: width * .22),
                   ),
-                  border: Border.all(color: _homeBlue, width: 1.5),
-                  boxShadow: <BoxShadow>[
-                    BoxShadow(color: _homeBlue.withAlpha(105), blurRadius: width * .05),
-                    BoxShadow(color: Colors.black.withAlpha(210), blurRadius: 9, offset: const Offset(0, 5)),
-                  ],
-                ),
-                child: Text(
-                  '360°',
-                  style: TextStyle(
-                    color: _homeWhite,
-                    fontSize: width * .078,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 4,
-                    shadows: <Shadow>[
-                      Shadow(color: _homeBlue.withAlpha(220), blurRadius: 14),
-                    ],
+                  Positioned(
+                    left: width * .025,
+                    top: height * .29,
+                    child: _CrestSportOrb(icon: Icons.sports_soccer_rounded, color: _homeBlue, size: width * .2),
                   ),
-                ),
-              ),
-            ),
-          ],
-        );
+                  Positioned(
+                    right: width * .025,
+                    top: height * .29,
+                    child: _CrestSportOrb(icon: Icons.sports_basketball_rounded, color: _homeRed, size: width * .2),
+                  ),
+                  Positioned(
+                    left: width * .12,
+                    bottom: height * .18,
+                    child: _CrestSportOrb(icon: Icons.sports_baseball_rounded, color: _homeWhite, size: width * .16),
+                  ),
+                  Positioned(
+                    right: width * .12,
+                    bottom: height * .18,
+                    child: _CrestSportOrb(icon: Icons.sports_volleyball_rounded, color: _homeGreen, size: width * .16),
+                  ),
+                  Positioned(
+                    left: width * .2,
+                    right: width * .2,
+                    bottom: height * .045,
+                    child: Container(
+                      height: width * .14,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(width * .045),
+                        gradient: const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: <Color>[
+                            Color(0xFFC6CFDA),
+                            Color(0xFF090909),
+                            Color(0xFF030303),
+                          ],
+                        ),
+                        border: Border.all(color: _homeBlue, width: 1.5),
+                        boxShadow: <BoxShadow>[
+                          BoxShadow(color: _homeBlue.withAlpha(105), blurRadius: width * .05),
+                          BoxShadow(color: Colors.black.withAlpha(210), blurRadius: 9, offset: const Offset(0, 5)),
+                        ],
+                      ),
+                      child: Text(
+                        '360°',
+                        style: TextStyle(
+                          color: _homeWhite,
+                          fontSize: width * .078,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 4,
+                          shadows: <Shadow>[
+                            Shadow(color: _homeBlue.withAlpha(220), blurRadius: 14),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
       },
     );
   }
@@ -1336,6 +1527,10 @@ class _CrestSportOrb extends StatelessWidget {
 }
 
 class _SportsCrestPainter extends CustomPainter {
+  const _SportsCrestPainter(this.progress);
+
+  final double progress;
+
   @override
   void paint(Canvas canvas, Size size) {
     final width = size.width;
@@ -1462,10 +1657,45 @@ class _SportsCrestPainter extends CustomPainter {
     canvas.drawLine(Offset(width * .34, height * .105), Offset(width * .66, height * .105), topLine);
     canvas.drawCircle(Offset(width * .5, height * .105), width * .014, Paint()..color = _homeWhite);
     canvas.drawCircle(Offset(width * .5, height * .105), width * .027, Paint()..color = _homeBlue.withAlpha(65));
+
+    // Segmento luminoso que recorre el bisel para reforzar el efecto mecánico.
+    final metrics = shield.computeMetrics().toList(growable: false);
+    if (metrics.isNotEmpty) {
+      final metric = metrics.first;
+      final length = metric.length;
+      final start = (progress * length) % length;
+      final end = start + length * .13;
+      final sweep = Path();
+      if (end <= length) {
+        sweep.addPath(metric.extractPath(start, end), Offset.zero);
+      } else {
+        sweep
+          ..addPath(metric.extractPath(start, length), Offset.zero)
+          ..addPath(metric.extractPath(0, end - length), Offset.zero);
+      }
+      canvas.drawPath(
+        sweep,
+        Paint()
+          ..color = _homeBlue.withAlpha(175)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = width * .018
+          ..strokeCap = StrokeCap.round
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, width * .008),
+      );
+      canvas.drawPath(
+        sweep,
+        Paint()
+          ..color = _homeWhite.withAlpha(205)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = width * .0035
+          ..strokeCap = StrokeCap.round,
+      );
+    }
   }
 
   @override
-  bool shouldRepaint(covariant _SportsCrestPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _SportsCrestPainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }
 
 class _HomeAtmospherePainter extends CustomPainter {

@@ -116,6 +116,12 @@ void main() {
     expect(find.byKey(const ValueKey<String>('home-sports-crest')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
+    // Una pantalla ancha y baja debe reducir el emblema sin crear overflow.
+    tester.view.physicalSize = const Size(915, 412);
+    await tester.pump();
+    expect(find.byKey(const ValueKey<String>('home-sports-crest')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -141,6 +147,32 @@ void main() {
     expect(find.text('Ajustes'), findsOneWidget);
     // La sala pública no arranca hasta seleccionar su pestaña.
     expect(find.text('CHAT PÚBLICO'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('la navegación inferior permite recorrer las diez secciones', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 800);
+
+    await tester.pumpWidget(const MaterialApp(home: MainShell()));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 30));
+
+    final forward = find.byKey(const ValueKey<String>('bottom-nav-scroll-right'));
+    expect(forward, findsOneWidget);
+    await tester.tap(forward);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 320));
+
+    expect(
+      find.byKey(const ValueKey<String>('bottom-nav-scroll-left')),
+      findsOneWidget,
+    );
+    expect(find.text('Ajustes'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

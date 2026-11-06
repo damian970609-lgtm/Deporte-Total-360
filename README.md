@@ -21,9 +21,10 @@ Archivos principales:
 - test/: pruebas automatizadas.
 
 Recursos:
-- assets/images/app_icon.png: icono y recurso gráfico reutilizado en Inicio.
-- assets/images/home_reference.png: referencia visual declarada como asset; Inicio se construye con widgets Flutter, no como captura estática.
-- assets/images/file_000000006048820e9e0720f1adf548f1.png: fondo de ajustes.
+- assets/images/app_icon.png: icono de lanzamiento y emblema central de Inicio; el widget limita la resolución decodificada para reducir memoria.
+- assets/images/home_reference.png: referencia visual conservada en el repositorio, no se incluye en los recursos de ejecución.
+- assets/images/file_000000006048820e9e0720f1adf548f1.png: recurso histórico de ajustes conservado en el proyecto.
+- Inicio usa widgets Flutter adaptables; el bisel del escudo incorpora un barrido luminoso animado y ajuste para pantallas compactas y orientación horizontal.
 
 API deportiva:
 La agenda, los diez deportes favoritos y las estadísticas nuevas usan SportsAPI.app a través del Worker público deporte-total-360-api. La clave SPORTAPI_API_KEY debe guardarse en los secretos Actions del repositorio del Worker y se publica como secreto del Worker mediante Wrangler; nunca se incluye en el APK. Las rutas API-Sports existentes siguen en el Worker por compatibilidad. Su clave APISPORTS_KEY es independiente y solo es necesaria para esas rutas antiguas:
