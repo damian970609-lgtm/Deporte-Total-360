@@ -6,6 +6,16 @@ import 'package:http/testing.dart';
 import 'package:deporte_total_360/channel_catalog_service.dart';
 
 void main() {
+  test('las etiquetas compactas distinguen español e inglés', () {
+    expect(channelLanguageDisplayLabel('es'), 'IDIOMA 🇪🇸');
+    expect(channelLanguageDisplayLabel('en'), 'IDIOMA 🇺🇸');
+  });
+
+  test('no inventa bandera para idioma desconocido', () {
+    expect(channelLanguageDisplayLabel('unknown'), isNull);
+    expect(channelLanguageDisplayLabel('fr'), isNull);
+  });
+
   test('canal parseado mantiene el identificador y los metadatos', () {
     final channel = SportsChannel.fromJson(<String, dynamic>{
       'id': 'espn-latino-1234',
