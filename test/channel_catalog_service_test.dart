@@ -53,6 +53,32 @@ void main() {
     expect(channelLanguageDisplayLabel('fr'), isNull);
   });
 
+  test('el catálogo puede serializar y restaurar canales completos para uso sin conexión', () {
+    final original = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'espn-latino-1234',
+      'identifier': 'espn-latino-1234',
+      'name': 'ESPN Latino',
+      'url': 'https://media.example/live.m3u8',
+      'logoUrl': 'https://media.example/logo.png',
+      'groupTitle': 'Deportes',
+      'isSports': true,
+      'visible': true,
+      'language': 'es',
+    });
+
+    final restored = SportsChannel.fromJson(original.toJson());
+
+    expect(restored.id, original.id);
+    expect(restored.identifier, original.identifier);
+    expect(restored.name, original.name);
+    expect(restored.url, original.url);
+    expect(restored.logoUrl, original.logoUrl);
+    expect(restored.groupTitle, original.groupTitle);
+    expect(restored.isSports, original.isSports);
+    expect(restored.visible, original.visible);
+    expect(restored.language, original.language);
+  });
+
   test('canal parseado mantiene el identificador y los metadatos', () {
     final channel = SportsChannel.fromJson(<String, dynamic>{
       'id': 'espn-latino-1234',
