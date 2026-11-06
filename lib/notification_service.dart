@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -41,6 +42,60 @@ class NotificationService {
       _firebaseSenderId.isNotEmpty &&
       _firebaseProjectId.isNotEmpty;
   static const int _matchNotificationFloor = 1000000000;
+
+  /// Inicializa Crashlytics sin bloquear el primer render de la app.
+  /// Si faltan las credenciales Firebase, la aplicación sigue funcionando
+  /// y continúa usando el registro local de errores.
+  static Future<void> initializeCrashlytics() async {
+    if (!_firebaseConfigured) return;
+    try {
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(
+          options: FirebaseOptions(
+            apiKey: _firebaseApiKey,
+            appId: _firebaseAppId,
+            messagingSenderId: _firebaseSenderId,
+            projectId: _firebaseProjectId,
+          ),
+        );
+      }
+      await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
+      FlutterError.onError = (details) {
+        FlutterError.presentError(details);
+        unawaited(recordFlutterFatalError(details));
+      };
+    } catch (error, stackTrace) {
+      debugPrint('Crashlytics no pudo inicializarse: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
+  static Future<void> recordFlutterFatalError(
+    FlutterErrorDetails details,
+  ) async {
+    if (!_firebaseConfigured || Firebase.apps.isEmpty) return;
+    try {
+      await FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    } catch (error) {
+      debugPrint('No se pudo registrar el error Flutter: $error');
+    }
+  }
+
+  static Future<void> recordFatalError(
+    Object error,
+    StackTrace stackTrace,
+  ) async {
+    if (!_firebaseConfigured || Firebase.apps.isEmpty) return;
+    try {
+      await FirebaseCrashlytics.instance.recordError(
+        error,
+        stackTrace,
+        fatal: true,
+      );
+    } catch (reportError) {
+      debugPrint('No se pudo registrar el error fatal: $reportError');
+    }
+  }
 
   static Future<void> initialize() async {
     if (_initialized) return;
