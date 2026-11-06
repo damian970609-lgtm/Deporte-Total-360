@@ -48,7 +48,11 @@ class SportsApiAppService {
     return Uri.parse('$base/api/sportsapi$route').replace(queryParameters: query.isEmpty ? null : query);
   }
 
-  Future<dynamic> _get(String route, [Map<String, String> query = const <String, String>{}]) async {
+  Future<dynamic> _get(
+    String route, [
+    Map<String, String> query = const <String, String>{},
+    bool includeEnvelope = false,
+  ]) async {
     try {
       final response = await _client.get(
         _uri(route, query),
@@ -73,7 +77,7 @@ class SportsApiAppService {
       if (decoded is! Map) {
         throw const SportsApiException('La respuesta de SportsAPI no tiene el formato esperado.');
       }
-      if (route == '/favorites') return decoded;
+      if (route == '/favorites' || includeEnvelope) return decoded;
       if (!decoded.containsKey('data')) {
         throw const SportsApiException('La respuesta de SportsAPI no contiene el campo data.');
       }
@@ -146,8 +150,10 @@ class SportsApiAppService {
     // SportsAPI date is a UTC calendar day. Use the phone's calendar
     // date deliberately so the native Agenda tab stays aligned with the
     // user's local day; returned instants are converted to local time below.
-    final selected = date ?? DateTime.now();
-    final day = selected.year.toString().padLeft(4, '0') + '-' +
+    // SportsAPI date parameters represent UTC calendar days, not local days.
+    final selected = date ?? DateTime.now().toUtc();
+    final utcDay = DateTime.utc(selected.year, selected.month, selected.day);
+    final day = utcDay.year.toString().padLeft(4, '0') + '-' +
         selected.month.toString().padLeft(2, '0') + '-' +
         selected.day.toString().padLeft(2, '0');
     final cached = _agendaCache[day];
@@ -206,83 +212,137 @@ class SportsApiAppService {
     DateTime startDate,
     int days,
   ) async {
-    final resultsById = <String, SportsAgendaEvent>{};
-    final unavailableDates = <DateTime>[];
-
-    for (var batchStart = 0; batchStart < days; batchStart += 2) {
-      final batchLength = (days - batchStart) < 2 ? days - batchStart : 2;
-      final dates = List<DateTime>.generate(
-        batchLength,
-        (index) => startDate.add(Duration(days: batchStart + index)),
-        growable: false,
-      );
-      final batch = await Future.wait<_AgendaDayResult>(
-        dates.map((date) async {
-          try {
-            final rows = await fetchFavoriteAgendaEvents(date: date);
-            return _AgendaDayResult(date: date, events: rows);
-          } catch (_) {
-            return _AgendaDayResult(
-              date: date,
-              events: const <SportsAgendaEvent>[],
-              failed: true,
-            );
-          }
-        }),
-      );
-      for (final result in batch) {
-        if (result.failed) {
-          unavailableDates.add(result.date);
-          continue;
-        }
-        for (final event in result.events) {
-          resultsById[event.id] = event;
-        }
-      }
-    }
-
-    final start = DateTime(startDate.year, startDate.month, startDate.day);
-    final end = start.add(Duration(days: days));
     final events = resultsById.values.where((event) {
-      final localStart = event.startsAt.toLocal();
-      return !localStart.isBefore(start) && localStart.isBefore(end);
+      final localEventStart = event.startsAt.toLocal();
+      return !localEventStart.isBefore(localStart) &&
+          localEventStart.isBefore(localEnd);
     }).toList()
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
 
+    final unavailableDates = unavailableLocalDays.toList()
+      ..sort((a, b) => a.compareTo(b));
     return SportsAgendaWindow(
-      startDate: start,
+      startDate: localStart,
       days: days,
       events: events,
       unavailableDates: unavailableDates,
     );
   }
 
+  }
+
   Future<List<SportsAgendaEvent>> _fetchFavoriteAgendaEvents(String day) async {
     var successfulSports = 0;
+
+    Future<Map<String, dynamic>> fetchCompleteEnvelope(
+      String route,
+      Map<String, String> query,
+    ) async {
+      Future<Map<String, dynamic>> request() async {
+        final raw = await _get(route, query, true);
+        if (raw is! Map) {
+          throw const FormatException(
+            'SportsAPI devolvió una respuesta con formato inválido.',
+          );
+        }
+        return Map<String, dynamic>.from(raw);
+      }
+
+      var envelope = await request();
+      var meta = envelope['meta'] is Map
+          ? Map<String, dynamic>.from(envelope['meta'] as Map)
+          : <String, dynamic>{};
+      if (meta['complete'] == false) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        envelope = await request();
+        meta = envelope['meta'] is Map
+            ? Map<String, dynamic>.from(envelope['meta'] as Map)
+            : <String, dynamic>{};
+        if (meta['complete'] == false) {
+          throw const SportsApiException(
+            'SportsAPI devolvió datos incompletos dos veces.',
+          );
+        }
+      }
+      return envelope;
+    }
+
     final results = await Future.wait(_sportNames.entries.map((entry) async {
       try {
         final isRace = entry.key == 'cycling' || entry.key == 'motorsport';
-        final payload = await _get(
-          isRace ? '/races' : '/fixtures',
-          <String, String>{'date': day, 'sport': entry.key, if (!isRace) 'page': '0'},
-        );
-        if (payload is! List) {
-          throw const FormatException('SportsAPI devolvió una agenda con formato inválido.');
+        final rows = <Map<String, dynamic>>[];
+
+        if (isRace) {
+          final envelope = await fetchCompleteEnvelope(
+            '/races',
+            <String, String>{'date': day, 'sport': entry.key},
+          );
+          final payload = envelope['data'];
+          if (payload is! List) {
+            throw const FormatException(
+              'SportsAPI devolvió una agenda de carreras con formato inválido.',
+            );
+          }
+          rows.addAll(payload.whereType<Map>().map(
+                (raw) => Map<String, dynamic>.from(raw),
+              ));
+        } else {
+          // Fixtures are paginated by ten leagues. A full page is not a
+          // complete day: follow hasNextPage until the provider says stop.
+          var finishedPages = false;
+          for (var page = 0; page < 100; page++) {
+            final envelope = await fetchCompleteEnvelope(
+              '/fixtures',
+              <String, String>{
+                'date': day,
+                'sport': entry.key,
+                'page': page.toString(),
+              },
+            );
+            final payload = envelope['data'];
+            if (payload is! List) {
+              throw const FormatException(
+                'SportsAPI devolvió una agenda de partidos con formato inválido.',
+              );
+            }
+            rows.addAll(payload.whereType<Map>().map(
+                  (raw) => Map<String, dynamic>.from(raw),
+                ));
+            final meta = envelope['meta'] is Map
+                ? Map<String, dynamic>.from(envelope['meta'] as Map)
+                : <String, dynamic>{};
+            if (meta['hasNextPage'] != true) {
+              finishedPages = true;
+              break;
+            }
+          }
+          if (!finishedPages) {
+            throw const SportsApiException(
+              'SportsAPI superó el límite seguro de cien páginas para un deporte.',
+            );
+          }
         }
+
         successfulSports++;
-        return payload.whereType<Map>().map((raw) {
-          final row = Map<String, dynamic>.from(raw);
-          if (isRace) return _raceEvent(row, entry.key, entry.value);
-          return _fixtureEvent(row, entry.value);
-        }).whereType<SportsAgendaEvent>().toList(growable: false);
+        if (isRace) {
+          return rows
+              .expand((row) => _raceEvents(row, entry.key, entry.value, day))
+              .toList(growable: false);
+        }
+        return rows
+            .map((row) => _fixtureEvent(row, entry.value))
+            .whereType<SportsAgendaEvent>()
+            .toList(growable: false);
       } catch (_) {
-        // La falta de cobertura de un deporte no bloquea los demás.
+        // Una disciplina temporalmente incompleta no bloquea las demás.
         return <SportsAgendaEvent>[];
       }
     }));
 
     if (successfulSports == 0) {
-      throw const SportsApiException('No se pudo consultar ninguno de tus diez deportes favoritos en SportsAPI.');
+      throw const SportsApiException(
+        'No se pudo consultar ninguno de tus diez deportes favoritos en SportsAPI.',
+      );
     }
     final unique = <String, SportsAgendaEvent>{};
     for (final event in results.expand((items) => items)) {
@@ -292,7 +352,7 @@ class SportsApiAppService {
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
   }
 
-  SportsAgendaEvent? _fixtureEvent(
+    SportsAgendaEvent? _fixtureEvent(
     Map<String, dynamic> row,
     String sportName,
   ) {
@@ -347,28 +407,19 @@ class SportsApiAppService {
     );
   }
 
-  SportsAgendaEvent? _raceEvent(
+  List<SportsAgendaEvent> _raceEvents(
     Map<String, dynamic> row,
     String sportId,
     String sportName,
+    String utcDay,
   ) {
     final id = int.tryParse(_text(row['id']));
-    if (id == null) return null;
+    if (id == null) return const <SportsAgendaEvent>[];
     final sessions = row['sessions'] is List
         ? (row['sessions'] as List).whereType<Map>().toList()
         : <Map>[];
-    DateTime? start;
-    int sessionId = 0;
-    for (final value in sessions) {
-      final session = Map<String, dynamic>.from(value);
-      final candidate = DateTime.tryParse(_text(session['startTime']));
-      if (candidate != null && (start == null || candidate.isBefore(start))) {
-        start = candidate;
-        sessionId = int.tryParse(_text(session['id'])) ?? 0;
-      }
-    }
-    start ??= DateTime.tryParse(_text(row['startDate']));
-    if (start == null) return null;
+    final dayEvents = <SportsAgendaEvent>[];
+
     final series = row['series'] is Map
         ? Map<String, dynamic>.from(row['series'])
         : <String, dynamic>{};
@@ -379,27 +430,97 @@ class SportsApiAppService {
         ? Map<String, dynamic>.from(row['winner'])
         : <String, dynamic>{};
     final winnerName = _text(winner['name']);
-    return SportsAgendaEvent(
-      id: 'sportsapi-race-$id-$sessionId',
-      title: _text(row['name']).isEmpty ? sportName : _text(row['name']),
-      sport: sportName,
-      competition: _text(series['name']),
-      participants: winnerName.isEmpty
-          ? const <SportsAgendaParticipant>[]
-          : <SportsAgendaParticipant>[SportsAgendaParticipant(name: winnerName, imageUrl: _image(winner['image']))],
-      homeTeam: winnerName,
-      homeTeamLogo: _image(winner['image']),
-      status: _text(row['status'] is Map ? row['status']['type'] : row['status']).isEmpty
-          ? 'scheduled'
-          : _text(row['status'] is Map ? row['status']['type'] : row['status']),
-      providerSeriesId: int.tryParse(_text(series['id'])),
-      providerSeasonId: int.tryParse(_text(season['id'])),
-      startsAt: start,
-      detailUrl: 'https://deporte-total-360-api.damian970609.workers.dev/api/sportsapi/races/$id',
-    );
+    final raceName = _text(row['name']).isEmpty
+        ? sportName
+        : _text(row['name']);
+    final rawStatus = row['status'] is Map
+        ? row['status']['type']
+        : row['status'];
+    final raceStatus = _text(rawStatus).isEmpty
+        ? 'scheduled'
+        : _text(rawStatus);
+
+    for (final value in sessions) {
+      final session = Map<String, dynamic>.from(value);
+      final start = DateTime.tryParse(_text(session['startTime']));
+      if (start == null) continue;
+      final utcStart = start.toUtc();
+      final sessionDay = utcStart.year.toString().padLeft(4, '0') + '-' +
+          utcStart.month.toString().padLeft(2, '0') + '-' +
+          utcStart.day.toString().padLeft(2, '0');
+      if (sessionDay != utcDay) continue;
+
+      final sessionId = int.tryParse(_text(session['id'])) ?? 0;
+      final sessionType = _text(session['type'] ?? session['name']);
+      final sessionStatus = _text(
+        session['status'] is Map
+            ? session['status']['type']
+            : session['status'],
+      );
+      final title = sessionType.isEmpty
+          ? raceName
+          : raceName + ' · ' + sessionType.toUpperCase();
+
+      dayEvents.add(SportsAgendaEvent(
+        id: 'sportsapi-race-$id-$sessionId',
+        title: title,
+        sport: sportName,
+        competition: _text(series['name']),
+        participants: winnerName.isEmpty
+            ? const <SportsAgendaParticipant>[]
+            : <SportsAgendaParticipant>[
+                SportsAgendaParticipant(
+                  name: winnerName,
+                  imageUrl: _image(winner['image']),
+                ),
+              ],
+        homeTeam: winnerName,
+        homeTeamLogo: _image(winner['image']),
+        status: sessionStatus.isEmpty ? raceStatus : sessionStatus,
+        providerSeriesId: int.tryParse(_text(series['id'])),
+        providerSeasonId: int.tryParse(_text(season['id'])),
+        startsAt: start,
+        detailUrl:
+            'https://deporte-total-360-api.damian970609.workers.dev/api/sportsapi/races/$id',
+      ));
+    }
+
+    // Some race records have no sessions. Show a date-only event only on
+    // their published start date; do not copy it into every following day.
+    if (dayEvents.isEmpty && sessions.isEmpty) {
+      final startDate = _text(row['startDate']);
+      if (startDate == utcDay) {
+        final start = DateTime.tryParse(startDate);
+        if (start != null) {
+          dayEvents.add(SportsAgendaEvent(
+            id: 'sportsapi-race-$id-0',
+            title: raceName,
+            sport: sportName,
+            competition: _text(series['name']),
+            participants: winnerName.isEmpty
+                ? const <SportsAgendaParticipant>[]
+                : <SportsAgendaParticipant>[
+                    SportsAgendaParticipant(
+                      name: winnerName,
+                      imageUrl: _image(winner['image']),
+                    ),
+                  ],
+            homeTeam: winnerName,
+            homeTeamLogo: _image(winner['image']),
+            status: raceStatus,
+            providerSeriesId: int.tryParse(_text(series['id'])),
+            providerSeasonId: int.tryParse(_text(season['id'])),
+            startsAt: start,
+            detailUrl:
+                'https://deporte-total-360-api.damian970609.workers.dev/api/sportsapi/races/$id',
+          ));
+        }
+      }
+    }
+    return dayEvents;
   }
 
-  Future<dynamic> fetchFixtureStatistics(int fixtureId) {
+    Future<dynamic> fetchFixtureStatistics(int fixtureId) {
     return _get('/fixtures/$fixtureId/statistics');
   }
 
