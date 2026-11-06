@@ -2,19 +2,20 @@
 
 Aplicación Android en Flutter. El APK se compila en GitHub Actions; la carpeta Android se genera en el runner.
 
-Navegación principal: Inicio, Deportes en vivo, Canales deportivos, Agenda de hoy, Noticias, Mister Fantasy, Estadísticas, Resúmenes, Chat y Ajustes. Chat es una pestaña de primer nivel y conserva la sala pública compartida del Worker. Inicio, Agenda, Estadísticas y Resúmenes utilizan los diez deportes favoritos configurados en SportsAPI.app; Deportes en vivo busca señales por separado en los catálogos M3U/XMLTV.
+Navegación principal: Inicio, Deportes en vivo, Canales deportivos, Agenda deportiva de siete días, Noticias, Mister Fantasy, Estadísticas, Resúmenes, Chat y Ajustes. Chat es una pestaña de primer nivel y conserva la sala pública compartida del Worker. Inicio, Agenda, Estadísticas y Resúmenes utilizan los diez deportes favoritos configurados en SportsAPI.app; Deportes en vivo busca señales por separado en los catálogos M3U/XMLTV.
 
 Archivos principales:
 - lib/main.dart: navegación de diez secciones, inicio, chat y ajustes.
-- lib/automatic_live_service.dart y lib/automatic_live_screen.dart: consumo prioritario del calendario central persistente de Cloudflare, con respaldo local, cruce XMLTV de canales visibles, verificación de señales en español e inglés y asignación a ocho reproductores.
+- lib/automatic_live_service.dart y lib/automatic_live_screen.dart: consumo prioritario del calendario central persistente de Cloudflare, con respaldo local, cruce XMLTV de canales visibles, verificación de señales en español e inglés, priorización del partido elegido desde Agenda y asignación a ocho reproductores.
 - lib/live_media_format.dart y lib/live_channels_screen.dart: detección explícita de HLS, DASH, Smooth Streaming y vídeo progresivo, adaptación de calidad automática con ExoPlayer, selector manual por pistas y transición fullscreen/miniatura sin recrear el controlador.
 - lib/sports_summaries_screen.dart: categorías deportivas y reproducción de YouTube dentro de la app mediante WebView.
 - lib/public_chat_screen.dart: sala pública de chat compartida.
 - lib/sports_statistics_screen.dart: búsqueda de ligas y clasificaciones.
 - lib/sports_api_service.dart: cliente legado de API-Sports/Worker, conservado para compatibilidad.
 - lib/sportsapi_app_service.dart y lib/sportsapi_statistics_screen.dart: conexión segura con las rutas SportsAPI.app del Worker; estadísticas de partidos y resultados de carreras sin introducir claves en la APK.
-- lib/notification_service.dart: recordatorios locales, Firebase Cloud Messaging mediante suscripción al tema de transmisiones y apertura de Deportes en vivo al tocar un aviso.
-- lib/web_agenda_screen.dart: agenda MARCA integrada y captura de eventos visibles.
+- lib/notification_service.dart: recordatorios locales a 60, 30, 15 y 5 minutos para los eventos de la ventana de Agenda, sincronización incremental de avisos, Firebase Cloud Messaging y apertura de Deportes en vivo al tocar un aviso.
+- lib/marca_agenda_screen.dart: agenda nativa de siete días, filtros por deporte y estado, búsqueda, caché por fecha y acceso al reproductor mediante el identificador del evento.
+- lib/web_agenda_screen.dart: agenda web de respaldo integrada dentro de la identidad de la aplicación.
 - lib/news_screen.dart: feed RSS y lector de noticias.
 - lib/web_protection_policy.dart: reglas compartidas de protección web.
 - lib/fantasy_screen.dart: módulo Fantasy.

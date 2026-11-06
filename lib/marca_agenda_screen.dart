@@ -1,9 +1,11 @@
-import 'app_section_design.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'app_section_design.dart';
 import 'automatic_live_service.dart';
+import 'notification_service.dart';
 import 'sportsapi_app_service.dart';
 import 'web_agenda_screen.dart';
 
@@ -18,18 +20,21 @@ const Color _agendaRed = Color(0xFFFF1744);
 
 typedef AgendaEventsLoader = Future<List<SportsAgendaEvent>?> Function();
 
-/// Agenda nativa: muestra el calendario publicado por el Worker sin depender
-/// de que la página de MARCA pueda renderizarse dentro de Android WebView.
+/// Agenda principal: consulta hoy y los seis días siguientes, conserva una
+/// caché por fecha y permite abrir en Deportes en vivo el evento seleccionado.
 class MarcaAgendaScreen extends StatefulWidget {
   const MarcaAgendaScreen({
     super.key,
     required this.onOpenLive,
     this.isActive = true,
     this.loadEvents,
+    this.initialDate,
   });
 
-  final VoidCallback onOpenLive;
+  final ValueChanged<String> onOpenLive;
   final bool isActive;
+  final DateTime? initialDate;
+
   @visibleForTesting
   final AgendaEventsLoader? loadEvents;
 
@@ -39,16 +44,38 @@ class MarcaAgendaScreen extends StatefulWidget {
 
 class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
     with WidgetsBindingObserver {
+  static const int _windowDays = 7;
+  late DateTime _windowStartDate;
+  late DateTime _selectedDate;
+
   List<SportsAgendaEvent> _events = <SportsAgendaEvent>[];
+  List<DateTime> _unavailableDates = <DateTime>[];
   Timer? _refreshTimer;
   bool _loading = true;
   bool _hasLoaded = false;
+  bool _refreshing = false;
   String? _error;
+  String _selectedSport = 'Todos';
+  String _statusFilter = 'Todos';
+  String _query = '';
+  int _refreshVersion = 0;
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _windowStartDate = _dateOnly(DateTime.now());
+    _selectedDate = _dateOnly(widget.initialDate ?? DateTime.now());
+    if (_selectedDate.isBefore(_windowStartDate) ||
+        !_selectedDate.isBefore(
+          _windowStartDate.add(const Duration(days: _windowDays)),
+        )) {
+      _selectedDate = _windowStartDate;
+    }
+    NotificationService.matchRemindersEnabled.addListener(
+      _onReminderPreferenceChanged,
+    );
     _refresh();
     _syncRefreshTimer();
   }
@@ -69,6 +96,26 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
     }
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    NotificationService.matchRemindersEnabled.removeListener(
+      _onReminderPreferenceChanged,
+    );
+    _refreshTimer?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  static DateTime _dateOnly(DateTime date) =>
+      DateTime(date.year, date.month, date.day);
+
+  bool _sameDay(DateTime first, DateTime second) {
+    final a = first.toLocal();
+    final b = second.toLocal();
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
   void _syncRefreshTimer() {
     _refreshTimer?.cancel();
     _refreshTimer = null;
@@ -80,41 +127,121 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
     }
   }
 
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _refreshTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<List<SportsAgendaEvent>> _loadEvents() async {
+  Future<SportsAgendaWindow> _loadWindow() async {
     final injectedLoader = widget.loadEvents;
     if (injectedLoader != null) {
-      return await injectedLoader() ?? <SportsAgendaEvent>[];
+      final events = await injectedLoader() ?? <SportsAgendaEvent>[];
+      return SportsAgendaWindow(
+        startDate: _windowStartDate,
+        days: _windowDays,
+        events: events,
+      );
     }
 
-    // SportsAPI es la fuente principal de los diez deportes favoritos.
-    // Así la agenda nativa no queda limitada a una programación antigua.
     try {
-      final events = await SportsApiAppService().fetchFavoriteAgendaEvents();
-      await SportsAgendaStore.save(events);
-      return events;
+      final window = await SportsApiAppService().fetchFavoriteAgendaWindow(
+        startDate: _windowStartDate,
+        days: _windowDays,
+      );
+      if (window.unavailableDates.length == window.days) {
+        throw const SportsApiException(
+          'No respondió ninguna fecha de la agenda.',
+        );
+      }
+
+      var events = List<SportsAgendaEvent>.of(window.events);
+      var unavailable = List<DateTime>.of(window.unavailableDates);
+      if (unavailable.isNotEmpty) {
+        final stored = await SportsAgendaStore.load();
+        for (final event in stored) {
+          if (unavailable.any((day) => _sameDay(day, event.startsAt))) {
+            events.add(event);
+          }
+        }
+        final recoveredDays = unavailable.where((day) {
+          return events.any((event) => _sameDay(day, event.startsAt));
+        }).toSet();
+        unavailable = unavailable
+            .where((day) => !recoveredDays.contains(day))
+            .toList(growable: false);
+      }
+
+      final unique = <String, SportsAgendaEvent>{
+        for (final event in events) event.id: event,
+      };
+      final result = unique.values.toList(growable: false)
+        ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+      await SportsAgendaStore.saveWindow(
+        result,
+        startDate: window.startDate,
+        days: window.days,
+      );
+      return SportsAgendaWindow(
+        startDate: window.startDate,
+        days: window.days,
+        events: result,
+        unavailableDates: unavailable,
+      );
     } catch (_) {
-      // Si la API falla, intenta el calendario agregado y luego la caché local.
+      // Si falla SportsAPI por completo, intenta primero el calendario
+      // central publicado y después la última captura local disponible.
       final published = await AutomaticLiveService().fetchPublishedSchedule();
       if (published != null) {
+        final end = _windowStartDate.add(const Duration(days: _windowDays));
         final events = published
             .map((item) => item.event)
+            .where((event) {
+              final start = event.startsAt.toLocal();
+              return !start.isBefore(_windowStartDate) && start.isBefore(end);
+            })
             .toList(growable: false);
-        await SportsAgendaStore.save(events);
-        return events;
+        await SportsAgendaStore.saveWindow(
+          events,
+          startDate: _windowStartDate,
+          days: _windowDays,
+        );
+        return SportsAgendaWindow(
+          startDate: _windowStartDate,
+          days: _windowDays,
+          events: events,
+        );
       }
-      return SportsAgendaStore.load();
+
+      final stored = await SportsAgendaStore.load();
+      final end = _windowStartDate.add(const Duration(days: _windowDays));
+      final cached = stored.where((event) {
+        final start = event.startsAt.toLocal();
+        return !start.isBefore(_windowStartDate) && start.isBefore(end);
+      }).toList(growable: false);
+      if (cached.isNotEmpty) {
+        return SportsAgendaWindow(
+          startDate: _windowStartDate,
+          days: _windowDays,
+          events: cached,
+          unavailableDates: List<DateTime>.generate(
+            _windowDays,
+            (index) => _windowStartDate.add(Duration(days: index)),
+            growable: false,
+          ),
+        );
+      }
+      rethrow;
     }
   }
 
   Future<void> _refresh() async {
-    if (_loading && _hasLoaded) return;
+    if (_refreshing) return;
+    final today = _dateOnly(DateTime.now());
+    if (!_sameDay(today, _windowStartDate)) {
+      _windowStartDate = today;
+      if (_selectedDate.isBefore(today) ||
+          !_selectedDate.isBefore(today.add(const Duration(days: _windowDays)))) {
+        _selectedDate = today;
+      }
+    }
+
+    _refreshing = true;
+    final version = ++_refreshVersion;
     if (mounted) {
       setState(() {
         _loading = true;
@@ -123,72 +250,164 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
     }
 
     try {
-      final loaded = await _loadEvents();
-      final now = DateTime.now();
-      // MARCA publica jornadas de varios días en una sola captura. La pestaña
-      // Agenda de hoy solo presenta eventos cuya fecha local de inicio coincide
-      // con la fecha del teléfono; el caché conserva la captura completa para
-      // que el planificador de transmisiones no pierda los próximos eventos.
-      final today = DateTime(now.year, now.month, now.day);
-      final tomorrow = today.add(const Duration(days: 1));
-      final visibleById = <String, SportsAgendaEvent>{};
-      for (final event in loaded) {
-        final localStart = event.startsAt.toLocal();
-        if (localStart.isBefore(today) || !localStart.isBefore(tomorrow)) {
-          continue;
-        }
-        visibleById.putIfAbsent(event.id, () => event);
-      }
-      final visible = visibleById.values.toList()
-        ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+      final window = await _loadWindow();
+      if (!mounted || version != _refreshVersion) return;
+      setState(() {
+        _events = window.events;
+        _unavailableDates = window.unavailableDates;
+        _loading = false;
+        _hasLoaded = true;
+      });
+      unawaited(_syncMatchReminders(window.events));
+    } catch (error) {
+      if (!mounted || version != _refreshVersion) return;
+      setState(() {
+        _loading = false;
+        _hasLoaded = true;
+        _error =
+            'No se pudo actualizar la agenda. Comprueba tu conexión e inténtalo de nuevo. ' +
+            error.toString();
+      });
+    } finally {
+      _refreshing = false;
+    }
+  }
 
-      if (!mounted) return;
-      setState(() {
-        _events = visible;
-        _loading = false;
-        _hasLoaded = true;
-      });
+  void _onReminderPreferenceChanged() {
+    if (!mounted) return;
+    if (NotificationService.matchRemindersEnabled.value) {
+      unawaited(_syncMatchReminders(_events));
+    } else {
+      unawaited(NotificationService.cancelMatchReminders());
+    }
+  }
+
+  Future<void> _syncMatchReminders(
+    List<SportsAgendaEvent> events,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final enabled = prefs.getBool('notifications_enabled') ?? false;
+      NotificationService.matchRemindersEnabled.value = enabled;
+      if (!enabled) {
+        await NotificationService.cancelMatchReminders();
+        return;
+      }
+      final now = DateTime.now();
+      final upcoming = events.where((event) {
+        final status = event.status.toLowerCase();
+        return event.startsAt.isAfter(now) &&
+            status != 'finished' &&
+            status != 'cancelled' &&
+            status != 'postponed';
+      }).take(40);
+      final reminders = upcoming.map((event) => <String, Object>{
+        'id': event.id,
+        'sport': event.sport,
+        'homeTeam': event.homeTeam.isNotEmpty ? event.homeTeam : event.title,
+        'awayTeam': event.awayTeam,
+        'startsAt': event.startsAt,
+      }).toList(growable: false);
+      await NotificationService.scheduleMatchReminders(events: reminders);
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _hasLoaded = true;
-        _error = 'No se pudo actualizar la agenda. Comprueba tu conexión e inténtalo de nuevo.';
-      });
+      // Un fallo de notificaciones no debe ocultar ni bloquear la agenda.
     }
   }
 
   String _dayLabel(DateTime date) {
     final local = date.toLocal();
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final day = DateTime(local.year, local.month, local.day);
+    final today = _dateOnly(DateTime.now());
+    final day = _dateOnly(local);
     if (day == today) return 'HOY';
     if (day == today.add(const Duration(days: 1))) return 'MAÑANA';
     const weekdays = <String>[
-      'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO', 'DOMINGO'
+      'DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB',
     ];
+    return weekdays[local.weekday % 7] + ' ' + local.day.toString();
+  }
+
+  String _dateSubtitle(DateTime date) {
+    final local = date.toLocal();
     const months = <String>[
       'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
-      'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'
+      'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC',
     ];
-    return '${weekdays[local.weekday - 1]} ${local.day} ${months[local.month - 1]}';
+    return local.day.toString() + ' ' + months[local.month - 1];
   }
 
   String _timeLabel(DateTime date) {
     final local = date.toLocal();
-    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+    return local.hour.toString().padLeft(2, '0') +
+        ':' +
+        local.minute.toString().padLeft(2, '0');
   }
 
   bool _isLive(SportsAgendaEvent event) {
-    final status = event.status.toLowerCase();
-    if (status == 'live' || status == 'inprogress') return true;
-    if (status == 'finished' || status == 'cancelled' || status == 'postponed') {
-      return false;
+    final status = event.status.toLowerCase().replaceAll(' ', '');
+    if (status == 'live' || status == 'inprogress' || status == 'in_play') {
+      return true;
     }
+    if (_isFinished(event)) return false;
     final now = DateTime.now();
     final end = event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
     return !now.isBefore(event.startsAt) && now.isBefore(end);
+  }
+
+  bool _isFinished(SportsAgendaEvent event) {
+    final status = event.status.toLowerCase().replaceAll(' ', '');
+    if (status == 'finished' ||
+        status == 'complete' ||
+        status == 'completed' ||
+        status == 'final' ||
+        status == 'cancelled' ||
+        status == 'canceled' ||
+        status == 'postponed' ||
+        status == 'abandoned') {
+      return true;
+    }
+    final end = event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
+    return DateTime.now().isAfter(end);
+  }
+
+  List<String> get _sportOptions {
+    final sports = _events
+        .map((event) => event.sport.trim())
+        .where((sport) => sport.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    return <String>['Todos', ...sports];
+  }
+
+  List<SportsAgendaEvent> get _filteredEvents {
+    final selectedDay = _dateOnly(_selectedDate);
+    final nextDay = selectedDay.add(const Duration(days: 1));
+    final query = _query.trim().toLowerCase();
+    return _events.where((event) {
+      final start = event.startsAt.toLocal();
+      if (start.isBefore(selectedDay) || !start.isBefore(nextDay)) return false;
+      if (_selectedSport != 'Todos' && event.sport != _selectedSport) {
+        return false;
+      }
+      final live = _isLive(event);
+      final finished = _isFinished(event);
+      if (_statusFilter == 'En vivo' && !live) return false;
+      if (_statusFilter == 'Programados' && (live || finished)) return false;
+      if (_statusFilter == 'Finalizados' && !finished) return false;
+      if (query.isNotEmpty) {
+        final searchable = <String>[
+          event.title,
+          event.sport,
+          event.competition,
+          event.homeTeam,
+          event.awayTeam,
+          event.venue,
+        ].join(' ').toLowerCase();
+        if (!searchable.contains(query)) return false;
+      }
+      return true;
+    }).toList()
+      ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
   }
 
   IconData _sportIcon(String sport) {
@@ -199,17 +418,14 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
     if (value.contains('hockey')) return Icons.sports_hockey_rounded;
     if (value.contains('voleibol') || value.contains('volleyball')) return Icons.sports_volleyball_rounded;
     if (value.contains('balonmano') || value.contains('handball')) return Icons.sports_handball_rounded;
-    if (value.contains('mma')) return Icons.sports_mma_rounded;
-    if (value.contains('fútbol sala') || value.contains('futsal')) return Icons.sports_soccer_rounded;
+    if (value.contains('mma') || value.contains('boxeo')) return Icons.sports_mma_rounded;
     if (value.contains('tenis')) return Icons.sports_tennis_rounded;
     if (value.contains('motor') || value.contains('f1')) return Icons.directions_car_rounded;
     if (value.contains('ciclismo')) return Icons.directions_bike_rounded;
     if (value.contains('atletismo') || value.contains('carrera')) return Icons.directions_run_rounded;
     if (value.contains('natación') || value.contains('natacion')) return Icons.pool_rounded;
-    if (value.contains('boxeo') || value.contains('combate')) return Icons.sports_mma_rounded;
     if (value.contains('golf')) return Icons.sports_golf_rounded;
     if (value.contains('rugby')) return Icons.sports_rugby_rounded;
-    if (value.contains('voleibol')) return Icons.sports_volleyball_rounded;
     return Icons.emoji_events_rounded;
   }
 
@@ -226,22 +442,27 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
         uri.userInfo.isEmpty;
 
     Widget fallback() {
-      final parts = fallbackLabel.trim().split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
-      final label = parts.take(2).map((part) => part.substring(0, 1)).join().toUpperCase();
-      if (label.isNotEmpty) {
-        return Center(
-          child: Text(
-            label,
-            maxLines: 1,
-            style: TextStyle(
-              color: _agendaCyan,
-              fontSize: size * .29,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        );
-      }
-      return Icon(fallbackIcon, color: _agendaCyan, size: size * .56);
+      final parts = fallbackLabel.trim().split(RegExp(r'\s+'));
+      final initials = parts
+          .where((part) => part.isNotEmpty)
+          .take(2)
+          .map((part) => part.characters.first.toUpperCase())
+          .join();
+      return ColoredBox(
+        color: const Color(0xFF0D1118),
+        child: Center(
+          child: initials.isNotEmpty
+              ? Text(
+                  initials,
+                  style: const TextStyle(
+                    color: _agendaCyan,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                )
+              : Icon(fallbackIcon, color: _agendaCyan, size: 22),
+        ),
+      );
     }
 
     return Container(
@@ -346,24 +567,422 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
     );
   }
 
-  Future<void> _openMarcaWeb() async {
+  Future<void> _openAgendaWeb() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => WebAgendaScreen(
-          pageTitle: 'PROGRAMACIÓN MARCA',
+          pageTitle: 'AGENDA WEB',
           onExit: () => Navigator.of(context).pop(),
           onOpenLive: () {
             Navigator.of(context).pop();
-            widget.onOpenLive();
+            if (_filteredEvents.isNotEmpty) {
+              widget.onOpenLive(_filteredEvents.first.id);
+            }
           },
         ),
       ),
     );
   }
 
+  Widget _buildDateSelector() {
+    return SizedBox(
+      height: 62,
+      child: ListView.separated(
+        key: const ValueKey<String>('agenda-seven-day-selector'),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        scrollDirection: Axis.horizontal,
+        itemCount: _windowDays,
+        separatorBuilder: (_, __) => const SizedBox(width: 7),
+        itemBuilder: (context, index) {
+          final date = _windowStartDate.add(Duration(days: index));
+          final selected = _sameDay(date, _selectedDate);
+          return ChoiceChip(
+            key: ValueKey<String>('agenda-day-' + index.toString()),
+            selected: selected,
+            onSelected: (_) => setState(() {
+              _selectedDate = date;
+              _statusFilter = 'Todos';
+            }),
+            label: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  _dayLabel(date),
+                  style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  _dateSubtitle(date),
+                  style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            labelStyle: TextStyle(
+              color: selected ? Colors.black : _agendaMuted,
+            ),
+            backgroundColor: _agendaPanel,
+            selectedColor: _agendaGreen,
+            side: BorderSide(
+              color: selected ? _agendaGreen : _agendaLine,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildFilters() {
+    final sports = _sportOptions;
+    if (!sports.contains(_selectedSport)) _selectedSport = 'Todos';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 5),
+      child: Column(
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: TextField(
+                  key: const ValueKey<String>('agenda-search'),
+                  controller: _searchController,
+                  onChanged: (value) => setState(() => _query = value),
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  decoration: InputDecoration(
+                    hintText: 'Buscar equipo, partido o competición',
+                    hintStyle: const TextStyle(
+                      color: _agendaMuted,
+                      fontSize: 10,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      color: _agendaCyan,
+                      size: 19,
+                    ),
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Limpiar búsqueda',
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _query = '');
+                            },
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              color: _agendaMuted,
+                              size: 17,
+                            ),
+                          ),
+                    filled: true,
+                    fillColor: _agendaPanel,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 10,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: _agendaLine),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: _agendaCyan,
+                        width: 1.4,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                height: 44,
+                padding: const EdgeInsets.symmetric(horizontal: 9),
+                decoration: BoxDecoration(
+                  color: _agendaPanel,
+                  border: Border.all(color: _agendaLine),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    key: const ValueKey<String>('agenda-sport-filter'),
+                    value: _selectedSport,
+                    dropdownColor: _agendaPanel,
+                    iconEnabledColor: _agendaCyan,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                    items: sports.map((sport) {
+                      return DropdownMenuItem<String>(
+                        value: sport,
+                        child: Text(
+                          sport == 'Todos' ? 'Deportes' : sport,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(growable: false),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _selectedSport = value);
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 34,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: <String>[
+                'Todos',
+                'En vivo',
+                'Programados',
+                'Finalizados',
+              ].map((status) {
+                final selected = _statusFilter == status;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: ChoiceChip(
+                    key: ValueKey<String>('agenda-status-' + status),
+                    visualDensity: VisualDensity.compact,
+                    label: Text(
+                      status,
+                      style: TextStyle(
+                        color: selected ? Colors.black : _agendaMuted,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    selected: selected,
+                    onSelected: (_) => setState(() => _statusFilter = status),
+                    backgroundColor: _agendaPanel,
+                    selectedColor: _agendaCyan,
+                    side: BorderSide(
+                      color: selected ? _agendaCyan : _agendaLine,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                  ),
+                );
+              }).toList(growable: false),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEventCard(SportsAgendaEvent event) {
+    final live = _isLive(event);
+    final finished = _isFinished(event);
+    final hasScore =
+        event.homeScore.isNotEmpty || event.awayScore.isNotEmpty;
+    final scoreLabel = (event.homeScore.isEmpty ? '-' : event.homeScore) +
+        ' : ' +
+        (event.awayScore.isEmpty ? '-' : event.awayScore);
+    final statusLabel = live
+        ? '● EN VIVO'
+        : finished
+            ? 'FINALIZADO'
+            : event.statusLabel.isNotEmpty
+                ? event.statusLabel.toUpperCase()
+                : 'PROGRAMADO';
+
+    return Container(
+      key: ValueKey<String>('agenda-event-' + event.id),
+      margin: const EdgeInsets.only(bottom: 9),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _agendaPanel,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(
+          color: live ? _agendaRed.withAlpha(190) : _agendaLine,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(_sportIcon(event.sport), color: _agendaCyan, size: 15),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  event.sport.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _agendaMuted,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: .8,
+                  ),
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  Text(
+                    hasScore ? scoreLabel : _timeLabel(event.startsAt),
+                    style: TextStyle(
+                      color: live ? _agendaRed : _agendaGreen,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    statusLabel,
+                    style: TextStyle(
+                      color: live ? _agendaRed : _agendaMuted,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (event.homeTeam.isNotEmpty && event.awayTeam.isNotEmpty)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                Expanded(child: _teamBlock(event.homeTeam, event.homeTeamLogo)),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 7),
+                  child: Text(
+                    'VS',
+                    style: TextStyle(
+                      color: _agendaPink,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                Expanded(child: _teamBlock(event.awayTeam, event.awayTeamLogo)),
+              ],
+            )
+          else ...<Widget>[
+            Text(
+              event.title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            if (event.participants.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 9),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: event.participants
+                    .take(6)
+                    .map(_participantBlock)
+                    .toList(growable: false),
+              ),
+              if (event.participants.length > 6) ...<Widget>[
+                const SizedBox(height: 5),
+                Center(
+                  child: Text(
+                    '+' + (event.participants.length - 6).toString() +
+                        ' participantes',
+                    style: const TextStyle(
+                      color: _agendaMuted,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ] else if (event.imageUrl.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 8),
+              Center(
+                child: _agendaImage(
+                  event.imageUrl,
+                  size: 58,
+                  fallbackIcon: Icons.sports_rounded,
+                ),
+              ),
+            ],
+          ],
+          if (event.competition.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 7),
+            Text(
+              event.competition,
+              style: const TextStyle(
+                color: _agendaMuted,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+          if (event.venue.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 4),
+            Row(
+              children: <Widget>[
+                const Icon(
+                  Icons.location_on_outlined,
+                  color: _agendaMuted,
+                  size: 12,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    event.venue,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _agendaMuted,
+                      fontSize: 9,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 9),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              key: ValueKey<String>('agenda-live-event-' + event.id),
+              onPressed: () => widget.onOpenLive(event.id),
+              icon: const Icon(
+                Icons.live_tv_rounded,
+                size: 15,
+                color: _agendaPink,
+              ),
+              label: Text(
+                live ? 'VER TRANSMISIÓN' : 'BUSCAR TRANSMISIÓN',
+                style: const TextStyle(
+                  color: _agendaPink,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final events = _events;
+    final events = _filteredEvents;
     return Scaffold(
       backgroundColor: _agendaBg,
       appBar: AppBar(
@@ -372,7 +991,7 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
           icon: Icons.calendar_month_rounded,
           title: 'AGENDA DEPORTIVA',
           accent: _agendaCyan,
-          subtitle: 'AGENDA AUTOMÁTICA · SPORTSAPI.APP',
+          subtitle: 'PRÓXIMOS 7 DÍAS · SPORTSAPI.APP',
         ),
         actions: <Widget>[
           IconButton(
@@ -385,8 +1004,11 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
           ),
           IconButton(
             tooltip: 'Abrir agenda web de respaldo',
-            onPressed: _openMarcaWeb,
-            icon: const Icon(Icons.open_in_browser_rounded, color: _agendaGreen),
+            onPressed: _openAgendaWeb,
+            icon: const Icon(
+              Icons.open_in_browser_rounded,
+              color: _agendaGreen,
+            ),
           ),
         ],
       ),
@@ -394,20 +1016,26 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
         children: <Widget>[
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: const BoxDecoration(
               color: _agendaPanel,
               border: Border(bottom: BorderSide(color: _agendaLine)),
             ),
             child: Row(
               children: <Widget>[
-                const Icon(Icons.calendar_month_rounded, color: _agendaCyan, size: 18),
+                const Icon(
+                  Icons.calendar_month_rounded,
+                  color: _agendaCyan,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     _loading
-                        ? 'Sincronizando agenda de tus deportes favoritos…'
-                        : '${events.length} eventos en la agenda',
+                        ? 'Sincronizando los próximos siete días…'
+                        : events.length.toString() +
+                            ' eventos · ' +
+                            _dayLabel(_selectedDate),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 11,
@@ -436,6 +1064,33 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
               ],
             ),
           ),
+          _buildDateSelector(),
+          _buildFilters(),
+          if (_unavailableDates.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 1, 14, 6),
+              child: Row(
+                children: <Widget>[
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: _agendaGreen,
+                    size: 14,
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      'Cobertura parcial: ' +
+                          _unavailableDates.map(_dateSubtitle).join(', ') +
+                          ' no respondió; se conserva la caché cuando está disponible.',
+                      style: const TextStyle(
+                        color: _agendaMuted,
+                        fontSize: 9,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: _loading && !_hasLoaded
                 ? const Center(
@@ -450,245 +1105,22 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                     : events.isEmpty
                         ? _emptyState(
                             icon: Icons.event_busy_rounded,
-                            title: 'AÚN NO HAY EVENTOS PUBLICADOS',
-                            message: 'SportsAPI mostrará aquí los partidos, carreras y competiciones de tus diez deportes favoritos cuando haya eventos programados. Actualiza para consultar el servidor.',
+                            title: 'NO HAY EVENTOS PARA ESTA FECHA',
+                            message: _events.isEmpty
+                                ? 'No se encontraron eventos en los próximos siete días. Comprueba la conexión y vuelve a actualizar.'
+                                : 'No hay eventos que coincidan con esta fecha y estos filtros. Prueba otro día o elimina los filtros.',
                           )
                         : RefreshIndicator(
                             color: _agendaCyan,
                             backgroundColor: _agendaPanel,
                             onRefresh: _refresh,
                             child: ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+                              key: const ValueKey<String>('agenda-event-list'),
+                              padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
                               cacheExtent: 240,
-                              addAutomaticKeepAlives: false,
                               itemCount: events.length,
-                              itemBuilder: (context, index) {
-                                final event = events[index];
-                                final live = _isLive(event);
-                                final previousDay = index > 0
-                                    ? _dayLabel(events[index - 1].startsAt)
-                                    : null;
-                                final day = _dayLabel(event.startsAt);
-                                return Column(
-                                  key: ValueKey<String>(event.id),
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                                  children: <Widget>[
-                                    if (day != previousDay)
-                                      Padding(
-                                        padding: const EdgeInsets.fromLTRB(3, 14, 3, 8),
-                                        child: Text(
-                                          day,
-                                          style: const TextStyle(
-                                            color: _agendaCyan,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w900,
-                                            letterSpacing: 1.1,
-                                          ),
-                                        ),
-                                      ),
-                                    Container(
-                                      margin: const EdgeInsets.only(bottom: 9),
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: _agendaPanel,
-                                        borderRadius: BorderRadius.circular(13),
-                                        border: Border.all(
-                                          color: live ? _agendaRed.withAlpha(190) : _agendaLine,
-                                        ),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: <Widget>[
-                                          Row(
-                                            children: <Widget>[
-                                              Expanded(
-                                                child: Row(
-                                                  children: <Widget>[
-                                                    Icon(
-                                                      _sportIcon(event.sport),
-                                                      color: _agendaCyan,
-                                                      size: 15,
-                                                    ),
-                                                    const SizedBox(width: 6),
-                                                    Flexible(
-                                                      child: Text(
-                                                        event.sport.toUpperCase(),
-                                                        overflow: TextOverflow.ellipsis,
-                                                        style: const TextStyle(
-                                                          color: _agendaMuted,
-                                                          fontSize: 9,
-                                                          fontWeight: FontWeight.w900,
-                                                          letterSpacing: .8,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              Column(
-                                                crossAxisAlignment: CrossAxisAlignment.end,
-                                                children: <Widget>[
-                                                  Text(
-                                                    event.homeScore.isNotEmpty || event.awayScore.isNotEmpty
-                                                        ? '${event.homeScore.isEmpty ? '-' : event.homeScore} : ${event.awayScore.isEmpty ? '-' : event.awayScore}'
-                                                        : _timeLabel(event.startsAt),
-                                                    style: TextStyle(
-                                                      color: live ? _agendaRed : _agendaGreen,
-                                                      fontSize: 12,
-                                                      fontWeight: FontWeight.w900,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 2),
-                                                  Text(
-                                                    live ? '● EN VIVO' :
-                                                      (event.statusLabel.isNotEmpty
-                                                        ? event.statusLabel.toUpperCase()
-                                                        : 'PROGRAMADO'),
-                                                    style: TextStyle(
-                                                      color: live ? _agendaRed : _agendaMuted,
-                                                      fontSize: 8,
-                                                      fontWeight: FontWeight.w800,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 7),
-                                          if (event.homeTeam.isNotEmpty &&
-                                              event.awayTeam.isNotEmpty) ...<Widget>[
-                                            const SizedBox(height: 7),
-                                            Row(
-                                              crossAxisAlignment: CrossAxisAlignment.center,
-                                              children: <Widget>[
-                                                Expanded(
-                                                  child: _teamBlock(
-                                                    event.homeTeam,
-                                                    event.homeTeamLogo,
-                                                  ),
-                                                ),
-                                                const Padding(
-                                                  padding: EdgeInsets.symmetric(horizontal: 7),
-                                                  child: Text(
-                                                    'VS',
-                                                    style: TextStyle(
-                                                      color: _agendaPink,
-                                                      fontSize: 12,
-                                                      fontWeight: FontWeight.w900,
-                                                    ),
-                                                  ),
-                                                ),
-                                                Expanded(
-                                                  child: _teamBlock(
-                                                    event.awayTeam,
-                                                    event.awayTeamLogo,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ] else ...<Widget>[
-                                            const SizedBox(height: 7),
-                                            Text(
-                                              event.title,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w900,
-                                              ),
-                                            ),
-                                            if (event.participants.isNotEmpty) ...<Widget>[
-                                              const SizedBox(height: 9),
-                                              Wrap(
-                                                alignment: WrapAlignment.center,
-                                                spacing: 8,
-                                                runSpacing: 8,
-                                                children: event.participants
-                                                    .take(6)
-                                                    .map(_participantBlock)
-                                                    .toList(growable: false),
-                                              ),
-                                              if (event.participants.length > 6) ...<Widget>[
-                                                const SizedBox(height: 5),
-                                                Center(
-                                                  child: Text(
-                                                    '+${event.participants.length - 6} participantes',
-                                                    style: const TextStyle(
-                                                      color: _agendaMuted,
-                                                      fontSize: 9,
-                                                      fontWeight: FontWeight.w700,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ] else if (event.imageUrl.isNotEmpty) ...<Widget>[
-                                              const SizedBox(height: 8),
-                                              Center(
-                                                child: _agendaImage(
-                                                  event.imageUrl,
-                                                  size: 58,
-                                                  fallbackIcon: Icons.sports_rounded,
-                                                ),
-                                              ),
-                                            ],
-                                          ],
-                                          if (event.competition.isNotEmpty) ...<Widget>[
-                                            const SizedBox(height: 7),
-                                            Text(
-                                              event.competition,
-                                              style: const TextStyle(
-                                                color: _agendaMuted,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                          ],
-                                          if (event.venue.isNotEmpty) ...<Widget>[
-                                            const SizedBox(height: 3),
-                                            Row(
-                                              children: <Widget>[
-                                                const Icon(Icons.location_on_outlined,
-                                                    color: _agendaMuted, size: 12),
-                                                const SizedBox(width: 4),
-                                                Expanded(
-                                                  child: Text(
-                                                    event.venue,
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                    style: const TextStyle(
-                                                      color: _agendaMuted,
-                                                      fontSize: 9,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                          const SizedBox(height: 10),
-                                          Align(
-                                            alignment: Alignment.centerRight,
-                                            child: TextButton.icon(
-                                              onPressed: widget.onOpenLive,
-                                              icon: const Icon(
-                                                Icons.live_tv_rounded,
-                                                size: 15,
-                                                color: _agendaPink,
-                                              ),
-                                              label: const Text(
-                                                'VER TRANSMISIONES',
-                                                style: TextStyle(
-                                                  color: _agendaPink,
-                                                  fontSize: 9,
-                                                  fontWeight: FontWeight.w900,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
+                              itemBuilder: (context, index) =>
+                                  _buildEventCard(events[index]),
                             ),
                           ),
           ),
@@ -753,9 +1185,9 @@ class _MarcaAgendaScreenState extends State<MarcaAgendaScreen>
                     ),
                   ),
                   FilledButton.icon(
-                    onPressed: _openMarcaWeb,
+                    onPressed: _openAgendaWeb,
                     icon: const Icon(Icons.open_in_browser_rounded),
-                    label: const Text('ABRIR MARCA'),
+                    label: const Text('ABRIR AGENDA WEB'),
                     style: FilledButton.styleFrom(
                       backgroundColor: _agendaGreen,
                       foregroundColor: _agendaBg,
