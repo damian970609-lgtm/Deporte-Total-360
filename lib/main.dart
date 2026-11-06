@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'automatic_live_screen.dart';
 import 'channel_catalog_screen.dart';
+import 'channel_catalog_service.dart';
 
 import 'fantasy_screen.dart';
 import 'news_screen.dart';
@@ -207,11 +208,318 @@ class DeporteTotal360App extends StatelessWidget {
             ),
           ),
         ),
-        home: const MainShell(),
+        home: const AppAccessGate(),
       ),
     );
   }
 }
+
+
+/// Puerta de acceso comercial. La licencia se comprueba en el servidor
+/// contra la cuenta Google verificada: una copia del APK no transfiere acceso.
+class AppAccessGate extends StatefulWidget {
+  const AppAccessGate({super.key});
+
+  @override
+  State<AppAccessGate> createState() => _AppAccessGateState();
+}
+
+enum _AccessGateStage { loading, signInRequired, denied, authorized, error }
+
+class _AppAccessGateState extends State<AppAccessGate> {
+  final ChannelCatalogService _licenseService = channelCatalogService;
+  _AccessGateStage _stage = _AccessGateStage.loading;
+  String? _email;
+  String? _message;
+  String? _licenseType;
+  bool _working = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_restoreAndCheck());
+  }
+
+  Future<void> _prepareApiSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedApiUrl = prefs.getString('sports_api_base_url');
+    sportsApiBaseUrl.value =
+        SportsApiService.normalizeBaseUrl(savedApiUrl ?? '') ??
+        defaultSportsApiBaseUrl;
+  }
+
+  Future<void> _restoreAndCheck() async {
+    if (mounted) {
+      setState(() {
+        _stage = _AccessGateStage.loading;
+        _message = null;
+      });
+    }
+    try {
+      await _prepareApiSettings();
+      final email = await _licenseService.restoreSession();
+      if (!mounted) return;
+      if (email == null) {
+        setState(() => _stage = _AccessGateStage.signInRequired);
+        return;
+      }
+      await _checkLicense(email);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _stage = _AccessGateStage.error;
+        _message = error.toString();
+      });
+    }
+  }
+
+  Future<void> _checkLicense(String email) async {
+    try {
+      final license = await _licenseService.fetchAppLicenseStatus();
+      if (!mounted) return;
+      setState(() {
+        _email = email;
+        _licenseType = license.licenseType;
+        _stage = license.allowed
+            ? _AccessGateStage.authorized
+            : _AccessGateStage.denied;
+        _message = license.allowed
+            ? null
+            : 'Esta cuenta todavía no tiene una licencia activa. '
+                'Contacta con Damián para comprarla o solicitar un pase gratuito.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _stage = _AccessGateStage.error;
+        _message = error.toString();
+      });
+    }
+  }
+
+  Future<void> _signIn() async {
+    if (_working) return;
+    setState(() {
+      _working = true;
+      _message = null;
+    });
+    try {
+      final email = await _licenseService.signIn();
+      await _checkLicense(email);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _stage = _AccessGateStage.error;
+          _message = error.toString();
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _changeAccount() async {
+    setState(() {
+      _working = true;
+      _stage = _AccessGateStage.signInRequired;
+      _email = null;
+      _licenseType = null;
+      _message = null;
+    });
+    try {
+      await _licenseService.signOut();
+    } catch (error) {
+      if (mounted) setState(() => _message = error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_stage == _AccessGateStage.authorized) {
+      return const MainShell();
+    }
+
+    final loading = _stage == _AccessGateStage.loading;
+    final denied = _stage == _AccessGateStage.denied;
+    final accent = denied ? appRed : appCyan;
+    return Scaffold(
+      backgroundColor: appBg,
+      body: Stack(
+        children: <Widget>[
+          const Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment(0, -.35),
+                  radius: 1.25,
+                  colors: <Color>[
+                    Color(0xFF091527),
+                    Color(0xFF07090D),
+                    Colors.black,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 430),
+                  child: Container(
+                    padding: const EdgeInsets.all(22),
+                    decoration: BoxDecoration(
+                      color: appPanel.withAlpha(245),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: accent.withAlpha(170)),
+                      boxShadow: <BoxShadow>[
+                        BoxShadow(
+                          color: accent.withAlpha(35),
+                          blurRadius: 28,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        const Icon(
+                          Icons.sports_soccer_rounded,
+                          color: Colors.white,
+                          size: 52,
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'DEPORTE TOTAL 360°',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 19,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          'ACCESO PROTEGIDO · LICENCIA PERSONAL',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: accent,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        if (loading) ...<Widget>[
+                          const CircularProgressIndicator(color: appCyan),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Comprobando tu licencia...',
+                            style: TextStyle(color: appMuted),
+                          ),
+                        ] else ...<Widget>[
+                          Icon(
+                            denied ? Icons.lock_outline_rounded :
+                                Icons.verified_user_outlined,
+                            color: accent,
+                            size: 38,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            denied ? 'LICENCIA NO ACTIVA' :
+                                'IDENTIFÍCATE PARA CONTINUAR',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: accent,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14,
+                            ),
+                          ),
+                          if (_email != null) ...<Widget>[
+                            const SizedBox(height: 7),
+                            Text(
+                              _email!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: appMuted),
+                            ),
+                          ],
+                          const SizedBox(height: 9),
+                          Text(
+                            _message ?? (denied
+                                ? 'La compra o el pase gratuito se asocian a tu cuenta Google. Compartir el APK no comparte la licencia.'
+                                : 'Accede con la cuenta Google vinculada a tu compra o invitación.'),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: appMuted,
+                              height: 1.45,
+                              fontSize: 11,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: _working ? null :
+                                  (denied ? _changeAccount :
+                                      (_stage == _AccessGateStage.error
+                                          ? _restoreAndCheck
+                                          : _signIn)),
+                              icon: _working
+                                  ? const SizedBox(
+                                      width: 17,
+                                      height: 17,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : Icon(denied ? Icons.switch_account_rounded :
+                                      (_stage == _AccessGateStage.error
+                                          ? Icons.refresh_rounded
+                                          : Icons.login_rounded)),
+                              label: Text(denied
+                                  ? 'CAMBIAR CUENTA'
+                                  : (_stage == _AccessGateStage.error
+                                      ? 'VOLVER A INTENTAR'
+                                      : 'ENTRAR CON GOOGLE')),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: accent,
+                                foregroundColor: Colors.black,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (denied) ...<Widget>[
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Para comprar una licencia o recibir una invitación, contacta al administrador.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: appMuted,
+                                fontSize: 10,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
