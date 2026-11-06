@@ -25,6 +25,22 @@ void main() {
     sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
   });
 
+  group('configuración EPG', () {
+    test('migra la EPG predeterminada anterior sin borrar preferencias personalizadas', () async {
+      await AutoLiveSettings.save(
+        playlistUrl: defaultAutoLivePlaylistUrls,
+        epgUrl: previousDefaultAutoLiveEpgUrl,
+        authorizationConfirmed: true,
+      );
+
+      final settings = await AutoLiveSettings.load();
+
+      expect(settings.epgUrl, defaultAutoLiveEpgUrl);
+      expect(settings.epgUrls, contains('https://iptv-epg.org/files/epg-do.xml'));
+      expect(settings.epgUrls, contains('https://iptv-epg.org/files/epg-gb.xml'));
+    });
+  });
+
   group('agenda deportiva MARCA', () {
     test('no reutiliza eventos persistidos por la agenda anterior', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
