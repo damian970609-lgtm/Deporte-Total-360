@@ -21,16 +21,7 @@ String languageCode(AppLanguage language) {
 }
 
 AppLanguage parseLanguage(String? code) {
-  switch (code) {
-    case 'en':
-      return AppLanguage.english;
-    case 'pt':
-      return AppLanguage.portuguese;
-    case 'fr':
-      return AppLanguage.french;
-    default:
-      return AppLanguage.spanish;
-  }
+  return code == 'en' ? AppLanguage.english : AppLanguage.spanish;
 }
 
 const Map<String, Map<AppLanguage, String>> _labels =
