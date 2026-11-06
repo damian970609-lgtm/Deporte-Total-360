@@ -59,6 +59,37 @@ T? _firstOrNull<T>(Iterable<T> items) {
   return iterator.moveNext() ? iterator.current : null;
 }
 
+class ChannelLanguageBadge extends StatelessWidget {
+  const ChannelLanguageBadge({super.key, required this.language});
+
+  final String language;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = channelLanguageDisplayLabel(language);
+    if (label == null) return const SizedBox.shrink();
+    final spanish = language == 'es';
+    final accent = spanish ? _channelGreen : _channelCyan;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: accent.withAlpha(18),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: accent.withAlpha(130)),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 7,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
 class ChannelCatalogScreen extends StatefulWidget {
   const ChannelCatalogScreen({super.key});
 
@@ -379,30 +410,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
                   ),
                 ),
                 const Spacer(),
-                if (channel.language == 'es' || channel.language == 'en')
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _channelCyan.withAlpha(18),
-                      borderRadius: BorderRadius.circular(7),
-                      border: Border.all(
-                        color: channel.language == 'es'
-                            ? _channelGreen.withAlpha(130)
-                            : _channelCyan.withAlpha(130),
-                      ),
-                    ),
-                    child: Text(
-                      channel.language == 'es' ? 'IDIOMA 🇪🇸' : 'IDIOMA 🇺🇸',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 7,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
+                ChannelLanguageBadge(language: channel.language),
                 const SizedBox(width: 5),
                 IconButton(
                   visualDensity: VisualDensity.compact,
@@ -1512,7 +1520,9 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _labelController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _adminScrollController = ScrollController();
   List<SportsChannel> _channels = <SportsChannel>[];
+  SportsChannel? _previewChannel;
   List<ChannelPlaylistSource> _sources = <ChannelPlaylistSource>[];
   bool _loading = false;
   bool _working = false;
@@ -1527,6 +1537,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     _urlController.dispose();
     _labelController.dispose();
     _searchController.dispose();
+    _adminScrollController.dispose();
     super.dispose();
   }
 
@@ -1565,6 +1576,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _email = null;
         _channels = <SportsChannel>[];
         _sources = <ChannelPlaylistSource>[];
+        _previewChannel = null;
       });
     }
   }
@@ -1587,6 +1599,15 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       if (!mounted) return;
       setState(() {
         _channels = channels;
+        final previewId = _previewChannel?.id;
+        if (previewId != null) {
+          for (final channel in channels) {
+            if (channel.id == previewId) {
+              _previewChannel = channel;
+              break;
+            }
+          }
+        }
         _hasMore = channels.length == 200;
         _loading = false;
         _error = null;
@@ -1729,6 +1750,18 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
+  void _previewChannelInAdmin(SportsChannel channel) {
+    setState(() => _previewChannel = channel);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_adminScrollController.hasClients) return;
+      _adminScrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
   Future<void> _toggleVisibility(SportsChannel channel) async {
     final next = !channel.visible;
     try {
@@ -1822,15 +1855,23 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(
-                  channel.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 12,
-                  ),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        channel.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    ChannelLanguageBadge(language: channel.language),
+                  ],
                 ),
                 Text(
                   sport ? 'DEPORTIVO' : 'SIN CLASIFICAR',
@@ -1838,6 +1879,32 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                     color: sport ? _channelGreen : _channelMuted,
                     fontWeight: FontWeight.w800,
                     fontSize: 8,
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => _previewChannelInAdmin(channel),
+                    icon: const Icon(
+                      Icons.play_circle_outline_rounded,
+                      size: 15,
+                    ),
+                    label: const Text(
+                      'PROBAR CANAL',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      foregroundColor: _channelCyan,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      minimumSize: const Size(0, 27),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                   ),
                 ),
                 DropdownButtonHideUnderline(
@@ -2034,6 +2101,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                 backgroundColor: _channelPanel,
                 onRefresh: () => _loadAdmin(),
                 child: ListView(
+                  controller: _adminScrollController,
                   padding: const EdgeInsets.fromLTRB(13, 13, 13, 26),
                   children: <Widget>[
                     _adminCard(
@@ -2054,6 +2122,78 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                               ),
                             ),
                           ),
+                        ],
+                      ),
+                    ),
+                    _adminCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Row(
+                            children: <Widget>[
+                              const Expanded(
+                                child: Text(
+                                  'REPRODUCTOR DE PRUEBA',
+                                  style: TextStyle(
+                                    color: _channelCyan,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              if (_previewChannel != null)
+                                IconButton(
+                                  tooltip: 'Cerrar prueba',
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () => setState(
+                                    () => _previewChannel = null,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    color: _channelMuted,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          if (_previewChannel == null)
+                            const Text(
+                              'Elige un canal del catálogo y pulsa PROBAR CANAL. Podrás comprobar la señal aquí antes de publicarla.',
+                              style: TextStyle(
+                                color: _channelMuted,
+                                fontSize: 10,
+                                height: 1.4,
+                              ),
+                            )
+                          else ...<Widget>[
+                            Text(
+                              _previewChannel!.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 11,
+                              ),
+                            ),
+                            const SizedBox(height: 7),
+                            ChannelInlinePlayer(
+                              key: ValueKey<String>(
+                                'admin-preview-\${_previewChannel!.id}',
+                              ),
+                              channel: _previewChannel,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _previewChannel!.visible
+                                  ? 'Prueba privada. Este canal ya está publicado; la prueba no cambia su estado.'
+                                  : 'Prueba privada. El canal seguirá oculto hasta que actives el icono del ojo.',
+                              style: const TextStyle(
+                                color: _channelMuted,
+                                fontSize: 9,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
