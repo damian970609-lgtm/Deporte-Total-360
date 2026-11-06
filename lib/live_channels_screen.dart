@@ -1615,52 +1615,7 @@ class _WaitingLivePlayerTile extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-              child: const _OfflineSportsArtwork(compact: true)
-                  : Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        const Icon(
-                          Icons.event_available_rounded,
-                          color: _liveCyan,
-                          size: 23,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          event!.heading,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: _liveCyan,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          event!.match,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            height: 1.25,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          event!.startLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: _liveMuted,
-                            fontSize: 9,
-                          ),
-                        ),
-                      ],
+              child: const _OfflineSportsArtwork(compact: true),
                     ),
             ),
           ),
