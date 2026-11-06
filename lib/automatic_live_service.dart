@@ -60,6 +60,29 @@ const String legacyDefaultAutoLivePlaylistUrls =
     'https://iptv-org.github.io/iptv/categories/sports.m3u';
 const String legacyDefaultAutoLiveEpgUrl =
     'https://dearbulut.github.io/iptv/epg/guide.xml.gz';
+// Versión EPG predeterminada anterior: se migra solo si el usuario no
+// personalizó la lista de guías.
+const String previousDefaultAutoLiveEpgUrl =
+    'https://iptv-epg.org/files/epg-es.xml\n'
+    'https://iptv-epg.org/files/epg-ar.xml\n'
+    'https://iptv-epg.org/files/epg-mx.xml\n'
+    'https://iptv-epg.org/files/epg-co.xml\n'
+    'https://iptv-epg.org/files/epg-ve.xml\n'
+    'https://iptv-epg.org/files/epg-cl.xml\n'
+    'https://iptv-epg.org/files/epg-pe.xml\n'
+    'https://iptv-epg.org/files/epg-uy.xml\n'
+    'https://iptv-epg.org/files/epg-py.xml\n'
+    'https://iptv-epg.org/files/epg-bo.xml\n'
+    'https://iptv-epg.org/files/epg-cr.xml\n'
+    'https://iptv-epg.org/files/epg-gt.xml\n'
+    'https://iptv-epg.org/files/epg-hn.xml\n'
+    'https://iptv-epg.org/files/epg-ni.xml\n'
+    'https://iptv-epg.org/files/epg-pa.xml\n'
+    'https://iptv-epg.org/files/epg-cw.xml\n'
+    'https://iptv-epg.org/files/epg-jm.xml\n'
+    'https://iptv-epg.org/files/epg-br.xml\n'
+    'https://raw.githubusercontent.com/teleonline/listas/main/epg.xml.gz\n'
+    'https://dearbulut.github.io/iptv/epg/guide.xml.gz';
 
 // Fuentes automáticas: primero catálogos en español y emisoras públicas;
 // después directorios deportivos internacionales como respaldo.
@@ -152,7 +175,8 @@ class AutoLiveSettings {
       playlist = defaultAutoLivePlaylistUrls;
       await prefs.setString(_playlistUrlKey, playlist);
     }
-    if (epg.trim() == legacyDefaultAutoLiveEpgUrl.trim()) {
+    if (epg.trim() == legacyDefaultAutoLiveEpgUrl.trim() ||
+        epg.trim() == previousDefaultAutoLiveEpgUrl.trim()) {
       epg = defaultAutoLiveEpgUrl;
       await prefs.setString(_epgUrlKey, epg);
     }
