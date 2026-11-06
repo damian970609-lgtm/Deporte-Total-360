@@ -1781,7 +1781,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
   Future<void> _addPlaylist() async {
     if (_sources.length >= maxChannelPlaylistSources) {
-      _message('Ya tienes las 24 listas registradas. No se pueden agregar más.');
+      _message('Ya tienes ' + maxChannelPlaylistSources.toString() + ' listas registradas. No se pueden agregar más.');
       return;
     }
     final uri = Uri.tryParse(_urlController.text.trim());
@@ -2768,7 +2768,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                               icon: const Icon(Icons.cloud_download_rounded),
                               label: Text(
                                 _sources.length >= maxChannelPlaylistSources
-                                    ? 'LÍMITE DE 24 LISTAS COMPLETO'
+                                    ? 'LÍMITE DE ' + maxChannelPlaylistSources.toString() + ' LISTAS COMPLETO'
                                     : 'GUARDAR LISTA E IMPORTAR',
                               ),
                               style: FilledButton.styleFrom(
