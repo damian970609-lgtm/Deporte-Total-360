@@ -697,8 +697,8 @@ class AutomaticLiveService {
           try {
             return await _downloadText(
               url,
-              maxBytes: 8 * 1024 * 1024,
-              timeout: const Duration(seconds: 12),
+              maxBytes: 12 * 1024 * 1024,
+              timeout: const Duration(seconds: 18),
             );
           } catch (_) {
             return null;
@@ -734,8 +734,8 @@ class AutomaticLiveService {
           try {
             return await _downloadText(
               url,
-              maxBytes: 20 * 1024 * 1024,
-              timeout: const Duration(seconds: 12),
+              maxBytes: 24 * 1024 * 1024,
+              timeout: const Duration(seconds: 20),
             );
           } catch (_) {
             return null;
