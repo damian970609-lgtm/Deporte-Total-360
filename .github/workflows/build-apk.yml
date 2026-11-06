@@ -323,16 +323,20 @@ jobs:
             cat >> android/app/build.gradle.kts <<'KTS'
 
           // Firma release con la llave privada guardada en GitHub Actions Secrets.
-          val dt360SigningProperties = java.util.Properties().apply {
-              rootProject.file("key.properties").inputStream().use { load(it) }
-          }
+          // Leer el archivo como mapa evita depender de imports Java en Kotlin DSL.
+          val dt360SigningProperties = rootProject.file("key.properties")
+              .readLines()
+              .filter { it.contains("=") }
+              .associate { line ->
+                  line.substringBefore("=").trim() to line.substringAfter("=").trim()
+              }
           android {
               signingConfigs {
                   create("dt360Release") {
-                      keyAlias = dt360SigningProperties.getProperty("keyAlias")
-                      keyPassword = dt360SigningProperties.getProperty("keyPassword")
-                      storeFile = file(dt360SigningProperties.getProperty("storeFile"))
-                      storePassword = dt360SigningProperties.getProperty("storePassword")
+                      keyAlias = dt360SigningProperties["keyAlias"] ?: error("Falta keyAlias en key.properties")
+                      keyPassword = dt360SigningProperties["keyPassword"] ?: error("Falta keyPassword en key.properties")
+                      storeFile = file(dt360SigningProperties["storeFile"] ?: error("Falta storeFile en key.properties"))
+                      storePassword = dt360SigningProperties["storePassword"] ?: error("Falta storePassword en key.properties")
                   }
               }
               buildTypes {
