@@ -1,5 +1,6 @@
 import 'app_section_design.dart';
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -22,6 +23,8 @@ const Color _channelGreen = Color(0xFF39FF14);
 const Color _channelYellow = Color(0xFFFFFFFF);
 const Color _channelMuted = Color(0xFFEAF0F8);
 const String _channelFavoritesKey = 'dt360_channel_catalog_favorites_v1';
+const String _channelCatalogCacheKey = 'dt360_channel_catalog_snapshot_v1';
+const int _maxCachedChannels = 2000;
 
 
 T? _firstOrNull<T>(Iterable<T> items) {
@@ -73,6 +76,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
   final ScrollController _scrollController = ScrollController();
   final Set<String> _favorites = <String>{};
   List<SportsChannel> _channels = <SportsChannel>[];
+  List<SportsChannel> _cachedChannels = <SportsChannel>[];
   SportsChannel? _selectedChannel;
   Timer? _searchDebounce;
   int _catalogRequestId = 0;
@@ -84,6 +88,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
   bool _loading = true;
   bool _syncing = false;
   String? _error;
+  String? _catalogNotice;
   String? _signedInEmail;
 
   @override
@@ -91,7 +96,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
     super.initState();
     _scrollController.addListener(_handleCatalogScroll);
     unawaited(_loadLocalFavorites());
-    unawaited(_loadChannels());
+    unawaited(_initializeCatalog());
   }
 
   @override
@@ -126,19 +131,76 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
     } catch (_) {}
   }
 
+  Future<void> _initializeCatalog() async {
+    await _loadCachedCatalog();
+    if (mounted) await _loadChannels();
+  }
+
+  Future<void> _loadCachedCatalog() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_channelCatalogCacheKey);
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return;
+      final cached = <SportsChannel>[];
+      for (final row in decoded.whereType<Map>()) {
+        try {
+          cached.add(SportsChannel.fromJson(Map<String, dynamic>.from(row)));
+        } on FormatException {
+          // Descarta una entrada dañada sin perder los demás canales.
+        }
+      }
+      if (!mounted || cached.isEmpty) return;
+      setState(() {
+        _cachedChannels = cached.take(_maxCachedChannels).toList();
+        _channels = List<SportsChannel>.from(_cachedChannels);
+        _catalogTotal = _cachedChannels.length;
+        _nextCatalogOffset = _cachedChannels.length;
+        _hasMoreChannels = false;
+        _catalogNotice =
+            'Mostrando la última copia guardada mientras se actualiza el catálogo.';
+      });
+    } catch (_) {
+      // La copia local nunca debe impedir intentar la conexión actual.
+    }
+  }
+
+  Future<void> _saveLocalCatalog() async {
+    if (_cachedChannels.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final snapshot = _cachedChannels.take(_maxCachedChannels).toList();
+      await prefs.setString(
+        _channelCatalogCacheKey,
+        jsonEncode(snapshot.map((channel) => channel.toJson()).toList()),
+      );
+    } catch (_) {
+      // El catálogo remoto sigue funcionando aunque falle el almacenamiento local.
+    }
+  }
+
   Future<void> _loadChannels() async {
     _searchDebounce?.cancel();
     final requestId = ++_catalogRequestId;
     final search = _searchController.text.trim();
+    final fallback = _cachedChannels.isNotEmpty
+        ? List<SportsChannel>.from(_cachedChannels)
+        : List<SportsChannel>.from(_channels);
     if (mounted) {
       setState(() {
         _loading = true;
         _loadingMoreChannels = false;
         _loadMoreError = null;
         _error = null;
-        _channels = <SportsChannel>[];
-        _nextCatalogOffset = 0;
-        _catalogTotal = 0;
+        _catalogNotice = fallback.isEmpty
+            ? null
+            : 'Conservando la última copia del catálogo durante la actualización.';
+        // No vaciar la lista antes de consultar Cloudflare: si se agota la
+        // cuota, los canales guardados deben seguir visibles en este teléfono.
+        _channels = fallback;
+        _catalogTotal = fallback.length;
+        _nextCatalogOffset = fallback.length;
         _hasMoreChannels = false;
       });
     }
@@ -158,12 +220,34 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
           page.channels.where((item) => item.id == previousId),
         );
         _loading = false;
+        _catalogNotice = null;
+        if (search.isEmpty) {
+          _cachedChannels = List<SportsChannel>.from(page.channels);
+        }
       });
+      if (search.isEmpty) unawaited(_saveLocalCatalog());
     } catch (error) {
       if (!mounted || requestId != _catalogRequestId) return;
+      final hasFallback = _cachedChannels.isNotEmpty || fallback.isNotEmpty;
       setState(() {
         _loading = false;
-        _error = error.toString();
+        if (hasFallback) {
+          _channels = _cachedChannels.isNotEmpty
+              ? List<SportsChannel>.from(_cachedChannels)
+              : fallback;
+          _catalogTotal = _channels.length;
+          _nextCatalogOffset = _channels.length;
+          _hasMoreChannels = false;
+          _error = null;
+          _catalogNotice =
+              'Cloudflare no está disponible o alcanzó su cuota diaria. Se conserva tu catálogo guardado y tus favoritos en este teléfono.';
+          if (_selectedChannel == null ||
+              !_channels.any((channel) => channel.id == _selectedChannel!.id)) {
+            _selectedChannel = _firstOrNull(_channels);
+          }
+        } else {
+          _error = error.toString();
+        }
       });
     }
   }
@@ -208,14 +292,22 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
       }
       setState(() {
         final knownIds = _channels.map((channel) => channel.id).toSet();
-        _channels = <SportsChannel>[
-          ..._channels,
-          ...page.channels.where((channel) => knownIds.add(channel.id)),
-        ];
+        final additions = page.channels
+            .where((channel) => knownIds.add(channel.id))
+            .toList(growable: false);
+        _channels = <SportsChannel>[..._channels, ...additions];
+        if (search.isEmpty) {
+          final cachedIds = _cachedChannels.map((channel) => channel.id).toSet();
+          _cachedChannels = <SportsChannel>[
+            ..._cachedChannels,
+            ...additions.where((channel) => cachedIds.add(channel.id)),
+          ].take(_maxCachedChannels).toList();
+        }
         _catalogTotal = page.total;
         _nextCatalogOffset = page.offset + page.channels.length;
         _hasMoreChannels = page.hasMore;
       });
+      if (search.isEmpty) unawaited(_saveLocalCatalog());
     } catch (error) {
       if (!mounted || requestId != _catalogRequestId) return;
       setState(() => _loadMoreError = error.toString());
@@ -231,14 +323,14 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
     try {
       final email = await _service.signIn();
       final remote = await _service.fetchFavorites();
-      if (remote.isEmpty && _favorites.isNotEmpty) {
-        await _service.saveFavorites(_favorites);
-      } else {
-        _favorites
-          ..clear()
-          ..addAll(remote);
-        await _saveLocalFavorites();
+      final combined = <String>{..._favorites, ...remote};
+      if (combined.length != remote.length) {
+        await _service.saveFavorites(combined);
       }
+      _favorites
+        ..clear()
+        ..addAll(combined);
+      await _saveLocalFavorites();
       if (!mounted) return;
       setState(() => _signedInEmail = email);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -584,18 +676,42 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
                             fontSize: 9,
                           ),
                         ),
+                      if (_catalogNotice != null) ...<Widget>[
+                        const SizedBox(height: 8),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            const Icon(
+                              Icons.cloud_off_rounded,
+                              color: _channelYellow,
+                              size: 15,
+                            ),
+                            const SizedBox(width: 7),
+                            Expanded(
+                              child: Text(
+                                _catalogNotice!,
+                                style: const TextStyle(
+                                  color: _channelYellow,
+                                  fontSize: 9,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ),
-              if (_loading)
+              if (_loading && channels.isEmpty)
                 const SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(
                     child: CircularProgressIndicator(color: _channelCyan),
                   ),
                 )
-              else if (_error != null)
+              else if (_error != null && channels.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(
