@@ -23,7 +23,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pump();
     expect(refreshes, 1);
-    expect(find.text('MULTIVISTA · 2/4 EVENTOS'), findsOneWidget);
+    expect(find.text('MULTIVISTA · 2/6 EVENTOS'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
