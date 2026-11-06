@@ -219,4 +219,38 @@ void main() {
     client.close();
   });
 
+  test('quitar una fuente usa DELETE y no altera otras rutas del catálogo', () async {
+    http.Request? sent;
+    final client = MockClient((request) async {
+      sent = request;
+      return http.Response(jsonEncode(<String, Object>{
+        'removed': true,
+        'preservedChannels': true,
+      }), 200);
+    });
+    final service = ChannelCatalogService(client: client);
+
+    await service.deletePlaylistSource(id: 'source-123');
+
+    expect(sent?.method, 'DELETE');
+    expect(sent?.url.path, endsWith('/api/channels/admin/sources/source-123'));
+    client.close();
+  });
+
+  test('reintentar una fuente vuelve a ponerla en cola en el servidor', () async {
+    http.Request? sent;
+    final client = MockClient((request) async {
+      sent = request;
+      return http.Response(jsonEncode(<String, Object>{
+        'queued': true,
+      }), 202);
+    });
+    final service = ChannelCatalogService(client: client);
+
+    await service.retryPlaylistSource(id: 'source-123');
+
+    expect(sent?.method, 'POST');
+    expect(sent?.url.path, endsWith('/api/channels/admin/sources/source-123/retry'));
+    client.close();
+  });
 }
