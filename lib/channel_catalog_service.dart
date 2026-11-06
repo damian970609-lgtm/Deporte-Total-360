@@ -683,19 +683,13 @@ class ChannelCatalogService {
   /// posterior no lo vuelva a crear.
   Future<void> deleteChannel(String channelId) async {
     final safeId = channelId.trim();
-    if (!RegExp(r'^[a-zA-Z0-9_-]{1,100}
-    final safeId = id.trim();
-    if (safeId.isEmpty) {
-      throw const ChannelCatalogException('El identificador de la lista no es válido.');
+    if (!RegExp(r'^[a-zA-Z0-9_-]{1,100}$').hasMatch(safeId)) {
+      throw const ChannelCatalogException('El identificador del canal no es válido.');
     }
-    final result = await _client.post(
-      Uri.parse(_baseUrl + '/api/channels/admin/sources/' +
-          Uri.encodeComponent(safeId) + '/retry'),
-      headers: <String, String>{
-        ..._authHeaders(),
-        'Content-Type': 'application/json',
-      },
-      body: '{}',
+    final result = await _client.delete(
+      Uri.parse(_baseUrl + '/api/channels/admin/channels/' +
+          Uri.encodeComponent(safeId)),
+      headers: _authHeaders(),
     ).timeout(const Duration(seconds: 20));
     _decode(result);
   }
