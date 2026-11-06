@@ -2178,7 +2178,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             const SizedBox(height: 7),
                             ChannelInlinePlayer(
                               key: ValueKey<String>(
-                                'admin-preview-\${_previewChannel!.id}',
+                                'admin-preview-${_previewChannel!.id}',
                               ),
                               channel: _previewChannel,
                             ),
