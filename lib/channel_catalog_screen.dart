@@ -1708,7 +1708,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
   Future<void> _addPlaylist() async {
     if (_sources.length >= maxChannelPlaylistSources) {
-      _message('Ya tienes las 16 listas registradas. No se pueden agregar más.');
+      _message('Ya tienes las 24 listas registradas. No se pueden agregar más.');
       return;
     }
     final uri = Uri.tryParse(_urlController.text.trim());
