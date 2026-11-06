@@ -77,7 +77,6 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
   int _catalogRequestId = 0;
   int _nextCatalogOffset = 0;
   int _catalogTotal = 0;
-  int _nextAdminOffset = 0;
   bool _hasMoreChannels = false;
   bool _loadingMoreChannels = false;
   String? _loadMoreError;
@@ -1482,6 +1481,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   bool _rightsConfirmed = false;
   bool _hasMore = true;
   int _catalogTotal = 0;
+  int _nextAdminOffset = 0;
   bool _diagnosingPreview = false;
   String? _diagnosticResult;
   String? _email;
