@@ -121,6 +121,11 @@ void main() {
 
   testWidgets('muestra las nueve secciones principales y deja Chat como acceso auxiliar', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
+    // Pintar un segundo frame comprueba el render inicial de Inicio, no solo
+    // que el árbol de widgets se pueda construir.
+    await tester.pump();
+    expect(find.byType(HomeDashboard), findsOneWidget);
+    expect(tester.takeException(), isNull);
 
     expect(find.text('Deportes en vivo'), findsOneWidget);
     expect(find.text('Canales deportivos'), findsOneWidget);
@@ -135,6 +140,7 @@ void main() {
     expect(find.text('Ajustes'), findsOneWidget);
     expect(find.text('Chat'), findsNothing);
     expect(find.text('CHAT PÚBLICO'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
 
