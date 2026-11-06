@@ -561,7 +561,9 @@ class AutomaticLiveService {
       final decoded = jsonDecode(response.body);
       if (decoded is! Map) return null;
       final status = (decoded['status'] ?? '').toString();
-      if (status != 'ok' && status != 'stale') return null;
+      // Un snapshot stale no debe imponerse al cálculo local: puede contener
+      // una URL que dejó de responder durante la caída del cron.
+      if (status != 'ok') return null;
       final rows = decoded['events'];
       if (rows is! List) return null;
 
