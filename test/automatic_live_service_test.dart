@@ -261,12 +261,12 @@ void main() {
   });
 
   group('configuración internacional', () {
-    test('carga siete listas automáticamente y diecinueve EPG sin pedir validación', () async {
+    test('carga doce listas automáticamente y veinticuatro EPG sin pedir validación', () async {
       final settings = await AutoLiveSettings.load();
 
       expect(settings.playlistUrls, hasLength(12));
       expect(settings.playlistUrls.every(isSafeHttpUrl), isTrue);
-      expect(settings.epgUrls, hasLength(20));
+      expect(settings.epgUrls, hasLength(24));
       expect(settings.epgUrls.every(isSafeHttpUrl), isTrue);
       expect(settings.playlistUrls.first, contains('teleonline'));
       expect(settings.playlistUrls[1], contains('languages/spa.m3u'));
@@ -286,7 +286,7 @@ void main() {
       final settings = await AutoLiveSettings.load();
 
       expect(settings.playlistUrls, hasLength(12));
-      expect(settings.epgUrls, hasLength(20));
+      expect(settings.epgUrls, hasLength(24));
       expect(settings.authorizationConfirmed, isTrue);
       expect(settings.isConfigured, isTrue);
     });
@@ -302,7 +302,7 @@ void main() {
 
       expect(settings.isConfigured, isTrue);
       expect(settings.playlistUrls, hasLength(12));
-      expect(settings.epgUrls, hasLength(20));
+      expect(settings.epgUrls, hasLength(24));
     });
   });
 
