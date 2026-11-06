@@ -35,7 +35,7 @@ const String contactUrl = 'https://wa.me/5927214741';
 const String settingsPhotoAsset =
     'assets/images/file_000000006048820e9e0720f1adf548f1.png';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
   ErrorWidget.builder = (details) {
     final message = details.exceptionAsString();
@@ -570,7 +570,7 @@ class SettingsBackdrop extends StatelessWidget {
   }
 }
 
-// Paleta exclusiva de Inicio: no altera los colores de las demás secciones.
+// Tonos del escudo y del fondo de Inicio, usando solo la identidad de cinco colores.
 const Color _homeBlack = Color(0xFF020204);
 const Color _homePanel = Color(0xFF07090D);
 const Color _homeSteel = Color(0xFFEAF0F8);
@@ -1028,8 +1028,7 @@ class _SportsCrestPainter extends CustomPainter {
       Paint()
         ..color = _homeBlue.withAlpha(115)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = width * .075
-        
+        ..strokeWidth = width * .075,
     );
     canvas.save();
     canvas.translate(width * .012, height * .014);
@@ -1038,8 +1037,7 @@ class _SportsCrestPainter extends CustomPainter {
       Paint()
         ..color = Colors.black.withAlpha(235)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = width * .055
-        
+        ..strokeWidth = width * .055,
     );
     canvas.restore();
 
