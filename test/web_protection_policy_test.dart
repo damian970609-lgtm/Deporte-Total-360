@@ -20,5 +20,16 @@ void main() {
       expect(WebProtectionPolicy.isBlockedUrl('https://futbol-libre.cam/'), isFalse);
       expect(WebProtectionPolicy.isBlockedUrl('https://player.example.net/live/index.m3u8'), isFalse);
     });
+
+    test('construye todos los bloqueadores en una lista modificable', () {
+      final blockers = WebProtectionPolicy.buildContentBlockers();
+
+      expect(
+        blockers,
+        hasLength(WebProtectionPolicy.blockedDomains.length + 1),
+      );
+      expect(() => blockers.add(blockers.last), returnsNormally);
+    });
+
   });
 }
