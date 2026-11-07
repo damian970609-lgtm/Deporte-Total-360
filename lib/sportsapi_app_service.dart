@@ -67,6 +67,39 @@ String _normalizeAgendaFilterText(String value) {
       .replaceAll(RegExp(r'\s+'), ' ');
 }
 
+String _normalizeAgendaSportId(String value) {
+  final normalized = _normalizeAgendaFilterText(value)
+      .replaceAll(RegExp(r'[ _]+'), '-');
+  const aliases = <String, String>{
+    'soccer': 'football', 'futbol': 'football', 'icehockey': 'ice-hockey',
+    'hockey': 'ice-hockey', 'volley-ball': 'volleyball',
+    'road-cycling': 'cycling', 'formula-1': 'motorsport',
+    'formula1': 'motorsport', 'f1': 'motorsport',
+    'motor-racing': 'motorsport', 'racing': 'motorsport',
+  };
+  return aliases[normalized] ?? normalized;
+}
+
+bool _isTruthy(dynamic value) {
+  if (value == true) return true;
+  if (value is num) return value != 0;
+  if (value is String) {
+    return const <String>{'true', '1', 'yes', 'on', 'enabled', 'selected'}
+        .contains(value.trim().toLowerCase());
+  }
+  return false;
+}
+
+void _addCompetitionSelection(String raw, Set<String> ids, Set<String> names) {
+  final value = raw.trim();
+  if (value.isEmpty) return;
+  if (int.tryParse(value) != null) {
+    ids.add(value);
+  } else {
+    names.add(_normalizeAgendaFilterText(value));
+  }
+}
+
 class _FavoriteAgendaSport {
   const _FavoriteAgendaSport({
     required this.id,
@@ -90,12 +123,19 @@ class _FavoriteAgendaSport {
   }
 
   bool matchesRow(Map<String, dynamic> row, {required bool isRace}) {
-    final raw = row[isRace ? 'series' : 'league'] ?? row['competition'];
+    dynamic raw = row[isRace ? 'series' : 'league'] ?? row['competition'];
+    for (final wrapperKey in const <String>['fixture', 'event', 'game']) {
+      final wrapper = row[wrapperKey];
+      if (raw == null && wrapper is Map) {
+        raw = wrapper[isRace ? 'series' : 'league'] ?? wrapper['competition'];
+      }
+    }
     final competition = raw is Map
         ? Map<String, dynamic>.from(raw)
         : <String, dynamic>{};
     final id = (competition['id'] ??
             competition[isRace ? 'seriesId' : 'leagueId'] ??
+            competition['competitionId'] ??
             '').toString().trim();
     final name = (competition['name'] ??
             competition['title'] ??
@@ -221,7 +261,13 @@ class SportsApiAppService {
     final future = () async {
       final response = await _get('/favorites');
       if (response is! Map) return <Map<String, dynamic>>[];
-      final sports = response['sports'];
+      final data = response['data'];
+      final dataMap = data is Map
+          ? Map<String, dynamic>.from(data)
+          : <String, dynamic>{};
+      final sports = response['sports'] ?? response['favorites'] ??
+          dataMap['sports'] ?? dataMap['favorites'] ??
+          (data is List ? data : null);
       if (sports is! List) return <Map<String, dynamic>>[];
       return sports.whereType<Map>()
           .map((item) => Map<String, dynamic>.from(item))
@@ -250,18 +296,36 @@ class SportsApiAppService {
         continue;
       }
 
-      var id = _text(
-        sport['id'] ?? sport['sportId'] ?? sport['slug'] ?? sport['sport'],
-      ).toLowerCase();
+      final rawSportId = <dynamic>[
+        sport['id'],
+        sport['sportId'],
+        sport['slug'],
+        sport['sport'],
+        sport['key'],
+        sport['code'],
+      ].firstWhere((value) => _text(value).isNotEmpty, orElse: () => null);
+      var id = _normalizeAgendaSportId(_text(rawSportId));
       if (!_sportNames.containsKey(id)) {
         final normalizedName = _normalizeAgendaFilterText(
           _text(sport['name'] ?? sport['sportName']),
         );
-        for (final entry in _sportNames.entries) {
-          if (_normalizeAgendaFilterText(entry.key) == normalizedName ||
-              _normalizeAgendaFilterText(entry.value) == normalizedName) {
-            id = entry.key;
-            break;
+        const nameAliases = <String, String>{
+          'football': 'football', 'soccer': 'football', 'futbol': 'football',
+          'basketball': 'basketball', 'baseball': 'baseball',
+          'ice hockey': 'ice-hockey', 'hockey sobre hielo': 'ice-hockey',
+          'volleyball': 'volleyball', 'mma': 'mma', 'futsal': 'futsal',
+          'cycling': 'cycling', 'ciclismo': 'cycling', 'motorsport': 'motorsport',
+          'motor sport': 'motorsport', 'formula 1': 'motorsport', 'f1': 'motorsport',
+          'handball': 'handball',
+        };
+        id = nameAliases[normalizedName] ?? id;
+        if (!_sportNames.containsKey(id)) {
+          for (final entry in _sportNames.entries) {
+            if (_normalizeAgendaFilterText(entry.key) == normalizedName ||
+                _normalizeAgendaFilterText(entry.value) == normalizedName) {
+              id = entry.key;
+              break;
+            }
           }
         }
       }
@@ -271,9 +335,17 @@ class SportsApiAppService {
       final name = suppliedName.isEmpty ? _sportNames[id]! : suppliedName;
       final competitionIds = <String>{};
       final competitionNames = <String>{};
-      var allCompetitions = sport['allCompetitions'] == true ||
-          sport['allLeagues'] == true ||
-          sport['all'] == true;
+      var allCompetitions = _isTruthy(sport['allCompetitions']) ||
+          _isTruthy(sport['allLeagues']) || _isTruthy(sport['all']);
+
+      void addSelection(String raw) {
+        final normalized = _normalizeAgendaFilterText(raw);
+        if (_isAllCompetitionsValue(normalized)) {
+          allCompetitions = true;
+        } else {
+          _addCompetitionSelection(raw, competitionIds, competitionNames);
+        }
+      }
 
       void readCompetitionSelection(dynamic value) {
         if (value == null) return;
@@ -285,54 +357,72 @@ class SportsApiAppService {
         }
         if (value is Map) {
           final map = Map<String, dynamic>.from(value);
-          final rawId = map['id'] ??
-              map['leagueId'] ??
-              map['competitionId'] ??
-              map['seriesId'];
-          final rawName = map['name'] ??
-              map['title'] ??
-              map['label'] ??
-              map['leagueName'] ??
-              map['competitionName'] ??
-              map['seriesName'];
+          if (map['enabled'] == false || map['active'] == false ||
+              map['selected'] == false || map['isSelected'] == false) {
+            return;
+          }
+          final rawId = map['id'] ?? map['leagueId'] ??
+              map['competitionId'] ?? map['seriesId'];
+          final rawName = map['name'] ?? map['title'] ?? map['label'] ??
+              map['leagueName'] ?? map['competitionName'] ?? map['seriesName'];
           final idValue = _text(rawId);
           final nameValue = _text(rawName);
           if (idValue.isNotEmpty || nameValue.isNotEmpty) {
             if (idValue.isNotEmpty) competitionIds.add(idValue);
-            if (nameValue.isNotEmpty) {
-              final normalized = _normalizeAgendaFilterText(nameValue);
-              if (_isAllCompetitionsValue(normalized)) {
-                allCompetitions = true;
-              } else {
-                competitionNames.add(normalized);
-              }
-            }
+            if (nameValue.isNotEmpty) addSelection(nameValue);
             return;
           }
-          for (final nested in map.values) {
-            readCompetitionSelection(nested);
+          // También admite mapas como {"39": true} o
+          // {"Premier League": {"selected": true}}.
+          for (final entry in map.entries) {
+            final key = entry.key.trim();
+            if (key.isEmpty || const <String>{
+              'enabled', 'active', 'selected', 'isSelected',
+              'all', 'allLeagues', 'allCompetitions',
+            }.contains(key)) continue;
+            final child = entry.value;
+            if (_isTruthy(child)) {
+              addSelection(key);
+            } else if (child is Map) {
+              final childMap = Map<String, dynamic>.from(child);
+              if (childMap['enabled'] == false || childMap['active'] == false ||
+                  childMap['selected'] == false || childMap['isSelected'] == false) {
+                continue;
+              }
+              final explicitId = _text(childMap['id'] ?? childMap['leagueId'] ??
+                  childMap['competitionId'] ?? childMap['seriesId']);
+              final explicitName = _text(childMap['name'] ?? childMap['title'] ??
+                  childMap['label'] ?? childMap['leagueName'] ??
+                  childMap['competitionName'] ?? childMap['seriesName']);
+              if (explicitId.isNotEmpty || explicitName.isNotEmpty) {
+                if (explicitId.isNotEmpty) competitionIds.add(explicitId);
+                if (explicitName.isNotEmpty) addSelection(explicitName);
+              } else {
+                if (_isTruthy(childMap['selected'] ?? childMap['enabled'])) {
+                  addSelection(key);
+                }
+                readCompetitionSelection(child);
+              }
+            } else {
+              readCompetitionSelection(child);
+            }
           }
           return;
         }
-        if (value is String || value is num) {
-          final raw = value.toString().trim();
-          if (raw.isEmpty) return;
-          final normalized = _normalizeAgendaFilterText(raw);
-          if (_isAllCompetitionsValue(normalized)) {
-            allCompetitions = true;
-          } else if (int.tryParse(raw) != null) {
-            competitionIds.add(raw);
-          } else {
-            competitionNames.add(normalized);
-          }
-        }
+        if (value is String || value is num) addSelection(value.toString());
       }
 
-      final selection = sport['competitions'] ??
-          sport['leagues'] ??
-          sport['selectedCompetitions'] ??
-          sport['selectedLeagues'];
-      readCompetitionSelection(selection);
+      // Fusionar campos: competitions: [] no debe ocultar selectedCompetitions.
+      for (final key in const <String>[
+        'competitions', 'leagues', 'selectedCompetitions', 'selectedLeagues',
+        'competitionIds', 'leagueIds', 'seriesIds',
+      ]) {
+        if (sport.containsKey(key)) readCompetitionSelection(sport[key]);
+      }
+      // Si el favorito no tiene filtro de ligas interpretable, incluir todas.
+      if (competitionIds.isEmpty && competitionNames.isEmpty && !allCompetitions) {
+        allCompetitions = true;
+      }
 
       selected[id] = _FavoriteAgendaSport(
         id: id,
@@ -370,7 +460,9 @@ class SportsApiAppService {
       value == 'todos' ||
       value == 'todas' ||
       value == 'all leagues' ||
-      value == 'all competitions';
+      value == 'all competitions' ||
+      value == 'todas las competiciones' ||
+      value == 'todas las ligas';
 
   static const Map<String, String> _sportNames = <String, String>{
     'football': 'Fútbol',
@@ -442,7 +534,9 @@ class SportsApiAppService {
       _agendaCacheExpiry[day] = DateTime.now().add(
         result.incomplete
             ? const Duration(minutes: 1)
-            : const Duration(hours: 6),
+            : result.events.isEmpty
+                ? const Duration(minutes: 3)
+                : const Duration(hours: 6),
       );
       return result;
     }).whenComplete(() {
@@ -496,9 +590,11 @@ class SportsApiAppService {
       _agendaWindowCache[cacheKey] = (
         window: window,
         expiresAt: DateTime.now().add(
-          window.unavailableDates.isEmpty
-              ? const Duration(hours: 6)
-              : const Duration(minutes: 1),
+          window.unavailableDates.isNotEmpty
+              ? const Duration(minutes: 1)
+              : window.events.isEmpty
+                  ? const Duration(minutes: 3)
+                  : const Duration(hours: 6),
         ),
       );
       return window;
