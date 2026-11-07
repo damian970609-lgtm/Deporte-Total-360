@@ -287,7 +287,7 @@ void main() {
     await tester.ensureVisible(chatTab);
     await tester.tap(chatTab);
     await tester.pump();
-    expect(find.text('CHAT PÚBLICO'), findsOneWidget);
+    expect(find.text('CHAT DE COMPRADORES'), findsOneWidget);
     expect(find.text('Ajustes'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
