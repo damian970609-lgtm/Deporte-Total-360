@@ -234,8 +234,8 @@ void main() {
       return http.Response(
         jsonEncode(<String, Object>{
           'configured': true,
-          'total': 450,
-          'offset': 200,
+          'total': 250001,
+          'offset': 250000,
           'hasMore': true,
           'channels': <Map<String, Object>>[
             <String, Object>{
