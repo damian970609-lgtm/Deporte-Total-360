@@ -124,7 +124,6 @@ class SportsApiAppService {
       }
       return decoded['data'];
     } on TimeoutException {
-      _closeOwnedClient();
       throw const SportsApiException('La consulta de SportsAPI tardó demasiado.');
     } on SportsApiException {
       rethrow;
@@ -397,16 +396,15 @@ class SportsApiAppService {
               ? Map<String, dynamic>.from(envelope['meta'] as Map)
               : <String, dynamic>{};
           if (meta['complete'] != false) return envelope;
-          if (attempt == 2) {
+          if (attempt == 1) {
             throw const SportsApiException(
-              'SportsAPI devolvió datos incompletos tres veces.',
+              'SportsAPI devolvió datos incompletos en dos intentos.',
             );
           }
         } catch (error) {
           final message = error.toString();
           final retryable =
               RegExp(r'HTTP (408|5[0-9][0-9])').hasMatch(message) ||
-              message.contains('tardó demasiado') ||
               message.contains('No se pudo conectar');
           if (!retryable || attempt == 1) rethrow;
 
@@ -427,7 +425,7 @@ class SportsApiAppService {
         );
       }
       throw const SportsApiException(
-        'SportsAPI no respondió con datos completos después de tres intentos.',
+        'SportsAPI no respondió con datos completos después de dos intentos.',
       );
     }
 
