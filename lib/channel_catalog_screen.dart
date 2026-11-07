@@ -2766,7 +2766,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
                           const Text(
-                            'CATÁLOGO GENERAL · 24 LISTAS',
+                            'LISTAS GENERALES · 24 FUENTES',
                             style: TextStyle(
                               color: _channelGreen,
                               fontWeight: FontWeight.w900,
