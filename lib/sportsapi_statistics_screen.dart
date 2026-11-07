@@ -781,7 +781,25 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
                       child: CircularProgressIndicator(color: _apiStatsPink),
                     ))
                   else if (_statsError != null)
-                    Text(_statsError!, style: const TextStyle(color: _apiStatsMuted, fontSize: 11, height: 1.4))
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(_statsError!,
+                            style: const TextStyle(color: _apiStatsMuted, fontSize: 11, height: 1.4)),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: () => _showingStandings
+                              ? _loadStandings(_selectedEvent!)
+                              : _loadStatistics(_selectedEvent!),
+                          icon: const Icon(Icons.refresh_rounded, size: 15),
+                          label: const Text('REINTENTAR CONSULTA'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: _apiStatsCyan,
+                            side: const BorderSide(color: _apiStatsLine),
+                          ),
+                        ),
+                      ],
+                    )
                   else
                     ..._statistics.map(_statisticItem),
                 ],
