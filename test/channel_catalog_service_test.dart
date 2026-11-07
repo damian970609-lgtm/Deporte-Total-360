@@ -339,6 +339,36 @@ void main() {
     expect(channel.visible, isFalse);
   });
 
+  test('clasificar un canal como deportivo usa PATCH autenticado', () async {
+    http.Request? sent;
+    final client = MockClient((request) async {
+      sent = request;
+      return http.Response(jsonEncode(<String, Object>{
+        'updated': true,
+        'isSports': true,
+        'visible': false,
+      }), 200);
+    });
+    final service = ChannelCatalogService(
+      client: client,
+      accessTokenProvider: () => 'test-google-id-token',
+    );
+
+    await service.setChannelSportsClassification(
+      'news-channel-123',
+      isSports: true,
+    );
+
+    expect(sent?.method, 'PATCH');
+    expect(
+      sent?.url.path,
+      endsWith('/api/channels/admin/channels/news-channel-123/classification'),
+    );
+    expect(sent?.headers['Authorization'], 'Bearer test-google-id-token');
+    expect(jsonDecode(sent!.body), <String, bool>{'isSports': true});
+    client.close();
+  });
+
   test('eliminar un canal usa DELETE autenticado en la ruta del canal', () async {
     http.Request? sent;
     final client = MockClient((request) async {
