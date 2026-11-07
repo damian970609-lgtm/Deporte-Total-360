@@ -202,4 +202,81 @@ void main() {
     },
   );
 
+  testWidgets(
+    'muestra juntos los eventos de todos los deportes favoritos y permite filtrar por deporte',
+    (tester) async {
+      final previousBase = sportsApiBaseUrl.value;
+      sportsApiBaseUrl.value = 'https://worker-statistics-all-favorites.example';
+      final now = DateTime.now();
+      final localMidday = DateTime(now.year, now.month, now.day, 12);
+      final eventStart = localMidday.toUtc().toIso8601String();
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('/favorites')) {
+          return http.Response(jsonEncode({
+            'sports': [
+              {'id': 'football', 'name': 'Fútbol', 'competitions': ['Premier League']},
+              {'id': 'basketball', 'name': 'Baloncesto', 'competitions': ['NBA']},
+            ],
+          }), 200);
+        }
+        if (request.url.path.endsWith('/fixtures')) {
+          final sport = request.url.queryParameters['sport'];
+          final row = sport == 'basketball'
+              ? {
+                  'id': 202,
+                  'startTime': eventStart,
+                  'home': {'name': 'Basket Club'},
+                  'away': {'name': 'Rival Basket'},
+                  'league': {'id': 12, 'name': 'NBA'},
+                  'season': {'id': 2026},
+                  'status': {'type': 'scheduled'},
+                }
+              : {
+                  'id': 101,
+                  'startTime': eventStart,
+                  'home': {'name': 'Alpha FC'},
+                  'away': {'name': 'Beta FC'},
+                  'league': {'id': 39, 'name': 'Premier League'},
+                  'season': {'id': 2026},
+                  'status': {'type': 'scheduled'},
+                };
+          return http.Response(jsonEncode({
+            'data': [row],
+            'meta': {'complete': true, 'hasNextPage': false},
+          }), 200);
+        }
+        if (request.url.path.endsWith('/races')) {
+          return http.Response(jsonEncode({'data': [], 'meta': {'complete': true}}), 200);
+        }
+        return http.Response(jsonEncode({'data': {}, 'meta': {}}), 200);
+      });
+
+      try {
+        await tester.pumpWidget(MaterialApp(
+          home: SportsApiStatisticsScreen(api: SportsApiAppService(client: client)),
+        ));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Alpha FC vs Beta FC'), findsOneWidget);
+        expect(find.text('Basket Club vs Rival Basket'), findsOneWidget);
+        expect(find.byKey(const ValueKey<String>('stats-filter-sport-all')), findsOneWidget);
+
+        final basketballChip = find.widgetWithText(ChoiceChip, 'Baloncesto');
+        await tester.tap(basketballChip);
+        await tester.pumpAndSettle();
+        expect(find.text('Basket Club vs Rival Basket'), findsOneWidget);
+        expect(find.text('Alpha FC vs Beta FC'), findsNothing);
+
+        await tester.tap(find.byKey(const ValueKey<String>('stats-filter-sport-all')));
+        await tester.pumpAndSettle();
+        expect(find.text('Alpha FC vs Beta FC'), findsOneWidget);
+        expect(find.text('Basket Club vs Rival Basket'), findsOneWidget);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        sportsApiBaseUrl.value = previousBase;
+        client.close();
+      }
+    },
+  );
+
 }
