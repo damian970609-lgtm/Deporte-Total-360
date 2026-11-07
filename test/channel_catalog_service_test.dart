@@ -256,14 +256,14 @@ void main() {
 
     final page = await service.fetchPublicChannelPage(
       search: 'ESPN',
-      offset: 200,
+      offset: 250000,
     );
 
     expect(requestedUri?.path, '/api/channels');
     expect(requestedUri?.queryParameters['q'], 'ESPN');
-    expect(requestedUri?.queryParameters['offset'], '200');
-    expect(page.total, 450);
-    expect(page.offset, 200);
+    expect(requestedUri?.queryParameters['offset'], '250000');
+    expect(page.total, 250001);
+    expect(page.offset, 250000);
     expect(page.hasMore, isTrue);
     expect(page.channels, hasLength(1));
     expect(page.channels.single.name, 'ESPN Latino');
