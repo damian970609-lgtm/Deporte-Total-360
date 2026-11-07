@@ -1715,6 +1715,44 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     );
   }
 
+  Future<void> _signIn() async {
+    setState(() {
+      _working = true;
+      _error = null;
+    });
+    try {
+      final email = await _service.signIn();
+      if (!mounted) return;
+      setState(() => _email = email);
+      await _loadCachedAdminSnapshot(email);
+      await _loadAdmin();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.toString());
+      _message(error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _signOut() async {
+    try {
+      await _service.signOut();
+    } catch (_) {}
+    if (mounted) {
+      setState(() {
+        _email = null;
+        _channels = <SportsChannel>[];
+        _sources = <ChannelPlaylistSource>[];
+        _licenseRecords = <AppLicenseRecord>[];
+        _previewChannel = null;
+        _catalogTotal = 0;
+        _nextAdminOffset = 0;
+        _hasMore = false;
+      });
+    }
+  }
+
   Future<void> _loadAdmin({bool showLoading = true}) async {
     if (_email == null && _service.signedInEmail == null) return;
     if (showLoading && mounted) {
