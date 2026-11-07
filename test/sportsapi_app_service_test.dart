@@ -346,7 +346,7 @@ void main() {
     }
   });
 
-  test('consulta fechas UTC de la semana en paralelo para completar los siete días', () async {
+  test('consulta fechas UTC de la semana en serie para respetar la cuota', () async {
     final previousBase = sportsApiBaseUrl.value;
     sportsApiBaseUrl.value = 'https://worker-window-concurrency.example';
     String? firstDate;
@@ -391,7 +391,7 @@ void main() {
       );
       expect(window.days, 7);
       expect(startedDates.length, greaterThan(1));
-      expect(anotherDateStartedBeforeFinish, isTrue);
+      expect(anotherDateStartedBeforeFinish, isFalse);
     } finally {
       sportsApiBaseUrl.value = previousBase;
       client.close();
