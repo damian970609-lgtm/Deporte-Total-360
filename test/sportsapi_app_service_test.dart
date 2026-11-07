@@ -684,4 +684,47 @@ void main() {
       client.close();
     }
   });
+  test('acepta variantes del nombre de una liga favorita sin perder el evento', () async {
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-league-alias.example';
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/favorites')) {
+        return http.Response(jsonEncode({
+          'sports': [
+            {'id': 'football', 'name': 'Fútbol', 'competitions': ['LaLiga']}
+          ]
+        }), 200);
+      }
+      if (request.url.path.endsWith('/fixtures')) {
+        return http.Response(jsonEncode({
+          'data': [{
+            'id': 303,
+            'sport': 'football',
+            'startTime': '2030-01-01T12:00:00Z',
+            'home': {'name': 'Equipo A'},
+            'away': {'name': 'Equipo B'},
+            'league': {'id': 140, 'name': 'LaLiga EA SPORTS'},
+            'season': {'id': 2030},
+            'status': {'type': 'scheduled'}
+          }],
+          'meta': {'complete': true, 'hasNextPage': false}
+        }), 200);
+      }
+      return http.Response(jsonEncode({'data': []}), 200);
+    });
+
+    try {
+      final api = SportsApiAppService(client: client);
+      final events = await api.fetchFavoriteAgendaEvents(
+        date: DateTime.utc(2030, 1, 1),
+      );
+      expect(events, hasLength(1));
+      expect(events.single.id, 'sportsapi-fixture-303');
+      expect(events.single.competition, 'LaLiga EA SPORTS');
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
+  });
+
 }
