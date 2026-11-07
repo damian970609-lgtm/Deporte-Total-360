@@ -408,6 +408,42 @@ class ChannelCatalogService {
     };
   }
 
+  bool _tokenNeedsRefresh(String token) {
+    final parts = token.split('.');
+    if (parts.length != 3) return false;
+    try {
+      final payload = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      );
+      if (payload is! Map) return true;
+      final expiresAt = int.tryParse((payload['exp'] ?? '').toString());
+      if (expiresAt == null) return true;
+      return expiresAt <= DateTime.now().millisecondsSinceEpoch ~/ 1000 + 120;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// Encabezados de Chat con sesión Google fresca. Se reutiliza la identidad
+  /// ya verificada por la puerta de licencias de la aplicación y se renueva
+  /// en segundo plano cuando el ID token está próximo a caducar.
+  Future<Map<String, String>> chatAuthorizationHeaders() async {
+    if (_accessTokenProvider != null) return _authHeaders();
+
+    final token = _idToken;
+    if (token == null || token.isEmpty || _tokenNeedsRefresh(token)) {
+      _idToken = null;
+      signedInEmail = null;
+      final restoredEmail = await restoreSession();
+      if (restoredEmail == null) {
+        throw const ChannelCatalogException(
+          'Tu sesión Google caducó. Vuelve a iniciar sesión en Deporte Total 360° para usar el Chat.',
+        );
+      }
+    }
+    return _authHeaders();
+  }
+
   /// Descarga solo una página del catálogo. La interfaz solicita las
   /// siguientes al desplazarse, sin traer miles de señales de una sola vez.
   Future<ChannelCatalogPage> fetchPublicChannelPage({
