@@ -531,18 +531,36 @@ void main() {
     }
   });
 
-  test('solicita estadísticas por la ruta correcta de SportsAPI', () async {
+  test('las cuatro consultas de estadísticas usan rutas e identificadores correctos', () async {
     final previousBase = sportsApiBaseUrl.value;
-    sportsApiBaseUrl.value = 'https://worker.example';
-    Uri? requested;
+    sportsApiBaseUrl.value = 'https://worker-statistics-endpoints.example';
+    final requested = <Uri>[];
     final client = MockClient((request) async {
-      requested = request.url;
-      return http.Response(jsonEncode({'data': {'periods': []}, 'meta': {}}), 200);
+      requested.add(request.url);
+      return http.Response(
+        jsonEncode({'data': <dynamic>[], 'meta': <String, dynamic>{}}),
+        200,
+      );
     });
     try {
-      final result = await SportsApiAppService(client: client).fetchFixtureStatistics(101);
-      expect(result, isA<Map>());
-      expect(requested?.path, '/api/sportsapi/fixtures/101/statistics');
+      final api = SportsApiAppService(client: client);
+      await api.fetchFixtureStatistics(101);
+      await api.fetchRaceResults(202, sessionId: 303);
+      await api.fetchLeagueStandings(leagueId: 39, seasonId: 2026);
+      await api.fetchSeriesStandings(seriesId: 55, seasonId: 2026);
+
+      expect(requested.map((uri) => uri.path), <String>[
+        '/api/sportsapi/fixtures/101/statistics',
+        '/api/sportsapi/races/202/results',
+        '/api/sportsapi/leagues/39/standings',
+        '/api/sportsapi/series/55/standings',
+      ]);
+      expect(requested[1].queryParameters, <String, String>{'session': '303'});
+      expect(requested[2].queryParameters, <String, String>{'season': '2026'});
+      expect(requested[3].queryParameters, <String, String>{
+        'season': '2026',
+        'type': 'competitors',
+      });
     } finally {
       sportsApiBaseUrl.value = previousBase;
       client.close();
