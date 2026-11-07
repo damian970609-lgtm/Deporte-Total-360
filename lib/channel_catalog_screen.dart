@@ -24,7 +24,6 @@ const Color _channelYellow = Color(0xFFFFFFFF);
 const Color _channelMuted = Color(0xFFEAF0F8);
 const String _channelFavoritesKey = 'dt360_channel_catalog_favorites_v1';
 const String _channelCatalogCacheKey = channelCatalogSnapshotCacheKey;
-const String _adminSnapshotPrefix = 'dt360_admin_snapshot_v1_';
 const int _maxCachedChannels = maxCachedChannelCatalogEntries;
 
 
