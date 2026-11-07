@@ -9,6 +9,32 @@ import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sportsapi_app_service.dart';
 import 'package:deporte_total_360/sportsapi_statistics_screen.dart';
 
+class _FavoritesOnlyApi extends SportsApiAppService {
+  _FavoritesOnlyApi(http.Client client) : super(client: client);
+
+  @override
+  Future<SportsAgendaWindow> fetchFavoriteAgendaWindow({
+    DateTime? startDate,
+    int days = 7,
+    bool forceRefresh = false,
+  }) async {
+    throw const SportsApiException('Calendario temporalmente no disponible.');
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchFavoriteSports({
+    bool forceRefresh = false,
+  }) async {
+    return <Map<String, dynamic>>[
+      <String, dynamic>{
+        'id': 'football',
+        'name': 'Fútbol',
+        'competitions': <String>['Premier League'],
+      },
+    ];
+  }
+}
+
 void main() {
   testWidgets(
     'Estadísticas permite buscar, filtrar, comparar datos y navegar entre fechas locales',
@@ -103,6 +129,8 @@ void main() {
 
         expect(find.text('EVENTOS DEL DÍA'), findsOneWidget);
         expect(find.text('Alpha FC vs Beta FC'), findsOneWidget);
+        expect(find.text('Fútbol'), findsOneWidget);
+        expect(find.text('Baloncesto'), findsNothing);
         expect(find.byKey(const ValueKey<String>('stats-date-picker')), findsOneWidget);
 
         final search = find.byType(TextField);
@@ -145,4 +173,33 @@ void main() {
       }
     },
   );
+
+  testWidgets(
+    'muestra deportes y ligas favoritas aunque falle la carga del calendario',
+    (tester) async {
+      final client = MockClient((request) async => http.Response('{}', 404));
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: SportsApiStatisticsScreen(api: _FavoritesOnlyApi(client)),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Fútbol'), findsOneWidget);
+        expect(find.text('Baloncesto'), findsNothing);
+        expect(
+          find.text('1 competiciones configuradas para Fútbol'),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('COMPETICIONES FAVORITAS'));
+        await tester.pumpAndSettle();
+        expect(find.text('Premier League'), findsOneWidget);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        client.close();
+      }
+    },
+  );
+
 }

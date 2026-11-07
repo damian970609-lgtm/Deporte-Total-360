@@ -20,7 +20,7 @@ void main() {
         return http.Response(jsonEncode({
           'sports': [
             {'id': 'football', 'name': 'Fútbol', 'competitions': ['Premier League']},
-            {'id': 'cycling', 'name': 'Ciclismo', 'competitions': ['Cycling Men']}
+            {'id': 'cycling', 'name': 'Ciclismo', 'competitions': ['Tour de France']}
           ]
         }), 200);
       }
@@ -76,6 +76,10 @@ void main() {
       expect(events.map((event) => event.id), contains('sportsapi-fixture-101'));
       expect(events.map((event) => event.id), contains('sportsapi-race-202-303'));
       expect(events.map((event) => event.id), contains('sportsapi-race-202-304'));
+      expect(
+        events.firstWhere((event) => event.id == 'sportsapi-race-202-303').competition,
+        'Tour de France',
+      );
       expect(events.firstWhere((event) => event.id == 'sportsapi-fixture-101').homeTeam, 'Team One');
       expect(requested.where((uri) => uri.path.endsWith('/fixtures')), hasLength(1));
       expect(requested.where((uri) => uri.path.endsWith('/races')), hasLength(1));
@@ -245,6 +249,57 @@ void main() {
     }
   });
 
+  test('conserva el lote de respaldo marcado por el Worker cuando cambia el nombre de una liga', () async {
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-favorite-fallback.example';
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/favorites')) {
+        return http.Response(jsonEncode({
+          'sports': [
+            {
+              'id': 'football',
+              'name': 'Fútbol',
+              'competitions': ['Premier League'],
+            },
+          ],
+        }), 200);
+      }
+      if (request.url.path.endsWith('/fixtures')) {
+        return http.Response(jsonEncode({
+          'data': [
+            {
+              'id': 601,
+              'startTime': '2036-06-01T12:00:00Z',
+              'status': {'type': 'scheduled'},
+              'home': {'name': 'Equipo de la liga'},
+              'away': {'name': 'Rival'},
+              'league': {'id': 999, 'name': 'Domestic Premier Competition'},
+            },
+          ],
+          'meta': {
+            'hasNextPage': false,
+            'complete': true,
+            'favoriteCompetitionFilter': false,
+            'favoriteCompetitionFilterFallback': true,
+          },
+        }), 200);
+      }
+      return http.Response(jsonEncode({
+        'data': [],
+        'meta': {'hasNextPage': false, 'complete': true},
+      }), 200);
+    });
+
+    try {
+      final events = await SportsApiAppService(client: client)
+          .fetchFavoriteAgendaEvents(date: DateTime.utc(2036, 6, 1));
+      expect(events.map((event) => event.id), contains('sportsapi-fixture-601'));
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
+  });
+
   test('un deporte favorito sin lista de ligas usa todas sus competiciones', () async {
     final previousBase = sportsApiBaseUrl.value;
     sportsApiBaseUrl.value = 'https://worker-empty-selection.example';
@@ -274,6 +329,58 @@ void main() {
       final events = await SportsApiAppService(client: client)
           .fetchFavoriteAgendaEvents(date: DateTime.utc(2036, 5, 8));
       expect(events.map((event) => event.id), contains('sportsapi-fixture-501'));
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
+  });
+
+  test('consulta fechas UTC de la semana en paralelo para completar los siete días', () async {
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-window-concurrency.example';
+    String? firstDate;
+    var firstDateFinished = false;
+    var anotherDateStartedBeforeFinish = false;
+    final startedDates = <String>{};
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/favorites')) {
+        return http.Response(jsonEncode({
+          'sports': [
+            {'id': 'football', 'name': 'Fútbol', 'competitions': ['Liga de prueba']},
+          ],
+        }), 200);
+      }
+      if (request.url.path.endsWith('/fixtures')) {
+        final date = request.url.queryParameters['date']!;
+        firstDate ??= date;
+        startedDates.add(date);
+        if (date != firstDate && !firstDateFinished) {
+          anotherDateStartedBeforeFinish = true;
+        }
+        if (date == firstDate) {
+          await Future<void>.delayed(const Duration(milliseconds: 150));
+          firstDateFinished = true;
+        }
+        return http.Response(jsonEncode({
+          'data': [],
+          'meta': {'hasNextPage': false, 'complete': true},
+        }), 200);
+      }
+      return http.Response(jsonEncode({
+        'data': [],
+        'meta': {'complete': true},
+      }), 200);
+    });
+
+    try {
+      final window = await SportsApiAppService(client: client)
+          .fetchFavoriteAgendaWindow(
+        startDate: DateTime(2041, 5, 6),
+        days: 7,
+      );
+      expect(window.days, 7);
+      expect(startedDates.length, greaterThan(1));
+      expect(anotherDateStartedBeforeFinish, isTrue);
     } finally {
       sportsApiBaseUrl.value = previousBase;
       client.close();
