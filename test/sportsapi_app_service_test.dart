@@ -69,7 +69,7 @@ void main() {
     try {
       final api = SportsApiAppService(client: client);
       final favorites = await api.fetchFavoriteSports();
-      expect(favorites, hasLength(1));
+      expect(favorites, hasLength(2));
       expect(favorites.first['id'], 'football');
 
       final events = await api.fetchFavoriteAgendaEvents(date: DateTime.utc(2030, 1, 1));
