@@ -304,6 +304,7 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
         _loading = false;
         _error = null;
       });
+      if (widget.isActive && _pollTimer == null) _startPolling();
     } catch (error) {
       if (!mounted) return;
       final denied = error is PublicChatException && error.statusCode == 403;
@@ -312,6 +313,7 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
         if (denied) {
           _accessDenied = true;
           _canModerate = false;
+          _messages = <PublicChatMessage>[];
         }
         if (denied || !silent || _messages.isEmpty) _error = error.toString();
       });
@@ -513,10 +515,10 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
                           'Pseudo acheteur',
                         ),
                         hintText: appText(
-                          'Nombre que verán los demás miembros',
-                          'Name other members will see',
-                          'Nome que os outros membros verão',
-                          'Nom visible par les autres membres',
+                          'Alias público (se fija con tu primer mensaje)',
+                          'Public nickname (locked with your first message)',
+                          'Apelido público (fixado na primeira mensagem)',
+                          'Pseudo public (fixé avec votre premier message)',
                         ),
                         counterText: '',
                         isDense: true,
@@ -565,51 +567,81 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
                 ),
               ),
             Expanded(
-              child: _loading && _messages.isEmpty
-                  ? const Center(
-                      child: CircularProgressIndicator(color: _chatCyan),
-                    )
-                  : _messages.isEmpty
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(28),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: <Widget>[
-                                const Icon(Icons.forum_rounded,
-                                    color: _chatCyan, size: 48),
-                                const SizedBox(height: 12),
-                                Text(
-                                  tr('public_chat_empty'),
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ],
+              child: _accessDenied
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(28),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            const Icon(
+                              Icons.lock_outline_rounded,
+                              color: Colors.orangeAccent,
+                              size: 46,
                             ),
-                          ),
-                        )
-                      : RefreshIndicator(
-                          color: _chatCyan,
-                          onRefresh: _refreshMessages,
-                          child: ListView.builder(
-                            reverse: true,
-                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 14),
-                            itemCount: newestFirst.length,
-                            itemBuilder: (context, index) {
-                              final item = newestFirst[index];
-                              return _ChatMessageBubble(
-                                message: item,
-                                time: _timeLabel(item.createdAt),
-                                onDelete: _canModerate && !item.deleted
-                                    ? () => _deleteMessage(item)
-                                    : null,
-                              );
-                            },
-                          ),
+                            const SizedBox(height: 12),
+                            Text(
+                              appText(
+                                'El Chat es exclusivo para compradores con licencia de pago activa.',
+                                'Chat is exclusive to buyers with an active paid license.',
+                                'O Chat é exclusivo para compradores com licença paga ativa.',
+                                'Le Chat est réservé aux acheteurs avec une licence payante active.',
+                              ),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
                         ),
+                      ),
+                    )
+                  : _loading && _messages.isEmpty
+                      ? const Center(
+                          child: CircularProgressIndicator(color: _chatCyan),
+                        )
+                      : _messages.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(28),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: <Widget>[
+                                    const Icon(Icons.forum_rounded,
+                                        color: _chatCyan, size: 48),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      tr('public_chat_empty'),
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : RefreshIndicator(
+                              color: _chatCyan,
+                              onRefresh: _refreshMessages,
+                              child: ListView.builder(
+                                reverse: true,
+                                padding: const EdgeInsets.fromLTRB(12, 8, 12, 14),
+                                itemCount: newestFirst.length,
+                                itemBuilder: (context, index) {
+                                  final item = newestFirst[index];
+                                  return _ChatMessageBubble(
+                                    message: item,
+                                    time: _timeLabel(item.createdAt),
+                                    onDelete: _canModerate && !item.deleted
+                                        ? () => _deleteMessage(item)
+                                        : null,
+                                  );
+                                },
+                              ),
+                            ),
             ),
             Container(
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 7),
