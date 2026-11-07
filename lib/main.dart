@@ -1745,7 +1745,9 @@ class _HomeAtmospherePainter extends CustomPainter {
 }
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.adminService});
+
+  final ChannelCatalogService? adminService;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -1830,7 +1832,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _signatureTapCount = 0;
       Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
-          builder: (_) => const ChannelAdminScreen(),
+          builder: (_) => ChannelAdminScreen(service: widget.adminService),
         ),
       );
     }
