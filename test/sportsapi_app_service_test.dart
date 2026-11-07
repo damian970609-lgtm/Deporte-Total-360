@@ -161,6 +161,14 @@ void main() {
       );
       expect(cached.events, hasLength(14));
       expect(requested, hasLength(utcDays * 11));
+
+      final refreshed = await api.fetchFavoriteAgendaWindow(
+        startDate: start,
+        days: 7,
+        forceRefresh: true,
+      );
+      expect(refreshed.events, hasLength(14));
+      expect(requested, hasLength(utcDays * 22));
     } finally {
       sportsApiBaseUrl.value = previousBase;
       client.close();
