@@ -807,7 +807,23 @@ class ChannelCatalogService {
     required bool isSports,
   }) async {
     final safeId = channelId.trim();
-    if (!RegExp(r'^[a-zA-Z0-9_-]{1,100}    String channelId, {
+    if (!RegExp(r'^[a-zA-Z0-9_-]{1,100}$').hasMatch(safeId)) {
+      throw const ChannelCatalogException('El identificador del canal no es válido.');
+    }
+    final result = await _client.patch(
+      Uri.parse(_baseUrl + '/api/channels/admin/channels/' +
+          Uri.encodeComponent(safeId) + '/classification'),
+      headers: <String, String>{
+        ..._authHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(<String, bool>{'isSports': isSports}),
+    ).timeout(const Duration(seconds: 20));
+    _decode(result);
+  }
+
+  Future<void> setLanguage(
+    String channelId, {
     required String language,
   }) async {
     if (!const <String>{'es', 'en', 'unknown'}.contains(language)) {
