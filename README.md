@@ -2,14 +2,14 @@
 
 Aplicación Android en Flutter. El APK se compila en GitHub Actions; la carpeta Android se genera en el runner.
 
-Navegación principal: Inicio, Deportes en vivo, Canales deportivos, Agenda deportiva de siete días, Noticias, Mister Fantasy, Estadísticas, Resúmenes, Chat y Ajustes. Chat es una pestaña de primer nivel y conserva la sala pública compartida del Worker. Inicio, Agenda, Estadísticas y Resúmenes utilizan los diez deportes favoritos configurados en SportsAPI.app; Deportes en vivo busca señales por separado en los catálogos M3U/XMLTV.
+Navegación principal: Inicio, Deportes en vivo, Canales deportivos, Agenda deportiva de siete días, Noticias, Mister Fantasy, Estadísticas, Resúmenes, Chat y Ajustes. Chat es una pestaña de primer nivel reservada a compradores con licencia de pago activa. El Worker verifica el ID token de Google y la licencia comercial antes de cada operación; la cuenta administradora puede moderar mensajes. Inicio, Agenda, Estadísticas y Resúmenes utilizan los diez deportes favoritos configurados en SportsAPI.app; Deportes en vivo busca señales por separado en los catálogos M3U/XMLTV.
 
 Archivos principales:
 - lib/main.dart: navegación de diez secciones, inicio, chat y ajustes.
 - lib/automatic_live_service.dart y lib/automatic_live_screen.dart: consumo prioritario del calendario central persistente de Cloudflare, con respaldo local, cruce XMLTV de canales visibles, verificación de señales en español e inglés, priorización del partido elegido desde Agenda y asignación a ocho reproductores.
 - lib/live_media_format.dart y lib/live_channels_screen.dart: detección explícita de HLS, DASH, Smooth Streaming y vídeo progresivo, adaptación de calidad automática con ExoPlayer, selector manual por pistas y transición fullscreen/miniatura sin recrear el controlador.
 - lib/sports_summaries_screen.dart: categorías deportivas y reproducción de YouTube dentro de la app mediante WebView.
-- lib/public_chat_screen.dart: sala pública de chat compartida.
+- lib/public_chat_screen.dart: comunidad privada de compradores con alias estable por cuenta, denuncias de mensajes, revisión administrativa, eliminación moderada y sesión Google vinculada a licencias de pago.
 - lib/sports_statistics_screen.dart: búsqueda de ligas y clasificaciones.
 - lib/sports_api_service.dart: cliente legado de API-Sports/Worker, conservado para compatibilidad.
 - lib/sportsapi_app_service.dart y lib/sportsapi_statistics_screen.dart: conexión segura con las rutas SportsAPI.app del Worker; estadísticas de partidos y resultados de carreras sin introducir claves en la APK.
