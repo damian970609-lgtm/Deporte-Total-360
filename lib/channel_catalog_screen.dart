@@ -2393,7 +2393,10 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           BoxShadow(color: _channelCyan.withAlpha(12), blurRadius: 14),
         ],
       ),
-      child: child,
+      child: Material(
+        color: Colors.transparent,
+        child: child,
+      ),
     );
   }
 
@@ -2663,6 +2666,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                 backgroundColor: _channelPanel,
                 onRefresh: () => _loadAdmin(),
                 child: ListView(
+                  key: const ValueKey<String>('channel-admin-scroll'),
                   controller: _adminScrollController,
                   padding: const EdgeInsets.fromLTRB(13, 13, 13, 26),
                   children: <Widget>[
