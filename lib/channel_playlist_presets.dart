@@ -3,7 +3,7 @@
 /// Las URLs son distintas entre sí. Algunas listas generales o regionales
 /// pueden contener canales también presentes en otras fuentes; el catálogo
 /// del servidor conserva el identificador de cada canal cuando está disponible.
-const int maxChannelPlaylistSources = 48;
+const int maxChannelPlaylistSources = 100;
 
 class ChannelPlaylistPreset {
   const ChannelPlaylistPreset({
@@ -138,6 +138,387 @@ const List<ChannelPlaylistPreset> channelPlaylistPresets =
     label: 'IPTV-org · Latinoamérica',
     url: 'https://iptv-org.github.io/iptv/regions/lac.m3u',
     description: 'Canales públicos de Latinoamérica y el Caribe',
+  ),
+,
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Estados Unidos',
+    url: 'https://iptv-org.github.io/iptv/countries/us.m3u',
+    description: 'Lista pública de canales del país Estados Unidos; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Canadá',
+    url: 'https://iptv-org.github.io/iptv/countries/ca.m3u',
+    description: 'Lista pública de canales del país Canadá; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Australia',
+    url: 'https://iptv-org.github.io/iptv/countries/au.m3u',
+    description: 'Lista pública de canales del país Australia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Brasil',
+    url: 'https://iptv-org.github.io/iptv/countries/br.m3u',
+    description: 'Lista pública de canales del país Brasil; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Chile',
+    url: 'https://iptv-org.github.io/iptv/countries/cl.m3u',
+    description: 'Lista pública de canales del país Chile; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Colombia',
+    url: 'https://iptv-org.github.io/iptv/countries/co.m3u',
+    description: 'Lista pública de canales del país Colombia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Costa Rica',
+    url: 'https://iptv-org.github.io/iptv/countries/cr.m3u',
+    description: 'Lista pública de canales del país Costa Rica; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · República Dominicana',
+    url: 'https://iptv-org.github.io/iptv/countries/do.m3u',
+    description: 'Lista pública de canales del país República Dominicana; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Bolivia',
+    url: 'https://iptv-org.github.io/iptv/countries/bo.m3u',
+    description: 'Lista pública de canales del país Bolivia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Venezuela',
+    url: 'https://iptv-org.github.io/iptv/countries/ve.m3u',
+    description: 'Lista pública de canales del país Venezuela; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Perú',
+    url: 'https://iptv-org.github.io/iptv/countries/pe.m3u',
+    description: 'Lista pública de canales del país Perú; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Paraguay',
+    url: 'https://iptv-org.github.io/iptv/countries/py.m3u',
+    description: 'Lista pública de canales del país Paraguay; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Uruguay',
+    url: 'https://iptv-org.github.io/iptv/countries/uy.m3u',
+    description: 'Lista pública de canales del país Uruguay; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Ecuador',
+    url: 'https://iptv-org.github.io/iptv/countries/ec.m3u',
+    description: 'Lista pública de canales del país Ecuador; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Panamá',
+    url: 'https://iptv-org.github.io/iptv/countries/pa.m3u',
+    description: 'Lista pública de canales del país Panamá; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Guatemala',
+    url: 'https://iptv-org.github.io/iptv/countries/gt.m3u',
+    description: 'Lista pública de canales del país Guatemala; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Honduras',
+    url: 'https://iptv-org.github.io/iptv/countries/hn.m3u',
+    description: 'Lista pública de canales del país Honduras; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Nicaragua',
+    url: 'https://iptv-org.github.io/iptv/countries/ni.m3u',
+    description: 'Lista pública de canales del país Nicaragua; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · El Salvador',
+    url: 'https://iptv-org.github.io/iptv/countries/sv.m3u',
+    description: 'Lista pública de canales del país El Salvador; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Belice',
+    url: 'https://iptv-org.github.io/iptv/countries/bz.m3u',
+    description: 'Lista pública de canales del país Belice; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Guyana',
+    url: 'https://iptv-org.github.io/iptv/countries/gy.m3u',
+    description: 'Lista pública de canales del país Guyana; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Barbados',
+    url: 'https://iptv-org.github.io/iptv/countries/bb.m3u',
+    description: 'Lista pública de canales del país Barbados; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Jamaica',
+    url: 'https://iptv-org.github.io/iptv/countries/jm.m3u',
+    description: 'Lista pública de canales del país Jamaica; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Trinidad y Tobago',
+    url: 'https://iptv-org.github.io/iptv/countries/tt.m3u',
+    description: 'Lista pública de canales del país Trinidad y Tobago; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Cuba',
+    url: 'https://iptv-org.github.io/iptv/countries/cu.m3u',
+    description: 'Lista pública de canales del país Cuba; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Haití',
+    url: 'https://iptv-org.github.io/iptv/countries/ht.m3u',
+    description: 'Lista pública de canales del país Haití; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Guayana Francesa',
+    url: 'https://iptv-org.github.io/iptv/countries/gf.m3u',
+    description: 'Lista pública de canales del país Guayana Francesa; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Surinam',
+    url: 'https://iptv-org.github.io/iptv/countries/sr.m3u',
+    description: 'Lista pública de canales del país Surinam; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Francia',
+    url: 'https://iptv-org.github.io/iptv/countries/fr.m3u',
+    description: 'Lista pública de canales del país Francia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Alemania',
+    url: 'https://iptv-org.github.io/iptv/countries/de.m3u',
+    description: 'Lista pública de canales del país Alemania; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Italia',
+    url: 'https://iptv-org.github.io/iptv/countries/it.m3u',
+    description: 'Lista pública de canales del país Italia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Portugal',
+    url: 'https://iptv-org.github.io/iptv/countries/pt.m3u',
+    description: 'Lista pública de canales del país Portugal; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Países Bajos',
+    url: 'https://iptv-org.github.io/iptv/countries/nl.m3u',
+    description: 'Lista pública de canales del país Países Bajos; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Bélgica',
+    url: 'https://iptv-org.github.io/iptv/countries/be.m3u',
+    description: 'Lista pública de canales del país Bélgica; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Suiza',
+    url: 'https://iptv-org.github.io/iptv/countries/ch.m3u',
+    description: 'Lista pública de canales del país Suiza; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Noruega',
+    url: 'https://iptv-org.github.io/iptv/countries/no.m3u',
+    description: 'Lista pública de canales del país Noruega; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Suecia',
+    url: 'https://iptv-org.github.io/iptv/countries/se.m3u',
+    description: 'Lista pública de canales del país Suecia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Dinamarca',
+    url: 'https://iptv-org.github.io/iptv/countries/dk.m3u',
+    description: 'Lista pública de canales del país Dinamarca; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Finlandia',
+    url: 'https://iptv-org.github.io/iptv/countries/fi.m3u',
+    description: 'Lista pública de canales del país Finlandia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Polonia',
+    url: 'https://iptv-org.github.io/iptv/countries/pl.m3u',
+    description: 'Lista pública de canales del país Polonia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Chequia',
+    url: 'https://iptv-org.github.io/iptv/countries/cz.m3u',
+    description: 'Lista pública de canales del país Chequia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Rumanía',
+    url: 'https://iptv-org.github.io/iptv/countries/ro.m3u',
+    description: 'Lista pública de canales del país Rumanía; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Hungría',
+    url: 'https://iptv-org.github.io/iptv/countries/hu.m3u',
+    description: 'Lista pública de canales del país Hungría; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Grecia',
+    url: 'https://iptv-org.github.io/iptv/countries/gr.m3u',
+    description: 'Lista pública de canales del país Grecia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Irlanda',
+    url: 'https://iptv-org.github.io/iptv/countries/ie.m3u',
+    description: 'Lista pública de canales del país Irlanda; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Reino Unido',
+    url: 'https://iptv-org.github.io/iptv/countries/uk.m3u',
+    description: 'Lista pública de canales del país Reino Unido; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Estonia',
+    url: 'https://iptv-org.github.io/iptv/countries/ee.m3u',
+    description: 'Lista pública de canales del país Estonia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Letonia',
+    url: 'https://iptv-org.github.io/iptv/countries/lv.m3u',
+    description: 'Lista pública de canales del país Letonia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Lituania',
+    url: 'https://iptv-org.github.io/iptv/countries/lt.m3u',
+    description: 'Lista pública de canales del país Lituania; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Eslovaquia',
+    url: 'https://iptv-org.github.io/iptv/countries/sk.m3u',
+    description: 'Lista pública de canales del país Eslovaquia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Eslovenia',
+    url: 'https://iptv-org.github.io/iptv/countries/si.m3u',
+    description: 'Lista pública de canales del país Eslovenia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Croacia',
+    url: 'https://iptv-org.github.io/iptv/countries/hr.m3u',
+    description: 'Lista pública de canales del país Croacia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Bosnia y Herzegovina',
+    url: 'https://iptv-org.github.io/iptv/countries/ba.m3u',
+    description: 'Lista pública de canales del país Bosnia y Herzegovina; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Serbia',
+    url: 'https://iptv-org.github.io/iptv/countries/rs.m3u',
+    description: 'Lista pública de canales del país Serbia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Rusia',
+    url: 'https://iptv-org.github.io/iptv/countries/ru.m3u',
+    description: 'Lista pública de canales del país Rusia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Ucrania',
+    url: 'https://iptv-org.github.io/iptv/countries/ua.m3u',
+    description: 'Lista pública de canales del país Ucrania; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Turquía',
+    url: 'https://iptv-org.github.io/iptv/countries/tr.m3u',
+    description: 'Lista pública de canales del país Turquía; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Israel',
+    url: 'https://iptv-org.github.io/iptv/countries/il.m3u',
+    description: 'Lista pública de canales del país Israel; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Jordania',
+    url: 'https://iptv-org.github.io/iptv/countries/jo.m3u',
+    description: 'Lista pública de canales del país Jordania; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Arabia Saudita',
+    url: 'https://iptv-org.github.io/iptv/countries/sa.m3u',
+    description: 'Lista pública de canales del país Arabia Saudita; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Emiratos Árabes Unidos',
+    url: 'https://iptv-org.github.io/iptv/countries/ae.m3u',
+    description: 'Lista pública de canales del país Emiratos Árabes Unidos; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Catar',
+    url: 'https://iptv-org.github.io/iptv/countries/qa.m3u',
+    description: 'Lista pública de canales del país Catar; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Kuwait',
+    url: 'https://iptv-org.github.io/iptv/countries/kw.m3u',
+    description: 'Lista pública de canales del país Kuwait; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Baréin',
+    url: 'https://iptv-org.github.io/iptv/countries/bh.m3u',
+    description: 'Lista pública de canales del país Baréin; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Omán',
+    url: 'https://iptv-org.github.io/iptv/countries/om.m3u',
+    description: 'Lista pública de canales del país Omán; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Marruecos',
+    url: 'https://iptv-org.github.io/iptv/countries/ma.m3u',
+    description: 'Lista pública de canales del país Marruecos; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Egipto',
+    url: 'https://iptv-org.github.io/iptv/countries/eg.m3u',
+    description: 'Lista pública de canales del país Egipto; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Nigeria',
+    url: 'https://iptv-org.github.io/iptv/countries/ng.m3u',
+    description: 'Lista pública de canales del país Nigeria; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Ghana',
+    url: 'https://iptv-org.github.io/iptv/countries/gh.m3u',
+    description: 'Lista pública de canales del país Ghana; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Kenia',
+    url: 'https://iptv-org.github.io/iptv/countries/ke.m3u',
+    description: 'Lista pública de canales del país Kenia; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Sudáfrica',
+    url: 'https://iptv-org.github.io/iptv/countries/za.m3u',
+    description: 'Lista pública de canales del país Sudáfrica; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Pakistán',
+    url: 'https://iptv-org.github.io/iptv/countries/pk.m3u',
+    description: 'Lista pública de canales del país Pakistán; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · India',
+    url: 'https://iptv-org.github.io/iptv/countries/in.m3u',
+    description: 'Lista pública de canales del país India; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Bangladés',
+    url: 'https://iptv-org.github.io/iptv/countries/bd.m3u',
+    description: 'Lista pública de canales del país Bangladés; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Sri Lanka',
+    url: 'https://iptv-org.github.io/iptv/countries/lk.m3u',
+    description: 'Lista pública de canales del país Sri Lanka; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Japón',
+    url: 'https://iptv-org.github.io/iptv/countries/jp.m3u',
+    description: 'Lista pública de canales del país Japón; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
   ),
 ];
 
