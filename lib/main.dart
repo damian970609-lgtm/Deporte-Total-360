@@ -976,35 +976,43 @@ class _MainShellState extends State<MainShell> {
                 fit: StackFit.expand,
                 clipBehavior: Clip.hardEdge,
                 children: <Widget>[
-                  NotificationListener<ScrollMetricsNotification>(
-                    onNotification: (_) {
-                      WidgetsBinding.instance.addPostFrameCallback(
-                        (_) => _syncBottomNavigation(),
-                      );
-                      return false;
-                    },
-                    child: SingleChildScrollView(
-                      controller: _bottomNavigationController,
-                      physics: const BouncingScrollPhysics(),
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: <Widget>[
-                          _buildBottomTab(_homeTab, Icons.home_rounded, tr('home'), appCyan),
-                          _buildBottomTab(_liveTab, Icons.live_tv_rounded, 'Deportes en vivo', appPink),
-                          _buildBottomTab(_channelsTab, Icons.grid_view_rounded, 'Canales deportivos', appCyan),
-                          _buildBottomTab(_agendaTab, Icons.calendar_month_rounded, 'Agenda de hoy', appGreen),
-                          _buildBottomTab(_newsTab, Icons.article_rounded, tr('news'), appGreen),
-                          _buildBottomTab(_fantasyTab, Icons.emoji_events_rounded, 'Mister Fantasy', appYellow),
-                          _buildBottomTab(_statisticsTab, Icons.query_stats_rounded, tr('statistics'), appCyan),
-                          _buildBottomTab(
-                            _summariesTab,
-                            Icons.play_circle_fill_rounded,
-                            appText('Resúmenes', 'Highlights', 'Resumos', 'Résumés'),
-                            appRed,
-                          ),
-                          _buildBottomTab(_chatTab, Icons.forum_rounded, tr('chat'), appGreen),
-                          _buildBottomTab(_settingsTab, Icons.settings_rounded, tr('settings'), appBlue),
-                        ],
+                  Padding(
+                    // Reserva el espacio de las flechas: nunca deben tapar el
+                    // texto ni el icono de una sección de navegación.
+                    padding: EdgeInsets.only(
+                      left: _bottomCanScrollLeft ? 38 : 0,
+                      right: _bottomCanScrollRight ? 38 : 0,
+                    ),
+                    child: NotificationListener<ScrollMetricsNotification>(
+                      onNotification: (_) {
+                        WidgetsBinding.instance.addPostFrameCallback(
+                          (_) => _syncBottomNavigation(),
+                        );
+                        return false;
+                      },
+                      child: SingleChildScrollView(
+                        controller: _bottomNavigationController,
+                        physics: const BouncingScrollPhysics(),
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: <Widget>[
+                            _buildBottomTab(_homeTab, Icons.home_rounded, tr('home'), appCyan),
+                            _buildBottomTab(_liveTab, Icons.live_tv_rounded, 'Deportes en vivo', appPink),
+                            _buildBottomTab(_channelsTab, Icons.grid_view_rounded, 'Canales deportivos', appCyan),
+                            _buildBottomTab(_agendaTab, Icons.calendar_month_rounded, 'Agenda de hoy', appGreen),
+                            _buildBottomTab(_newsTab, Icons.article_rounded, tr('news'), appGreen),
+                            _buildBottomTab(_fantasyTab, Icons.emoji_events_rounded, 'Mister Fantasy', appYellow),
+                            _buildBottomTab(_statisticsTab, Icons.query_stats_rounded, tr('statistics'), appCyan),
+                            _buildBottomTab(
+                              _summariesTab,
+                              Icons.play_circle_fill_rounded,
+                              appText('Resúmenes', 'Highlights', 'Resumos', 'Résumés'),
+                              appRed,
+                            ),
+                            _buildBottomTab(_chatTab, Icons.forum_rounded, tr('chat'), appGreen),
+                            _buildBottomTab(_settingsTab, Icons.settings_rounded, tr('settings'), appBlue),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1317,6 +1325,18 @@ class _SportsCrestState extends State<_SportsCrest>
       vsync: this,
       duration: const Duration(seconds: 9),
     )..repeat();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Respeta la preferencia de accesibilidad del sistema para reducir
+    // movimiento y evita animaciones permanentes cuando el usuario las desactiva.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _motion.stop();
+    } else if (!_motion.isAnimating) {
+      _motion.repeat();
+    }
   }
 
   @override
