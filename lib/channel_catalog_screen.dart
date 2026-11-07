@@ -1738,18 +1738,44 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
-  Future<void> _saveLocalAdminSnapshot() async {
+  Future<void> _saveLocalAdminSnapshot({
+    bool saveChannels = true,
+    bool saveSources = true,
+  }) async {
     final email = (_email ?? _service.signedInEmail ?? '').trim();
-    if (email.isEmpty) return;
+    if (email.isEmpty || (!saveChannels && !saveSources)) return;
     try {
       final prefs = await SharedPreferences.getInstance();
+      final key = _adminSnapshotKey(email);
+      final raw = prefs.getString(key);
+      Map<String, dynamic> previous = <String, dynamic>{};
+      if (raw != null && raw.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(raw);
+          if (decoded is Map &&
+              (decoded['email'] ?? '').toString().trim().toLowerCase() ==
+                  email.toLowerCase()) {
+            previous = Map<String, dynamic>.from(decoded);
+          }
+        } catch (_) {
+          // Se crea una copia nueva si la anterior está dañada.
+        }
+      }
       await prefs.setString(
-        _adminSnapshotKey(email),
+        key,
         jsonEncode(<String, Object>{
           'email': email.toLowerCase(),
           'savedAt': DateTime.now().toIso8601String(),
-          'channels': _channels.map((channel) => channel.toJson()).toList(),
-          'sources': _sources.map((source) => source.toJson()).toList(),
+          'channels': saveChannels
+              ? _channels.map((channel) => channel.toJson()).toList()
+              : (previous['channels'] is List
+                  ? previous['channels'] as List
+                  : <Object>[]),
+          'sources': saveSources
+              ? _sources.map((source) => source.toJson()).toList()
+              : (previous['sources'] is List
+                  ? previous['sources'] as List
+                  : <Object>[]),
         }),
       );
     } catch (_) {
@@ -1830,7 +1856,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _loading = false;
         _error = null;
       });
-      await _saveLocalAdminSnapshot();
+      await _saveLocalAdminSnapshot(saveChannels: true, saveSources: false);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -1853,7 +1879,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _sources = sources;
         _sourcesError = null;
       });
-      await _saveLocalAdminSnapshot();
+      await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -1986,7 +2012,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _loading = false;
         _error = null;
       });
-      await _saveLocalAdminSnapshot();
+      await _saveLocalAdminSnapshot(saveChannels: true, saveSources: false);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -2067,7 +2093,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _sources = sources;
         _sourcesError = null;
       });
-      await _saveLocalAdminSnapshot();
+      await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
       _message('Fuente añadida: ' + preset.label + '. Se está importando.');
     } catch (error) {
       _message('No se pudo añadir la fuente deportiva: ' + error.toString());
@@ -2134,7 +2160,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _sources = sources;
         _sourcesError = null;
       });
-      await _saveLocalAdminSnapshot();
+      await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
       _message('Lista añadida: ' + preset.label + '. Se importará en segundo plano y se publicarán solo canales deportivos compatibles.');
     } catch (error) {
       _message('No se pudo añadir la lista: ' + error.toString());
@@ -2287,7 +2313,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       setState(() {
         _sources.removeWhere((item) => item.id == source.id);
       });
-      await _saveLocalAdminSnapshot();
+      await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
       _message('Lista quitada. Los canales ya importados se conservaron.');
     } catch (error) {
       _message('No se pudo quitar la lista: ' + error.toString());
