@@ -1105,7 +1105,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
               ),
             ),
           Expanded(
-            child: _loading && (!_hasLoaded || _events.isEmpty)
+            child: _loading && (!_hasLoaded || events.isEmpty)
                 ? const Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
