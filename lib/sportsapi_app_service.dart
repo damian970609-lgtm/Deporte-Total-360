@@ -123,7 +123,10 @@ class _FavoriteAgendaSport {
   }
 
   bool matchesRow(Map<String, dynamic> row, {required bool isRace}) {
-    dynamic raw = row[isRace ? 'series' : 'league'] ?? row['competition'];
+    // Ciclismo se selecciona por carrera (row.name), no por la serie general.
+    dynamic raw = id == 'cycling' && isRace
+        ? row['name']
+        : row[isRace ? 'series' : 'league'] ?? row['competition'];
     for (final wrapperKey in const <String>['fixture', 'event', 'game']) {
       final wrapper = row[wrapperKey];
       if (raw == null && wrapper is Map) {
@@ -168,7 +171,7 @@ class SportsApiAppService {
   }
 
   static const Duration _timeout = Duration(seconds: 10);
-  static const Duration _windowTimeout = Duration(seconds: 30);
+  static const Duration _windowTimeout = Duration(seconds: 60);
   static const Duration _favoritesCacheDuration = Duration(minutes: 2);
 
   static final Map<String, ({
@@ -536,7 +539,7 @@ class SportsApiAppService {
             ? const Duration(minutes: 1)
             : result.events.isEmpty
                 ? const Duration(minutes: 3)
-                : const Duration(hours: 6),
+                : const Duration(minutes: 2),
       );
       return result;
     }).whenComplete(() {
@@ -594,7 +597,7 @@ class SportsApiAppService {
               ? const Duration(minutes: 1)
               : window.events.isEmpty
                   ? const Duration(minutes: 3)
-                  : const Duration(hours: 6),
+                  : const Duration(minutes: 2),
         ),
       );
       return window;
@@ -656,34 +659,45 @@ class SportsApiAppService {
       }
     }
 
-    // Consulta un día UTC cada vez; dentro de cada fecha se limita también
-    // la concurrencia por deporte para no saturar el Worker ni el proveedor.
-    for (var dayIndex = 0; dayIndex < utcDays; dayIndex++) {
-      final date = firstUtcDay.add(Duration(days: dayIndex));
-      _AgendaDayResult result;
-      try {
-        final dayResult = await _fetchCachedAgendaDay(date);
-        result = _AgendaDayResult(
-          date: date,
-          events: dayResult.events,
-          incomplete: dayResult.incomplete,
-        );
-      } catch (_) {
-        result = _AgendaDayResult(
-          date: date,
-          events: const <SportsAgendaEvent>[],
-          failed: true,
-        );
-      }
-      if (result.failed) {
-        markUnavailableUtcDay(result.date);
-        continue;
-      }
-      if (result.incomplete) markUnavailableUtcDay(result.date);
-      for (final event in result.events) {
-        resultsById[event.id] = event;
+    // Procesa dos fechas UTC en paralelo. Dentro de cada día se mantiene
+    // un límite por deporte para acelerar la semana sin saturar el proveedor.
+    var nextDayIndex = 0;
+    Future<void> runUtcDayWorker() async {
+      while (true) {
+        final dayIndex = nextDayIndex++;
+        if (dayIndex >= utcDays) return;
+        final date = firstUtcDay.add(Duration(days: dayIndex));
+        _AgendaDayResult result;
+        try {
+          final dayResult = await _fetchCachedAgendaDay(date);
+          result = _AgendaDayResult(
+            date: date,
+            events: dayResult.events,
+            incomplete: dayResult.incomplete,
+          );
+        } catch (_) {
+          result = _AgendaDayResult(
+            date: date,
+            events: const <SportsAgendaEvent>[],
+            failed: true,
+          );
+        }
+        if (result.failed) {
+          markUnavailableUtcDay(result.date);
+          continue;
+        }
+        if (result.incomplete) markUnavailableUtcDay(result.date);
+        for (final event in result.events) {
+          resultsById[event.id] = event;
+        }
       }
     }
+
+    await Future.wait<void>(List<Future<void>>.generate(
+      utcDays.clamp(1, 2).toInt(),
+      (_) => runUtcDayWorker(),
+      growable: false,
+    ));
 
     final events = resultsById.values.where((event) {
       final localEventStart = event.startsAt.toLocal();
@@ -828,12 +842,26 @@ class SportsApiAppService {
           // El endpoint /favorites es la fuente de verdad: solo se admiten
           // competiciones seleccionadas, comparando primero el ID y después
           // el nombre normalizado cuando el proveedor no trae ese ID.
-          final selectedRows = rows.where(
-            (row) => entry.matchesRow(row, isRace: isRace),
-          ).toList(growable: false);
+          final meta = envelope['meta'] is Map
+              ? Map<String, dynamic>.from(envelope['meta'] as Map)
+              : <String, dynamic>{};
+          // Si el Worker usó el respaldo para diferencias de nombres, no
+          // volver a eliminar en Flutter todos los eventos que él conservó.
+          final keepWorkerFallback =
+              meta['favoriteCompetitionFilterFallback'] == true;
+          final selectedRows = keepWorkerFallback
+              ? rows
+              : rows.where(
+                  (row) => entry.matchesRow(row, isRace: isRace),
+                ).toList(growable: false);
           final events = isRace
               ? selectedRows
-                  .expand((row) => _raceEvents(row, entry.name, day))
+                  .expand((row) => _raceEvents(
+                        row,
+                        entry.name,
+                        day,
+                        useRaceNameAsCompetition: entry.id == 'cycling',
+                      ))
                   .toList(growable: false)
               : selectedRows
                   .map((row) => _fixtureEvent(row, entry.name))
@@ -850,7 +878,7 @@ class SportsApiAppService {
     }
 
     await Future.wait<void>(List<Future<void>>.generate(
-      entries.length.clamp(1, 5).toInt(),
+      entries.length.clamp(1, 3).toInt(),
       (_) => runSportWorker(),
       growable: false,
     ));
@@ -932,8 +960,9 @@ class SportsApiAppService {
   List<SportsAgendaEvent> _raceEvents(
     Map<String, dynamic> row,
     String sportName,
-    String utcDay,
-  ) {
+    String utcDay, {
+    required bool useRaceNameAsCompetition,
+  }) {
     final id = int.tryParse(_text(row['id']));
     if (id == null) return const <SportsAgendaEvent>[];
     final sessions = row['sessions'] is List
@@ -954,6 +983,9 @@ class SportsApiAppService {
     final raceName = _text(row['name']).isEmpty
         ? sportName
         : _text(row['name']);
+    final raceCompetition = useRaceNameAsCompetition
+        ? raceName
+        : _text(series['name']);
     final rawStatus = row['status'] is Map
         ? row['status']['type']
         : row['status'];
@@ -986,7 +1018,7 @@ class SportsApiAppService {
         id: 'sportsapi-race-$id-$sessionId',
         title: title,
         sport: sportName,
-        competition: _text(series['name']),
+        competition: raceCompetition,
         participants: winnerName.isEmpty
             ? const <SportsAgendaParticipant>[]
             : <SportsAgendaParticipant>[
@@ -1017,7 +1049,7 @@ class SportsApiAppService {
             id: 'sportsapi-race-$id-0',
             title: raceName,
             sport: sportName,
-            competition: _text(series['name']),
+            competition: raceCompetition,
             participants: winnerName.isEmpty
                 ? const <SportsAgendaParticipant>[]
                 : <SportsAgendaParticipant>[
