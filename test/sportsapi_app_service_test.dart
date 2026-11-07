@@ -233,6 +233,84 @@ void main() {
     }
   });
 
+  test('no reintenta límites 429 con Retry-After largo y conserva datos parciales', () async {
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-rate-limit.example';
+    final requested = <Uri>[];
+    final client = MockClient((request) async {
+      requested.add(request.url);
+      if (request.url.path.endsWith('/fixtures') &&
+          request.url.queryParameters['sport'] == 'football') {
+        return http.Response(
+          jsonEncode(<String, Object>{
+            'error': 'API limit reached',
+          }),
+          429,
+          headers: <String, String>{'retry-after': '60'},
+        );
+      }
+      if (request.url.path.endsWith('/fixtures')) {
+        return http.Response(
+          jsonEncode(<String, Object>{
+            'data': <Object>[],
+            'meta': <String, Object>{
+              'hasNextPage': false,
+              'complete': true,
+            },
+          }),
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/races')) {
+        return http.Response(
+          jsonEncode(<String, Object>{
+            'data': <Object>[],
+            'meta': <String, Object>{'complete': true},
+          }),
+          200,
+        );
+      }
+      return http.Response('{}', 404);
+    });
+
+    try {
+      final start = DateTime(2035, 4, 5);
+      final localStart = DateTime(start.year, start.month, start.day);
+      final localEnd = localStart.add(const Duration(days: 1));
+      final firstUtc = localStart.toUtc();
+      final lastUtc = localEnd.toUtc().subtract(
+        const Duration(milliseconds: 1),
+      );
+      final firstUtcDay = DateTime.utc(
+        firstUtc.year,
+        firstUtc.month,
+        firstUtc.day,
+      );
+      final lastUtcDay = DateTime.utc(
+        lastUtc.year,
+        lastUtc.month,
+        lastUtc.day,
+      );
+      final expectedUtcDays = lastUtcDay.difference(firstUtcDay).inDays + 1;
+
+      final window = await SportsApiAppService(client: client)
+          .fetchFavoriteAgendaWindow(startDate: start, days: 1);
+
+      final footballRequests = requested.where(
+        (uri) =>
+            uri.path.endsWith('/fixtures') &&
+            uri.queryParameters['sport'] == 'football',
+      );
+
+      expect(footballRequests, hasLength(expectedUtcDays));
+      expect(window.events, isEmpty);
+      expect(window.unavailableDates, isNotEmpty);
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
+  });
+
   test('solicita estadísticas por la ruta correcta de SportsAPI', () async {
     final previousBase = sportsApiBaseUrl.value;
     sportsApiBaseUrl.value = 'https://worker.example';
