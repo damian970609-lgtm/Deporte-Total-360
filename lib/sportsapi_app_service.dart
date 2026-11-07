@@ -422,9 +422,10 @@ class SportsApiAppService {
       ]) {
         if (sport.containsKey(key)) readCompetitionSelection(sport[key]);
       }
-      // Si el favorito no tiene filtro de ligas interpretable, incluir todas.
+      // Una selección sin ligas legibles no equivale a "todas".
+      // Solo se permite cargar todas cuando el catálogo lo indica expresamente.
       if (competitionIds.isEmpty && competitionNames.isEmpty && !allCompetitions) {
-        allCompetitions = true;
+        continue;
       }
 
       selected[id] = _FavoriteAgendaSport(
@@ -773,9 +774,7 @@ class SportsApiAppService {
 
     final entries = await _loadFavoriteAgendaSports();
     if (entries.isEmpty) {
-      throw const SportsApiException(
-        'No hay deportes favoritos seleccionados en la configuración de SportsAPI.',
-      );
+      return const _AgendaSportsResult(events: <SportsAgendaEvent>[]);
     }
     final resultsByIndex =
         List<_AgendaSportResult?>.filled(entries.length, null);
@@ -790,7 +789,6 @@ class SportsApiAppService {
           final isRace =
               entry.id == 'cycling' || entry.id == 'motorsport';
           final rows = <Map<String, dynamic>>[];
-          var keepWorkerFallback = false;
           if (isRace) {
             final envelope = await fetchCompleteEnvelope(
               '/races',
@@ -802,11 +800,6 @@ class SportsApiAppService {
                 'SportsAPI devolvió una agenda de carreras con formato inválido.',
               );
             }
-            final raceMeta = envelope['meta'] is Map
-                ? Map<String, dynamic>.from(envelope['meta'] as Map)
-                : <String, dynamic>{};
-            keepWorkerFallback =
-                raceMeta['favoriteCompetitionFilterFallback'] == true;
             rows.addAll(payload.whereType<Map>().map(
               (raw) => Map<String, dynamic>.from(raw),
             ));
@@ -833,8 +826,6 @@ class SportsApiAppService {
               final meta = envelope['meta'] is Map
                   ? Map<String, dynamic>.from(envelope['meta'] as Map)
                   : <String, dynamic>{};
-              keepWorkerFallback = keepWorkerFallback ||
-                  meta['favoriteCompetitionFilterFallback'] == true;
               if (meta['hasNextPage'] != true) {
                 finishedPages = true;
                 break;
@@ -847,16 +838,12 @@ class SportsApiAppService {
             }
           }
 
-          // El endpoint /favorites es la fuente de verdad: solo se admiten
-          // competiciones seleccionadas, comparando primero el ID y después
-          // el nombre normalizado cuando el proveedor no trae ese ID.
-          // Si el Worker usó el respaldo para diferencias de nombres, no
-          // volver a eliminar en Flutter todos los eventos que él conservó.
-          final selectedRows = keepWorkerFallback
-              ? rows
-              : rows.where(
-                  (row) => entry.matchesRow(row, isRace: isRace),
-                ).toList(growable: false);
+          // El endpoint /favorites es la fuente de verdad. La APK aplica
+          // siempre el filtro de nuevo; nunca acepta como respaldo una lista
+          // completa que podría contener ligas no seleccionadas.
+          final selectedRows = rows.where(
+            (row) => entry.matchesRow(row, isRace: isRace),
+          ).toList(growable: false);
           final events = isRace
               ? selectedRows
                   .expand((row) => _raceEvents(
