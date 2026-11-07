@@ -50,6 +50,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
 
   List<SportsAgendaEvent> _events = <SportsAgendaEvent>[];
   List<DateTime> _unavailableDates = <DateTime>[];
+  List<String> _favoriteSportNames = <String>[];
   Timer? _refreshTimer;
   bool _loading = true;
   bool _hasLoaded = false;
@@ -127,23 +128,40 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
     }
   }
 
-  Future<SportsAgendaWindow> _loadWindow({bool forceRefresh = false}) async {
+  Future<SportsAgendaWindow> _loadWindow({
+    bool forceRefresh = false,
+    void Function(SportsAgendaWindow window)? onProgress,
+  }) async {
     final injectedLoader = widget.loadEvents;
     if (injectedLoader != null) {
       final events = await injectedLoader() ?? <SportsAgendaEvent>[];
-      return SportsAgendaWindow(
+      final sports = events.map((event) => event.sport.trim())
+          .where((sport) => sport.isNotEmpty).toSet().toList()..sort();
+      if (mounted) setState(() => _favoriteSportNames = sports);
+      final window = SportsAgendaWindow(
         startDate: _windowStartDate,
         days: _windowDays,
         events: events,
       );
+      onProgress?.call(window);
+      return window;
     }
 
     try {
       final agendaApi = SportsApiAppService();
+      try {
+        final sports = await agendaApi.fetchFavoriteAgendaSportNames(
+          forceRefresh: forceRefresh,
+        );
+        if (mounted) setState(() => _favoriteSportNames = sports);
+      } catch (_) {
+        // La falta del catálogo no debe bloquear los eventos ni la caché local.
+      }
       final window = await agendaApi.fetchFavoriteAgendaWindow(
         startDate: _windowStartDate,
         days: _windowDays,
         forceRefresh: forceRefresh,
+        onProgress: onProgress,
       );
       if (window.unavailableDates.length == window.days &&
           window.events.isEmpty) {
@@ -163,12 +181,8 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
             events.add(event);
           }
         }
-        final recoveredDays = unavailable.where((day) {
-          return events.any((event) => _sameDay(day, event.startsAt));
-        }).toSet();
-        unavailable = unavailable
-            .where((day) => !recoveredDays.contains(day))
-            .toList(growable: false);
+        // Recuperar eventos guardados no convierte una fecha en completa:
+        // puede seguir faltando el calendario de otro deporte o competición.
       }
 
       final unique = <String, SportsAgendaEvent>{
@@ -249,18 +263,29 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
     final version = ++_refreshVersion;
     if (mounted) {
       setState(() {
-        _loading = true;
+        if (!_hasLoaded) _loading = true;
         _error = null;
       });
     }
 
     try {
-      final window = await _loadWindow(forceRefresh: forceRefresh);
+      final window = await _loadWindow(
+        forceRefresh: forceRefresh,
+        onProgress: (partial) {
+          if (!mounted || version != _refreshVersion) return;
+          setState(() {
+            _events = partial.events;
+            _unavailableDates = partial.unavailableDates;
+            _hasLoaded = true;
+          });
+        },
+      );
       if (!mounted || version != _refreshVersion) return;
-      final availableSports = window.events
-          .map((event) => event.sport.trim())
-          .where((sport) => sport.isNotEmpty)
-          .toSet();
+      final availableSports = <String>{
+        ..._favoriteSportNames,
+        ...window.events.map((event) => event.sport.trim())
+            .where((sport) => sport.isNotEmpty),
+      };
       setState(() {
         _events = window.events;
         if (!availableSports.contains(_selectedSport)) {
@@ -381,11 +406,11 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
   }
 
   List<String> get _sportOptions {
-    final sports = _events
-        .map((event) => event.sport.trim())
-        .where((sport) => sport.isNotEmpty)
-        .toSet()
-        .toList()
+    final sports = <String>{
+      ..._favoriteSportNames,
+      ..._events.map((event) => event.sport.trim())
+          .where((sport) => sport.isNotEmpty),
+    }.toList()
       ..sort();
     return <String>['Todos', ...sports];
   }
@@ -1080,9 +1105,19 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
               ),
             ),
           Expanded(
-            child: _loading && !_hasLoaded
+            child: _loading && (!_hasLoaded || events.isEmpty)
                 ? const Center(
-                    child: CircularProgressIndicator(color: _agendaCyan),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        CircularProgressIndicator(color: _agendaCyan),
+                        SizedBox(height: 12),
+                        Text(
+                          'Cargando eventos por deporte y fecha…',
+                          style: TextStyle(color: _agendaMuted, fontSize: 11),
+                        ),
+                      ],
+                    ),
                   )
                 : _error != null && events.isEmpty
                     ? _emptyState(

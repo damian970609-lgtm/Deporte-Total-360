@@ -14,7 +14,8 @@ Archivos principales:
 - lib/sports_api_service.dart: cliente legado de API-Sports/Worker, conservado para compatibilidad.
 - lib/sportsapi_app_service.dart y lib/sportsapi_statistics_screen.dart: conexión segura con las rutas SportsAPI.app del Worker; estadísticas de partidos y resultados de carreras sin introducir claves en la APK.
 - lib/notification_service.dart: recordatorios locales a 60, 30, 15 y 5 minutos para los eventos de la ventana de Agenda, sincronización incremental de avisos, Firebase Cloud Messaging y apertura de Deportes en vivo al tocar un aviso.
-- lib/sports_agenda_screen.dart: agenda nativa de siete días, filtros por deporte y estado, búsqueda, caché por fecha y acceso al reproductor mediante el identificador del evento.
+- lib/sports_agenda_screen.dart: agenda nativa de siete días, selector que conserva todos los deportes favoritos aunque no tengan partidos, filtros por estado y búsqueda, carga progresiva por deporte/fecha, avisos de cobertura parcial y acceso al reproductor mediante el identificador del evento.
+- lib/sportsapi_app_service.dart: paginación de partidos y carreras, alias de competiciones, caché con vencimientos diferenciados y actualización manual que solicita al Worker omitir su caché.
 - lib/news_screen.dart: feed RSS y lector de noticias.
 - lib/web_protection_policy.dart: reglas compartidas de protección web.
 - lib/fantasy_screen.dart: módulo Fantasy.

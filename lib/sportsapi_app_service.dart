@@ -181,7 +181,7 @@ class SportsApiAppService {
     }
   }
 
-  static const Duration _timeout = Duration(seconds: 120);
+  static const Duration _timeout = Duration(seconds: 45);
   static const Duration _windowTimeout = Duration(minutes: 20);
   static const Duration _favoritesCacheDuration = Duration(minutes: 2);
 
@@ -299,8 +299,10 @@ class SportsApiAppService {
     });
   }
 
-  Future<List<_FavoriteAgendaSport>> _loadFavoriteAgendaSports() async {
-    final favorites = await fetchFavoriteSports();
+  Future<List<_FavoriteAgendaSport>> _loadFavoriteAgendaSports({
+    bool forceRefresh = false,
+  }) async {
+    final favorites = await fetchFavoriteSports(forceRefresh: forceRefresh);
     final selected = <String, _FavoriteAgendaSport>{};
 
     for (final sport in favorites) {
@@ -433,6 +435,27 @@ class SportsApiAppService {
       ]) {
         if (sport.containsKey(key)) readCompetitionSelection(sport[key]);
       }
+
+      // Incorpora los alias publicados por Cloudflare, pero solo para las
+      // competiciones que el usuario tiene seleccionadas.
+      final rawAliases = sport['competitionAliases'] ?? sport['aliases'];
+      if (rawAliases is Map) {
+        for (final entry in rawAliases.entries) {
+          final canonical = _normalizeAgendaFilterText(entry.key.toString());
+          final rawValues = entry.value;
+          final aliases = rawValues is List ? rawValues : <dynamic>[rawValues];
+          final normalizedNames = <String>{canonical};
+          for (final alias in aliases) {
+            final normalized = _normalizeAgendaFilterText(alias.toString());
+            if (normalized.isNotEmpty) normalizedNames.add(normalized);
+          }
+          if (allCompetitions ||
+              normalizedNames.any(competitionNames.contains)) {
+            competitionNames.addAll(normalizedNames);
+          }
+        }
+      }
+
       // Una selección sin ligas legibles no equivale a "todas".
       // Solo se permite cargar todas cuando el catálogo lo indica expresamente.
       if (competitionIds.isEmpty && competitionNames.isEmpty && !allCompetitions) {
@@ -467,6 +490,18 @@ class SportsApiAppService {
       }
       return false;
     }).toList(growable: false);
+  }
+
+  /// Devuelve el catálogo de deportes seleccionados aunque todavía no tengan
+  /// encuentros publicados dentro de la ventana actual.
+  Future<List<String>> fetchFavoriteAgendaSportNames({
+    bool forceRefresh = false,
+  }) async {
+    final sports = await _loadFavoriteAgendaSports(forceRefresh: forceRefresh);
+    final names = sports.map((sport) => sport.name.trim())
+        .where((name) => name.isNotEmpty).toSet().toList()
+      ..sort();
+    return names;
   }
 
   bool _isAllCompetitionsValue(String value) =>
@@ -530,7 +565,11 @@ class SportsApiAppService {
     return result.events;
   }
 
-  Future<_AgendaSportsResult> _fetchCachedAgendaDay(DateTime date) {
+  Future<_AgendaSportsResult> _fetchCachedAgendaDay(
+    DateTime date, {
+    bool forceRefresh = false,
+    void Function(_AgendaSportsResult result)? onProgress,
+  }) {
     final utcDay = DateTime.utc(date.year, date.month, date.day);
     final day = utcDay.year.toString().padLeft(4, '0') + '-' +
         utcDay.month.toString().padLeft(2, '0') + '-' +
@@ -540,27 +579,58 @@ class SportsApiAppService {
     final cacheKey = '$base:$day';
     final cached = _agendaCache[cacheKey];
     final expires = _agendaCacheExpiry[cacheKey];
-    if (cached != null && expires != null && DateTime.now().isBefore(expires)) {
+    if (!forceRefresh &&
+        cached != null &&
+        expires != null &&
+        DateTime.now().isBefore(expires)) {
+      onProgress?.call(cached);
       return Future<_AgendaSportsResult>.value(cached);
     }
     final pending = _agendaInFlight[cacheKey];
-    if (pending != null) return pending;
-    final future = _fetchFavoriteAgendaEvents(day);
+    if (pending != null) {
+      if (forceRefresh) {
+        return pending.then(
+          (_) => _fetchCachedAgendaDay(
+            date,
+            forceRefresh: true,
+            onProgress: onProgress,
+          ),
+          onError: (_) => _fetchCachedAgendaDay(
+            date,
+            forceRefresh: true,
+            onProgress: onProgress,
+          ),
+        );
+      }
+      return pending.then((result) {
+        onProgress?.call(result);
+        return result;
+      });
+    }
+
+    final future = _fetchFavoriteAgendaEvents(
+      day,
+      forceRefresh: forceRefresh,
+      onProgress: onProgress,
+    );
     _agendaInFlight[cacheKey] = future;
     return future.then((result) {
       _agendaCache[cacheKey] = result;
       final parsedDay = DateTime.tryParse(day);
       final todayUtc = DateTime.now().toUtc();
-      final isTodayUtc = parsedDay != null &&
-          parsedDay.year == todayUtc.year &&
-          parsedDay.month == todayUtc.month &&
-          parsedDay.day == todayUtc.day;
+      final dayOffset = parsedDay == null
+          ? 0
+          : DateTime.utc(parsedDay.year, parsedDay.month, parsedDay.day)
+              .difference(DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day))
+              .inDays;
       _agendaCacheExpiry[cacheKey] = DateTime.now().add(
         result.incomplete
             ? const Duration(minutes: 1)
-            : isTodayUtc
-                ? const Duration(minutes: 30)
-                : const Duration(hours: 6),
+            : dayOffset == 0
+                ? const Duration(minutes: 3)
+                : dayOffset < 0
+                    ? const Duration(hours: 6)
+                    : const Duration(minutes: 15),
       );
       return result;
     }).whenComplete(() {
@@ -574,6 +644,7 @@ class SportsApiAppService {
     DateTime? startDate,
     int days = 7,
     bool forceRefresh = false,
+    void Function(SportsAgendaWindow window)? onProgress,
   }) {
     final requested = (startDate ?? DateTime.now()).toLocal();
     final firstDay = DateTime(requested.year, requested.month, requested.day);
@@ -588,21 +659,49 @@ class SportsApiAppService {
       _agendaWindowCache.remove(cacheKey);
       _agendaCache.clear();
       _agendaCacheExpiry.clear();
-      final base = SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value);
-      if (base != null) {
-        _favoriteSportsCache.remove(base);
-        _favoriteSportsInFlight.remove(base);
+      final normalizedBase =
+          SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value);
+      if (normalizedBase != null) {
+        _favoriteSportsCache.remove(normalizedBase);
+        _favoriteSportsInFlight.remove(normalizedBase);
       }
     }
     final now = DateTime.now();
     final cached = _agendaWindowCache[cacheKey];
-    if (cached != null && now.isBefore(cached.expiresAt)) {
+    if (!forceRefresh && cached != null && now.isBefore(cached.expiresAt)) {
+      onProgress?.call(cached.window);
       return Future<SportsAgendaWindow>.value(cached.window);
     }
     final pending = _agendaWindowInFlight[cacheKey];
-    if (pending != null) return pending;
+    if (pending != null) {
+      if (forceRefresh) {
+        return pending.then(
+          (_) => fetchFavoriteAgendaWindow(
+            startDate: firstDay,
+            days: safeDays,
+            forceRefresh: true,
+            onProgress: onProgress,
+          ),
+          onError: (_) => fetchFavoriteAgendaWindow(
+            startDate: firstDay,
+            days: safeDays,
+            forceRefresh: true,
+            onProgress: onProgress,
+          ),
+        );
+      }
+      return pending.then((window) {
+        onProgress?.call(window);
+        return window;
+      });
+    }
 
-    final future = _fetchFavoriteAgendaWindow(firstDay, safeDays).timeout(
+    final future = _fetchFavoriteAgendaWindow(
+      firstDay,
+      safeDays,
+      forceRefresh: forceRefresh,
+      onProgress: onProgress,
+    ).timeout(
       _windowTimeout,
       onTimeout: () {
         _closeOwnedClient();
@@ -618,7 +717,7 @@ class SportsApiAppService {
         expiresAt: DateTime.now().add(
           window.unavailableDates.isNotEmpty
               ? const Duration(minutes: 1)
-              : const Duration(minutes: 30),
+              : const Duration(minutes: 3),
         ),
       );
       return window;
@@ -629,14 +728,15 @@ class SportsApiAppService {
 
   Future<SportsAgendaWindow> _fetchFavoriteAgendaWindow(
     DateTime startDate,
-    int days,
-  ) async {
+    int days, {
+    required bool forceRefresh,
+    void Function(SportsAgendaWindow window)? onProgress,
+  }) async {
     final localStart = DateTime(startDate.year, startDate.month, startDate.day);
     final localEnd = localStart.add(Duration(days: days));
 
-    // A local seven-day window may overlap eight UTC calendar dates in
-    // UTC-negative time zones. SportsAPI accepts UTC dates, so query every
-    // UTC date whose interval intersects the requested local window.
+    // En Guyana y otras zonas UTC-negativas, una ventana local de siete días
+    // puede intersectar ocho fechas UTC. Consultamos todas las fechas necesarias.
     final firstUtcInstant = localStart.toUtc();
     final lastUtcInstant = localEnd.toUtc().subtract(
       const Duration(milliseconds: 1),
@@ -653,8 +753,13 @@ class SportsApiAppService {
     );
     final utcDays = lastUtcDay.difference(firstUtcDay).inDays + 1;
 
-    final resultsById = <String, SportsAgendaEvent>{};
+    final eventsByUtcDay = <String, Map<String, SportsAgendaEvent>>{};
     final unavailableLocalDays = <DateTime>{};
+
+    String utcDayKey(DateTime value) =>
+        value.year.toString().padLeft(4, '0') + '-' +
+        value.month.toString().padLeft(2, '0') + '-' +
+        value.day.toString().padLeft(2, '0');
 
     void markUnavailableUtcDay(DateTime utcDay) {
       final utcEnd = utcDay
@@ -680,17 +785,50 @@ class SportsApiAppService {
       }
     }
 
-    // Procesa una fecha UTC a la vez; cada deporte también se consulta en
-    // serie. El Worker aplica además el límite global entre dispositivos.
+    SportsAgendaWindow currentWindow() {
+      final unique = <String, SportsAgendaEvent>{};
+      for (final dailyEvents in eventsByUtcDay.values) {
+        unique.addAll(dailyEvents);
+      }
+      final events = unique.values.where((event) {
+        final localEventStart = event.startsAt.toLocal();
+        return !localEventStart.isBefore(localStart) &&
+            localEventStart.isBefore(localEnd);
+      }).toList()
+        ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+      final unavailableDates = unavailableLocalDays.toList()
+        ..sort((a, b) => a.compareTo(b));
+      return SportsAgendaWindow(
+        startDate: localStart,
+        days: days,
+        events: events,
+        unavailableDates: unavailableDates,
+      );
+    }
+
+    // Procesa fechas y deportes en serie para respetar el limitador global del
+    // proveedor, pero publica cada deporte terminado para que la pantalla no
+    // espere hasta finalizar toda la semana.
     var nextDayIndex = 0;
     Future<void> runUtcDayWorker() async {
       while (true) {
         final dayIndex = nextDayIndex++;
         if (dayIndex >= utcDays) return;
         final date = firstUtcDay.add(Duration(days: dayIndex));
+        final key = utcDayKey(date);
         _AgendaDayResult result;
         try {
-          final dayResult = await _fetchCachedAgendaDay(date);
+          final dayResult = await _fetchCachedAgendaDay(
+            date,
+            forceRefresh: forceRefresh,
+            onProgress: (partial) {
+              eventsByUtcDay[key] = <String, SportsAgendaEvent>{
+                for (final event in partial.events) event.id: event,
+              };
+              if (partial.incomplete) markUnavailableUtcDay(date);
+              onProgress?.call(currentWindow());
+            },
+          );
           result = _AgendaDayResult(
             date: date,
             events: dayResult.events,
@@ -703,14 +841,13 @@ class SportsApiAppService {
             failed: true,
           );
         }
-        if (result.failed) {
+        eventsByUtcDay[key] = <String, SportsAgendaEvent>{
+          for (final event in result.events) event.id: event,
+        };
+        if (result.failed || result.incomplete) {
           markUnavailableUtcDay(result.date);
-          continue;
         }
-        if (result.incomplete) markUnavailableUtcDay(result.date);
-        for (final event in result.events) {
-          resultsById[event.id] = event;
-        }
+        onProgress?.call(currentWindow());
       }
     }
 
@@ -720,30 +857,24 @@ class SportsApiAppService {
       growable: false,
     ));
 
-    final events = resultsById.values.where((event) {
-      final localEventStart = event.startsAt.toLocal();
-      return !localEventStart.isBefore(localStart) &&
-          localEventStart.isBefore(localEnd);
-    }).toList()
-      ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
-
-    final unavailableDates = unavailableLocalDays.toList()
-      ..sort((a, b) => a.compareTo(b));
-    return SportsAgendaWindow(
-      startDate: localStart,
-      days: days,
-      events: events,
-      unavailableDates: unavailableDates,
-    );
+    return currentWindow();
   }
 
-  Future<_AgendaSportsResult> _fetchFavoriteAgendaEvents(String day) async {
+  Future<_AgendaSportsResult> _fetchFavoriteAgendaEvents(
+    String day, {
+    bool forceRefresh = false,
+    void Function(_AgendaSportsResult result)? onProgress,
+  }) async {
     Future<Map<String, dynamic>> fetchCompleteEnvelope(
       String route,
       Map<String, String> query,
     ) async {
       Future<Map<String, dynamic>> request() async {
-        final raw = await _get(route, query, true);
+        final requestQuery = <String, String>{
+          ...query,
+          if (forceRefresh) 'refresh': '1',
+        };
+        final raw = await _get(route, requestQuery, true);
         if (raw is! Map) {
           throw const FormatException(
             'SportsAPI devolvió una respuesta con formato inválido.',
@@ -753,8 +884,7 @@ class SportsApiAppService {
       }
 
       // Reintenta una vez ante 429/errores temporales respetando Retry-After.
-      // Si el proveedor informa que la cuota diaria se agotó, se conserva
-      // el resto de deportes y se marca la fecha como incompleta.
+      // Los errores de un deporte no eliminan los resultados de los demás.
       for (var attempt = 0; attempt < 2; attempt++) {
         try {
           final envelope = await request();
@@ -801,6 +931,24 @@ class SportsApiAppService {
         List<_AgendaSportResult?>.filled(entries.length, null);
     var nextIndex = 0;
 
+    void emitProgress() {
+      final completed = resultsByIndex.whereType<_AgendaSportResult>().toList();
+      if (completed.isEmpty) return;
+      final unique = <String, SportsAgendaEvent>{};
+      for (final result in completed) {
+        for (final event in result.events) {
+          unique[event.id] = event;
+        }
+      }
+      final events = unique.values.toList()
+        ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+      final allCompleted = completed.length == entries.length;
+      onProgress?.call(_AgendaSportsResult(
+        events: events,
+        incomplete: allCompleted && completed.any((result) => result.failed),
+      ));
+    }
+
     Future<void> runSportWorker() async {
       while (true) {
         final index = nextIndex++;
@@ -810,58 +958,43 @@ class SportsApiAppService {
           final isRace =
               entry.id == 'cycling' || entry.id == 'motorsport';
           final rows = <Map<String, dynamic>>[];
-          if (isRace) {
+          var finishedPages = false;
+          for (var page = 0; page < 100; page++) {
             final envelope = await fetchCompleteEnvelope(
-              '/races',
-              <String, String>{'date': day, 'sport': entry.id},
+              isRace ? '/races' : '/fixtures',
+              <String, String>{
+                'date': day,
+                'sport': entry.id,
+                'page': page.toString(),
+              },
             );
             final payload = envelope['data'];
             if (payload is! List) {
-              throw const FormatException(
-                'SportsAPI devolvió una agenda de carreras con formato inválido.',
+              throw FormatException(
+                isRace
+                    ? 'SportsAPI devolvió una agenda de carreras con formato inválido.'
+                    : 'SportsAPI devolvió una agenda de partidos con formato inválido.',
               );
             }
             rows.addAll(payload.whereType<Map>().map(
               (raw) => Map<String, dynamic>.from(raw),
             ));
-          } else {
-            var finishedPages = false;
-            for (var page = 0; page < 100; page++) {
-              final envelope = await fetchCompleteEnvelope(
-                '/fixtures',
-                <String, String>{
-                  'date': day,
-                  'sport': entry.id,
-                  'page': page.toString(),
-                },
-              );
-              final payload = envelope['data'];
-              if (payload is! List) {
-                throw const FormatException(
-                  'SportsAPI devolvió una agenda de partidos con formato inválido.',
-                );
-              }
-              rows.addAll(payload.whereType<Map>().map(
-                (raw) => Map<String, dynamic>.from(raw),
-              ));
-              final meta = envelope['meta'] is Map
-                  ? Map<String, dynamic>.from(envelope['meta'] as Map)
-                  : <String, dynamic>{};
-              if (meta['hasNextPage'] != true) {
-                finishedPages = true;
-                break;
-              }
-            }
-            if (!finishedPages) {
-              throw const SportsApiException(
-                'SportsAPI superó el límite seguro de cien páginas para un deporte.',
-              );
+            final meta = envelope['meta'] is Map
+                ? Map<String, dynamic>.from(envelope['meta'] as Map)
+                : <String, dynamic>{};
+            if (meta['hasNextPage'] != true) {
+              finishedPages = true;
+              break;
             }
           }
+          if (!finishedPages) {
+            throw SportsApiException(
+              'SportsAPI superó el límite seguro de cien páginas para ${entry.name}.',
+            );
+          }
 
-          // El endpoint /favorites es la fuente de verdad. La APK aplica
-          // siempre el filtro de nuevo; nunca acepta como respaldo una lista
-          // completa que podría contener ligas no seleccionadas.
+          // /favorites es la fuente de verdad. Flutter vuelve a aplicar los
+          // filtros para no mostrar competiciones que no están seleccionadas.
           final selectedRows = rows.where(
             (row) => entry.matchesRow(row, isRace: isRace),
           ).toList(growable: false);
@@ -885,6 +1018,7 @@ class SportsApiAppService {
             failed: true,
           );
         }
+        emitProgress();
       }
     }
 
