@@ -72,9 +72,49 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
   _FavouriteSport get _sport =>
       _sports.firstWhere((item) => item.id == _sportId, orElse: () => _sports.first);
 
+  String _catalogSportId(Map<String, dynamic> row) {
+    final raw = <dynamic>[
+      row['id'], row['sportId'], row['slug'], row['sport'],
+      row['key'], row['code'], row['name'], row['sportName'],
+    ].firstWhere(
+      (value) => value != null && value.toString().trim().isNotEmpty,
+      orElse: () => '',
+    ).toString().trim().toLowerCase();
+    final normalized = raw
+        .replaceAll(RegExp(r'[áàäâ]'), 'a')
+        .replaceAll(RegExp(r'[éèëê]'), 'e')
+        .replaceAll(RegExp(r'[íìïî]'), 'i')
+        .replaceAll(RegExp(r'[óòöô]'), 'o')
+        .replaceAll(RegExp(r'[úùüû]'), 'u')
+        .replaceAll(RegExp(r'[\s_]+'), '-');
+    const aliases = <String, String>{
+      'soccer': 'football',
+      'futbol': 'football',
+      'baloncesto': 'basketball',
+      'beisbol': 'baseball',
+      'hockey': 'ice-hockey',
+      'hockey-sobre-hielo': 'ice-hockey',
+      'voleibol': 'volleyball',
+      'futbol-sala': 'futsal',
+      'ciclismo': 'cycling',
+      'formula-1': 'motorsport',
+      'formula1': 'motorsport',
+      'deportes-de-motor': 'motorsport',
+      'balonmano': 'handball',
+    };
+    return aliases[normalized] ?? normalized;
+  }
+
+  List<_FavouriteSport> get _availableSports {
+    final favoriteIds = _catalog.map(_catalogSportId).toSet();
+    return _sports
+        .where((sport) => favoriteIds.contains(sport.id))
+        .toList(growable: false);
+  }
+
   Map<String, dynamic>? get _currentCatalog {
     for (final row in _catalog) {
-      if (row['id']?.toString() == _sportId) return row;
+      if (_catalogSportId(row) == _sportId) return row;
     }
     return null;
   }
@@ -110,49 +150,82 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
   Future<void> _loadEvents({bool forceRefresh = false}) async {
     final generation = ++_eventsRequestGeneration;
     final selectedId = _selectedEvent?.id;
+    final selectedSportId = _sportId;
     setState(() {
       _loading = true;
       _error = null;
       _coverageWarning = null;
     });
-    try {
-      final window = await _api.fetchFavoriteAgendaWindow(
-        startDate: _selectedDate,
-        days: 1,
-        forceRefresh: forceRefresh,
-      );
-      final catalog = await _api.fetchFavoriteSports();
-      if (!mounted || generation != _eventsRequestGeneration) return;
-      SportsAgendaEvent? restoredSelection;
-      if (selectedId != null) {
-        for (final event in window.events) {
-          if (event.id == selectedId) {
-            restoredSelection = event;
-            break;
+
+    // No condicionar los deportes y ligas favoritos a que el calendario
+    // consiga devolver eventos para el día actual.
+    Future<void> loadCatalog() async {
+      try {
+        final catalog = await _api.fetchFavoriteSports();
+        if (!mounted || generation != _eventsRequestGeneration) return;
+        final favoriteIds = catalog.map(_catalogSportId).toSet();
+        final knownFavoriteIds = _sports
+            .where((sport) => favoriteIds.contains(sport.id))
+            .map((sport) => sport.id)
+            .toSet();
+        setState(() {
+          _catalog = catalog;
+          if (knownFavoriteIds.isNotEmpty &&
+              !knownFavoriteIds.contains(_sportId)) {
+            _sportId = _sports.firstWhere(
+              (sport) => knownFavoriteIds.contains(sport.id),
+            ).id;
+            _selectedEvent = null;
+            _statistics = <MapEntry<String, String>>[];
+            _statsError = null;
+            _showingStandings = false;
+          }
+        });
+      } catch (_) {
+        // Ante una caída temporal, mantiene el último catálogo conocido.
+      }
+    }
+
+    Future<void> loadWindow() async {
+      try {
+        final window = await _api.fetchFavoriteAgendaWindow(
+          startDate: _selectedDate,
+          days: 1,
+          forceRefresh: forceRefresh,
+        );
+        if (!mounted || generation != _eventsRequestGeneration) return;
+        SportsAgendaEvent? restoredSelection;
+        if (selectedId != null && selectedSportId == _sportId) {
+          for (final event in window.events) {
+            if (event.id == selectedId) {
+              restoredSelection = event;
+              break;
+            }
           }
         }
+        setState(() {
+          _events = window.events;
+          _selectedEvent = restoredSelection;
+          if (restoredSelection == null) {
+            _statistics = <MapEntry<String, String>>[];
+            _statsError = null;
+            _showingStandings = false;
+          }
+          _coverageWarning = window.unavailableDates.isEmpty
+              ? null
+              : 'Cobertura parcial: el proveedor no respondió para todas las franjas horarias de este día. Los eventos recibidos sí se muestran.';
+        });
+      } catch (error) {
+        if (!mounted || generation != _eventsRequestGeneration) return;
+        setState(() => _error = error.toString());
       }
-      setState(() {
-        _catalog = catalog;
-        _events = window.events;
-        _selectedEvent = restoredSelection;
-        if (restoredSelection == null) {
-          _statistics = <MapEntry<String, String>>[];
-          _statsError = null;
-          _showingStandings = false;
-        }
-        _loading = false;
-        _coverageWarning = window.unavailableDates.isEmpty
-            ? null
-            : 'Cobertura parcial: el proveedor no respondió para todas las franjas horarias de este día. Los eventos recibidos sí se muestran.';
-      });
-    } catch (error) {
-      if (!mounted || generation != _eventsRequestGeneration) return;
-      setState(() {
-        _loading = false;
-        _error = error.toString();
-      });
     }
+
+    final windowRequest = loadWindow();
+    final catalogRequest = loadCatalog();
+    await Future.wait<void>(<Future<void>>[windowRequest, catalogRequest]);
+    if (!mounted || generation != _eventsRequestGeneration) return;
+    setState(() => _loading = false);
   }
 
   Future<void> _refresh() => _loadEvents(forceRefresh: true);
@@ -503,7 +576,14 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
   Widget build(BuildContext context) {
     final competitions = _currentCatalog?['competitions'];
     final competitionNames = competitions is List
-        ? competitions.map((value) => value.toString()).toList(growable: false)
+        ? competitions.map((value) {
+            if (value is Map) {
+              return (value['name'] ?? value['title'] ?? value['label'] ?? '')
+                  .toString()
+                  .trim();
+            }
+            return value.toString().trim();
+          }).where((name) => name.isNotEmpty).toList(growable: false)
         : <String>[];
     final events = _visibleEvents;
 
@@ -542,7 +622,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
               border: Border.all(color: _apiStatsLine),
             ),
             child: const Text(
-              'Tus 10 deportes favoritos. Selecciona un deporte y abre un partido, combate o carrera para consultar los datos que SportsAPI tenga publicados.',
+              'Tus deportes y ligas favoritas. Selecciona un evento para consultar los datos que SportsAPI tenga publicados.',
               style: TextStyle(color: _apiStatsMuted, fontSize: 11, height: 1.45),
             ),
           ),
@@ -579,10 +659,11 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 7,
-            runSpacing: 7,
-            children: _sports.map((sport) => ChoiceChip(
+          if (_availableSports.isNotEmpty)
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: _availableSports.map((sport) => ChoiceChip(
               selected: _sportId == sport.id,
               onSelected: (_) => setState(() {
                 _sportId = sport.id;
@@ -605,7 +686,9 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
               ),
               side: BorderSide(color: _sportId == sport.id ? _apiStatsCyan : _apiStatsLine),
             )).toList(growable: false),
-          ),
+            )
+          else if (!_loading)
+            _message('No se encontraron deportes favoritos en el catálogo de SportsAPI.'),
           const SizedBox(height: 10),
           TextField(
             controller: _eventSearchController,
