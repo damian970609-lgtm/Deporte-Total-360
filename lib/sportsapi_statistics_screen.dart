@@ -541,7 +541,39 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
               style: TextStyle(color: _apiStatsMuted, fontSize: 11, height: 1.45),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
+          Row(
+            children: <Widget>[
+              IconButton(
+                key: const ValueKey<String>('stats-date-previous'),
+                tooltip: 'Día anterior',
+                onPressed: _loading ? null : () => _changeDate(-1),
+                icon: const Icon(Icons.chevron_left_rounded, color: _apiStatsCyan),
+              ),
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const ValueKey<String>('stats-date-picker'),
+                  onPressed: _loading ? null : _chooseDate,
+                  icon: const Icon(Icons.calendar_month_rounded, size: 16),
+                  label: Text(_dateLabel,
+                      maxLines: 2, textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _apiStatsCyan,
+                    side: const BorderSide(color: _apiStatsLine),
+                  ),
+                ),
+              ),
+              IconButton(
+                key: const ValueKey<String>('stats-date-next'),
+                tooltip: 'Día siguiente',
+                onPressed: _loading ? null : () => _changeDate(1),
+                icon: const Icon(Icons.chevron_right_rounded, color: _apiStatsCyan),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 7,
             runSpacing: 7,
@@ -564,6 +596,55 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
                 fontWeight: FontWeight.w800,
               ),
               side: BorderSide(color: _sportId == sport.id ? _apiStatsCyan : _apiStatsLine),
+            )).toList(growable: false),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _eventSearchController,
+            onChanged: (_) => setState(() {}),
+            textInputAction: TextInputAction.search,
+            style: const TextStyle(color: Colors.white, fontSize: 11),
+            decoration: InputDecoration(
+              labelText: 'Buscar equipo, evento o competición',
+              prefixIcon: const Icon(Icons.search_rounded, color: _apiStatsCyan),
+              suffixIcon: _eventSearchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Limpiar búsqueda',
+                      onPressed: () {
+                        _eventSearchController.clear();
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.close_rounded, color: _apiStatsMuted),
+                    ),
+              filled: true,
+              fillColor: _apiStatsPanel,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(11)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: <(String, String)>[
+              ('all', 'TODOS'),
+              ('live', 'EN VIVO'),
+              ('upcoming', 'PRÓXIMOS'),
+              ('finished', 'FINALIZADOS'),
+            ].map((filter) => ChoiceChip(
+              key: ValueKey<String>('stats-filter-${filter.$1}'),
+              selected: _statusFilter == filter.$1,
+              onSelected: (_) => setState(() => _statusFilter = filter.$1),
+              label: Text(filter.$2),
+              selectedColor: _apiStatsCyan,
+              backgroundColor: _apiStatsPanel,
+              labelStyle: TextStyle(
+                color: _statusFilter == filter.$1 ? _apiStatsBg : _apiStatsMuted,
+                fontSize: 8,
+                fontWeight: FontWeight.w900,
+              ),
+              side: BorderSide(color: _statusFilter == filter.$1 ? _apiStatsCyan : _apiStatsLine),
             )).toList(growable: false),
           ),
           const SizedBox(height: 8),
@@ -609,13 +690,20 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
           Row(
             children: <Widget>[
               const Expanded(
-                child: Text('EVENTOS DE HOY',
+                child: Text('EVENTOS DEL DÍA',
                     style: TextStyle(color: _apiStatsCyan, fontSize: 11, fontWeight: FontWeight.w900)),
               ),
               Text('${events.length} eventos',
                   style: const TextStyle(color: _apiStatsMuted, fontSize: 9)),
             ],
           ),
+          const SizedBox(height: 4),
+          Text(_dateLabel,
+              style: const TextStyle(color: _apiStatsMuted, fontSize: 9)),
+          if (_coverageWarning != null) ...<Widget>[
+            const SizedBox(height: 8),
+            _message(_coverageWarning!),
+          ],
           const SizedBox(height: 7),
           if (_loading)
             const Padding(
@@ -623,9 +711,22 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
               child: Center(child: CircularProgressIndicator(color: _apiStatsCyan)),
             )
           else if (_error != null)
-            _message(_error!)
+            Column(
+              children: <Widget>[
+                _message(_error!),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _refresh,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('REINTENTAR'),
+                  style: OutlinedButton.styleFrom(foregroundColor: _apiStatsCyan),
+                ),
+              ],
+            )
           else if (events.isEmpty)
-            _message('No hay eventos publicados hoy para ${_sport.name}. La agenda se actualiza automáticamente desde el Worker.')
+            _message(_statusFilter == 'all' && _eventSearchController.text.isEmpty
+                ? 'No hay eventos publicados para ${_sport.name} en esta fecha. Prueba otro día o actualiza los datos.'
+                : 'No hay eventos que coincidan con la búsqueda y el filtro seleccionados.')
           else
             ...events.map((event) => _eventCard(event)),
           if (_selectedEvent != null) ...<Widget>[
@@ -640,7 +741,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text('ESTADÍSTICAS · ${_selectedEvent!.competition}',
+                  Text('${_showingStandings ? 'CLASIFICACIÓN' : 'ESTADÍSTICAS'} · ${_selectedEvent!.competition}',
                       style: const TextStyle(color: _apiStatsPink, fontSize: 10, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 5),
                   Text(_selectedEvent!.title,
@@ -674,20 +775,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
                   else if (_statsError != null)
                     Text(_statsError!, style: const TextStyle(color: _apiStatsMuted, fontSize: 11, height: 1.4))
                   else
-                    ..._statistics.map((item) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 5),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Expanded(child: Text(item.key,
-                              style: const TextStyle(color: _apiStatsMuted, fontSize: 10))),
-                          const SizedBox(width: 12),
-                          Flexible(child: Text(item.value,
-                              textAlign: TextAlign.end,
-                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800))),
-                        ],
-                      ),
-                    )),
+                    ..._statistics.map(_statisticItem),
                 ],
               ),
             ),
@@ -698,8 +786,17 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
   }
 
   Widget _eventCard(SportsAgendaEvent event) {
-    final status = event.status.toLowerCase();
-    final isLive = status == 'live' || status == 'inprogress';
+    final category = _eventCategory(event);
+    final isLive = category == 'live';
+    final statusLabel = event.statusLabel.trim().isNotEmpty
+        ? event.statusLabel
+        : category == 'live'
+            ? 'EN VIVO'
+            : category == 'finished'
+                ? 'FINALIZADO'
+                : category == 'upcoming'
+                    ? 'PROGRAMADO'
+                    : event.status;
     final score = event.homeScore.isNotEmpty || event.awayScore.isNotEmpty
         ? '${event.homeScore.isEmpty ? '-' : event.homeScore} : ${event.awayScore.isEmpty ? '-' : event.awayScore}'
         : '';
@@ -730,6 +827,13 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
                       const SizedBox(height: 3),
                       Text(event.competition, maxLines: 1, overflow: TextOverflow.ellipsis,
                           style: const TextStyle(color: _apiStatsMuted, fontSize: 9)),
+                      const SizedBox(height: 2),
+                      Text(statusLabel.toUpperCase(),
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: isLive ? _apiStatsPink : _apiStatsMuted,
+                            fontSize: 8, fontWeight: FontWeight.w800,
+                          )),
                     ],
                   ),
                 ),
