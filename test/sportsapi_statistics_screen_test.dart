@@ -17,6 +17,7 @@ class _FavoritesOnlyApi extends SportsApiAppService {
     DateTime? startDate,
     int days = 7,
     bool forceRefresh = false,
+    void Function(SportsAgendaWindow window)? onProgress,
   }) async {
     throw const SportsApiException('Calendario temporalmente no disponible.');
   }
