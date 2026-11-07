@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 import 'live_media_format.dart';
 import 'sports_api_service.dart';
 
+const int channelCatalogMaxOffset = 5000000;
+
 const String _googleServerClientId =
     String.fromEnvironment('GOOGLE_OAUTH_CLIENT_ID');
 
@@ -413,7 +415,7 @@ class ChannelCatalogService {
     int offset = 0,
     int limit = 200,
   }) async {
-    final normalizedOffset = offset.clamp(0, 100000).toInt();
+    final normalizedOffset = offset.clamp(0, channelCatalogMaxOffset).toInt();
     final normalizedLimit = limit.clamp(1, 2000).toInt();
     final query = <String, String>{
       'offset': normalizedOffset.toString(),
@@ -471,7 +473,7 @@ class ChannelCatalogService {
     String search = '',
     int offset = 0,
   }) async {
-    final normalizedOffset = offset.clamp(0, 100000).toInt();
+    final normalizedOffset = offset.clamp(0, channelCatalogMaxOffset).toInt();
     final uri = Uri.parse(_baseUrl + '/api/channels/admin/catalog').replace(
       queryParameters: <String, String>{
         if (search.trim().isNotEmpty) 'q': search.trim(),
