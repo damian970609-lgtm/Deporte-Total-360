@@ -249,7 +249,7 @@ void main() {
     }
   });
 
-  test('conserva el lote de respaldo marcado por el Worker cuando cambia el nombre de una liga', () async {
+  test('vuelve a filtrar el respaldo del Worker para no mostrar ligas ajenas', () async {
     final previousBase = sportsApiBaseUrl.value;
     sportsApiBaseUrl.value = 'https://worker-favorite-fallback.example';
     final client = MockClient((request) async {
@@ -271,7 +271,15 @@ void main() {
               'id': 601,
               'startTime': '2036-06-01T12:00:00Z',
               'status': {'type': 'scheduled'},
-              'home': {'name': 'Equipo de la liga'},
+              'home': {'name': 'Equipo favorito'},
+              'away': {'name': 'Rival'},
+              'league': {'id': 39, 'name': 'Premier League'},
+            },
+            {
+              'id': 602,
+              'startTime': '2036-06-01T13:00:00Z',
+              'status': {'type': 'scheduled'},
+              'home': {'name': 'Equipo no favorito'},
               'away': {'name': 'Rival'},
               'league': {'id': 999, 'name': 'Domestic Premier Competition'},
             },
@@ -293,16 +301,17 @@ void main() {
     try {
       final events = await SportsApiAppService(client: client)
           .fetchFavoriteAgendaEvents(date: DateTime.utc(2036, 6, 1));
-      expect(events.map((event) => event.id), contains('sportsapi-fixture-601'));
+      expect(events.map((event) => event.id), ['sportsapi-fixture-601']);
     } finally {
       sportsApiBaseUrl.value = previousBase;
       client.close();
     }
   });
 
-  test('un deporte favorito sin lista de ligas usa todas sus competiciones', () async {
+  test('un deporte favorito sin ligas seleccionadas no carga competiciones', () async {
     final previousBase = sportsApiBaseUrl.value;
     sportsApiBaseUrl.value = 'https://worker-empty-selection.example';
+    var fixtureRequests = 0;
     final client = MockClient((request) async {
       if (request.url.path.endsWith('/favorites')) {
         return http.Response(jsonEncode({
@@ -310,6 +319,7 @@ void main() {
         }), 200);
       }
       if (request.url.path.endsWith('/fixtures')) {
+        fixtureRequests++;
         return http.Response(jsonEncode({
           'data': [{
             'id': 501, 'startTime': '2036-05-08T12:00:00Z',
@@ -328,7 +338,8 @@ void main() {
     try {
       final events = await SportsApiAppService(client: client)
           .fetchFavoriteAgendaEvents(date: DateTime.utc(2036, 5, 8));
-      expect(events.map((event) => event.id), contains('sportsapi-fixture-501'));
+      expect(events, isEmpty);
+      expect(fixtureRequests, 0);
     } finally {
       sportsApiBaseUrl.value = previousBase;
       client.close();

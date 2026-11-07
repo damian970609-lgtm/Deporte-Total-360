@@ -676,7 +676,7 @@ class _MainShellState extends State<MainShell> {
   static const int _settingsTab = 9;
 
   int _selectedIndex = _homeTab;
-  String _selectedStatisticsSport = 'Fútbol';
+  String _selectedStatisticsSport = 'Todos';
   String? _selectedAgendaEventId;
   bool _handlingBack = false;
   final Set<int> _visitedTabs = <int>{_homeTab};
