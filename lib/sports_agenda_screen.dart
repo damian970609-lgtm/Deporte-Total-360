@@ -127,7 +127,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
     }
   }
 
-  Future<SportsAgendaWindow> _loadWindow() async {
+  Future<SportsAgendaWindow> _loadWindow({bool forceRefresh = false}) async {
     final injectedLoader = widget.loadEvents;
     if (injectedLoader != null) {
       final events = await injectedLoader() ?? <SportsAgendaEvent>[];
@@ -142,6 +142,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
       final window = await SportsApiAppService().fetchFavoriteAgendaWindow(
         startDate: _windowStartDate,
         days: _windowDays,
+        forceRefresh: forceRefresh,
       );
       if (window.unavailableDates.length == window.days &&
           window.events.isEmpty) {
@@ -224,7 +225,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
     }
   }
 
-  Future<void> _refresh() async {
+  Future<void> _refresh({bool forceRefresh = false}) async {
     if (_refreshing) return;
     final today = _dateOnly(DateTime.now());
     if (!_sameDay(today, _windowStartDate)) {
@@ -245,7 +246,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
     }
 
     try {
-      final window = await _loadWindow();
+      final window = await _loadWindow(forceRefresh: forceRefresh);
       if (!mounted || version != _refreshVersion) return;
       final availableSports = window.events
           .map((event) => event.sport.trim())
@@ -982,7 +983,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
         actions: <Widget>[
           IconButton(
             tooltip: 'Actualizar agenda',
-            onPressed: _loading ? null : _refresh,
+            onPressed: _loading ? null : () => _refresh(forceRefresh: true),
             icon: Icon(
               Icons.refresh_rounded,
               color: _loading ? _agendaMuted : _agendaCyan,
@@ -1091,7 +1092,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
                         : RefreshIndicator(
                             color: _agendaCyan,
                             backgroundColor: _agendaPanel,
-                            onRefresh: _refresh,
+                            onRefresh: () => _refresh(forceRefresh: true),
                             child: ListView.builder(
                               key: const ValueKey<String>('agenda-event-list'),
                               padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
