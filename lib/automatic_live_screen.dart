@@ -16,10 +16,12 @@ class AutomaticLiveScreen extends StatefulWidget {
     super.key,
     required this.onOpenAgenda,
     this.isActive = true,
+    this.selectedEventId,
   });
 
   final VoidCallback onOpenAgenda;
   final bool isActive;
+  final String? selectedEventId;
 
   @override
   State<AutomaticLiveScreen> createState() => _AutomaticLiveScreenState();
@@ -53,7 +55,10 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
   @override
   void didUpdateWidget(covariant AutomaticLiveScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!oldWidget.isActive && widget.isActive) _refresh(force: true);
+    if ((!oldWidget.isActive && widget.isActive) ||
+        oldWidget.selectedEventId != widget.selectedEventId) {
+      _refresh(force: true);
+    }
   }
 
   @override
@@ -116,24 +121,40 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
       try {
         // El tablero Live obtiene primero los diez deportes favoritos, aunque
         // el usuario nunca haya abierto la pestaña Agenda.
-        events = await SportsApiAppService().fetchFavoriteAgendaEvents();
-        await SportsAgendaStore.save(events);
+        final window = await SportsApiAppService().fetchFavoriteAgendaWindow(
+          startDate: DateTime.now(),
+          days: 7,
+        );
+        events = window.events;
+        await SportsAgendaStore.saveWindow(
+          events,
+          startDate: window.startDate,
+          days: window.days,
+        );
       } catch (_) {
         events = localEvents;
       }
 
-      // El endpoint público contiene solo canales deportivos visibles del panel
-      // privado del propietario; son las URL exactas que él seleccionó.
-      final selectedChannels = await _loadSelectedSportsChannels(forceRefresh: force);
-      final latest = selectedChannels.isNotEmpty
-          ? await _service.schedule(
-              events: events,
-              now: DateTime.now(),
-              settings: settings,
-              availableChannels: selectedChannels,
-              forceRefresh: force,
-            )
-          : <ScheduledLiveEvent>[];      if (!mounted) return;
+      // Primero se consume el calendario persistente que prepara Cloudflare
+      // aunque ningún teléfono tenga la APK abierta. Si el Worker aún no lo ha
+      // generado o está temporalmente fuera de línea, se conserva el motor local.
+      final published = await _service.fetchPublishedSchedule();
+      List<ScheduledLiveEvent> latest;
+      if (published != null) {
+        latest = published;
+      } else {
+        final selectedChannels =
+            await _loadSelectedSportsChannels(forceRefresh: force);
+        latest = selectedChannels.isNotEmpty
+            ? await _service.schedule(
+                events: events,
+                now: DateTime.now(),
+                settings: settings,
+                availableChannels: selectedChannels,
+                forceRefresh: force,
+              )
+            : <ScheduledLiveEvent>[];
+      }      if (!mounted) return;
       setState(() {
         _agendaEvents = events;
         _scheduled = latest;
@@ -151,7 +172,12 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
   List<LivePlayerSource> _playerSources() {
     final now = DateTime.now();
     final ordered = List<ScheduledLiveEvent>.of(_scheduled)
-      ..sort((a, b) => a.event.startsAt.compareTo(b.event.startsAt));
+      ..sort((a, b) {
+        final aSelected = a.event.id == widget.selectedEventId;
+        final bSelected = b.event.id == widget.selectedEventId;
+        if (aSelected != bSelected) return aSelected ? -1 : 1;
+        return a.event.startsAt.compareTo(b.event.startsAt);
+      });
     final usedUrls = <String>{};
     final result = <LivePlayerSource>[];
     for (final item in ordered) {
@@ -201,7 +227,12 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
           event.startsAt.add(const Duration(hours: 3));
       return now.isBefore(end);
     }).toList()
-      ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+      ..sort((a, b) {
+        final aSelected = a.id == widget.selectedEventId;
+        final bSelected = b.id == widget.selectedEventId;
+        if (aSelected != bSelected) return aSelected ? -1 : 1;
+        return a.startsAt.compareTo(b.startsAt);
+      });
 
     return upcoming
         .take(8 - activeSources.length)
@@ -279,6 +310,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         sources: activeSources,
         waitingEvents: waitingEvents,
         isActive: widget.isActive,
+        prioritizedEventId: widget.selectedEventId,
       ),
     );
   }

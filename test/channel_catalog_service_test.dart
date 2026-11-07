@@ -53,6 +53,32 @@ void main() {
     expect(channelLanguageDisplayLabel('fr'), isNull);
   });
 
+  test('el catálogo puede serializar y restaurar canales completos para uso sin conexión', () {
+    final original = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'espn-latino-1234',
+      'identifier': 'espn-latino-1234',
+      'name': 'ESPN Latino',
+      'url': 'https://media.example/live.m3u8',
+      'logoUrl': 'https://media.example/logo.png',
+      'groupTitle': 'Deportes',
+      'isSports': true,
+      'visible': true,
+      'language': 'es',
+    });
+
+    final restored = SportsChannel.fromJson(original.toJson());
+
+    expect(restored.id, original.id);
+    expect(restored.identifier, original.identifier);
+    expect(restored.name, original.name);
+    expect(restored.url, original.url);
+    expect(restored.logoUrl, original.logoUrl);
+    expect(restored.groupTitle, original.groupTitle);
+    expect(restored.isSports, original.isSports);
+    expect(restored.visible, original.visible);
+    expect(restored.language, original.language);
+  });
+
   test('canal parseado mantiene el identificador y los metadatos', () {
     final channel = SportsChannel.fromJson(<String, dynamic>{
       'id': 'espn-latino-1234',
@@ -72,6 +98,19 @@ void main() {
     expect(channel.isSports, isTrue);
     expect(channel.visible, isTrue);
     expect(channel.language, 'es');
+  });
+
+  test('canal rechaza HTTP aunque el enlace termine en una extensión compatible', () {
+    expect(
+      () => SportsChannel.fromJson(<String, dynamic>{
+        'id': 'unsafe-http',
+        'identifier': 'unsafe-http',
+        'name': 'Canal HTTP',
+        'url': 'http://media.example/live.m3u8',
+        'isSports': true,
+      }),
+      throwsFormatException,
+    );
   });
 
   test('canal admite señales MPEG-TS directas de listas M3U', () {
@@ -133,6 +172,18 @@ void main() {
     expect(channel.language, 'unknown');
   });
 
+  test('un canal sin visibilidad explícita permanece oculto hasta su publicación', () {
+    final channel = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'new-sports-channel',
+      'identifier': 'new-sports-channel',
+      'name': 'Canal deportivo nuevo',
+      'url': 'https://media.example/new-channel.m3u8',
+      'isSports': true,
+    });
+
+    expect(channel.visible, isFalse);
+  });
+
   test('Google OAuth confirma que APK y Worker comparten el cliente Web', () async {
     final clientId = 'dt360-web.apps.googleusercontent.com';
     final client = MockClient((request) async {
@@ -183,8 +234,8 @@ void main() {
       return http.Response(
         jsonEncode(<String, Object>{
           'configured': true,
-          'total': 450,
-          'offset': 200,
+          'total': 250001,
+          'offset': 250000,
           'hasMore': true,
           'channels': <Map<String, Object>>[
             <String, Object>{
@@ -205,17 +256,50 @@ void main() {
 
     final page = await service.fetchPublicChannelPage(
       search: 'ESPN',
-      offset: 200,
+      offset: 250000,
     );
 
     expect(requestedUri?.path, '/api/channels');
     expect(requestedUri?.queryParameters['q'], 'ESPN');
-    expect(requestedUri?.queryParameters['offset'], '200');
-    expect(page.total, 450);
-    expect(page.offset, 200);
+    expect(requestedUri?.queryParameters['offset'], '250000');
+    expect(page.total, 250001);
+    expect(page.offset, 250000);
     expect(page.hasMore, isTrue);
     expect(page.channels, hasLength(1));
     expect(page.channels.single.name, 'ESPN Latino');
+    client.close();
+  });
+
+  test('editar una lista actualiza su nombre y URL mediante PUT autenticado', () async {
+    http.Request? sent;
+    final client = MockClient((request) async {
+      sent = request;
+      return http.Response(jsonEncode(<String, Object>{'updated': true}), 200);
+    });
+    final service = ChannelCatalogService(
+      client: client,
+      accessTokenProvider: () => 'test-google-id-token',
+    );
+
+    await service.updatePlaylistSource(
+      id: 'source-123',
+      url: 'https://lists.example/updated.m3u',
+      label: 'Lista actualizada',
+    );
+
+    expect(sent?.method, 'PUT');
+    expect(
+      sent?.url.path,
+      endsWith('/api/channels/admin/sources/source-123'),
+    );
+    expect(sent?.headers['Authorization'], 'Bearer test-google-id-token');
+    expect(
+      jsonDecode(sent!.body),
+      <String, String>{
+        'url': 'https://lists.example/updated.m3u',
+        'label': 'Lista actualizada',
+      },
+    );
     client.close();
   });
 
@@ -237,6 +321,90 @@ void main() {
 
     expect(sent?.method, 'DELETE');
     expect(sent?.url.path, endsWith('/api/channels/admin/sources/source-123'));
+    client.close();
+  });
+
+  test('el canal DASH se conserva como señal multimedia compatible', () {
+    final channel = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'sports-dash-1',
+      'identifier': 'sports-dash-1',
+      'name': 'Sports DASH',
+      'url': 'https://media.example/live/manifest.mpd?token=sample',
+      'isSports': true,
+      'visible': false,
+    });
+
+    expect(channel.url, contains('.mpd'));
+    expect(channel.isSports, isTrue);
+    expect(channel.visible, isFalse);
+  });
+
+  test('clasificar un canal como deportivo usa PATCH autenticado', () async {
+    http.Request? sent;
+    final client = MockClient((request) async {
+      sent = request;
+      return http.Response(jsonEncode(<String, Object>{
+        'updated': true,
+        'isSports': true,
+        'visible': false,
+      }), 200);
+    });
+    final service = ChannelCatalogService(
+      client: client,
+      accessTokenProvider: () => 'test-google-id-token',
+    );
+
+    await service.setChannelSportsClassification(
+      'news-channel-123',
+      isSports: true,
+    );
+
+    expect(sent?.method, 'PATCH');
+    expect(
+      sent?.url.path,
+      endsWith('/api/channels/admin/channels/news-channel-123/classification'),
+    );
+    expect(sent?.headers['Authorization'], 'Bearer test-google-id-token');
+    expect(jsonDecode(sent!.body), <String, bool>{'isSports': true});
+    client.close();
+  });
+
+  test('eliminar un canal usa DELETE autenticado en la ruta del canal', () async {
+    http.Request? sent;
+    final client = MockClient((request) async {
+      sent = request;
+      return http.Response(jsonEncode(<String, Object>{
+        'deleted': true,
+        'blockedFromReimport': true,
+      }), 200);
+    });
+    final service = ChannelCatalogService(
+      client: client,
+      accessTokenProvider: () => 'test-google-id-token',
+    );
+
+    await service.deleteChannel('sports-channel-123');
+
+    expect(sent?.method, 'DELETE');
+    expect(
+      sent?.url.path,
+      endsWith('/api/channels/admin/channels/sports-channel-123'),
+    );
+    expect(sent?.headers['Authorization'], 'Bearer test-google-id-token');
+    client.close();
+  });
+
+  test('eliminar un canal rechaza identificadores inseguros', () async {
+    final client = MockClient((request) async => http.Response('{}', 200));
+    final service = ChannelCatalogService(
+      client: client,
+      accessTokenProvider: () => 'test-google-id-token',
+    );
+
+    await expectLater(
+      service.deleteChannel('../channel'),
+      throwsA(isA<ChannelCatalogException>()),
+    );
     client.close();
   });
 

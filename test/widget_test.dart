@@ -3,12 +3,78 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:deporte_total_360/agenda_screen.dart';
 import 'package:deporte_total_360/main.dart';
+import 'package:deporte_total_360/channel_catalog_screen.dart';
+import 'package:deporte_total_360/channel_catalog_service.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sports_statistics_screen.dart';
 
 void _noopHomeNavigate(int _) {}
 void _noopHomeSport(String _) {}
 void _noopHomeAction() {}
+
+class _AdminTestService extends ChannelCatalogService {
+  _AdminTestService({this.autoSignIn = true});
+
+  final bool autoSignIn;
+  final List<String> deletedSourceIds = <String>[];
+
+  @override
+  Future<String?> restoreSession() async =>
+      autoSignIn ? 'admin@example.com' : null;
+
+  @override
+  Future<ChannelCatalogPage> fetchAdminChannelPage({
+    String search = '',
+    int offset = 0,
+  }) async {
+    return const ChannelCatalogPage(
+      channels: <SportsChannel>[],
+      total: 0,
+      offset: 0,
+      hasMore: false,
+    );
+  }
+
+  @override
+  Future<List<ChannelPlaylistSource>> fetchSources() async {
+    return const <ChannelPlaylistSource>[
+      ChannelPlaylistSource(
+        id: 'source-imported',
+        url: 'https://lists.example/imported.m3u',
+        label: 'Lista importada',
+        status: 'imported',
+        importedCount: 4,
+        lastImportedAt: '2026-11-06T12:00:00Z',
+      ),
+      ChannelPlaylistSource(
+        id: 'source-queued',
+        url: 'https://lists.example/queued.m3u',
+        label: 'Lista en cola',
+        status: 'queued',
+      ),
+    ];
+  }
+
+  @override
+  Future<List<AppLicenseRecord>> fetchAdminLicenses() async =>
+      <AppLicenseRecord>[];
+
+  @override
+  Future<Map<String, dynamic>> addPlaylistSourcesToCatalog({
+    required List<Map<String, String>> sources,
+  }) async => <String, dynamic>{
+        'added': sources.length,
+        'duplicates': 0,
+        'total': 100,
+        'limit': 100,
+        'complete': true,
+      };
+
+  @override
+  Future<void> deletePlaylistSource({required String id}) async {
+    deletedSourceIds.add(id);
+  }
+}
 
 void main() {
   testWidgets('estadísticas muestra selector multideporte e IDs', (tester) async {
@@ -41,6 +107,44 @@ void main() {
     expect(find.text('Próximos 7 días'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
+  });
+
+  testWidgets('DAMIAN.APK abre el panel secreto después de diez pulsaciones', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final service = _AdminTestService(autoSignIn: false);
+    await tester.pumpWidget(
+      MaterialApp(home: SettingsScreen(adminService: service)),
+    );
+    await tester.pump();
+
+    final signature = find.text('DAMIAN.APK');
+    expect(signature, findsOneWidget);
+    for (var tap = 0; tap < 9; tap++) {
+      await tester.tap(signature);
+      await tester.pump();
+    }
+    expect(find.text('ADMINISTRACIÓN · DAMIÁN.APK'), findsNothing);
+
+    await tester.tap(signature);
+    await tester.pumpAndSettle();
+    expect(find.text('ADMINISTRACIÓN · DAMIÁN.APK'), findsOneWidget);
+    expect(find.text('ENTRAR CON GOOGLE'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('el panel privado exige autenticación antes de mostrar las listas', (tester) async {
+    final service = _AdminTestService(autoSignIn: false);
+    await tester.pumpWidget(
+      MaterialApp(home: ChannelAdminScreen(service: service)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('PANEL PRIVADO DE CANALES'), findsOneWidget);
+    expect(find.text('ENTRAR CON GOOGLE'), findsOneWidget);
+    expect(find.text('CATÁLOGO DE FUENTES · 100 LISTAS'), findsNothing);
+    expect(service.deletedSourceIds, isEmpty);
+
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('Ajustes expone un acceso visible al servidor deportivo', (tester) async {

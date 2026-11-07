@@ -20,7 +20,7 @@ import 'public_chat_screen.dart';
 import 'sports_api_service.dart';
 import 'sportsapi_statistics_screen.dart';
 import 'sports_summaries_screen.dart';
-import 'marca_agenda_screen.dart';
+import 'sports_agenda_screen.dart';
 
 // Identidad visual unificada: blanco, negro, azul, rojo y verde neón.
 const Color appBg = Color(0xFF000000);
@@ -618,6 +618,7 @@ class _MainShellState extends State<MainShell> {
   void _handleLivePush() {
     final eventId = NotificationService.liveEventNotification.value;
     if (eventId == null || !mounted) return;
+    _selectedAgendaEventId = eventId;
     NotificationService.liveEventNotification.value = null;
     _selectTab(_liveTab);
   }
@@ -676,6 +677,7 @@ class _MainShellState extends State<MainShell> {
 
   int _selectedIndex = _homeTab;
   String _selectedStatisticsSport = 'Fútbol';
+  String? _selectedAgendaEventId;
   bool _handlingBack = false;
   final Set<int> _visitedTabs = <int>{_homeTab};
 
@@ -697,7 +699,7 @@ class _MainShellState extends State<MainShell> {
 
   void _openStatistics() => _selectTab(_statisticsTab);
 
-  void _openWebAgenda() => _selectTab(_agendaTab);
+  void _openAgenda() => _selectTab(_agendaTab);
 
   void _openPublicChat() => _selectTab(_chatTab);
 
@@ -900,22 +902,26 @@ class _MainShellState extends State<MainShell> {
         onDonations: _openDonations,
         onFantasy: _openFantasy,
         onStatistics: _openStatistics,
-        onOpenAgenda: _openWebAgenda,
+        onOpenAgenda: _openAgenda,
         onChat: _openPublicChat,
       ),
       _visitedTabs.contains(_liveTab)
           ? AutomaticLiveScreen(
               onOpenAgenda: () => _selectTab(_agendaTab),
               isActive: _selectedIndex == _liveTab,
+              selectedEventId: _selectedAgendaEventId,
             )
           : const SizedBox.shrink(),
       _visitedTabs.contains(_channelsTab)
           ? const ChannelCatalogScreen()
           : const SizedBox.shrink(),
       _visitedTabs.contains(_agendaTab)
-          ? MarcaAgendaScreen(
+          ? SportsAgendaScreen(
               isActive: _selectedIndex == _agendaTab,
-              onOpenLive: () => _selectTab(_liveTab),
+              onOpenLive: (eventId) {
+                _selectedAgendaEventId = eventId;
+                _selectTab(_liveTab);
+              },
             )
           : const SizedBox.shrink(),
       _visitedTabs.contains(_newsTab) ? const NewsScreen() : const SizedBox.shrink(),
@@ -1739,7 +1745,9 @@ class _HomeAtmospherePainter extends CustomPainter {
 }
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.adminService});
+
+  final ChannelCatalogService? adminService;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -1760,8 +1768,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadNotificationPreference() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (mounted) setState(() => _notificationsEnabled =
-          prefs.getBool('notifications_enabled') ?? false);
+      if (mounted) {
+        final enabled = prefs.getBool('notifications_enabled') ?? false;
+        NotificationService.matchRemindersEnabled.value = enabled;
+        setState(() => _notificationsEnabled = enabled);
+      }
     } catch (_) {}
   }
 
@@ -1786,6 +1797,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await prefs.setBool('notifications_enabled', enabled);
     } catch (_) {}
     if (enabled) await NotificationService.registerCurrentDevice();
+    NotificationService.matchRemindersEnabled.value = enabled;
     if (mounted) setState(() => _notificationsEnabled = enabled);
   }
 
@@ -1820,7 +1832,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _signatureTapCount = 0;
       Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
-          builder: (_) => const ChannelAdminScreen(),
+          builder: (_) => ChannelAdminScreen(service: widget.adminService),
         ),
       );
     }

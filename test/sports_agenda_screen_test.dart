@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:deporte_total_360/automatic_live_service.dart';
-import 'package:deporte_total_360/marca_agenda_screen.dart';
+import 'package:deporte_total_360/sports_agenda_screen.dart';
 
 void main() {
   testWidgets('muestra los eventos que publica la agenda sincronizada', (tester) async {
@@ -9,12 +9,12 @@ void main() {
     final start = DateTime(now.year, now.month, now.day, 12);
     await tester.pumpWidget(
       MaterialApp(
-        home: MarcaAgendaScreen(
+        home: SportsAgendaScreen(
           isActive: false,
-          onOpenLive: () {},
+          onOpenLive: (_) {},
           loadEvents: () async => <SportsAgendaEvent>[
             SportsAgendaEvent(
-              id: 'marca-test-1',
+              id: 'sportsapi-test-1',
               title: 'Equipo A vs Equipo B',
               sport: 'Fútbol',
               competition: 'Liga de prueba',
@@ -23,7 +23,7 @@ void main() {
               homeTeamLogo: 'https://img.example/equipo-a.png',
               awayTeamLogo: 'https://img.example/equipo-b.png',
               startsAt: start,
-              detailUrl: 'https://www.marca.com/programacion-tv.html',
+              detailUrl: 'https://sportsapi.app/',
             ),
           ],
         ),
@@ -47,9 +47,9 @@ void main() {
     final start = DateTime(now.year, now.month, now.day, 14);
     await tester.pumpWidget(
       MaterialApp(
-        home: MarcaAgendaScreen(
+        home: SportsAgendaScreen(
           isActive: false,
-          onOpenLive: () {},
+          onOpenLive: (_) {},
           loadEvents: () async => <SportsAgendaEvent>[
             SportsAgendaEvent(
               id: 'tennis-final-1',
@@ -69,7 +69,7 @@ void main() {
                 ),
               ],
               startsAt: start,
-              detailUrl: 'https://www.marca.com/programacion-tv.html',
+              detailUrl: 'https://sportsapi.app/',
             ),
           ],
         ),
@@ -88,7 +88,7 @@ void main() {
   });
 
 
-  testWidgets('solo muestra la jornada local de hoy y permite desplazarse por una agenda extensa', (tester) async {
+  testWidgets('muestra solo la fecha seleccionada y permite desplazarse por una agenda extensa', (tester) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final mixedEvents = <SportsAgendaEvent>[
@@ -98,7 +98,7 @@ void main() {
           title: 'Evento de hoy $index',
           sport: 'Fútbol',
           startsAt: today.add(Duration(minutes: index * 10)),
-          detailUrl: 'https://www.marca.com/programacion-tv.html',
+          detailUrl: 'https://sportsapi.app/',
         ),
       for (var index = 0; index < 63; index++)
         SportsAgendaEvent(
@@ -106,15 +106,15 @@ void main() {
           title: 'Evento de otra jornada $index',
           sport: 'Tenis',
           startsAt: today.add(Duration(days: index.isEven ? 1 : -1, minutes: index)),
-          detailUrl: 'https://www.marca.com/programacion-tv.html',
+          detailUrl: 'https://sportsapi.app/',
         ),
     ];
 
     await tester.pumpWidget(
       MaterialApp(
-        home: MarcaAgendaScreen(
+        home: SportsAgendaScreen(
           isActive: false,
-          onOpenLive: () {},
+          onOpenLive: (_) {},
           loadEvents: () async => mixedEvents,
         ),
       ),
@@ -122,14 +122,17 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.text('40 eventos en la agenda'), findsOneWidget);
+    expect(find.text('40 eventos · HOY'), findsOneWidget);
     expect(find.text('Evento de hoy 0'), findsOneWidget);
     expect(find.text('Evento de otra jornada 0'), findsNothing);
 
     await tester.scrollUntilVisible(
       find.text('Evento de hoy 39'),
       500,
-      scrollable: find.byType(Scrollable),
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey<String>('agenda-event-list')),
+        matching: find.byType(Scrollable),
+      ),
     );
     await tester.pump();
 
@@ -138,12 +141,64 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('muestra un estado visible cuando el servidor aún no publica eventos', (tester) async {
+  testWidgets('permite cambiar de fecha y abrir la transmisión del evento seleccionado', (tester) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    String? openedEventId;
+
     await tester.pumpWidget(
       MaterialApp(
-        home: MarcaAgendaScreen(
+        home: SportsAgendaScreen(
           isActive: false,
-          onOpenLive: () {},
+          initialDate: today,
+          onOpenLive: (eventId) => openedEventId = eventId,
+          loadEvents: () async => <SportsAgendaEvent>[
+            SportsAgendaEvent(
+              id: 'event-today',
+              title: 'Team A vs Team B',
+              sport: 'Fútbol',
+              homeTeam: 'Team A',
+              awayTeam: 'Team B',
+              startsAt: today.add(const Duration(hours: 2)),
+              detailUrl: 'https://sportsapi.app/',
+            ),
+            SportsAgendaEvent(
+              id: 'event-tomorrow',
+              title: 'Team C vs Team D',
+              sport: 'Baloncesto',
+              homeTeam: 'Team C',
+              awayTeam: 'Team D',
+              startsAt: today.add(const Duration(days: 1, hours: 3)),
+              detailUrl: 'https://sportsapi.app/',
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('Team A'), findsOneWidget);
+    expect(find.text('Team C'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey<String>('agenda-day-1')));
+    await tester.pump();
+
+    expect(find.text('Team A'), findsNothing);
+    expect(find.text('Team C'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('agenda-live-event-event-tomorrow')),
+    );
+    expect(openedEventId, 'event-tomorrow');
+  });
+
+  testWidgets('muestra un estado vacío cuando SportAPI no publica eventos', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SportsAgendaScreen(
+          isActive: false,
+          onOpenLive: (_) {},
           loadEvents: () async => <SportsAgendaEvent>[],
         ),
       ),
@@ -152,7 +207,6 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.text('AÚN NO HAY EVENTOS PUBLICADOS'), findsOneWidget);
-    expect(find.text('ABRIR MARCA'), findsOneWidget);
+    expect(find.text('NO HAY EVENTOS PARA ESTA FECHA'), findsOneWidget);
   });
 }

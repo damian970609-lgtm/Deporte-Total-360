@@ -25,6 +25,8 @@ class NotificationService {
   static StreamSubscription<RemoteMessage>? _openedSubscription;
   static final ValueNotifier<String?> liveEventNotification =
       ValueNotifier<String?>(null);
+  static final ValueNotifier<bool> matchRemindersEnabled =
+      ValueNotifier<bool>(false);
 
   static const String _liveTopic = 'deporte_total_360_live';
   static const String _firebaseApiKey =
@@ -256,6 +258,18 @@ class NotificationService {
     return _matchNotificationFloor + (hash & 0x3fffffff);
   }
 
+  @visibleForTesting
+  static int matchReminderNotificationId({
+    required String sport,
+    required String eventId,
+    required DateTime startsAt,
+    required int minutesBefore,
+  }) =>
+      _stableId(
+        sport + ':' + eventId + ':' + minutesBefore.toString() + ':' +
+            startsAt.millisecondsSinceEpoch.toString(),
+      );
+
   static Future<void> scheduleMatchReminder({
     required String eventId,
     required String sport,
@@ -269,7 +283,12 @@ class NotificationService {
     final reminderAt = startsAt.toLocal().subtract(Duration(minutes: minutesBefore));
     if (!reminderAt.isAfter(DateTime.now())) return;
 
-    final id = _stableId('$sport:$eventId:$minutesBefore');
+    final id = matchReminderNotificationId(
+      sport: sport,
+      eventId: eventId,
+      startsAt: startsAt,
+      minutesBefore: minutesBefore,
+    );
     final channelName = tr('notifications');
     await _plugin.zonedSchedule(
       id: id,
@@ -301,21 +320,62 @@ class NotificationService {
     required List<Map<String, Object>> events,
   }) async {
     await initialize();
-    await cancelMatchReminders();
+    final prefs = await SharedPreferences.getInstance();
+    final enabled = prefs.getBool('notifications_enabled') ?? false;
+    if (!enabled) {
+      await cancelMatchReminders();
+      return;
+    }
+
     final ordered = List<Map<String, Object>>.from(events)
       ..sort((a, b) {
         final left = a['startsAt'] as DateTime;
         final right = b['startsAt'] as DateTime;
         return left.compareTo(right);
       });
-    for (final event in ordered.take(40)) {
+    final selected = ordered.take(40).toList(growable: false);
+    final now = DateTime.now();
+    final desiredIds = <int>{};
+    for (final event in selected) {
+      final start = (event['startsAt'] as DateTime).toLocal();
       for (final minutesBefore in <int>[60, 30, 15, 5]) {
+        if (start.subtract(Duration(minutes: minutesBefore)).isAfter(now)) {
+          desiredIds.add(matchReminderNotificationId(
+            sport: event['sport'].toString(),
+            eventId: event['id'].toString(),
+            startsAt: start,
+            minutesBefore: minutesBefore,
+          ));
+        }
+      }
+    }
+
+    final pending = await _plugin.pendingNotificationRequests();
+    final pendingIds = pending.map((item) => item.id).toSet();
+    for (final request in pending) {
+      if (request.id >= _matchNotificationFloor &&
+          !desiredIds.contains(request.id)) {
+        await _plugin.cancel(id: request.id);
+      }
+    }
+
+    for (final event in selected) {
+      final start = (event['startsAt'] as DateTime).toLocal();
+      for (final minutesBefore in <int>[60, 30, 15, 5]) {
+        final reminderAt = start.subtract(Duration(minutes: minutesBefore));
+        final id = matchReminderNotificationId(
+          sport: event['sport'].toString(),
+          eventId: event['id'].toString(),
+          startsAt: start,
+          minutesBefore: minutesBefore,
+        );
+        if (!reminderAt.isAfter(now) || pendingIds.contains(id)) continue;
         await scheduleMatchReminder(
           eventId: event['id'] as String,
           sport: event['sport'] as String,
           homeTeam: event['homeTeam'] as String,
           awayTeam: event['awayTeam'] as String,
-          startsAt: event['startsAt'] as DateTime,
+          startsAt: start,
           minutesBefore: minutesBefore,
         );
       }

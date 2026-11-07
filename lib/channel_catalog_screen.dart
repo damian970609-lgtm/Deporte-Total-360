@@ -1,5 +1,6 @@
 import 'app_section_design.dart';
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import 'package:volume_controller/volume_controller.dart';
 
 import 'channel_catalog_service.dart';
 import 'channel_playlist_presets.dart';
+import 'live_media_format.dart';
 
 const Color _channelBg = Color(0xFF000000);
 const Color _channelPanel = Color(0xFF07090D);
@@ -21,6 +23,8 @@ const Color _channelGreen = Color(0xFF39FF14);
 const Color _channelYellow = Color(0xFFFFFFFF);
 const Color _channelMuted = Color(0xFFEAF0F8);
 const String _channelFavoritesKey = 'dt360_channel_catalog_favorites_v1';
+const String _channelCatalogCacheKey = 'dt360_channel_catalog_snapshot_v1';
+const int _maxCachedChannels = 2000;
 
 
 T? _firstOrNull<T>(Iterable<T> items) {
@@ -72,6 +76,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
   final ScrollController _scrollController = ScrollController();
   final Set<String> _favorites = <String>{};
   List<SportsChannel> _channels = <SportsChannel>[];
+  List<SportsChannel> _cachedChannels = <SportsChannel>[];
   SportsChannel? _selectedChannel;
   Timer? _searchDebounce;
   int _catalogRequestId = 0;
@@ -83,6 +88,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
   bool _loading = true;
   bool _syncing = false;
   String? _error;
+  String? _catalogNotice;
   String? _signedInEmail;
 
   @override
@@ -90,7 +96,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
     super.initState();
     _scrollController.addListener(_handleCatalogScroll);
     unawaited(_loadLocalFavorites());
-    unawaited(_loadChannels());
+    unawaited(_initializeCatalog());
   }
 
   @override
@@ -125,19 +131,76 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
     } catch (_) {}
   }
 
+  Future<void> _initializeCatalog() async {
+    await _loadCachedCatalog();
+    if (mounted) await _loadChannels();
+  }
+
+  Future<void> _loadCachedCatalog() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_channelCatalogCacheKey);
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return;
+      final cached = <SportsChannel>[];
+      for (final row in decoded.whereType<Map>()) {
+        try {
+          cached.add(SportsChannel.fromJson(Map<String, dynamic>.from(row)));
+        } on FormatException {
+          // Descarta una entrada dañada sin perder los demás canales.
+        }
+      }
+      if (!mounted || cached.isEmpty) return;
+      setState(() {
+        _cachedChannels = cached.take(_maxCachedChannels).toList();
+        _channels = List<SportsChannel>.from(_cachedChannels);
+        _catalogTotal = _cachedChannels.length;
+        _nextCatalogOffset = _cachedChannels.length;
+        _hasMoreChannels = false;
+        _catalogNotice =
+            'Mostrando la última copia guardada mientras se actualiza el catálogo.';
+      });
+    } catch (_) {
+      // La copia local nunca debe impedir intentar la conexión actual.
+    }
+  }
+
+  Future<void> _saveLocalCatalog() async {
+    if (_cachedChannels.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final snapshot = _cachedChannels.take(_maxCachedChannels).toList();
+      await prefs.setString(
+        _channelCatalogCacheKey,
+        jsonEncode(snapshot.map((channel) => channel.toJson()).toList()),
+      );
+    } catch (_) {
+      // El catálogo remoto sigue funcionando aunque falle el almacenamiento local.
+    }
+  }
+
   Future<void> _loadChannels() async {
     _searchDebounce?.cancel();
     final requestId = ++_catalogRequestId;
     final search = _searchController.text.trim();
+    final fallback = _cachedChannels.isNotEmpty
+        ? List<SportsChannel>.from(_cachedChannels)
+        : List<SportsChannel>.from(_channels);
     if (mounted) {
       setState(() {
         _loading = true;
         _loadingMoreChannels = false;
         _loadMoreError = null;
         _error = null;
-        _channels = <SportsChannel>[];
-        _nextCatalogOffset = 0;
-        _catalogTotal = 0;
+        _catalogNotice = fallback.isEmpty
+            ? null
+            : 'Conservando la última copia del catálogo durante la actualización.';
+        // No vaciar la lista antes de consultar Cloudflare: si se agota la
+        // cuota, los canales guardados deben seguir visibles en este teléfono.
+        _channels = fallback;
+        _catalogTotal = fallback.length;
+        _nextCatalogOffset = fallback.length;
         _hasMoreChannels = false;
       });
     }
@@ -157,12 +220,42 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
           page.channels.where((item) => item.id == previousId),
         );
         _loading = false;
+        _catalogNotice = null;
+        if (search.isEmpty) {
+          final cachedById = <String, SportsChannel>{
+            for (final channel in _cachedChannels) channel.id: channel,
+          };
+          for (final channel in page.channels) {
+            cachedById[channel.id] = channel;
+          }
+          _cachedChannels = cachedById.values
+              .take(_maxCachedChannels)
+              .toList();
+        }
       });
+      if (search.isEmpty) unawaited(_saveLocalCatalog());
     } catch (error) {
       if (!mounted || requestId != _catalogRequestId) return;
+      final hasFallback = _cachedChannels.isNotEmpty || fallback.isNotEmpty;
       setState(() {
         _loading = false;
-        _error = error.toString();
+        if (hasFallback) {
+          _channels = _cachedChannels.isNotEmpty
+              ? List<SportsChannel>.from(_cachedChannels)
+              : fallback;
+          _catalogTotal = _channels.length;
+          _nextCatalogOffset = _channels.length;
+          _hasMoreChannels = false;
+          _error = null;
+          _catalogNotice =
+              'Cloudflare no está disponible o alcanzó su cuota diaria. Se conserva tu catálogo guardado y tus favoritos en este teléfono.';
+          if (_selectedChannel == null ||
+              !_channels.any((channel) => channel.id == _selectedChannel!.id)) {
+            _selectedChannel = _firstOrNull(_channels);
+          }
+        } else {
+          _error = error.toString();
+        }
       });
     }
   }
@@ -207,14 +300,22 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
       }
       setState(() {
         final knownIds = _channels.map((channel) => channel.id).toSet();
-        _channels = <SportsChannel>[
-          ..._channels,
-          ...page.channels.where((channel) => knownIds.add(channel.id)),
-        ];
+        final additions = page.channels
+            .where((channel) => knownIds.add(channel.id))
+            .toList(growable: false);
+        _channels = <SportsChannel>[..._channels, ...additions];
+        if (search.isEmpty) {
+          final cachedIds = _cachedChannels.map((channel) => channel.id).toSet();
+          _cachedChannels = <SportsChannel>[
+            ..._cachedChannels,
+            ...additions.where((channel) => cachedIds.add(channel.id)),
+          ].take(_maxCachedChannels).toList();
+        }
         _catalogTotal = page.total;
         _nextCatalogOffset = page.offset + page.channels.length;
         _hasMoreChannels = page.hasMore;
       });
+      if (search.isEmpty) unawaited(_saveLocalCatalog());
     } catch (error) {
       if (!mounted || requestId != _catalogRequestId) return;
       setState(() => _loadMoreError = error.toString());
@@ -230,14 +331,14 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
     try {
       final email = await _service.signIn();
       final remote = await _service.fetchFavorites();
-      if (remote.isEmpty && _favorites.isNotEmpty) {
-        await _service.saveFavorites(_favorites);
-      } else {
-        _favorites
-          ..clear()
-          ..addAll(remote);
-        await _saveLocalFavorites();
+      final combined = <String>{..._favorites, ...remote};
+      if (combined.length != remote.length) {
+        await _service.saveFavorites(combined);
       }
+      _favorites
+        ..clear()
+        ..addAll(combined);
+      await _saveLocalFavorites();
       if (!mounted) return;
       setState(() => _signedInEmail = email);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -583,18 +684,42 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
                             fontSize: 9,
                           ),
                         ),
+                      if (_catalogNotice != null) ...<Widget>[
+                        const SizedBox(height: 8),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            const Icon(
+                              Icons.cloud_off_rounded,
+                              color: _channelYellow,
+                              size: 15,
+                            ),
+                            const SizedBox(width: 7),
+                            Expanded(
+                              child: Text(
+                                _catalogNotice!,
+                                style: const TextStyle(
+                                  color: _channelYellow,
+                                  fontSize: 9,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ),
-              if (_loading)
+              if (_loading && channels.isEmpty)
                 const SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(
                     child: CircularProgressIndicator(color: _channelCyan),
                   ),
                 )
-              else if (_error != null)
+              else if (_error != null && channels.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(
@@ -809,20 +934,14 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
       return;
     }
 
-    final uri = Uri.tryParse(channel.url);
-    if (uri == null ||
-        uri.scheme != 'https' ||
-        uri.host.isEmpty ||
-        uri.userInfo.isNotEmpty ||
-        !(uri.path.toLowerCase().endsWith('.m3u8') ||
-            uri.path.toLowerCase().endsWith('.mp4') ||
-            uri.path.toLowerCase().endsWith('.ts'))) {
+    if (!isSupportedChannelPlaybackUrl(channel.url)) {
       setState(() {
         _loading = false;
-        _error = 'La fuente no es un enlace HLS, MP4 o MPEG-TS directo seguro.';
+        _error = 'La fuente no es una señal HTTPS directa compatible (HLS, DASH, Smooth Streaming o vídeo progresivo).';
       });
       return;
     }
+    final uri = Uri.parse(channel.url.trim());
 
     setState(() {
       _loading = true;
@@ -1461,14 +1580,16 @@ class _ChannelFullscreenScreenState extends State<_ChannelFullscreenScreen> {
 }
 
 class ChannelAdminScreen extends StatefulWidget {
-  const ChannelAdminScreen({super.key});
+  const ChannelAdminScreen({super.key, this.service});
+
+  final ChannelCatalogService? service;
 
   @override
   State<ChannelAdminScreen> createState() => _ChannelAdminScreenState();
 }
 
 class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
-  final ChannelCatalogService _service = channelCatalogService;
+  late final ChannelCatalogService _service;
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _labelController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
@@ -1477,6 +1598,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   final ScrollController _adminScrollController = ScrollController();
   String _licenseType = 'free';
   String _selectedSportsPresetUrl = channelSportsPlaylistPresets.first.url;
+  String _selectedGeneralPresetUrl = channelPlaylistPresets.first.url;
   List<AppLicenseRecord> _licenseRecords = <AppLicenseRecord>[];
   String? _licensesError;
   List<SportsChannel> _channels = <SportsChannel>[];
@@ -1497,6 +1619,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   @override
   void initState() {
     super.initState();
+    _service = widget.service ?? channelCatalogService;
     _adminScrollController.addListener(_handleAdminScroll);
     _working = true;
     unawaited(_restoreAdminSession());
@@ -1789,7 +1912,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         uri.scheme != 'https' ||
         uri.host.isEmpty ||
         uri.userInfo.isNotEmpty) {
-      _message('Introduce una URL HTTPS pública de una lista M3U.');
+      _message('Introduce una URL HTTPS pública de una lista IPTV compatible.');
       return;
     }
     final normalizedUrl = uri.toString();
@@ -1842,7 +1965,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     setState(() => _working = true);
     try {
       await _service.addPlaylist(url: preset.url, label: preset.label);
-      await _service.refreshSources();
       final sources = await _service.fetchSources();
       if (!mounted) return;
       setState(() {
@@ -1852,6 +1974,72 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       _message('Fuente añadida: ' + preset.label + '. Se está importando.');
     } catch (error) {
       _message('No se pudo añadir la fuente deportiva: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _fillPlaylistCatalogTo100() async {
+    if (_working) return;
+    if (_sources.length >= maxChannelPlaylistSources) {
+      _message('El catálogo ya tiene 100 listas registradas.');
+      return;
+    }
+    setState(() => _working = true);
+    try {
+      final result = await _service.addPlaylistSourcesToCatalog(
+        sources: channelPlaylistPresets
+            .map((preset) => <String, String>{
+                  'label': preset.label,
+                  'url': preset.url,
+                })
+            .toList(growable: false),
+      );
+      await _loadAdmin(showLoading: false);
+      if (!mounted) return;
+      final total = result['total'] ?? _sources.length;
+      final added = result['added'] ?? 0;
+      _message(
+        'Catálogo actualizado: $total / 100 listas. '
+        'Se añadieron $added fuentes nuevas. '
+        'Todas las importaciones se procesan en segundo plano.',
+      );
+    } catch (error) {
+      _message('No se pudo completar el catálogo de 100 listas: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _addGeneralPreset() async {
+    if (_sources.length >= maxChannelPlaylistSources) {
+      _message('Has alcanzado el límite de $maxChannelPlaylistSources listas.');
+      return;
+    }
+    final preset = channelPlaylistPresets.firstWhere(
+      (item) => item.url == _selectedGeneralPresetUrl,
+      orElse: () => channelPlaylistPresets.first,
+    );
+    if (containsChannelPlaylistUrl(
+      _sources.map((source) => source.url),
+      preset.url,
+    )) {
+      _message('Esta lista ya está registrada en tu catálogo.');
+      return;
+    }
+    setState(() => _working = true);
+    try {
+      await _service.addPlaylist(url: preset.url, label: preset.label);
+      await _service.refreshSources();
+      final sources = await _service.fetchSources();
+      if (!mounted) return;
+      setState(() {
+        _sources = sources;
+        _sourcesError = null;
+      });
+      _message('Lista añadida: ' + preset.label + '. Se importará en segundo plano y se publicarán solo canales deportivos compatibles.');
+    } catch (error) {
+      _message('No se pudo añadir la lista: ' + error.toString());
     } finally {
       if (mounted) setState(() => _working = false);
     }
@@ -1870,19 +2058,114 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
-  Future<void> _removePlaylistSource(ChannelPlaylistSource source) async {
-    if (source.status != 'error') return;
+  Future<void> _editPlaylistSource(ChannelPlaylistSource source) async {
+    if (_working) return;
+    final labelController = TextEditingController(text: source.label);
+    final urlController = TextEditingController(text: source.url);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: _channelPanel,
         title: const Text(
-          'Quitar lista con error',
+          'Editar lista IPTV',
+          style: TextStyle(color: _channelCyan, fontWeight: FontWeight.w900),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              TextField(
+                controller: labelController,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(labelText: 'Nombre de la lista'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: urlController,
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+                enableSuggestions: false,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'URL HTTPS de la lista',
+                  hintText: 'https://...',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('CANCELAR'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: _channelCyan),
+            child: const Text('GUARDAR'),
+          ),
+        ],
+      ),
+    );
+    final label = labelController.text.trim();
+    final candidateUrl = urlController.text.trim();
+    labelController.dispose();
+    urlController.dispose();
+    if (confirmed != true || !mounted) return;
+
+    final uri = Uri.tryParse(candidateUrl);
+    if (label.isEmpty || label.length > 80) {
+      _message('El nombre debe tener entre 1 y 80 caracteres.');
+      return;
+    }
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty) {
+      _message('Introduce una URL HTTPS pública válida.');
+      return;
+    }
+    if (containsChannelPlaylistUrl(
+      _sources
+          .where((item) => item.id != source.id)
+          .map((item) => item.url),
+      uri.toString(),
+    )) {
+      _message('Otra lista ya utiliza esa URL.');
+      return;
+    }
+
+    setState(() => _working = true);
+    try {
+      await _service.updatePlaylistSource(
+        id: source.id,
+        url: uri.toString(),
+        label: label,
+      );
+      await _loadAdmin(showLoading: false);
+      if (!mounted) return;
+      _message('Lista actualizada. Se volverá a importar en segundo plano.');
+    } catch (error) {
+      _message('No se pudo actualizar la lista: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _removePlaylistSource(ChannelPlaylistSource source) async {
+    if (_working) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _channelPanel,
+        title: const Text(
+          'Quitar lista registrada',
           style: TextStyle(color: _channelPink),
         ),
         content: Text(
           '¿Quieres quitar "' + source.label +
-              '" del catálogo de fuentes? Los canales ya importados se conservarán.',
+              '" y detener sus futuras actualizaciones? Los canales ya importados se conservarán y seguirán pudiendo administrarse por separado.',
           style: const TextStyle(color: _channelMuted),
         ),
         actions: <Widget>[
@@ -1919,7 +2202,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     setState(() => _working = true);
     try {
       await _service.retryPlaylistSource(id: source.id);
-      await _service.refreshSources();
       final sources = await _service.fetchSources();
       if (!mounted) return;
       setState(() => _sources = sources);
@@ -1957,13 +2239,18 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       final result = await _service.diagnoseStream(channel.url);
       if (!mounted) return;
       setState(() => _diagnosticResult = result);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _diagnosticResult = 'No se pudo completar el diagnóstico: ' + error.toString());
     } finally {
       if (mounted) setState(() => _diagnosingPreview = false);
     }
   }
 
   Future<void> _toggleVisibility(SportsChannel channel) async {
+    if (_working) return;
     final next = !channel.visible;
+    setState(() => _working = true);
     try {
       await _service.setVisibility(channel.id, visible: next);
       await _loadAdmin(showLoading: false);
@@ -1972,6 +2259,82 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           : 'Canal ocultado para todos los usuarios.');
     } catch (error) {
       _message(error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _deleteChannel(SportsChannel channel) async {
+    if (_working) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _channelPanel,
+        title: const Text(
+          'ELIMINAR CANAL',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+        ),
+        content: Text(
+          'Se eliminará "${channel.name}" del catálogo y se bloqueará su URL para que las próximas importaciones no lo vuelvan a agregar. Esta acción no se puede deshacer desde la APK.',
+          style: const TextStyle(color: _channelMuted, height: 1.4),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('CANCELAR'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: _channelPink,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('ELIMINAR'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _working = true);
+    try {
+      await _service.deleteChannel(channel.id);
+      if (!mounted) return;
+      if (_previewChannel?.id == channel.id) {
+        setState(() {
+          _previewChannel = null;
+          _diagnosticResult = null;
+        });
+      }
+      await _loadAdmin(showLoading: false);
+      if (!mounted) return;
+      _message('Canal eliminado. Su URL quedó bloqueada para futuras importaciones.');
+    } catch (error) {
+      _message('No se pudo eliminar el canal: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _setChannelSportsClassification(
+    SportsChannel channel,
+  ) async {
+    if (_working) return;
+    final next = !channel.isSports;
+    setState(() => _working = true);
+    try {
+      await _service.setChannelSportsClassification(
+        channel.id,
+        isSports: next,
+      );
+      await _loadAdmin(showLoading: false);
+      _message(next
+          ? 'Canal clasificado como deportivo. Ya puedes publicarlo.'
+          : 'Canal clasificado como general y ocultado de Canales deportivos.');
+    } catch (error) {
+      _message('No se pudo cambiar la clasificación: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
     }
   }
 
@@ -2001,6 +2364,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     switch (source.status) {
       case 'queued':
         return 'EN COLA';
+      case 'importing':
+        return 'IMPORTANDO…';
       case 'imported':
         return 'ACTUALIZADA';
       case 'error':
@@ -2008,6 +2373,32 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       default:
         return source.status.toUpperCase();
     }
+  }
+
+  Color _sourceStatusColor(ChannelPlaylistSource source) {
+    switch (source.status) {
+      case 'error':
+        return _channelPink;
+      case 'importing':
+      case 'queued':
+        return _channelCyan;
+      default:
+        return _channelGreen;
+    }
+  }
+
+  String? _sourceLastUpdated(ChannelPlaylistSource source) {
+    if (source.lastImportedAt.isEmpty) return null;
+    final parsed = DateTime.tryParse(source.lastImportedAt);
+    if (parsed == null) return source.lastImportedAt;
+    final local = parsed.toLocal();
+    String twoDigits(int value) => value.toString().padLeft(2, '0');
+    return 'Última importación: ' +
+        twoDigits(local.day) + '/' +
+        twoDigits(local.month) + '/' +
+        local.year.toString() + ' ' +
+        twoDigits(local.hour) + ':' +
+        twoDigits(local.minute);
   }
 
   Widget _adminCard({required Widget child}) {
@@ -2022,7 +2413,10 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           BoxShadow(color: _channelCyan.withAlpha(12), blurRadius: 14),
         ],
       ),
-      child: child,
+      child: Material(
+        color: Colors.transparent,
+        child: child,
+      ),
     );
   }
 
@@ -2074,7 +2468,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                   ],
                 ),
                 Text(
-                  sport ? 'DEPORTIVO' : 'SIN CLASIFICAR',
+                  sport ? 'DEPORTIVO' : 'GENERAL / SIN CLASIFICAR',
                   style: TextStyle(
                     color: sport ? _channelGreen : _channelMuted,
                     fontWeight: FontWeight.w800,
@@ -2083,17 +2477,35 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                 ),
                 Align(
                   alignment: Alignment.centerRight,
-                  child: IconButton(
-                    tooltip: 'PROBAR CANAL',
-                    onPressed: () => _previewChannelInAdmin(channel),
-                    visualDensity: VisualDensity.compact,
+                  child: PopupMenuButton<String>(
+                    tooltip: 'ACCIONES DEL CANAL',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(
                       width: 30,
                       height: 30,
                     ),
+                    color: _channelPanel,
+                    onSelected: (action) {
+                      if (action == 'preview') {
+                        _previewChannelInAdmin(channel);
+                      } else if (action == 'classification') {
+                        unawaited(_setChannelSportsClassification(channel));
+                      }
+                    },
+                    itemBuilder: (context) => <PopupMenuEntry<String>>[
+                      const PopupMenuItem<String>(
+                        value: 'preview',
+                        child: Text('PROBAR CANAL'),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'classification',
+                        child: Text(
+                          sport ? 'MARCAR COMO GENERAL' : 'MARCAR COMO DEPORTIVO',
+                        ),
+                      ),
+                    ],
                     icon: const Icon(
-                      Icons.play_circle_outline_rounded,
+                      Icons.more_vert_rounded,
                       color: _channelCyan,
                       size: 20,
                     ),
@@ -2171,12 +2583,24 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           IconButton(
             tooltip: channel.visible ? 'Ocultar a todos' : 'Publicar para todos',
             visualDensity: VisualDensity.compact,
-            onPressed: sport ? () => _toggleVisibility(channel) : null,
+            onPressed: sport && !_working
+                ? () => _toggleVisibility(channel)
+                : null,
             icon: Icon(
               channel.visible
                   ? Icons.visibility_rounded
                   : Icons.visibility_off_rounded,
               color: channel.visible ? _channelGreen : _channelMuted,
+            ),
+          ),
+          IconButton(
+            tooltip: 'Eliminar permanentemente',
+            visualDensity: VisualDensity.compact,
+            onPressed: _working ? null : () => _deleteChannel(channel),
+            icon: const Icon(
+              Icons.delete_forever_rounded,
+              color: _channelPink,
+              size: 19,
             ),
           ),
         ],
@@ -2280,6 +2704,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                 backgroundColor: _channelPanel,
                 onRefresh: () => _loadAdmin(),
                 child: ListView(
+                  key: const ValueKey<String>('channel-admin-scroll'),
                   controller: _adminScrollController,
                   padding: const EdgeInsets.fromLTRB(13, 13, 13, 26),
                   children: <Widget>[
@@ -2495,11 +2920,92 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                           ),
                           const SizedBox(height: 6),
                           const Text(
-                            'La importación reconoce M3U/M3U8, PLS, XSPF/XML, JSON y TXT. Cada señal se valida antes de aparecer en el catálogo.',
+                            'Admite listas M3U/M3U8, PLS, XSPF, XML/ASX, JSON, CSV y TXT. Importa todos los canales que incluyan una URL directa HTTPS compatible con HLS, DASH, Smooth Streaming o vídeo progresivo. Límite técnico por fuente: 25 MB y hasta 50.000 entradas.',
                             style: TextStyle(
                               color: _channelMuted,
                               fontSize: 9,
                               height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _adminCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          const Text(
+                            'CATÁLOGO DE FUENTES · 100 LISTAS',
+                            style: TextStyle(
+                              color: _channelGreen,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          const Text(
+                            'Completa hasta 100 listas públicas distintas sin borrar las fuentes que ya funcionan. Se importan todos los canales con enlaces multimedia compatibles; el sistema identifica los deportivos para que puedas decidir cuáles publicar.',
+                            style: TextStyle(
+                              color: _channelMuted,
+                              fontSize: 10,
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          DropdownButtonFormField<String>(
+                            initialValue: _selectedGeneralPresetUrl,
+                            isExpanded: true,
+                            dropdownColor: _channelPanel2,
+                            decoration: const InputDecoration(
+                              labelText: 'Elegir una de las 100 listas disponibles',
+                            ),
+                            items: channelPlaylistPresets
+                                .map((preset) => DropdownMenuItem<String>(
+                                      value: preset.url,
+                                      child: Text(
+                                        preset.label,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ))
+                                .toList(growable: false),
+                            onChanged: _working
+                                ? null
+                                : (value) => setState(
+                                      () => _selectedGeneralPresetUrl =
+                                          value ?? channelPlaylistPresets.first.url,
+                                    ),
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: _working || _sources.length >= maxChannelPlaylistSources
+                                  ? null
+                                  : _fillPlaylistCatalogTo100,
+                              icon: const Icon(Icons.cloud_download_rounded),
+                              label: Text(
+                                _sources.length >= maxChannelPlaylistSources
+                                    ? '100 LISTAS REGISTRADAS'
+                                    : 'COMPLETAR CATÁLOGO HASTA 100 LISTAS',
+                              ),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: _channelGreen,
+                                foregroundColor: _channelBg,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: _working ? null : _addGeneralPreset,
+                              icon: const Icon(Icons.playlist_add_rounded),
+                              label: const Text('AÑADIR LISTA GENERAL'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: _channelGreen,
+                                side: const BorderSide(color: _channelGreen),
+                              ),
                             ),
                           ),
                         ],
@@ -2734,8 +3240,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             enableSuggestions: false,
                             style: const TextStyle(color: Colors.white),
                             decoration: const InputDecoration(
-                              labelText: 'URL HTTPS de la lista o archivo multimedia',
-                              hintText: 'M3U, PLS, XSPF, JSON o TXT',
+                              labelText: 'URL HTTPS de la lista IPTV',
+                              hintText: 'M3U/M3U8, PLS, XSPF, XML/ASX, JSON, CSV o TXT',
                               prefixIcon: Icon(Icons.link_rounded),
                             ),
                           ),
@@ -2779,7 +3285,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                           ),
                           const SizedBox(height: 6),
                           const Text(
-                            'La URL queda guardada en tu catálogo de Cloudflare y no se pierde al cerrar o reinstalar la APK. Los canales nuevos entran ocultos y solo se publican cuando activas su ojo.',
+                            'La URL queda guardada en Cloudflare y no se pierde al cerrar o reinstalar la APK. Los canales nuevos se guardan ocultos hasta que actives su icono del ojo.',
                             style: TextStyle(
                               color: _channelMuted,
                               fontSize: 9,
@@ -2866,13 +3372,19 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                               Text(
                                 _sourceStatus(source),
                                 style: TextStyle(
-                                  color: source.status == 'error'
-                                      ? _channelPink
-                                      : _channelGreen,
+                                  color: _sourceStatusColor(source),
                                   fontSize: 9,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
+                              if (source.lastImportedAt.isNotEmpty)
+                                Text(
+                                  _sourceLastUpdated(source) ?? '',
+                                  style: const TextStyle(
+                                    color: _channelMuted,
+                                    fontSize: 9,
+                                  ),
+                                ),
                               Text(
                                 source.importedCount.toString() +
                                     ' canales procesados' +
@@ -2884,12 +3396,24 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                                   fontSize: 9,
                                 ),
                               ),
-                              if (source.status == 'error') ...<Widget>[
-                                const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 6,
-                                  children: <Widget>[
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: <Widget>[
+                                  OutlinedButton.icon(
+                                    onPressed: _working
+                                        ? null
+                                        : () => _editPlaylistSource(source),
+                                    icon: const Icon(Icons.edit_rounded, size: 16),
+                                    label: const Text('EDITAR'),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: _channelCyan,
+                                      side: const BorderSide(color: _channelCyan),
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                  ),
+                                  if (source.status == 'error')
                                     OutlinedButton.icon(
                                       onPressed: _working
                                           ? null
@@ -2902,21 +3426,21 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                                         visualDensity: VisualDensity.compact,
                                       ),
                                     ),
-                                    OutlinedButton.icon(
-                                      onPressed: _working
-                                          ? null
-                                          : () => _removePlaylistSource(source),
-                                      icon: const Icon(Icons.delete_outline_rounded, size: 16),
-                                      label: const Text('QUITAR'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: _channelPink,
-                                        side: const BorderSide(color: _channelPink),
-                                        visualDensity: VisualDensity.compact,
-                                      ),
+                                  OutlinedButton.icon(
+                                    key: ValueKey<String>('remove-source-' + source.id),
+                                    onPressed: _working
+                                        ? null
+                                        : () => _removePlaylistSource(source),
+                                    icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                                    label: const Text('QUITAR LISTA'),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: _channelPink,
+                                      side: const BorderSide(color: _channelPink),
+                                      visualDensity: VisualDensity.compact,
                                     ),
-                                  ],
-                                ),
-                              ],
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
                         ),

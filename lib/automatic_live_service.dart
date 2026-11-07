@@ -13,13 +13,12 @@ const String _playlistUrlKey = 'dt360_auto_live_playlist_url_v1';
 const String _epgUrlKey = 'dt360_auto_live_epg_url_v1';
 const String _authorizedKey = 'dt360_auto_live_authorized_v1';
 
-/// Normaliza imágenes de MARCA: admite URL HTTPS absolutas, protocol-relative
-/// y rutas relativas del mismo sitio. Nunca permite esquemas no HTTPS ni
-/// URLs con credenciales.
-String _marcaImageUrl(dynamic value) {
+/// Normaliza imágenes remotas de eventos. Solo acepta URL HTTPS absolutas
+/// o protocol-relative, sin credenciales ni esquemas ejecutables.
+String _safeAgendaImageUrl(dynamic value) {
   if (value is List) {
     for (final item in value) {
-      final candidate = _marcaImageUrl(item);
+      final candidate = _safeAgendaImageUrl(item);
       if (candidate.isNotEmpty) return candidate;
     }
     return '';
@@ -29,7 +28,7 @@ String _marcaImageUrl(dynamic value) {
       'url', 'contentUrl', 'thumbnailUrl', 'src', 'image',
       'logo', 'crest', 'badge', 'photo', 'picture', 'avatar', 'href',
     ]) {
-      final candidate = _marcaImageUrl(value[key]);
+      final candidate = _safeAgendaImageUrl(value[key]);
       if (candidate.isNotEmpty) return candidate;
     }
     return '';
@@ -40,7 +39,7 @@ String _marcaImageUrl(dynamic value) {
   try {
     var uri = Uri.parse(raw.startsWith('//') ? 'https:$raw' : raw);
     if (!uri.hasScheme) {
-      uri = Uri.parse('https://www.marca.com/').resolveUri(uri);
+      return '';
     } else if (uri.scheme == 'http') {
       uri = uri.replace(scheme: 'https');
     }
@@ -261,7 +260,7 @@ class SportsAgendaParticipant {
     final row = Map<String, dynamic>.from(value);
     final name = (row['name'] ?? row['title'] ?? '').toString().trim();
     if (name.isEmpty) return null;
-    final imageUrl = _marcaImageUrl(
+    final imageUrl = _safeAgendaImageUrl(
       row['imageUrl'] ?? row['logo'] ?? row['image'] ??
       row['thumbnailUrl'] ?? row['photo'] ?? row['picture'] ?? row['avatar'],
     );
@@ -363,13 +362,13 @@ class SportsAgendaEvent {
         : <SportsAgendaParticipant>[];
     final homeTeam = (row['homeTeam'] ?? '').toString();
     final awayTeam = (row['awayTeam'] ?? '').toString();
-    final homeLogo = _marcaImageUrl(
+    final homeLogo = _safeAgendaImageUrl(
       row['homeTeamLogo'] ?? row['homeTeamLogoUrl'] ?? row['homeLogo'],
     );
-    final awayLogo = _marcaImageUrl(
+    final awayLogo = _safeAgendaImageUrl(
       row['awayTeamLogo'] ?? row['awayTeamLogoUrl'] ?? row['awayLogo'],
     );
-    final eventImage = _marcaImageUrl(
+    final eventImage = _safeAgendaImageUrl(
       row['imageUrl'] ?? row['image'] ?? row['thumbnailUrl'] ?? row['photo'],
     );
     String participantImage(String name) => participants
@@ -403,7 +402,7 @@ class SportsAgendaEvent {
 }
 
 class SportsAgendaStore {
-  static const String _key = 'dt360_sports_agenda_events_v2';
+  static const String _key = 'dt360_sportsapi_agenda_events_v1';
 
   /// Sustituye la captura anterior por el contenido visible más reciente.
   /// Así los eventos retirados de la agenda no quedan programados.
@@ -420,6 +419,53 @@ class SportsAgendaStore {
     await prefs.setString(
       _key,
       jsonEncode(unique.values.map((event) => event.toJson()).toList()),
+    );
+  }
+
+  /// Sustituye solamente las fechas incluidas y conserva las demás jornadas
+  /// que ya están guardadas para que actualizar hoy no borre mañana.
+  static Future<void> saveWindow(
+    List<SportsAgendaEvent> events, {
+    required DateTime startDate,
+    int days = 7,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final start = DateTime(startDate.year, startDate.month, startDate.day);
+    final safeDays = days.clamp(1, 7).toInt();
+    final end = start.add(Duration(days: safeDays));
+    final cutoff = DateTime.now().subtract(const Duration(hours: 4));
+    final byId = <String, SportsAgendaEvent>{};
+
+    String dayKey(DateTime value) {
+      final local = value.toLocal();
+      return local.year.toString() + '-' +
+          local.month.toString() + '-' + local.day.toString();
+    }
+
+    final replacedDays = <String>{
+      for (var index = 0; index < safeDays; index++)
+        dayKey(start.add(Duration(days: index))),
+    };
+
+    for (final event in await load()) {
+      final localStart = event.startsAt.toLocal();
+      final eventEnd =
+          event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
+      if (replacedDays.contains(dayKey(localStart))) continue;
+      if (eventEnd.isAfter(cutoff)) byId[event.id] = event;
+    }
+
+    for (final event in events) {
+      final localStart = event.startsAt.toLocal();
+      final eventEnd =
+          event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
+      if (localStart.isBefore(start) || !localStart.isBefore(end)) continue;
+      if (eventEnd.isAfter(cutoff)) byId[event.id] = event;
+    }
+
+    await prefs.setString(
+      _key,
+      jsonEncode(byId.values.map((event) => event.toJson()).toList()),
     );
   }
 
@@ -561,7 +607,9 @@ class AutomaticLiveService {
       final decoded = jsonDecode(response.body);
       if (decoded is! Map) return null;
       final status = (decoded['status'] ?? '').toString();
-      if (status != 'ok' && status != 'stale') return null;
+      // Un snapshot stale no debe imponerse al cálculo local: puede contener
+      // una URL que dejó de responder durante la caída del cron.
+      if (status != 'ok') return null;
       final rows = decoded['events'];
       if (rows is! List) return null;
 
@@ -590,7 +638,7 @@ class AutomaticLiveService {
                 .whereType<SportsAgendaParticipant>()
                 .toList(growable: false)
             : <SportsAgendaParticipant>[];
-        String safeLogo(dynamic value) => _marcaImageUrl(value);
+        String safeLogo(dynamic value) => _safeAgendaImageUrl(value);
         final homeTeam = (eventData['homeTeam'] ?? '').toString();
         final awayTeam = (eventData['awayTeam'] ?? '').toString();
         String participantLogo(String name) => participants
@@ -645,7 +693,7 @@ class AutomaticLiveService {
           endsAt: endsAt?.toLocal(),
           detailUrl: isSafeHttpUrl(detailUrl)
               ? detailUrl
-              : 'https://www.marca.com/programacion-tv.html',
+              : '',
         );
 
         final removeAt = DateTime.tryParse(

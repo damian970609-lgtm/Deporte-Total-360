@@ -38,7 +38,7 @@ void main() {
             'league': {'id': 10, 'name': 'Premier League'},
             'season': {'id': 20, 'name': '2030'}
           }],
-          'meta': {'count': 1}
+          'meta': {'count': 1, 'hasNextPage': false, 'complete': true}
         }), 200);
       }
       if (request.url.path.endsWith('/races')) {
@@ -54,7 +54,10 @@ void main() {
             'status': 'scheduled',
             'series': {'id': 30, 'name': 'Cycling Men'},
             'season': {'id': 40, 'name': '2030'},
-            'sessions': [{'id': 303, 'type': 'stage', 'startTime': '2030-01-01T09:00:00Z'}]
+            'sessions': [
+              {'id': 303, 'type': 'practice', 'startTime': '2030-01-01T09:00:00Z'},
+              {'id': 304, 'type': 'stage', 'startTime': '2030-01-01T12:00:00Z'}
+            ]
           }],
           'meta': {'count': 1}
         }), 200);
@@ -71,9 +74,159 @@ void main() {
       final events = await api.fetchFavoriteAgendaEvents(date: DateTime.utc(2030, 1, 1));
       expect(events.map((event) => event.id), contains('sportsapi-fixture-101'));
       expect(events.map((event) => event.id), contains('sportsapi-race-202-303'));
+      expect(events.map((event) => event.id), contains('sportsapi-race-202-304'));
       expect(events.firstWhere((event) => event.id == 'sportsapi-fixture-101').homeTeam, 'Team One');
       expect(requested.where((uri) => uri.path.endsWith('/fixtures')), hasLength(8));
       expect(requested.where((uri) => uri.path.endsWith('/races')), hasLength(2));
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
+  });
+
+  test('carga y reutiliza la ventana de los próximos siete días', () async {
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-window.example';
+    final requested = <Uri>[];
+    final client = MockClient((request) async {
+      requested.add(request.url);
+      if (request.url.path.endsWith('/fixtures')) {
+        if (request.url.queryParameters['sport'] != 'football') {
+          return http.Response(jsonEncode({'data': [], 'meta': {'hasNextPage': false, 'complete': true}}), 200);
+        }
+        final date = request.url.queryParameters['date']!;
+        final page = int.parse(request.url.queryParameters['page'] ?? '0');
+        final day = int.parse(date.substring(8));
+        return http.Response(jsonEncode({
+          'data': [{
+            'id': day * 10 + page,
+            'sport': 'football',
+            'startTime': date + 'T12:00:00Z',
+            'status': {'type': 'scheduled'},
+            'home': {'id': day * 20 + page * 2, 'name': 'Equipo ' + day.toString() + ' ' + page.toString()},
+            'away': {'id': day * 20 + page * 2 + 1, 'name': 'Rival ' + day.toString() + ' ' + page.toString()},
+            'league': {'id': 1, 'name': 'Liga de prueba'},
+          }],
+          'meta': {'count': 1, 'hasNextPage': page == 0, 'complete': true}
+        }), 200);
+      }
+      if (request.url.path.endsWith('/races')) {
+        return http.Response(jsonEncode({'data': [], 'meta': {'complete': true}}), 200);
+      }
+      return http.Response(jsonEncode({'data': {}, 'meta': {}}), 200);
+    });
+
+    try {
+      final api = SportsApiAppService(client: client);
+      final start = DateTime(2031, 2, 3);
+      final window = await api.fetchFavoriteAgendaWindow(
+        startDate: start,
+        days: 7,
+      );
+
+      expect(window.days, 7);
+      expect(window.unavailableDates, isEmpty);
+      expect(window.events, hasLength(14));
+      expect(window.events.map((event) => event.id).toSet(), hasLength(14));
+      final localStart = DateTime(start.year, start.month, start.day);
+      final localEnd = localStart.add(const Duration(days: 7));
+      final firstUtc = localStart.toUtc();
+      final lastUtc = localEnd.toUtc().subtract(
+        const Duration(milliseconds: 1),
+      );
+      final firstUtcDay = DateTime.utc(firstUtc.year, firstUtc.month, firstUtc.day);
+      final lastUtcDay = DateTime.utc(lastUtc.year, lastUtc.month, lastUtc.day);
+      final utcDays = lastUtcDay.difference(firstUtcDay).inDays + 1;
+      final eventLocalDays = window.events.map((event) {
+        final local = event.startsAt.toLocal();
+        return '${local.year}-${local.month}-${local.day}';
+      }).toSet();
+      expect(eventLocalDays, hasLength(7));
+      expect(
+        eventLocalDays,
+        contains('${localStart.year}-${localStart.month}-${localStart.day}'),
+      );
+      expect(
+        requested.where((uri) => uri.path.endsWith('/fixtures')),
+        hasLength(utcDays * 9),
+      );
+      expect(
+        requested.where((uri) => uri.path.endsWith('/races')),
+        hasLength(utcDays * 2),
+      );
+
+      final cached = await api.fetchFavoriteAgendaWindow(
+        startDate: start,
+        days: 7,
+      );
+      expect(cached.events, hasLength(14));
+      expect(requested, hasLength(utcDays * 11));
+
+      final refreshed = await api.fetchFavoriteAgendaWindow(
+        startDate: start,
+        days: 7,
+        forceRefresh: true,
+      );
+      expect(refreshed.events, hasLength(14));
+      expect(requested, hasLength(utcDays * 22));
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
+  });
+
+  test('marca cobertura parcial si falla un deporte sin descartar los demás', () async {
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-partial.example';
+    final failedDate = '2033-03-04';
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/fixtures')) {
+        final date = request.url.queryParameters['date']!;
+        final sport = request.url.queryParameters['sport'];
+        if (date == failedDate && sport == 'basketball') {
+          return http.Response(
+            jsonEncode({'error': 'basketball temporarily unavailable'}),
+            503,
+          );
+        }
+        final rows = date == failedDate && sport == 'football'
+            ? [{
+                'id': 404,
+                'sport': 'football',
+                'startTime': failedDate + 'T12:00:00Z',
+                'status': {'type': 'scheduled'},
+                'home': {'id': 1, 'name': 'Equipo A'},
+                'away': {'id': 2, 'name': 'Equipo B'},
+                'league': {'id': 1, 'name': 'Liga de prueba'},
+              }]
+            : <Map<String, dynamic>>[];
+        return http.Response(jsonEncode({
+          'data': rows,
+          'meta': {'hasNextPage': false, 'complete': true},
+        }), 200);
+      }
+      if (request.url.path.endsWith('/races')) {
+        return http.Response(jsonEncode({
+          'data': [],
+          'meta': {'complete': true},
+        }), 200);
+      }
+      return http.Response(jsonEncode({'data': {}, 'meta': {}}), 200);
+    });
+
+    try {
+      final window = await SportsApiAppService(client: client)
+          .fetchFavoriteAgendaWindow(
+        startDate: DateTime(2033, 3, 4),
+        days: 7,
+      );
+      expect(
+        window.unavailableDates.any((date) =>
+            date.year == 2033 && date.month == 3 && date.day == 4),
+        isTrue,
+      );
+      expect(window.events, hasLength(1));
+      expect(window.events.single.id, 'sportsapi-fixture-404');
     } finally {
       sportsApiBaseUrl.value = previousBase;
       client.close();

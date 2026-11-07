@@ -16,8 +16,8 @@ void main() {
       expect(WebProtectionPolicy.isBlockedUrl('https://adultads.example.test/banner.js'), isTrue);
     });
 
-    test('no bloquea la agenda ni reproductores HTTPS normales', () {
-      expect(WebProtectionPolicy.isBlockedUrl('https://futbol-libre.cam/'), isFalse);
+    test('no bloquea servicios deportivos ni reproductores HTTPS normales', () {
+      expect(WebProtectionPolicy.isBlockedUrl('https://worker.example/api/sportsapi/fixtures'), isFalse);
       expect(WebProtectionPolicy.isBlockedUrl('https://player.example.net/live/index.m3u8'), isFalse);
     });
 

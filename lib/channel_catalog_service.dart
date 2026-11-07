@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 import 'live_media_format.dart';
 import 'sports_api_service.dart';
 
+const int channelCatalogMaxOffset = 5000000;
+
 const String _googleServerClientId =
     String.fromEnvironment('GOOGLE_OAUTH_CLIENT_ID');
 
@@ -45,6 +47,18 @@ class SportsChannel {
   final bool visible;
   final String language;
 
+  Map<String, Object> toJson() => <String, Object>{
+        'id': id,
+        'identifier': identifier,
+        'name': name,
+        'url': url,
+        'logoUrl': logoUrl,
+        'groupTitle': groupTitle,
+        'isSports': isSports,
+        'visible': visible,
+        'language': language,
+      };
+
   factory SportsChannel.fromJson(Map<String, dynamic> json) {
     final id = (json['id'] ?? json['identifier'] ?? '').toString().trim();
     final identifier =
@@ -60,9 +74,9 @@ class SportsChannel {
     if (id.isEmpty || identifier.isEmpty || name.isEmpty || url.isEmpty) {
       throw const FormatException('El canal recibido está incompleto.');
     }
-    if (liveMediaFormatForUrl(url) == null) {
+    if (!isSupportedChannelPlaybackUrl(url)) {
       throw const FormatException(
-        'El canal no contiene una señal HLS, DASH, Smooth Streaming o vídeo directo compatible.',
+        'El canal no contiene una señal HTTPS directa HLS, DASH, Smooth Streaming o de vídeo progresivo compatible.',
       );
     }
     return SportsChannel(
@@ -73,7 +87,7 @@ class SportsChannel {
       logoUrl: logoUrl,
       groupTitle: groupTitle,
       isSports: json['isSports'] == true,
-      visible: json['visible'] != false,
+      visible: json['visible'] == true,
       language: language,
     );
   }
@@ -401,7 +415,7 @@ class ChannelCatalogService {
     int offset = 0,
     int limit = 200,
   }) async {
-    final normalizedOffset = offset.clamp(0, 100000).toInt();
+    final normalizedOffset = offset.clamp(0, channelCatalogMaxOffset).toInt();
     final normalizedLimit = limit.clamp(1, 2000).toInt();
     final query = <String, String>{
       'offset': normalizedOffset.toString(),
@@ -459,7 +473,7 @@ class ChannelCatalogService {
     String search = '',
     int offset = 0,
   }) async {
-    final normalizedOffset = offset.clamp(0, 100000).toInt();
+    final normalizedOffset = offset.clamp(0, channelCatalogMaxOffset).toInt();
     final uri = Uri.parse(_baseUrl + '/api/channels/admin/catalog').replace(
       queryParameters: <String, String>{
         if (search.trim().isNotEmpty) 'q': search.trim(),
@@ -515,8 +529,8 @@ class ChannelCatalogService {
   /// autenticación o política del proveedor; no se presenta como certeza.
   Future<String> diagnoseStream(String value) async {
     final uri = Uri.tryParse(value.trim());
-    if (uri == null || liveMediaFormatForUrl(value) == null) {
-      return 'ENLACE NO COMPATIBLE: revisa la URL o el formato de la señal.';
+    if (uri == null || !isSupportedChannelPlaybackUrl(value)) {
+      return 'ENLACE NO COMPATIBLE: se necesita una URL HTTPS directa con formato multimedia admitido.';
     }
     try {
       final result = await _client.get(
@@ -651,6 +665,65 @@ class ChannelCatalogService {
     _decode(result);
   }
 
+  Future<void> updatePlaylistSource({
+    required String id,
+    required String url,
+    required String label,
+  }) async {
+    final safeId = id.trim();
+    if (!RegExp(r'^[a-zA-Z0-9_-]{1,100}$').hasMatch(safeId)) {
+      throw const ChannelCatalogException(
+        'El identificador de la lista no es válido.',
+      );
+    }
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty) {
+      throw const ChannelCatalogException(
+        'Introduce una URL HTTPS pública válida.',
+      );
+    }
+    if (label.trim().isEmpty || label.trim().length > 80) {
+      throw const ChannelCatalogException(
+        'El nombre de la lista debe tener entre 1 y 80 caracteres.',
+      );
+    }
+    final result = await _client.put(
+      Uri.parse(_baseUrl + '/api/channels/admin/sources/' +
+          Uri.encodeComponent(safeId)),
+      headers: <String, String>{
+        ..._authHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(<String, String>{
+        'url': uri.toString(),
+        'label': label.trim(),
+      }),
+    ).timeout(const Duration(seconds: 20));
+    _decode(result);
+  }
+
+  /// Completa una lista registrada hasta el límite de 100 fuentes sin borrar
+  /// las listas que ya existan. El servidor elimina duplicados por URL.
+  Future<Map<String, dynamic>> addPlaylistSourcesToCatalog({
+    required List<Map<String, String>> sources,
+  }) async {
+    final result = await _client.post(
+      Uri.parse(_baseUrl + '/api/channels/admin/sources/bulk'),
+      headers: <String, String>{
+        ..._authHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(<String, Object>{
+        'sources': sources,
+      }),
+    ).timeout(const Duration(seconds: 30));
+    return _decode(result);
+  }
+
+  /// Pone en cola la actualización de las listas registradas.
   Future<void> refreshSources() async {
     final result = await _client.post(
       Uri.parse(_baseUrl + '/api/channels/admin/refresh'),
@@ -673,6 +746,21 @@ class ChannelCatalogService {
     }
     final result = await _client.delete(
       Uri.parse(_baseUrl + '/api/channels/admin/sources/' +
+          Uri.encodeComponent(safeId)),
+      headers: _authHeaders(),
+    ).timeout(const Duration(seconds: 20));
+    _decode(result);
+  }
+
+  /// Elimina un canal del catálogo y bloquea su URL para que una importación
+  /// posterior no lo vuelva a crear.
+  Future<void> deleteChannel(String channelId) async {
+    final safeId = channelId.trim();
+    if (!RegExp(r'^[a-zA-Z0-9_-]{1,100}$').hasMatch(safeId)) {
+      throw const ChannelCatalogException('El identificador del canal no es válido.');
+    }
+    final result = await _client.delete(
+      Uri.parse(_baseUrl + '/api/channels/admin/channels/' +
           Uri.encodeComponent(safeId)),
       headers: _authHeaders(),
     ).timeout(const Duration(seconds: 20));
@@ -710,6 +798,26 @@ class ChannelCatalogService {
         'Content-Type': 'application/json',
       },
       body: jsonEncode(<String, bool>{'visible': visible}),
+    ).timeout(const Duration(seconds: 20));
+    _decode(result);
+  }
+
+  Future<void> setChannelSportsClassification(
+    String channelId, {
+    required bool isSports,
+  }) async {
+    final safeId = channelId.trim();
+    if (!RegExp(r'^[a-zA-Z0-9_-]{1,100}$').hasMatch(safeId)) {
+      throw const ChannelCatalogException('El identificador del canal no es válido.');
+    }
+    final result = await _client.patch(
+      Uri.parse(_baseUrl + '/api/channels/admin/channels/' +
+          Uri.encodeComponent(safeId) + '/classification'),
+      headers: <String, String>{
+        ..._authHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(<String, bool>{'isSports': isSports}),
     ).timeout(const Duration(seconds: 20));
     _decode(result);
   }

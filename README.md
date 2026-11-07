@@ -2,19 +2,19 @@
 
 Aplicación Android en Flutter. El APK se compila en GitHub Actions; la carpeta Android se genera en el runner.
 
-Navegación principal: Inicio, Deportes en vivo, Canales deportivos, Agenda de hoy, Noticias, Mister Fantasy, Estadísticas, Resúmenes, Chat y Ajustes. Chat es una pestaña de primer nivel y conserva la sala pública compartida del Worker. Inicio, Agenda, Estadísticas y Resúmenes utilizan los diez deportes favoritos configurados en SportsAPI.app; Deportes en vivo busca señales por separado en los catálogos M3U/XMLTV.
+Navegación principal: Inicio, Deportes en vivo, Canales deportivos, Agenda deportiva de siete días, Noticias, Mister Fantasy, Estadísticas, Resúmenes, Chat y Ajustes. Chat es una pestaña de primer nivel y conserva la sala pública compartida del Worker. Inicio, Agenda, Estadísticas y Resúmenes utilizan los diez deportes favoritos configurados en SportsAPI.app; Deportes en vivo busca señales por separado en los catálogos M3U/XMLTV.
 
 Archivos principales:
 - lib/main.dart: navegación de diez secciones, inicio, chat y ajustes.
-- lib/automatic_live_service.dart y lib/automatic_live_screen.dart: captura de eventos de SportsAPI, cruce de programación XMLTV con los canales deportivos visibles que el propietario seleccionó en Ajustes > Damián APK, verificación de señales en español e inglés y asignación automática a ocho reproductores.
+- lib/automatic_live_service.dart y lib/automatic_live_screen.dart: consumo prioritario del calendario central persistente de Cloudflare, con respaldo local, cruce XMLTV de canales visibles, verificación de señales en español e inglés, priorización del partido elegido desde Agenda y asignación a ocho reproductores.
 - lib/live_media_format.dart y lib/live_channels_screen.dart: detección explícita de HLS, DASH, Smooth Streaming y vídeo progresivo, adaptación de calidad automática con ExoPlayer, selector manual por pistas y transición fullscreen/miniatura sin recrear el controlador.
 - lib/sports_summaries_screen.dart: categorías deportivas y reproducción de YouTube dentro de la app mediante WebView.
 - lib/public_chat_screen.dart: sala pública de chat compartida.
 - lib/sports_statistics_screen.dart: búsqueda de ligas y clasificaciones.
 - lib/sports_api_service.dart: cliente legado de API-Sports/Worker, conservado para compatibilidad.
 - lib/sportsapi_app_service.dart y lib/sportsapi_statistics_screen.dart: conexión segura con las rutas SportsAPI.app del Worker; estadísticas de partidos y resultados de carreras sin introducir claves en la APK.
-- lib/notification_service.dart: recordatorios locales, Firebase Cloud Messaging mediante suscripción al tema de transmisiones y apertura de Deportes en vivo al tocar un aviso.
-- lib/web_agenda_screen.dart: agenda MARCA integrada y captura de eventos visibles.
+- lib/notification_service.dart: recordatorios locales a 60, 30, 15 y 5 minutos para los eventos de la ventana de Agenda, sincronización incremental de avisos, Firebase Cloud Messaging y apertura de Deportes en vivo al tocar un aviso.
+- lib/sports_agenda_screen.dart: agenda nativa de siete días, filtros por deporte y estado, búsqueda, caché por fecha y acceso al reproductor mediante el identificador del evento.
 - lib/news_screen.dart: feed RSS y lector de noticias.
 - lib/web_protection_policy.dart: reglas compartidas de protección web.
 - lib/fantasy_screen.dart: módulo Fantasy.
@@ -34,7 +34,7 @@ Compilación:
 El workflow configura Java y Flutter, genera Android en el runner, prepara permisos de red e icono, ejecuta flutter analyze y flutter test, compila el APK release y publica deporte-total-360-apk durante 30 días.
 
 Límites y funcionamiento:
-SportsAPI.app es la fuente principal de Agenda de hoy para Fútbol, Baloncesto, Béisbol, Hockey sobre hielo, Voleibol, MMA, Fútbol sala, Ciclismo, Deportes de motor y Balonmano, filtrados por las competiciones masculinas y femeninas elegidas. El Worker consulta los ocho deportes de partidos y los dos deportes de carreras; descarga páginas adicionales de ligas escalonadamente y refresca los marcadores globales cada 30 minutos. Las horas UTC del proveedor se convierten a la hora local del teléfono. MARCA queda como respaldo anterior cuando SPORTAPI_API_KEY no está configurada; no se utiliza como proveedor principal cuando SportsAPI está activo. El planificador central de Cloudflare descarga doce listas M3U y veinte guías XMLTV cada cinco minutos, de forma independiente de cualquier teléfono. Así continúa aunque el teléfono del propietario esté apagado o su APK esté desinstalada, una vez que el Worker esté desplegado. La búsqueda automática consulta únicamente los canales deportivos visibles que el propietario dejó seleccionados en Ajustes > Damián APK; utiliza la URL directa guardada para cada canal y no sustituye esa selección por listas genéricas. Diez minutos antes de cada evento busca una coincidencia XMLTV por equipos, participantes, evento y competición, comprueba todos los canales coincidentes y coloca la mejor señal española y la mejor inglesa en reproductores separados. Si solo existe una señal verificada, utiliza esa; si no hay idioma identificable, conserva una señal compatible como respaldo. El tablero Deportes en vivo mantiene ocho cuadros y muestra deporte, competición, evento/equipos, idioma y nombre del canal. Al comenzar un evento, una señal directa y comprobada ocupa un canal libre; el usuario pulsa Play para reproducirla. Los canales 2, 3 y 4 empiezan silenciados. La calidad Automática deja que ExoPlayer adapte la resolución al ancho de banda real de la conexión; el selector permite fijar cualquier resolución publicada por el manifiesto HLS/DASH. Al pulsar Play se abre pantalla completa reutilizando el mismo controlador; el primer atrás regresa a la miniatura sin detener el vídeo y el siguiente atrás detiene y libera el controlador. Los cuadros libres muestran el próximo evento y su horario con el estado ESPERANDO TRANSMISIÓN hasta que una señal comprobada esté en directo. Al detectar un estado final en la agenda o alcanzar la hora de finalización del evento/EPG, se detiene y libera el cuadro para el siguiente evento. La nueva fuente utiliza un almacén de eventos separado para no recuperar datos antiguos de la agenda anterior. Las APK instaladas actualizan la agenda y las asignaciones cada 45 segundos mientras la aplicación está abierta. El catálogo de canales seleccionados se conserva en memoria durante treinta minutos para reducir las consultas al servidor. Las señales se preparan diez minutos antes del comienzo y se asignan a los reproductores cuando el evento inicia. Firebase Cloud Messaging puede avisar a los dispositivos registrados que tengan las notificaciones activadas y abrir la pestaña Deportes en vivo al tocar el aviso. Android no permite forzar la reproducción de vídeo con la aplicación cerrada: el usuario debe abrir el aviso y pulsar Play. Se aceptan señales multimedia directas HLS (.m3u8), DASH (.mpd), Smooth Streaming y contenedores progresivos compatibles como MP4, MPEG-TS, WebM, Matroska y FLV; los enlaces relativos dentro de las playlists se resuelven usando la URL de la lista. Las páginas HTML, RTMP, DRM, credenciales y geobloqueos no se eluden. La disponibilidad depende del proveedor, la región, la conexión y la correspondencia de horarios y nombres, por lo que no se garantiza una señal para cada evento. Los resúmenes de YouTube se reproducen dentro de WebView.
+SportsAPI.app es la fuente principal de Agenda de hoy para Fútbol, Baloncesto, Béisbol, Hockey sobre hielo, Voleibol, MMA, Fútbol sala, Ciclismo, Deportes de motor y Balonmano, filtrados por las competiciones masculinas y femeninas elegidas. El Worker consulta los ocho deportes de partidos y los dos deportes de carreras; descarga páginas adicionales de ligas escalonadamente y refresca los marcadores globales cada 30 minutos. Las horas UTC del proveedor se convierten a la hora local del teléfono. La agenda de la APK utiliza exclusivamente SportsAPI.app; se retiraron la agenda web externa y los extractores de programación de terceros. El planificador central de Cloudflare se ejecuta cada cinco minutos, consulta la agenda de los diez deportes en SportsAPI.app y cruza las guías XMLTV con las señales directas publicadas y visibles en el catálogo de Canales deportivos. Verifica las señales antes de publicar la mejor opción española y la mejor inglesa en una instantánea persistente del Durable Object. Así prepara los eventos aunque el teléfono esté apagado o la APK desinstalada, una vez desplegado el Worker. La APK consulta GET /api/live/auto/schedule y mantiene el planificador local como respaldo durante una caída temporal o antes de la primera ejecución del cron. La búsqueda automática consulta únicamente los canales deportivos visibles que el propietario dejó seleccionados en Ajustes > Damián APK; utiliza la URL directa guardada para cada canal y no sustituye esa selección por listas genéricas. Diez minutos antes de cada evento busca una coincidencia XMLTV por equipos, participantes, evento y competición, comprueba todos los canales coincidentes y coloca la mejor señal española y la mejor inglesa en reproductores separados. Si solo existe una señal verificada, utiliza esa; si no hay idioma identificable, conserva una señal compatible como respaldo. El tablero Deportes en vivo mantiene ocho cuadros y muestra deporte, competición, evento/equipos, idioma y nombre del canal. Al comenzar un evento, una señal directa y comprobada ocupa un canal libre; el usuario pulsa Play para reproducirla. Los canales 2, 3 y 4 empiezan silenciados. La calidad Automática deja que ExoPlayer adapte la resolución al ancho de banda real de la conexión; el selector permite fijar cualquier resolución publicada por el manifiesto HLS/DASH. Al pulsar Play se abre pantalla completa reutilizando el mismo controlador; el primer atrás regresa a la miniatura sin detener el vídeo y el siguiente atrás detiene y libera el controlador. Los cuadros libres muestran el próximo evento y su horario con el estado ESPERANDO TRANSMISIÓN hasta que una señal comprobada esté en directo. Al detectar un estado final en la agenda o alcanzar la hora de finalización del evento/EPG, se detiene y libera el cuadro para el siguiente evento. La nueva fuente utiliza un almacén de eventos separado para no recuperar datos antiguos de la agenda anterior. Las APK instaladas actualizan la agenda y las asignaciones cada 45 segundos mientras la aplicación está abierta. El catálogo de canales seleccionados se conserva en memoria durante treinta minutos para reducir las consultas al servidor. Las señales se preparan diez minutos antes del comienzo y se asignan a los reproductores cuando el evento inicia. Firebase Cloud Messaging puede avisar a los dispositivos registrados que tengan las notificaciones activadas y abrir la pestaña Deportes en vivo al tocar el aviso. Android no permite forzar la reproducción de vídeo con la aplicación cerrada: el usuario debe abrir el aviso y pulsar Play. Se aceptan señales multimedia directas HLS (.m3u8), DASH (.mpd), Smooth Streaming y contenedores progresivos compatibles como MP4, MPEG-TS, WebM, Matroska y FLV; los enlaces relativos dentro de las playlists se resuelven usando la URL de la lista. Las páginas HTML, RTMP, DRM, credenciales y geobloqueos no se eluden. La disponibilidad depende del proveedor, la región, la conexión y la correspondencia de horarios y nombres, por lo que no se garantiza una señal para cada evento. Los resúmenes de YouTube se reproducen dentro de WebView.
 
 
 ## Activar notificaciones push
@@ -46,19 +46,21 @@ En Firebase crea una aplicación Android para el paquete de esta APK y copia los
 
 La nueva pestaña **Canales deportivos** muestra únicamente señales aprobadas y
 publicadas desde el catálogo central de Cloudflare. El reproductor se desplaza
-con la lista, admite HLS/MP4/MPEG-TS, controles ocultables a los cinco segundos,
+con la lista y admite HLS, DASH, Smooth Streaming y los formatos progresivos
+que clasifica el proyecto, con controles ocultables a los cinco segundos,
 bloqueo, pantalla completa, ajuste gestual de brillo de la aplicación y
 volumen multimedia, además de calidad automática y pistas publicadas por el
 proveedor. La calidad automática depende de las variantes disponibles en la
 señal; no puede crear resoluciones que el proveedor no publique.
 
-El acceso de diez pulsaciones sobre `DAMIÁN.APK` abre ahora el panel privado
-de importación. Inicia sesión con Google. Añade una lista M3U HTTPS y confirma
-que tienes autorización para distribuir las señales. Cloudflare descarga y
-procesa la lista en segundo plano; los nuevos canales permanecen ocultos.
-Desde el catálogo general puedes copiar su identificador o URL de señal y
-activar/desactivar el ojo de visibilidad para publicar u ocultar cada señal
-deportiva a todos los usuarios.
+El acceso de diez pulsaciones sobre `DAMIÁN.APK` abre el panel privado de
+importación. Inicia sesión con Google y añade listas M3U, PLS, XSPF/XML, JSON o
+TXT mediante HTTPS; confirma que tienes autorización para distribuir las
+señales. Cloudflare descarga y procesa las listas en segundo plano; los nuevos
+canales permanecen ocultos. Desde el catálogo privado puedes probar una señal,
+copiar su identificador o URL, asignar idioma, publicarla u ocultarla y eliminar
+un canal permanentemente. El borrado bloquea la URL para que las actualizaciones
+posteriores no vuelvan a añadir esa misma señal.
 
 Configura `GOOGLE_OAUTH_CLIENT_ID` como secreto de GitHub Actions del
 repositorio de la APK y del repositorio del Worker. Debe ser el **ID de cliente
@@ -67,7 +69,12 @@ Android para el package name y la huella SHA-1 del certificado de firma
 utilizado por GitHub Actions. El Worker comprueba el ID token, su audiencia y
 correo verificado; solo `damian970609@gmail.com` administra el catálogo.
 Los favoritos individuales se sincronizan en Cloudflare al iniciar sesión
-con Google; sin iniciar sesión solo se guardan localmente.
+con Google; sin iniciar sesión solo se guardan localmente. La aplicación también guarda localmente una
+instantánea de hasta 2.000 canales publicados. Si Cloudflare agota la cuota o
+pierde conexión, la lista y el reproductor siguen mostrando la última copia
+disponible en ese teléfono; al restablecerse el servicio se actualiza de nuevo.
+La sincronización de favoritos fusiona lo local con lo remoto para no borrar
+selecciones cuando una respuesta del servidor llegue vacía o incompleta.
 
 El package name Android que ya usa la APK es `com.example.deporte_total_360`.
 El workflow comprueba que no cambie y, después de compilar, publica en el resumen
@@ -78,9 +85,10 @@ parece un ID OAuth Web; nunca imprime el valor del secreto.
 
 El reproductor modifica el brillo de la aplicación, no el brillo global del
 sistema, por lo que no necesita el permiso especial de Android. El control
-gestual de volumen utiliza el volumen multimedia de Android. Las importaciones
-solo aceptan playlists M3U HTTPS y direcciones HLS/MP4/MPEG-TS directas; no extraen
-páginas de reproducción ni evaden DRM, cuentas o restricciones regionales.
+gestual de volumen utiliza el volumen multimedia de Android. El reproductor
+comparte el mismo clasificador de formatos que el catálogo: HLS, DASH, Smooth
+Streaming y vídeo progresivo compatible, siempre mediante enlaces HTTPS directos.
+No extrae páginas de reproducción ni evade DRM, cuentas o restricciones regionales.
 
 
 ### Idioma de los canales
