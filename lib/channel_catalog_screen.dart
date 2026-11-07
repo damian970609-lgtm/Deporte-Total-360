@@ -3389,6 +3389,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                                       ),
                                     ),
                                   OutlinedButton.icon(
+                                    key: ValueKey<String>('remove-source-' + source.id),
                                     onPressed: _working
                                         ? null
                                         : () => _removePlaylistSource(source),
