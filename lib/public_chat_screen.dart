@@ -47,6 +47,16 @@ class PublicChatMessage {
   }
 }
 
+class PublicChatException implements Exception {
+  const PublicChatException(this.statusCode, this.message);
+
+  final int statusCode;
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class PublicChatService {
   PublicChatService({
     http.Client? client,
@@ -82,7 +92,7 @@ class PublicChatService {
   Future<Map<String, String>> _headers({bool jsonBody = false}) async {
     return <String, String>{
       'Accept': 'application/json',
-      ...await _authHeadersProvider(),
+      ...(await _authHeadersProvider()),
       if (jsonBody) 'Content-Type': 'application/json',
     };
   }
@@ -161,7 +171,7 @@ class PublicChatService {
     }
   }
 
-  Exception _responseError(http.Response response) {
+  PublicChatException _responseError(http.Response response) {
     try {
       final decoded = jsonDecode(response.body);
       if (decoded is Map && decoded['error'] != null) {
@@ -170,13 +180,13 @@ class PublicChatService {
             ? (error['message'] ?? error['code'] ?? 'Error del servidor')
                 .toString()
             : error.toString();
-        return Exception(message);
+        return PublicChatException(response.statusCode, message);
       }
     } catch (_) {
       // Se usa el mensaje de estado HTTP si no hay JSON.
     }
     if (response.statusCode == 401) {
-      return Exception(appText(
+      return PublicChatException(response.statusCode, appText(
         'Tu sesión Google caducó. Vuelve a iniciar sesión en la aplicación.',
         'Your Google session expired. Sign in again in the app.',
         'Sua sessão Google expirou. Entre novamente no aplicativo.',
@@ -184,7 +194,7 @@ class PublicChatService {
       ));
     }
     if (response.statusCode == 403) {
-      return Exception(appText(
+      return PublicChatException(response.statusCode, appText(
         'El Chat está reservado para compradores con licencia de pago activa.',
         'Chat is reserved for buyers with an active paid license.',
         'O Chat é exclusivo para compradores com licença paga ativa.',
@@ -192,14 +202,14 @@ class PublicChatService {
       ));
     }
     if (response.statusCode == 429) {
-      return Exception(appText(
+      return PublicChatException(response.statusCode, appText(
         'Espera un momento antes de volver a enviar.',
         'Please wait before sending another message.',
         'Aguarde um momento antes de enviar novamente.',
         'Veuillez patienter avant de renvoyer un message.',
       ));
     }
-    return Exception('HTTP ' + response.statusCode.toString());
+    return PublicChatException(response.statusCode, 'HTTP ' + response.statusCode.toString());
   }
 }
 class PublicChatScreen extends StatefulWidget {
@@ -223,6 +233,7 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
   bool _refreshing = false;
   bool _sending = false;
   bool _canModerate = false;
+  bool _accessDenied = false;
   String? _error;
 
   @override
@@ -289,15 +300,25 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
       setState(() {
         _messages = messages;
         _canModerate = _service.canModerate;
+        _accessDenied = false;
         _loading = false;
         _error = null;
       });
     } catch (error) {
       if (!mounted) return;
+      final denied = error is PublicChatException && error.statusCode == 403;
       setState(() {
         _loading = false;
-        if (!silent || _messages.isEmpty) _error = error.toString();
+        if (denied) {
+          _accessDenied = true;
+          _canModerate = false;
+        }
+        if (denied || !silent || _messages.isEmpty) _error = error.toString();
       });
+      if (denied) {
+        _pollTimer?.cancel();
+        _pollTimer = null;
+      }
     } finally {
       _refreshing = false;
     }
@@ -501,12 +522,31 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
                         isDense: true,
                         border: InputBorder.none,
                       ),
+                      enabled: !_accessDenied,
                     ),
                   ),
                 ],
               ),
             ),
-            if (_error != null && _messages.isEmpty)
+            if (_accessDenied)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Text(
+                  _error ?? appText(
+                    'Este Chat requiere una licencia de pago activa.',
+                    'This Chat requires an active paid license.',
+                    'Este Chat exige uma licença paga ativa.',
+                    'Ce Chat nécessite une licence payante active.',
+                  ),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.orangeAccent,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            if (_error != null && _messages.isEmpty && !_accessDenied)
               Padding(
                 padding: const EdgeInsets.fromLTRB(18, 12, 18, 6),
                 child: Column(
@@ -591,6 +631,7 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
                           maxLength: PublicChatService.maxMessageLength,
                           textCapitalization: TextCapitalization.sentences,
                           textInputAction: TextInputAction.newline,
+                          enabled: !_accessDenied,
                           decoration: InputDecoration(
                             hintText: appText(
                               'Escribe a la comunidad de compradores…',
@@ -614,7 +655,7 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
                       SizedBox(
                         height: 48,
                         child: FilledButton(
-                          onPressed: _sending ? null : _sendMessage,
+                          onPressed: _sending || _accessDenied ? null : _sendMessage,
                           style: FilledButton.styleFrom(
                             backgroundColor: _chatCyan,
                             foregroundColor: _chatBg,
