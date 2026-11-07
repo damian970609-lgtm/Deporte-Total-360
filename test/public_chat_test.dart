@@ -148,6 +148,91 @@ void main() {
     client.close();
   });
 
+  test('recupera el alias estable de la cuenta desde el servidor', () async {
+    final client = MockClient((request) async => http.Response(
+      jsonEncode(<String, Object>{
+        'canModerate': false,
+        'profile': <String, String>{'name': 'AliasFijo'},
+        'messages': <Object>[],
+      }),
+      200,
+    ));
+    final service = PublicChatService(
+      client: client,
+      authHeadersProvider: () async => <String, String>{
+        'Authorization': 'Bearer verified-google-id-token',
+      },
+    );
+
+    await service.loadMessages();
+
+    expect(service.currentAlias, 'AliasFijo');
+    client.close();
+  });
+
+  test('denuncia un mensaje ajeno con autenticación y motivo', () async {
+    http.Request? captured;
+    final client = MockClient((request) async {
+      captured = request;
+      return http.Response('{"reported":true}', 201);
+    });
+    final service = PublicChatService(
+      client: client,
+      authHeadersProvider: () async => <String, String>{
+        'Authorization': 'Bearer verified-google-id-token',
+      },
+    );
+
+    await service.reportMessage('message-456', 'spam');
+
+    expect(captured?.method, 'POST');
+    expect(captured?.url.path, endsWith('/api/chat/messages/message-456/report'));
+    expect(captured?.headers['Authorization'], 'Bearer verified-google-id-token');
+    expect(jsonDecode(captured!.body), <String, String>{'reason': 'spam'});
+    client.close();
+  });
+
+  test('consulta y resuelve denuncias con la cuenta administradora', () async {
+    final requests = <http.Request>[];
+    final client = MockClient((request) async {
+      requests.add(request);
+      if (request.method == 'GET') {
+        return http.Response(jsonEncode(<String, Object>{
+          'reports': <Map<String, Object>>[
+            <String, Object>{
+              'id': 'report-1',
+              'messageId': 'message-1',
+              'reporterName': 'Comprador',
+              'reason': 'abuse',
+              'status': 'pending',
+              'createdAt': '2026-11-06T16:00:00Z',
+              'messageName': 'Otro usuario',
+              'messageText': 'Mensaje denunciado',
+            },
+          ],
+        }), 200);
+      }
+      return http.Response('{"updated":true}', 200);
+    });
+    final service = PublicChatService(
+      client: client,
+      authHeadersProvider: () async => <String, String>{
+        'Authorization': 'Bearer owner-google-id-token',
+      },
+    );
+
+    final reports = await service.fetchReports();
+    await service.updateReport('report-1', 'resolved');
+
+    expect(reports, hasLength(1));
+    expect(reports.single.messageText, 'Mensaje denunciado');
+    expect(requests.first.url.path, endsWith('/api/chat/reports'));
+    expect(requests.last.method, 'PATCH');
+    expect(requests.last.url.path, endsWith('/api/chat/reports/report-1'));
+    expect(jsonDecode(requests.last.body), <String, String>{'status': 'resolved'});
+    client.close();
+  });
+
   test('rechaza IDs no seguros antes de llamar al servidor', () async {
     var called = false;
     final client = MockClient((request) async {
