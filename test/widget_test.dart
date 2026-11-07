@@ -229,7 +229,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('la flecha de navegación no cubre el nombre de Estadísticas', (tester) async {
+  testWidgets('las flechas de navegación nunca cubren etiquetas antes ni después de desplazar', (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     tester.view.devicePixelRatio = 1;
@@ -239,22 +239,49 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
 
-    final cue = find.byKey(const ValueKey<String>('bottom-nav-scroll-right'));
-    final statisticsLabel = find.text('Estadísticas');
-    expect(cue, findsOneWidget);
-    expect(statisticsLabel, findsOneWidget);
-    expect(tester.getRect(cue).overlaps(tester.getRect(statisticsLabel)), isFalse);
+    void expectNoNavigationLabelBehindCues() {
+      final labels = List<Finder>.generate(
+        10,
+        (index) => find.byKey(ValueKey<String>('bottom-tab-label-$index')),
+      );
+      final cues = <Finder>[
+        find.byKey(const ValueKey<String>('bottom-nav-scroll-left')),
+        find.byKey(const ValueKey<String>('bottom-nav-scroll-right')),
+      ].where((finder) => finder.evaluate().isNotEmpty);
+
+      for (final cue in cues) {
+        final cueRect = tester.getRect(cue);
+        for (var index = 0; index < labels.length; index++) {
+          final label = labels[index];
+          expect(
+            cueRect.overlaps(tester.getRect(label)),
+            isFalse,
+            reason: 'La flecha no debe cubrir la etiqueta de la pestaña $index.',
+          );
+        }
+      }
+    }
+
+    expect(find.byKey(const ValueKey<String>('bottom-nav-scroll-right')), findsOneWidget);
+    expectNoNavigationLabelBehindCues();
+
+    await tester.tap(find.byKey(const ValueKey<String>('bottom-nav-scroll-right')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.byKey(const ValueKey<String>('bottom-nav-scroll-left')), findsOneWidget);
+    expectNoNavigationLabelBehindCues();
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('Inicio respeta la preferencia del sistema para reducir movimiento', (tester) async {
+  testWidgets('Inicio se estabiliza cuando Android solicita reducir movimiento', (tester) async {
     await tester.pumpWidget(
-      MediaQuery(
-        data: const MediaQueryData(disableAnimations: true),
-        child: MaterialApp(
-          home: HomeDashboard(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: HomeDashboard(
             onNavigate: (_) {},
             onSportSelected: (_) {},
             onTelegram: () {},
@@ -268,8 +295,42 @@ void main() {
         ),
       ),
     );
-    await tester.pump(const Duration(seconds: 10));
+
+    // Con el movimiento reducido no debe quedar un ticker infinito activo.
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey<String>('home-sports-crest')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('Inicio conserva el contenido con texto ampliado al 200 por ciento', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 640);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(2.0)),
+          child: HomeDashboard(
+            onNavigate: (_) {},
+            onSportSelected: (_) {},
+            onTelegram: () {},
+            onContact: () {},
+            onDonations: () {},
+            onFantasy: () {},
+            onStatistics: () {},
+            onOpenAgenda: () {},
+            onChat: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(const ValueKey<String>('home-sports-crest')), findsOneWidget);
+    expect(find.text('TODO EL DEPORTE'), findsOneWidget);
+    expect(find.text('EN UN SOLO LUGAR'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
