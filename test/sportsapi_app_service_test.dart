@@ -10,6 +10,23 @@ import 'package:deporte_total_360/sportsapi_app_service.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('una respuesta del Worker sin lista de favoritos se trata como fallo y no como lista vacía', () async {
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-malformed-favorites.example';
+    final client = MockClient((request) async {
+      return http.Response(jsonEncode({'status': 'ok'}), 200);
+    });
+    try {
+      await expectLater(
+        SportsApiAppService(client: client).fetchFavoriteAgendaSportNames(),
+        throwsA(isA<SportsApiException>()),
+      );
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
+  });
+
   test('lista todos los deportes favoritos aunque no tengan encuentros publicados', () async {
     final previousBase = sportsApiBaseUrl.value;
     sportsApiBaseUrl.value = 'https://worker-favorite-catalog.example';

@@ -122,7 +122,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
     _refreshTimer = null;
     if (widget.isActive) {
       _refreshTimer = Timer.periodic(
-        const Duration(minutes: 1),
+        const Duration(minutes: 3),
         (_) => _refresh(),
       );
     }
@@ -173,9 +173,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
       var events = List<SportsAgendaEvent>.of(window.events);
       var unavailable = List<DateTime>.of(window.unavailableDates);
       if (unavailable.isNotEmpty) {
-        final stored = await agendaApi.filterFavoriteAgendaEvents(
-          await SportsAgendaStore.load(),
-        );
+        final stored = await SportsAgendaStore.load();
         for (final event in stored) {
           if (unavailable.any((day) => _sameDay(day, event.startsAt))) {
             events.add(event);
@@ -206,28 +204,41 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
       // Nunca debe sustituir silenciosamente la ventana completa de SportAPI.
       final end = _windowStartDate.add(const Duration(days: _windowDays));
       final byId = <String, SportsAgendaEvent>{};
-      final agendaApi = SportsApiAppService();
-      final published = await AutomaticLiveService().fetchPublishedSchedule();
-      if (published != null) {
-        final selectedPublished = await agendaApi.filterFavoriteAgendaEvents(
-          published.map((item) => item.event),
-        );
-        for (final event in selectedPublished) {
-          final localStart = event.startsAt.toLocal();
-          if (!localStart.isBefore(_windowStartDate) &&
-              localStart.isBefore(end)) {
-            byId[event.id] = event;
+      // SportsAgendaStore solo guarda eventos que ya pasaron por el filtro de
+      // deportes y ligas favoritas. No volver a consultar /favorites aquí:
+      // ese segundo viaje al Worker anulaba precisamente el respaldo sin cuota.
+      try {
+        final published = await AutomaticLiveService().fetchPublishedSchedule();
+        if (published != null) {
+          for (final item in published) {
+            final event = item.event;
+            final localStart = event.startsAt.toLocal();
+            if (!localStart.isBefore(_windowStartDate) &&
+                localStart.isBefore(end)) {
+              byId[event.id] = event;
+            }
           }
         }
+      } catch (_) {
+        // La copia persistente local sigue siendo suficiente para abrir Agenda.
       }
-      final selectedStored = await agendaApi.filterFavoriteAgendaEvents(
-        await SportsAgendaStore.load(),
-      );
+      final selectedStored = await SportsAgendaStore.load();
       for (final event in selectedStored) {
         final localStart = event.startsAt.toLocal();
         if (!localStart.isBefore(_windowStartDate) &&
             localStart.isBefore(end)) {
           byId.putIfAbsent(event.id, () => event);
+        }
+      }
+      if (mounted && _favoriteSportNames.isEmpty && selectedStored.isNotEmpty) {
+        final cachedSports = selectedStored
+            .map((event) => event.sport.trim())
+            .where((sport) => sport.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+        if (cachedSports.isNotEmpty) {
+          setState(() => _favoriteSportNames = cachedSports);
         }
       }
       final fallbackEvents = byId.values.toList(growable: false)

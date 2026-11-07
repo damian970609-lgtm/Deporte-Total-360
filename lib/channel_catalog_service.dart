@@ -2,11 +2,62 @@ import 'dart:convert';
 
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'live_media_format.dart';
 import 'sports_api_service.dart';
 
 const int channelCatalogMaxOffset = 5000000;
+
+/// Copia persistente del catálogo deportivo que ya se descargó correctamente.
+/// Se conserva en el dispositivo y no depende de que Cloudflare siga disponible.
+const String channelCatalogSnapshotCacheKey =
+    'dt360_channel_catalog_snapshot_v1';
+const int maxCachedChannelCatalogEntries = 2000;
+
+Future<List<SportsChannel>> loadCachedVisibleSportsChannels() async {
+  final prefs = await SharedPreferences.getInstance();
+  final raw = prefs.getString(channelCatalogSnapshotCacheKey);
+  if (raw == null || raw.isEmpty) return <SportsChannel>[];
+
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) return <SportsChannel>[];
+    final byId = <String, SportsChannel>{};
+    for (final row in decoded.whereType<Map>()) {
+      try {
+        final channel = SportsChannel.fromJson(
+          Map<String, dynamic>.from(row),
+        );
+        if (channel.isSports && channel.visible) {
+          byId[channel.id] = channel;
+        }
+      } on FormatException {
+        // Una fila dañada no debe inutilizar toda la copia local.
+      }
+    }
+    return byId.values.take(maxCachedChannelCatalogEntries).toList(
+      growable: false,
+    );
+  } catch (_) {
+    return <SportsChannel>[];
+  }
+}
+
+Future<void> saveCachedPublicChannelSnapshot(
+  Iterable<SportsChannel> channels,
+) async {
+  final prefs = await SharedPreferences.getInstance();
+  final byId = <String, SportsChannel>{};
+  for (final channel in channels) {
+    byId[channel.id] = channel;
+  }
+  final snapshot = byId.values
+      .take(maxCachedChannelCatalogEntries)
+      .map((channel) => channel.toJson())
+      .toList(growable: false);
+  await prefs.setString(channelCatalogSnapshotCacheKey, jsonEncode(snapshot));
+}
 
 const String _googleServerClientId =
     String.fromEnvironment('GOOGLE_OAUTH_CLIENT_ID');
@@ -113,6 +164,17 @@ class ChannelPlaylistSource {
   final String lastError;
   final int importedCount;
   final String lastImportedAt;
+
+  Map<String, Object> toJson() => <String, Object>{
+        'id': id,
+        'url': url,
+        'label': label,
+        'status': status,
+        'format': format,
+        'last_error': lastError,
+        'imported_count': importedCount,
+        'last_imported_at': lastImportedAt,
+      };
 
   factory ChannelPlaylistSource.fromJson(Map<String, dynamic> json) {
     return ChannelPlaylistSource(
@@ -280,7 +342,14 @@ class ChannelCatalogService {
       return currentEmail;
     }
 
-    await validateGoogleOAuthConfiguration();
+    // La recuperación local de la cuenta no debe depender de una consulta al
+    // Worker: si Cloudflare agotó la cuota, el panel todavía debe poder abrir
+    // su copia privada guardada en este teléfono.
+    try {
+      await validateGoogleOAuthConfiguration();
+    } catch (_) {
+      // El backend validará el token cuando vuelva a estar disponible.
+    }
     await _initializeGoogle();
 
     try {
@@ -674,7 +743,11 @@ class ChannelCatalogService {
       headers: _authHeaders(),
     ).timeout(const Duration(seconds: 20));
     final rows = _decode(result)['sources'];
-    if (rows is! List) return <ChannelPlaylistSource>[];
+    if (rows is! List) {
+      throw const ChannelCatalogException(
+        'Cloudflare no devolvió la lista de fuentes con un formato válido.',
+      );
+    }
     return rows
         .whereType<Map>()
         .map((row) => ChannelPlaylistSource.fromJson(

@@ -23,8 +23,9 @@ const Color _channelGreen = Color(0xFF39FF14);
 const Color _channelYellow = Color(0xFFFFFFFF);
 const Color _channelMuted = Color(0xFFEAF0F8);
 const String _channelFavoritesKey = 'dt360_channel_catalog_favorites_v1';
-const String _channelCatalogCacheKey = 'dt360_channel_catalog_snapshot_v1';
-const int _maxCachedChannels = 2000;
+const String _channelCatalogCacheKey = channelCatalogSnapshotCacheKey;
+const String _adminSnapshotPrefix = 'dt360_admin_snapshot_v1_';
+const int _maxCachedChannels = maxCachedChannelCatalogEntries;
 
 
 T? _firstOrNull<T>(Iterable<T> items) {
@@ -1633,6 +1634,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       final email = await _service.restoreSession();
       if (!mounted || email == null) return;
       setState(() => _email = email);
+      await _loadCachedAdminSnapshot(email);
       await _loadAdmin();
     } catch (error) {
       if (!mounted) return;
@@ -1671,6 +1673,90 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     );
   }
 
+  String _adminSnapshotKey(String email) {
+    final account = base64Url
+        .encode(utf8.encode(email.trim().toLowerCase()))
+        .replaceAll('=', '');
+    return '$_adminSnapshotPrefix$account';
+  }
+
+  Future<void> _loadCachedAdminSnapshot(String email) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_adminSnapshotKey(email));
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map ||
+          (decoded['email'] ?? '').toString().trim().toLowerCase() !=
+              email.trim().toLowerCase()) {
+        return;
+      }
+
+      final channelRows = decoded['channels'];
+      final sourceRows = decoded['sources'];
+      final channels = <SportsChannel>[];
+      if (channelRows is List) {
+        for (final row in channelRows.whereType<Map>()) {
+          try {
+            channels.add(
+              SportsChannel.fromJson(Map<String, dynamic>.from(row)),
+            );
+          } on FormatException {
+            // Se conserva el resto de canales aunque una fila esté dañada.
+          }
+        }
+      }
+      final sources = sourceRows is List
+          ? sourceRows
+              .whereType<Map>()
+              .map((row) => ChannelPlaylistSource.fromJson(
+                    Map<String, dynamic>.from(row),
+                  ))
+              .toList(growable: false)
+          : <ChannelPlaylistSource>[];
+
+      if (!mounted) return;
+      setState(() {
+        if (channelRows is List) {
+          _channels = channels;
+          _catalogTotal = channels.length;
+          _nextAdminOffset = channels.length;
+          _hasMore = false;
+        }
+        if (sourceRows is List) _sources = sources;
+        if (channelRows is List && channels.isNotEmpty) {
+          _error =
+              'Copia local del catálogo. Se actualizará cuando Cloudflare responda.';
+        }
+        if (sourceRows is List) {
+          _sourcesError =
+              'Listas conservadas en este teléfono. El modo sin conexión es de solo lectura.';
+        }
+      });
+    } catch (_) {
+      // Una copia local dañada nunca debe impedir abrir el panel.
+    }
+  }
+
+  Future<void> _saveLocalAdminSnapshot() async {
+    final email = (_email ?? _service.signedInEmail ?? '').trim();
+    if (email.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _adminSnapshotKey(email),
+        jsonEncode(<String, Object>{
+          'email': email.toLowerCase(),
+          'savedAt': DateTime.now().toIso8601String(),
+          'channels': _channels.map((channel) => channel.toJson()).toList(),
+          'sources': _sources.map((source) => source.toJson()).toList(),
+        }),
+      );
+    } catch (_) {
+      // La copia remota sigue siendo la fuente maestra.
+    }
+  }
+
   Future<void> _signIn() async {
     setState(() {
       _working = true;
@@ -1680,6 +1766,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       final email = await _service.signIn();
       if (!mounted) return;
       setState(() => _email = email);
+      await _loadCachedAdminSnapshot(email);
       await _loadAdmin();
     } catch (error) {
       if (!mounted) return;
@@ -1743,11 +1830,14 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _loading = false;
         _error = null;
       });
+      await _saveLocalAdminSnapshot();
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = error.toString();
+        _error = _channels.isNotEmpty
+            ? 'Cloudflare no está disponible o alcanzó su cuota. Se conserva el catálogo guardado en este teléfono.'
+            : error.toString();
       });
     }
 
@@ -1763,10 +1853,13 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _sources = sources;
         _sourcesError = null;
       });
+      await _saveLocalAdminSnapshot();
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _sourcesError = error.toString();
+        _sourcesError = _sources.isNotEmpty
+            ? 'Cloudflare no está disponible o alcanzó su cuota. Tus listas guardadas siguen disponibles en modo de solo lectura.'
+            : error.toString();
       });
     }
 
@@ -1893,11 +1986,14 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _loading = false;
         _error = null;
       });
+      await _saveLocalAdminSnapshot();
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = error.toString();
+        _error = _channels.isNotEmpty
+            ? 'Cloudflare no está disponible. Se mantiene la última copia del catálogo.'
+            : error.toString();
       });
     }
   }
@@ -1971,6 +2067,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _sources = sources;
         _sourcesError = null;
       });
+      await _saveLocalAdminSnapshot();
       _message('Fuente añadida: ' + preset.label + '. Se está importando.');
     } catch (error) {
       _message('No se pudo añadir la fuente deportiva: ' + error.toString());
@@ -2037,6 +2134,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _sources = sources;
         _sourcesError = null;
       });
+      await _saveLocalAdminSnapshot();
       _message('Lista añadida: ' + preset.label + '. Se importará en segundo plano y se publicarán solo canales deportivos compatibles.');
     } catch (error) {
       _message('No se pudo añadir la lista: ' + error.toString());
@@ -2189,6 +2287,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       setState(() {
         _sources.removeWhere((item) => item.id == source.id);
       });
+      await _saveLocalAdminSnapshot();
       _message('Lista quitada. Los canales ya importados se conservaron.');
     } catch (error) {
       _message('No se pudo quitar la lista: ' + error.toString());

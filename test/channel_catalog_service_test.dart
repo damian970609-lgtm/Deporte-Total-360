@@ -1,11 +1,74 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:deporte_total_360/channel_catalog_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('la copia local del catálogo conserva solo canales deportivos publicados', () async {
+    final visibleSports = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'sports-visible',
+      'identifier': 'sports-visible',
+      'name': 'Canal Deportivo',
+      'url': 'https://media.example/sports.m3u8',
+      'isSports': true,
+      'visible': true,
+      'language': 'es',
+    });
+    final hiddenSports = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'sports-hidden',
+      'identifier': 'sports-hidden',
+      'name': 'Canal Oculto',
+      'url': 'https://media.example/hidden.m3u8',
+      'isSports': true,
+      'visible': false,
+    });
+    final general = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'general-visible',
+      'identifier': 'general-visible',
+      'name': 'Canal General',
+      'url': 'https://media.example/general.m3u8',
+      'isSports': false,
+      'visible': true,
+    });
+    SharedPreferences.setMockInitialValues({});
+    await saveCachedPublicChannelSnapshot([
+      visibleSports,
+      hiddenSports,
+      general,
+    ]);
+
+    final restored = await loadCachedVisibleSportsChannels();
+
+    expect(restored.map((channel) => channel.id), ['sports-visible']);
+  });
+
+  test('las fuentes de listas se pueden guardar y restaurar sin perder metadatos', () {
+    const source = ChannelPlaylistSource(
+      id: 'sports-list',
+      url: 'https://lists.example/sports.m3u',
+      label: 'Deportes',
+      status: 'imported',
+      format: 'm3u',
+      lastError: '',
+      importedCount: 32,
+      lastImportedAt: '2026-11-07T12:00:00Z',
+    );
+    final restored = ChannelPlaylistSource.fromJson(source.toJson());
+
+    expect(restored.id, source.id);
+    expect(restored.url, source.url);
+    expect(restored.label, source.label);
+    expect(restored.status, source.status);
+    expect(restored.format, source.format);
+    expect(restored.importedCount, source.importedCount);
+    expect(restored.lastImportedAt, source.lastImportedAt);
+  });
+
   test('parsea el permiso permanente de compra del servidor', () {
     final license = AppLicenseStatus.fromJson(<String, dynamic>{
       'allowed': true,

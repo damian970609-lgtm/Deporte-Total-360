@@ -282,7 +282,11 @@ class SportsApiAppService {
       final sports = response['sports'] ?? response['favorites'] ??
           dataMap['sports'] ?? dataMap['favorites'] ??
           (data is List ? data : null);
-      if (sports is! List) return <Map<String, dynamic>>[];
+      if (sports is! List) {
+        throw const SportsApiException(
+          'Cloudflare no devolvió la lista de deportes favoritos. Se utilizará la agenda guardada.',
+        );
+      }
       return sports.whereType<Map>()
           .map((item) => Map<String, dynamic>.from(item))
           .toList(growable: false);

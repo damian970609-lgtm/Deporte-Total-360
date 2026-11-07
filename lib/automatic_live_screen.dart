@@ -47,7 +47,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     // La búsqueda previa al evento continúa aunque el usuario esté en otra
     // pestaña. El tablero de vídeo sigue respetando widget.isActive.
     _refresh(force: true);
-    _refreshTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+    _refreshTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       if (mounted) _refresh();
     });
   }
@@ -86,25 +86,63 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         tvgName: channel.name, group: channel.groupTitle, language: channel.language,
       )).toList(growable: false);
     }
-    final selected = <SportsChannel>[];
-    var offset = 0;
-    for (var pageNumber = 0; pageNumber < 100; pageNumber++) {
-      final page = await _channelCatalog.fetchPublicChannelPage(offset: offset, limit: 2000);
-      selected.addAll(page.channels.where((channel) => channel.isSports && channel.visible));
-      if (!page.hasMore || page.channels.isEmpty) break;
-      if (pageNumber == 99) {
-        throw StateError('El catálogo seleccionado supera el límite seguro de páginas.');
+
+    try {
+      final allChannels = <SportsChannel>[];
+      var offset = 0;
+      for (var pageNumber = 0; pageNumber < 100; pageNumber++) {
+        final page = await _channelCatalog.fetchPublicChannelPage(
+          offset: offset,
+          limit: 2000,
+        );
+        if (page.channels.isEmpty && page.hasMore) {
+          throw StateError('El catálogo no entregó la siguiente página.');
+        }
+        allChannels.addAll(page.channels);
+        if (!page.hasMore || page.channels.isEmpty) break;
+        if (pageNumber == 99) {
+          throw StateError('El catálogo seleccionado supera el límite seguro de páginas.');
+        }
+        final nextOffset = page.offset + page.channels.length;
+        if (nextOffset <= offset) {
+          throw StateError('El catálogo no avanzó a la siguiente página.');
+        }
+        offset = nextOffset;
       }
-      final nextOffset = page.offset + page.channels.length;
-      if (nextOffset <= offset) throw StateError('El catálogo no avanzó a la siguiente página.');
-      offset = nextOffset;
+
+      await saveCachedPublicChannelSnapshot(allChannels);
+      final selected = allChannels
+          .where((channel) => channel.isSports && channel.visible)
+          .toList(growable: false);
+      _selectedChannelCache = List<SportsChannel>.unmodifiable(selected);
+      _selectedChannelCacheAt = now;
+      return selected.map((channel) => M3uChannel(
+        name: channel.name,
+        url: channel.url,
+        tvgId: channel.identifier,
+        tvgName: channel.name,
+        group: channel.groupTitle,
+        language: channel.language,
+      )).toList(growable: false);
+    } catch (_) {
+      // El tablero usa la última selección confirmada, no una lista inventada
+      // ni todas las listas predeterminadas. Un fallo de cuota no borra canales.
+      final local = cached != null && cached.isNotEmpty
+          ? cached
+          : await loadCachedVisibleSportsChannels();
+      if (local.isNotEmpty) {
+        _selectedChannelCache = List<SportsChannel>.unmodifiable(local);
+        return local.map((channel) => M3uChannel(
+          name: channel.name,
+          url: channel.url,
+          tvgId: channel.identifier,
+          tvgName: channel.name,
+          group: channel.groupTitle,
+          language: channel.language,
+        )).toList(growable: false);
+      }
+      rethrow;
     }
-    _selectedChannelCache = List<SportsChannel>.unmodifiable(selected);
-    _selectedChannelCacheAt = now;
-    return selected.map((channel) => M3uChannel(
-      name: channel.name, url: channel.url, tvgId: channel.identifier,
-      tvgName: channel.name, group: channel.groupTitle, language: channel.language,
-    )).toList(growable: false);
   }
 
   Future<void> _refresh({bool force = false}) async {
@@ -140,12 +178,13 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
       // generado o está temporalmente fuera de línea, se conserva el motor local.
       final published = await _service.fetchPublishedSchedule();
       List<ScheduledLiveEvent> latest;
-      if (published != null) {
+      if (published != null &&
+          published.any((item) => item.sources.isNotEmpty)) {
         latest = published;
       } else {
         final selectedChannels =
             await _loadSelectedSportsChannels(forceRefresh: force);
-        latest = selectedChannels.isNotEmpty
+        final localSchedule = selectedChannels.isNotEmpty
             ? await _service.schedule(
                 events: events,
                 now: DateTime.now(),
@@ -154,6 +193,9 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
                 forceRefresh: force,
               )
             : <ScheduledLiveEvent>[];
+        latest = localSchedule.isNotEmpty
+            ? localSchedule
+            : (published ?? <ScheduledLiveEvent>[]);
       }      if (!mounted) return;
       setState(() {
         _agendaEvents = events;
