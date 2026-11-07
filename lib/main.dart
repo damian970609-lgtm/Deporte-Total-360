@@ -796,7 +796,9 @@ class _MainShellState extends State<MainShell> {
   }
 
   double _bottomNavigationItemWidth(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
+    final media = MediaQuery.of(context);
+    final width = (media.size.width - media.padding.left - media.padding.right)
+        .clamp(0.0, media.size.width);
     if (width < 360) return 72;
     if (width < 480) return 76;
     if (width < 700) return 82;
@@ -897,8 +899,11 @@ class _MainShellState extends State<MainShell> {
     // Reserva dos carriles estables cuando las diez pestañas no caben.
     // Así la aparición/desaparición de las flechas no cambia el viewport ni
     // desplaza el contenido mientras el usuario recorre la navegación.
+    final media = MediaQuery.of(context);
+    final navigationAvailableWidth =
+        media.size.width - media.padding.left - media.padding.right;
     final navigationNeedsScroll =
-        _bottomNavigationItemWidth(context) * 10 > MediaQuery.sizeOf(context).width;
+        _bottomNavigationItemWidth(context) * 10 > navigationAvailableWidth;
 
     final pages = <Widget>[
       HomeDashboard(
