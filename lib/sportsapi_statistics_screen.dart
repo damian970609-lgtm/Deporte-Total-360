@@ -115,13 +115,6 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
         .toList(growable: false);
   }
 
-  Map<String, dynamic>? get _currentCatalog {
-    for (final row in _catalog) {
-      if (_catalogSportId(row) == _sportId) return row;
-    }
-    return null;
-  }
-
   @override
   void initState() {
     super.initState();
