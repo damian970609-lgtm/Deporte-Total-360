@@ -2878,7 +2878,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                           ),
                           const SizedBox(height: 6),
                           const Text(
-                            'La importación reconoce M3U/M3U8, PLS, XSPF/XML, JSON y TXT. Cada señal se valida antes de aparecer en el catálogo.',
+                            'Admite listas M3U/M3U8, PLS, XSPF, XML/ASX, JSON, CSV y TXT. Importa todos los canales que incluyan una URL directa HTTPS compatible con HLS, DASH, Smooth Streaming o vídeo progresivo. Límite técnico por fuente: 25 MB y hasta 50.000 entradas.',
                             style: TextStyle(
                               color: _channelMuted,
                               fontSize: 9,
