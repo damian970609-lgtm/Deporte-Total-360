@@ -2027,6 +2027,101 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
+  Future<void> _editPlaylistSource(ChannelPlaylistSource source) async {
+    if (_working) return;
+    final labelController = TextEditingController(text: source.label);
+    final urlController = TextEditingController(text: source.url);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _channelPanel,
+        title: const Text(
+          'Editar lista IPTV',
+          style: TextStyle(color: _channelCyan, fontWeight: FontWeight.w900),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              TextField(
+                controller: labelController,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(labelText: 'Nombre de la lista'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: urlController,
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+                enableSuggestions: false,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'URL HTTPS de la lista',
+                  hintText: 'https://...',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('CANCELAR'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: _channelCyan),
+            child: const Text('GUARDAR'),
+          ),
+        ],
+      ),
+    );
+    final label = labelController.text.trim();
+    final candidateUrl = urlController.text.trim();
+    labelController.dispose();
+    urlController.dispose();
+    if (confirmed != true || !mounted) return;
+
+    final uri = Uri.tryParse(candidateUrl);
+    if (label.isEmpty || label.length > 80) {
+      _message('El nombre debe tener entre 1 y 80 caracteres.');
+      return;
+    }
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty) {
+      _message('Introduce una URL HTTPS pública válida.');
+      return;
+    }
+    if (containsChannelPlaylistUrl(
+      _sources
+          .where((item) => item.id != source.id)
+          .map((item) => item.url),
+      uri.toString(),
+    )) {
+      _message('Otra lista ya utiliza esa URL.');
+      return;
+    }
+
+    setState(() => _working = true);
+    try {
+      await _service.updatePlaylistSource(
+        id: source.id,
+        url: uri.toString(),
+        label: label,
+      );
+      await _loadAdmin(showLoading: false);
+      if (!mounted) return;
+      _message('Lista actualizada. Se volverá a importar en segundo plano.');
+    } catch (error) {
+      _message('No se pudo actualizar la lista: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   Future<void> _removePlaylistSource(ChannelPlaylistSource source) async {
     if (_working) return;
     final confirmed = await showDialog<bool>(
