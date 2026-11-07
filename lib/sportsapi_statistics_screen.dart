@@ -435,7 +435,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
           ClipRRect(
             borderRadius: BorderRadius.circular(5),
             child: LinearProgressIndicator(
-              value: ratio.clamp(0.0, 1.0),
+              value: ratio.clamp(0.0, 1.0).toDouble(),
               minHeight: 6,
               backgroundColor: const Color(0xFF202631),
               valueColor: AlwaysStoppedAnimation<Color>(color),
