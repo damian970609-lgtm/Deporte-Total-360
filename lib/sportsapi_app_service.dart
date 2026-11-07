@@ -524,18 +524,21 @@ class SportsApiAppService {
     final day = utcDay.year.toString().padLeft(4, '0') + '-' +
         utcDay.month.toString().padLeft(2, '0') + '-' +
         utcDay.day.toString().padLeft(2, '0');
-    final cached = _agendaCache[day];
-    final expires = _agendaCacheExpiry[day];
+    final base = SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value) ??
+        sportsApiBaseUrl.value.trim();
+    final cacheKey = '$base:$day';
+    final cached = _agendaCache[cacheKey];
+    final expires = _agendaCacheExpiry[cacheKey];
     if (cached != null && expires != null && DateTime.now().isBefore(expires)) {
       return Future<_AgendaSportsResult>.value(cached);
     }
-    final pending = _agendaInFlight[day];
+    final pending = _agendaInFlight[cacheKey];
     if (pending != null) return pending;
     final future = _fetchFavoriteAgendaEvents(day);
-    _agendaInFlight[day] = future;
+    _agendaInFlight[cacheKey] = future;
     return future.then((result) {
-      _agendaCache[day] = result;
-      _agendaCacheExpiry[day] = DateTime.now().add(
+      _agendaCache[cacheKey] = result;
+      _agendaCacheExpiry[cacheKey] = DateTime.now().add(
         result.incomplete
             ? const Duration(minutes: 1)
             : result.events.isEmpty
@@ -544,7 +547,7 @@ class SportsApiAppService {
       );
       return result;
     }).whenComplete(() {
-      _agendaInFlight.remove(day);
+      _agendaInFlight.remove(cacheKey);
     });
   }
 
@@ -561,7 +564,9 @@ class SportsApiAppService {
     final firstKey = firstDay.year.toString().padLeft(4, '0') + '-' +
         firstDay.month.toString().padLeft(2, '0') + '-' +
         firstDay.day.toString().padLeft(2, '0');
-    final cacheKey = firstKey + ':' + safeDays.toString();
+    final base = SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value) ??
+        sportsApiBaseUrl.value.trim();
+    final cacheKey = base + ':' + firstKey + ':' + safeDays.toString();
     if (forceRefresh) {
       _agendaWindowCache.remove(cacheKey);
       _agendaCache.clear();
