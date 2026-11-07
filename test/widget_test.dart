@@ -139,10 +139,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final adminScrollable = find.descendant(
+      of: find.byKey(const ValueKey<String>('channel-admin-scroll')),
+      matching: find.byType(Scrollable),
+    ).first;
+
     await tester.scrollUntilVisible(
       find.text('CATÁLOGO DE FUENTES · 100 LISTAS'),
       350,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: adminScrollable,
     );
     await tester.pumpAndSettle();
     expect(find.text('CATÁLOGO DE FUENTES · 100 LISTAS'), findsOneWidget);
@@ -152,7 +157,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('LISTAS REGISTRADAS'),
       350,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: adminScrollable,
     );
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
