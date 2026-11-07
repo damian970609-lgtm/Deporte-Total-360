@@ -823,6 +823,7 @@ class _MainShellState extends State<MainShell> {
               const SizedBox(height: 3),
               Text(
                 label,
+                key: ValueKey<String>('bottom-tab-label-$index'),
                 maxLines: 2,
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,
