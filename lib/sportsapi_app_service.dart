@@ -267,9 +267,8 @@ class SportsApiAppService {
       }
       if (!_sportNames.containsKey(id)) continue;
 
-      final name = _text(sport['name'] ?? sport['sportName']).isNotEmpty
-          ? _text(sport['name'] ?? sport['sportName'])
-          : _sportNames[id]!;
+      final suppliedName = _text(sport['name'] ?? sport['sportName']);
+      final name = suppliedName.isEmpty ? _sportNames[id]! : suppliedName;
       final competitionIds = <String>{};
       final competitionNames = <String>{};
       var allCompetitions = sport['allCompetitions'] == true ||
@@ -321,7 +320,39 @@ class SportsApiAppService {
           final normalized = _normalizeAgendaFilterText(raw);
           if (_isAllCompetitionsValue(normalized)) {
             allCompetitions = true;
-          } else if (RegExp(r'^\\d+
+          } else if (int.tryParse(raw) != null) {
+            competitionIds.add(raw);
+          } else {
+            competitionNames.add(normalized);
+          }
+        }
+      }
+
+      final selection = sport['competitions'] ??
+          sport['leagues'] ??
+          sport['selectedCompetitions'] ??
+          sport['selectedLeagues'];
+      readCompetitionSelection(selection);
+
+      selected[id] = _FavoriteAgendaSport(
+        id: id,
+        name: name,
+        competitionIds: competitionIds,
+        competitionNames: competitionNames,
+        allCompetitions: allCompetitions,
+      );
+    }
+    return selected.values.toList(growable: false);
+  }
+
+  bool _isAllCompetitionsValue(String value) =>
+      value == '*' ||
+      value == 'all' ||
+      value == 'todos' ||
+      value == 'todas' ||
+      value == 'all leagues' ||
+      value == 'all competitions';
+
   static const Map<String, String> _sportNames = <String, String>{
     'football': 'Fútbol',
     'basketball': 'Baloncesto',
