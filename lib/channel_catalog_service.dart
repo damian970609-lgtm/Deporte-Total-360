@@ -669,7 +669,60 @@ class ChannelCatalogService {
     required String label,
   }) async {
     final safeId = id.trim();
-    if (!RegExp(r'^[a-zA-Z0-9_-]{1,100}
+    if (!RegExp(r'^[a-zA-Z0-9_-]{1,100}$').hasMatch(safeId)) {
+      throw const ChannelCatalogException(
+        'El identificador de la lista no es válido.',
+      );
+    }
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty) {
+      throw const ChannelCatalogException(
+        'Introduce una URL HTTPS pública válida.',
+      );
+    }
+    if (label.trim().isEmpty || label.trim().length > 80) {
+      throw const ChannelCatalogException(
+        'El nombre de la lista debe tener entre 1 y 80 caracteres.',
+      );
+    }
+    final result = await _client.put(
+      Uri.parse(_baseUrl + '/api/channels/admin/sources/' +
+          Uri.encodeComponent(safeId)),
+      headers: <String, String>{
+        ..._authHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(<String, String>{
+        'url': uri.toString(),
+        'label': label.trim(),
+      }),
+    ).timeout(const Duration(seconds: 20));
+    _decode(result);
+  }
+
+  /// Completa una lista registrada hasta el límite de 100 fuentes sin borrar
+  /// las listas que ya existan. El servidor elimina duplicados por URL.
+  Future<Map<String, dynamic>> addPlaylistSourcesToCatalog({
+    required List<Map<String, String>> sources,
+  }) async {
+    final result = await _client.post(
+      Uri.parse(_baseUrl + '/api/channels/admin/sources/bulk'),
+      headers: <String, String>{
+        ..._authHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(<String, Object>{
+        'sources': sources,
+      }),
+    ).timeout(const Duration(seconds: 30));
+    return _decode(result);
+  }
+
+  /// Pone en cola la actualización de las listas registradas.
+  Future<void> refreshSources() async {
     final result = await _client.post(
       Uri.parse(_baseUrl + '/api/channels/admin/refresh'),
       headers: <String, String>{
