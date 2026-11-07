@@ -2203,7 +2203,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     setState(() => _working = true);
     try {
       await _service.retryPlaylistSource(id: source.id);
-      await _service.refreshSources();
       final sources = await _service.fetchSources();
       if (!mounted) return;
       setState(() => _sources = sources);
