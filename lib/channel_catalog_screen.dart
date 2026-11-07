@@ -1912,7 +1912,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         uri.scheme != 'https' ||
         uri.host.isEmpty ||
         uri.userInfo.isNotEmpty) {
-      _message('Introduce una URL HTTPS pública de una lista M3U.');
+      _message('Introduce una URL HTTPS pública de una lista IPTV compatible.');
       return;
     }
     final normalizedUrl = uri.toString();
@@ -3201,7 +3201,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             style: const TextStyle(color: Colors.white),
                             decoration: const InputDecoration(
                               labelText: 'URL HTTPS de la lista IPTV',
-                              hintText: 'M3U, PLS, XSPF, JSON o TXT',
+                              hintText: 'M3U/M3U8, PLS, XSPF, XML/ASX, JSON, CSV o TXT',
                               prefixIcon: Icon(Icons.link_rounded),
                             ),
                           ),
