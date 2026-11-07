@@ -270,6 +270,39 @@ void main() {
     client.close();
   });
 
+  test('editar una lista actualiza su nombre y URL mediante PUT autenticado', () async {
+    http.Request? sent;
+    final client = MockClient((request) async {
+      sent = request;
+      return http.Response(jsonEncode(<String, Object>{'updated': true}), 200);
+    });
+    final service = ChannelCatalogService(
+      client: client,
+      accessTokenProvider: () => 'test-google-id-token',
+    );
+
+    await service.updatePlaylistSource(
+      id: 'source-123',
+      url: 'https://lists.example/updated.m3u',
+      label: 'Lista actualizada',
+    );
+
+    expect(sent?.method, 'PUT');
+    expect(
+      sent?.url.path,
+      endsWith('/api/channels/admin/sources/source-123'),
+    );
+    expect(sent?.headers['Authorization'], 'Bearer test-google-id-token');
+    expect(
+      jsonDecode(sent!.body),
+      <String, String>{
+        'url': 'https://lists.example/updated.m3u',
+        'label': 'Lista actualizada',
+      },
+    );
+    client.close();
+  });
+
   test('quitar una fuente usa DELETE y no altera otras rutas del catálogo', () async {
     http.Request? sent;
     final client = MockClient((request) async {
