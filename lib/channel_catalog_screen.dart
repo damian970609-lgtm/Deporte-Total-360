@@ -1980,6 +1980,38 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
+  Future<void> _fillPlaylistCatalogTo100() async {
+    if (_working) return;
+    if (_sources.length >= maxChannelPlaylistSources) {
+      _message('El catálogo ya tiene 100 listas registradas.');
+      return;
+    }
+    setState(() => _working = true);
+    try {
+      final result = await _service.addPlaylistSourcesToCatalog(
+        sources: channelPlaylistPresets
+            .map((preset) => <String, String>{
+                  'label': preset.label,
+                  'url': preset.url,
+                })
+            .toList(growable: false),
+      );
+      await _loadAdmin(showLoading: false);
+      if (!mounted) return;
+      final total = result['total'] ?? _sources.length;
+      final added = result['added'] ?? 0;
+      _message(
+        'Catálogo actualizado: $total / 100 listas. '
+        'Se añadieron $added fuentes nuevas. '
+        'Todas las importaciones se procesan en segundo plano.',
+      );
+    } catch (error) {
+      _message('No se pudo completar el catálogo de 100 listas: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   Future<void> _addGeneralPreset() async {
     if (_sources.length >= maxChannelPlaylistSources) {
       _message('Has alcanzado el límite de $maxChannelPlaylistSources listas.');
@@ -2861,7 +2893,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
                           const Text(
-                            'LISTAS GENERALES · 24 FUENTES',
+                            'CATÁLOGO DE FUENTES · 100 LISTAS',
                             style: TextStyle(
                               color: _channelGreen,
                               fontWeight: FontWeight.w900,
@@ -2870,7 +2902,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                           ),
                           const SizedBox(height: 5),
                           const Text(
-                            'También puedes cargar listas generales, de idioma o de país. El servidor solo incorporará al catálogo deportivo los canales que reconozca como deportes; los demás no se publicarán.',
+                            'Completa hasta 100 listas públicas distintas sin borrar las fuentes que ya funcionan. Se importan todos los canales con enlaces multimedia compatibles; el sistema identifica los deportivos para que puedas decidir cuáles publicar.',
                             style: TextStyle(
                               color: _channelMuted,
                               fontSize: 10,
@@ -2883,7 +2915,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             isExpanded: true,
                             dropdownColor: _channelPanel2,
                             decoration: const InputDecoration(
-                              labelText: 'Elegir una de las 24 listas generales',
+                              labelText: 'Elegir una de las 100 listas disponibles',
                             ),
                             items: channelPlaylistPresets
                                 .map((preset) => DropdownMenuItem<String>(
@@ -2901,6 +2933,25 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                                       () => _selectedGeneralPresetUrl =
                                           value ?? channelPlaylistPresets.first.url,
                                     ),
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: _working || _sources.length >= maxChannelPlaylistSources
+                                  ? null
+                                  : _fillPlaylistCatalogTo100,
+                              icon: const Icon(Icons.cloud_download_rounded),
+                              label: Text(
+                                _sources.length >= maxChannelPlaylistSources
+                                    ? '100 LISTAS REGISTRADAS'
+                                    : 'COMPLETAR CATÁLOGO HASTA 100 LISTAS',
+                              ),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: _channelGreen,
+                                foregroundColor: _channelBg,
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 8),
                           SizedBox(
