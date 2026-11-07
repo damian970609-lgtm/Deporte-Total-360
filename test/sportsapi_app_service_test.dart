@@ -730,7 +730,8 @@ void main() {
         days: 1,
       );
       expect(requestedPages, isNotEmpty);
-      expect(requestedPages, everyElement(contains(':0')));
+      expect(requestedPages.any((page) => page.endsWith(':0')), isTrue);
+      expect(requestedPages.any((page) => page.endsWith(':1')), isTrue);
       expect(window.events, isNotEmpty);
       expect(window.events.any((event) =>
           event.title.contains('Equipo de prueba')), isTrue);
