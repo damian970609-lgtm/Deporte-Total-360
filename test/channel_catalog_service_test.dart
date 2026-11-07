@@ -160,7 +160,7 @@ void main() {
     expect(first!.channels.single.id, 'channel-one');
     expect(first.sources.single.id, 'sports-list');
     expect(second!.channels.single.id, 'channel-two');
-    expect(second.hasSources, isFalse);
+    expect(second!.sources, isEmpty);
   });
 
   test('las fuentes de listas se pueden guardar y restaurar sin perder metadatos', () {
