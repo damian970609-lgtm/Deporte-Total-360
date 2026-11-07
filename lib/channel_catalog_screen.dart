@@ -3308,6 +3308,18 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                                 spacing: 8,
                                 runSpacing: 6,
                                 children: <Widget>[
+                                  OutlinedButton.icon(
+                                    onPressed: _working
+                                        ? null
+                                        : () => _editPlaylistSource(source),
+                                    icon: const Icon(Icons.edit_rounded, size: 16),
+                                    label: const Text('EDITAR'),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: _channelCyan,
+                                      side: const BorderSide(color: _channelCyan),
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                  ),
                                   if (source.status == 'error')
                                     OutlinedButton.icon(
                                       onPressed: _working
