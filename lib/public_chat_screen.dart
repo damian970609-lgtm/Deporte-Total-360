@@ -224,7 +224,9 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
       if (widget.isActive && _pollTimer == null) _startPolling();
     } catch (error) {
       if (!mounted) return;
-      final denied = error is PublicChatException && error.statusCode == 403;
+      final denied = (error is PublicChatException &&
+              (error.statusCode == 401 || error.statusCode == 403)) ||
+          error is ChannelCatalogException;
       setState(() {
         _loading = false;
         if (denied) {
@@ -534,7 +536,7 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
                       child:Column(mainAxisSize:MainAxisSize.min,children:<Widget>[
                         const Icon(Icons.lock_outline_rounded,color:Colors.orangeAccent,size:46),
                         const SizedBox(height:12),
-                        Text(appText('El Chat es exclusivo para compradores con licencia de pago activa.','Chat is exclusive to buyers with an active paid license.','O Chat é exclusivo para compradores com licença paga ativa.','Le Chat est réservé aux acheteurs avec une licence payante active.'),textAlign:TextAlign.center,style:const TextStyle(color:Colors.white,fontWeight:FontWeight.w800)),
+                        Text(_error ?? appText('El Chat es exclusivo para compradores con licencia de pago activa.','Chat is exclusive to buyers with an active paid license.','O Chat é exclusivo para compradores com licença paga ativa.','Le Chat est réservé aux acheteurs avec une licence payante active.'),textAlign:TextAlign.center,style:const TextStyle(color:Colors.white,fontWeight:FontWeight.w800)),
                       ]),
                     ))
                   : _loading && _messages.isEmpty
