@@ -128,14 +128,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('CATÁLOGO GENERAL · 24 LISTAS'), findsOneWidget);
+    expect(find.text('LISTAS GENERALES · 24 FUENTES'), findsOneWidget);
     expect(find.text('AÑADIR LISTA GENERAL'), findsOneWidget);
 
     await tester.ensureVisible(find.text('LISTAS REGISTRADAS'));
     await tester.pumpAndSettle();
     expect(find.text('Lista importada'), findsOneWidget);
     expect(find.text('Lista en cola'), findsOneWidget);
-    expect(find.text('QUITAR LISTA'), findsNWidgets(2));
+    expect(find.text('QUITAR LISTA'), findsWidgets);
 
     await tester.ensureVisible(find.text('QUITAR LISTA').first);
     await tester.tap(find.text('QUITAR LISTA').first);
