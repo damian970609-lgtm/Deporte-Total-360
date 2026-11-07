@@ -2766,6 +2766,68 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
                           const Text(
+                            'CATÁLOGO GENERAL · 24 LISTAS',
+                            style: TextStyle(
+                              color: _channelGreen,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          const Text(
+                            'También puedes cargar listas generales, de idioma o de país. El servidor solo incorporará al catálogo deportivo los canales que reconozca como deportes; los demás no se publicarán.',
+                            style: TextStyle(
+                              color: _channelMuted,
+                              fontSize: 10,
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          DropdownButtonFormField<String>(
+                            initialValue: _selectedGeneralPresetUrl,
+                            isExpanded: true,
+                            dropdownColor: _channelPanel2,
+                            decoration: const InputDecoration(
+                              labelText: 'Elegir una de las 24 listas generales',
+                            ),
+                            items: channelPlaylistPresets
+                                .map((preset) => DropdownMenuItem<String>(
+                                      value: preset.url,
+                                      child: Text(
+                                        preset.label,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ))
+                                .toList(growable: false),
+                            onChanged: _working
+                                ? null
+                                : (value) => setState(
+                                      () => _selectedGeneralPresetUrl =
+                                          value ?? channelPlaylistPresets.first.url,
+                                    ),
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: _working ? null : _addGeneralPreset,
+                              icon: const Icon(Icons.playlist_add_rounded),
+                              label: const Text('AÑADIR LISTA GENERAL'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: _channelGreen,
+                                side: const BorderSide(color: _channelGreen),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _adminCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          const Text(
                             'LICENCIAS · VENTAS Y REGALOS',
                             style: TextStyle(
                               color: _channelGreen,
@@ -2990,7 +3052,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             enableSuggestions: false,
                             style: const TextStyle(color: Colors.white),
                             decoration: const InputDecoration(
-                              labelText: 'URL HTTPS de la lista o archivo multimedia',
+                              labelText: 'URL HTTPS de la lista IPTV',
                               hintText: 'M3U, PLS, XSPF, JSON o TXT',
                               prefixIcon: Icon(Icons.link_rounded),
                             ),
@@ -3035,7 +3097,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                           ),
                           const SizedBox(height: 6),
                           const Text(
-                            'La URL queda guardada en tu catálogo de Cloudflare y no se pierde al cerrar o reinstalar la APK. Los canales nuevos entran ocultos y solo se publican cuando activas su ojo.',
+                            'La URL queda guardada en Cloudflare y no se pierde al cerrar o reinstalar la APK. Los canales nuevos se guardan ocultos hasta que actives su icono del ojo.',
                             style: TextStyle(
                               color: _channelMuted,
                               fontSize: 9,
@@ -3122,13 +3184,19 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                               Text(
                                 _sourceStatus(source),
                                 style: TextStyle(
-                                  color: source.status == 'error'
-                                      ? _channelPink
-                                      : _channelGreen,
+                                  color: _sourceStatusColor(source),
                                   fontSize: 9,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
+                              if (source.lastImportedAt.isNotEmpty)
+                                Text(
+                                  _sourceLastUpdated(source) ?? '',
+                                  style: const TextStyle(
+                                    color: _channelMuted,
+                                    fontSize: 9,
+                                  ),
+                                ),
                               Text(
                                 source.importedCount.toString() +
                                     ' canales procesados' +
@@ -3140,12 +3208,12 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                                   fontSize: 9,
                                 ),
                               ),
-                              if (source.status == 'error') ...<Widget>[
-                                const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 6,
-                                  children: <Widget>[
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: <Widget>[
+                                  if (source.status == 'error')
                                     OutlinedButton.icon(
                                       onPressed: _working
                                           ? null
@@ -3158,21 +3226,20 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                                         visualDensity: VisualDensity.compact,
                                       ),
                                     ),
-                                    OutlinedButton.icon(
-                                      onPressed: _working
-                                          ? null
-                                          : () => _removePlaylistSource(source),
-                                      icon: const Icon(Icons.delete_outline_rounded, size: 16),
-                                      label: const Text('QUITAR'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: _channelPink,
-                                        side: const BorderSide(color: _channelPink),
-                                        visualDensity: VisualDensity.compact,
-                                      ),
+                                  OutlinedButton.icon(
+                                    onPressed: _working
+                                        ? null
+                                        : () => _removePlaylistSource(source),
+                                    icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                                    label: const Text('QUITAR LISTA'),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: _channelPink,
+                                      side: const BorderSide(color: _channelPink),
+                                      visualDensity: VisualDensity.compact,
                                     ),
-                                  ],
-                                ),
-                              ],
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
                         ),
