@@ -163,7 +163,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Lista importada'),
       300,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: adminScrollable,
     );
     await tester.pumpAndSettle();
     expect(find.text('Lista importada'), findsOneWidget);
