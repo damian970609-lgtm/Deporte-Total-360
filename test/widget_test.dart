@@ -229,6 +229,116 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('las flechas de navegación nunca cubren etiquetas antes ni después de desplazar', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(686, 900);
+
+    await tester.pumpWidget(const MaterialApp(home: MainShell()));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    void expectNoNavigationLabelBehindCues() {
+      final viewportRect = tester.getRect(
+        find.byKey(const ValueKey<String>('bottom-nav-scroll-viewport')),
+      );
+      final labels = List<Finder>.generate(
+        10,
+        (index) => find.byKey(ValueKey<String>('bottom-tab-label-$index')),
+      );
+      final cues = <Finder>[
+        find.byKey(const ValueKey<String>('bottom-nav-scroll-left')),
+        find.byKey(const ValueKey<String>('bottom-nav-scroll-right')),
+      ].where((finder) => finder.evaluate().isNotEmpty);
+
+      for (final cue in cues) {
+        final cueRect = tester.getRect(cue);
+        for (var index = 0; index < labels.length; index++) {
+          final visibleLabelRect = tester.getRect(labels[index]).intersect(viewportRect);
+          if (visibleLabelRect.isEmpty) continue;
+          expect(
+            cueRect.overlaps(visibleLabelRect),
+            isFalse,
+            reason: 'La flecha no debe cubrir la parte visible de la etiqueta de la pestaña $index.',
+          );
+        }
+      }
+    }
+
+    expect(find.byKey(const ValueKey<String>('bottom-nav-scroll-right')), findsOneWidget);
+    expectNoNavigationLabelBehindCues();
+
+    await tester.tap(find.byKey(const ValueKey<String>('bottom-nav-scroll-right')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.byKey(const ValueKey<String>('bottom-nav-scroll-left')), findsOneWidget);
+    expectNoNavigationLabelBehindCues();
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('Inicio se estabiliza cuando Android solicita reducir movimiento', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: HomeDashboard(
+            onNavigate: (_) {},
+            onSportSelected: (_) {},
+            onTelegram: () {},
+            onContact: () {},
+            onDonations: () {},
+            onFantasy: () {},
+            onStatistics: () {},
+            onOpenAgenda: () {},
+            onChat: () {},
+          ),
+        ),
+      ),
+    );
+
+    // Con el movimiento reducido no debe quedar un ticker infinito activo.
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey<String>('home-sports-crest')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('Inicio conserva el contenido con texto ampliado al 200 por ciento', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 640);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(2.0)),
+          child: HomeDashboard(
+            onNavigate: (_) {},
+            onSportSelected: (_) {},
+            onTelegram: () {},
+            onContact: () {},
+            onDonations: () {},
+            onFantasy: () {},
+            onStatistics: () {},
+            onOpenAgenda: () {},
+            onChat: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(const ValueKey<String>('home-sports-crest')), findsOneWidget);
+    expect(find.text('TODO EL DEPORTE'), findsOneWidget);
+    expect(find.text('EN UN SOLO LUGAR'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('muestra las diez secciones principales y presenta Chat antes de Ajustes', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
     // Pintar un segundo frame comprueba el render inicial de Inicio, no solo

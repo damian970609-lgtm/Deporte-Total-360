@@ -796,7 +796,9 @@ class _MainShellState extends State<MainShell> {
   }
 
   double _bottomNavigationItemWidth(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
+    final media = MediaQuery.of(context);
+    final width = (media.size.width - media.padding.left - media.padding.right)
+        .clamp(0.0, media.size.width);
     if (width < 360) return 72;
     if (width < 480) return 76;
     if (width < 700) return 82;
@@ -823,6 +825,7 @@ class _MainShellState extends State<MainShell> {
               const SizedBox(height: 3),
               Text(
                 label,
+                key: ValueKey<String>('bottom-tab-label-$index'),
                 maxLines: 2,
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,
@@ -893,6 +896,15 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Reserva dos carriles estables cuando las diez pestañas no caben.
+    // Así la aparición/desaparición de las flechas no cambia el viewport ni
+    // desplaza el contenido mientras el usuario recorre la navegación.
+    final media = MediaQuery.of(context);
+    final navigationAvailableWidth =
+        media.size.width - media.padding.left - media.padding.right;
+    final navigationNeedsScroll =
+        _bottomNavigationItemWidth(context) * 10 > navigationAvailableWidth;
+
     final pages = <Widget>[
       HomeDashboard(
         onNavigate: _selectTab,
@@ -976,35 +988,43 @@ class _MainShellState extends State<MainShell> {
                 fit: StackFit.expand,
                 clipBehavior: Clip.hardEdge,
                 children: <Widget>[
-                  NotificationListener<ScrollMetricsNotification>(
-                    onNotification: (_) {
-                      WidgetsBinding.instance.addPostFrameCallback(
-                        (_) => _syncBottomNavigation(),
-                      );
-                      return false;
-                    },
-                    child: SingleChildScrollView(
-                      controller: _bottomNavigationController,
-                      physics: const BouncingScrollPhysics(),
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: <Widget>[
-                          _buildBottomTab(_homeTab, Icons.home_rounded, tr('home'), appCyan),
-                          _buildBottomTab(_liveTab, Icons.live_tv_rounded, 'Deportes en vivo', appPink),
-                          _buildBottomTab(_channelsTab, Icons.grid_view_rounded, 'Canales deportivos', appCyan),
-                          _buildBottomTab(_agendaTab, Icons.calendar_month_rounded, 'Agenda de hoy', appGreen),
-                          _buildBottomTab(_newsTab, Icons.article_rounded, tr('news'), appGreen),
-                          _buildBottomTab(_fantasyTab, Icons.emoji_events_rounded, 'Mister Fantasy', appYellow),
-                          _buildBottomTab(_statisticsTab, Icons.query_stats_rounded, tr('statistics'), appCyan),
-                          _buildBottomTab(
-                            _summariesTab,
-                            Icons.play_circle_fill_rounded,
-                            appText('Resúmenes', 'Highlights', 'Resumos', 'Résumés'),
-                            appRed,
-                          ),
-                          _buildBottomTab(_chatTab, Icons.forum_rounded, tr('chat'), appGreen),
-                          _buildBottomTab(_settingsTab, Icons.settings_rounded, tr('settings'), appBlue),
-                        ],
+                  Padding(
+                    // Reserva el espacio de las flechas: nunca deben tapar el
+                    // texto ni el icono de una sección de navegación.
+                    padding: EdgeInsets.symmetric(
+                      horizontal: navigationNeedsScroll ? 38 : 0,
+                    ),
+                    child: NotificationListener<ScrollMetricsNotification>(
+                      onNotification: (_) {
+                        WidgetsBinding.instance.addPostFrameCallback(
+                          (_) => _syncBottomNavigation(),
+                        );
+                        return false;
+                      },
+                      child: SingleChildScrollView(
+                        key: const ValueKey<String>('bottom-nav-scroll-viewport'),
+                        controller: _bottomNavigationController,
+                        physics: const BouncingScrollPhysics(),
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: <Widget>[
+                            _buildBottomTab(_homeTab, Icons.home_rounded, tr('home'), appCyan),
+                            _buildBottomTab(_liveTab, Icons.live_tv_rounded, 'Deportes en vivo', appPink),
+                            _buildBottomTab(_channelsTab, Icons.grid_view_rounded, 'Canales deportivos', appCyan),
+                            _buildBottomTab(_agendaTab, Icons.calendar_month_rounded, 'Agenda de hoy', appGreen),
+                            _buildBottomTab(_newsTab, Icons.article_rounded, tr('news'), appGreen),
+                            _buildBottomTab(_fantasyTab, Icons.emoji_events_rounded, 'Mister Fantasy', appYellow),
+                            _buildBottomTab(_statisticsTab, Icons.query_stats_rounded, tr('statistics'), appCyan),
+                            _buildBottomTab(
+                              _summariesTab,
+                              Icons.play_circle_fill_rounded,
+                              appText('Resúmenes', 'Highlights', 'Resumos', 'Résumés'),
+                              appRed,
+                            ),
+                            _buildBottomTab(_chatTab, Icons.forum_rounded, tr('chat'), appGreen),
+                            _buildBottomTab(_settingsTab, Icons.settings_rounded, tr('settings'), appBlue),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1317,6 +1337,18 @@ class _SportsCrestState extends State<_SportsCrest>
       vsync: this,
       duration: const Duration(seconds: 9),
     )..repeat();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Respeta la preferencia de accesibilidad del sistema para reducir
+    // movimiento y evita animaciones permanentes cuando el usuario las desactiva.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _motion.stop();
+    } else if (!_motion.isAnimating) {
+      _motion.repeat();
+    }
   }
 
   @override
