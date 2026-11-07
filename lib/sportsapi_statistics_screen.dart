@@ -662,8 +662,11 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
               border: Border.all(color: _apiStatsLine),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: ExpansionTile(
-              initiallyExpanded: _catalogExpanded,
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              child: ExpansionTile(
+                initiallyExpanded: _catalogExpanded,
               onExpansionChanged: (value) => setState(() => _catalogExpanded = value),
               iconColor: _apiStatsCyan,
               collapsedIconColor: _apiStatsMuted,
@@ -691,7 +694,8 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
                     ),
                   ),
                 ),
-              ],
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 13),
