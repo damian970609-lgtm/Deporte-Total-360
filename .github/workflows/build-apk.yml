@@ -16,6 +16,7 @@ on:
       # Rama de integración de confianza: compila APK firmada en eventos push,
       # sin exponer secretos durante las comprobaciones pull_request.
       - codex/complete-live-schedule
+      - codex/harden-offline-snapshots-ci-20261107
     paths:
       - 'lib/**'
       - 'test/**'
