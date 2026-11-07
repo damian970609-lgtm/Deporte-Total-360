@@ -1002,6 +1002,7 @@ class _MainShellState extends State<MainShell> {
                         return false;
                       },
                       child: SingleChildScrollView(
+                        key: const ValueKey<String>('bottom-nav-scroll-viewport'),
                         controller: _bottomNavigationController,
                         physics: const BouncingScrollPhysics(),
                         scrollDirection: Axis.horizontal,
