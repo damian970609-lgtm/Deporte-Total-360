@@ -139,11 +139,22 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(
+      find.text('CATÁLOGO DE FUENTES · 100 LISTAS'),
+      350,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     expect(find.text('CATÁLOGO DE FUENTES · 100 LISTAS'), findsOneWidget);
     expect(find.text('COMPLETAR CATÁLOGO HASTA 100 LISTAS'), findsOneWidget);
     expect(find.text('AÑADIR LISTA GENERAL'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('LISTAS REGISTRADAS'));
+    await tester.scrollUntilVisible(
+      find.text('LISTAS REGISTRADAS'),
+      350,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     await tester.pumpAndSettle();
     expect(find.text('Lista importada'), findsOneWidget);
     expect(find.text('Lista en cola'), findsOneWidget);
