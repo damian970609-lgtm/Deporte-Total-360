@@ -2475,39 +2475,37 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                     fontSize: 8,
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: _working
-                      ? null
-                      : () => _setChannelSportsClassification(channel),
-                  style: TextButton.styleFrom(
-                    foregroundColor: sport ? _channelMuted : _channelGreen,
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 24),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  icon: Icon(
-                    sport ? Icons.category_outlined : Icons.sports_soccer_rounded,
-                    size: 13,
-                  ),
-                  label: Text(
-                    sport ? 'MARCAR COMO GENERAL' : 'MARCAR COMO DEPORTIVO',
-                    style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w800),
-                  ),
-                ),
                 Align(
                   alignment: Alignment.centerRight,
-                  child: IconButton(
-                    tooltip: 'PROBAR CANAL',
-                    onPressed: () => _previewChannelInAdmin(channel),
-                    visualDensity: VisualDensity.compact,
+                  child: PopupMenuButton<String>(
+                    tooltip: 'ACCIONES DEL CANAL',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(
                       width: 30,
                       height: 30,
                     ),
+                    color: _channelPanel,
+                    onSelected: (action) {
+                      if (action == 'preview') {
+                        _previewChannelInAdmin(channel);
+                      } else if (action == 'classification') {
+                        unawaited(_setChannelSportsClassification(channel));
+                      }
+                    },
+                    itemBuilder: (context) => <PopupMenuEntry<String>>[
+                      const PopupMenuItem<String>(
+                        value: 'preview',
+                        child: Text('PROBAR CANAL'),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'classification',
+                        child: Text(
+                          sport ? 'MARCAR COMO GENERAL' : 'MARCAR COMO DEPORTIVO',
+                        ),
+                      ),
+                    ],
                     icon: const Icon(
-                      Icons.play_circle_outline_rounded,
+                      Icons.more_vert_rounded,
                       color: _channelCyan,
                       size: 20,
                     ),
