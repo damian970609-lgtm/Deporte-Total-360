@@ -774,7 +774,7 @@ class SportsApiAppService {
           if (!retryable || attempt == 1) rethrow;
 
           final retryMatch =
-              RegExp(r'Retry-After:\\s*(\\d+)', caseSensitive: false)
+              RegExp(r'Retry-After:\s*(\d+)', caseSensitive: false)
                   .firstMatch(message);
           final retrySeconds = int.tryParse(retryMatch?.group(1) ?? '');
           if (retrySeconds != null && retrySeconds > 120) rethrow;
