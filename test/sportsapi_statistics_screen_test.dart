@@ -130,9 +130,10 @@ void main() {
           contains('/api/sportsapi/fixtures/101/statistics'),
         );
 
-        await tester.tap(
-          find.byKey(const ValueKey<String>('stats-date-next')),
-        );
+        final nextDateButton =
+            find.byKey(const ValueKey<String>('stats-date-next'));
+        await tester.ensureVisible(nextDateButton);
+        await tester.tap(nextDateButton);
         await tester.pumpAndSettle();
 
         expect(find.textContaining('MAÑANA'), findsWidgets);
