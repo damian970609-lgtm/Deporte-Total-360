@@ -2077,13 +2077,13 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
                 child: GestureDetector(
                   onTap: () {
                     if (isPlaying) {
-                      unawaited(_openFullscreen(controller!));
+                      unawaited(_openFullscreen(controller));
                     } else {
                       setState(() => _showControls = !_showControls);
                     }
                   },
                   child: AspectRatio(
-                    aspectRatio: controller.value.aspectRatio > 0
+                    aspectRatio: controller!.value.aspectRatio > 0
                         ? controller.value.aspectRatio
                         : 16 / 9,
                     child: VideoPlayer(controller),
