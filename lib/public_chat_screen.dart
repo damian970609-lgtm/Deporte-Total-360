@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_i18n.dart';
 import 'sports_api_service.dart';
+import 'channel_catalog_service.dart';
 
 const Color _chatBg = Color(0xFF000000);
 const Color _chatPanel = Color(0xFF07090D);
@@ -22,12 +23,16 @@ class PublicChatMessage {
     required this.name,
     required this.text,
     required this.createdAt,
+    this.isMine = false,
+    this.deleted = false,
   });
 
   final String id;
   final String name;
   final String text;
   final DateTime createdAt;
+  final bool isMine;
+  final bool deleted;
 
   factory PublicChatMessage.fromJson(Map<String, dynamic> json) {
     return PublicChatMessage(
@@ -36,16 +41,29 @@ class PublicChatMessage {
       text: (json['text'] ?? '').toString(),
       createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString())?.toLocal() ??
           DateTime.now(),
+      isMine: json['isMine'] == true,
+      deleted: json['deleted'] == true,
     );
   }
 }
 
 class PublicChatService {
+  PublicChatService({
+    http.Client? client,
+    Future<Map<String, String>> Function()? authHeadersProvider,
+  })  : _client = client ?? http.Client(),
+        _authHeadersProvider =
+            authHeadersProvider ?? channelCatalogService.chatAuthorizationHeaders;
+
   static const int maxNameLength = 24;
   static const int maxMessageLength = 500;
   static const Duration timeout = Duration(seconds: 12);
 
-  Uri _messagesUri() {
+  final http.Client _client;
+  final Future<Map<String, String>> Function() _authHeadersProvider;
+  bool canModerate = false;
+
+  Uri _messagesUri([String? messageId]) {
     final base = SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value);
     if (base == null) {
       throw Exception(appText(
@@ -55,11 +73,24 @@ class PublicChatService {
         'Le serveur de discussion n’est pas configuré.',
       ));
     }
-    return Uri.parse(base + '/api/chat/messages');
+    final suffix = messageId == null
+        ? ''
+        : '/' + Uri.encodeComponent(messageId);
+    return Uri.parse(base + '/api/chat/messages' + suffix);
+  }
+
+  Future<Map<String, String>> _headers({bool jsonBody = false}) async {
+    return <String, String>{
+      'Accept': 'application/json',
+      ...await _authHeadersProvider(),
+      if (jsonBody) 'Content-Type': 'application/json',
+    };
   }
 
   Future<List<PublicChatMessage>> loadMessages() async {
-    final response = await http.get(_messagesUri()).timeout(timeout);
+    final response = await _client
+        .get(_messagesUri(), headers: await _headers())
+        .timeout(timeout);
     if (response.statusCode != 200) {
       throw _responseError(response);
     }
@@ -72,6 +103,7 @@ class PublicChatService {
         'Le serveur a renvoyé une réponse de discussion invalide.',
       ));
     }
+    canModerate = decoded['canModerate'] == true;
     return (decoded['messages'] as List)
         .whereType<Map>()
         .map((item) => PublicChatMessage.fromJson(
@@ -86,13 +118,10 @@ class PublicChatService {
     required String name,
     required String text,
   }) async {
-    final response = await http
+    final response = await _client
         .post(
           _messagesUri(),
-          headers: const <String, String>{
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
+          headers: await _headers(jsonBody: true),
           body: jsonEncode(<String, String>{
             'name': name.trim(),
             'text': text.trim(),
@@ -117,14 +146,50 @@ class PublicChatService {
     );
   }
 
+  Future<void> deleteMessage(String id) async {
+    if (!RegExp(r'^[a-zA-Z0-9_-]{1,100}$').hasMatch(id)) {
+      throw Exception('El identificador del mensaje no es válido.');
+    }
+    final response = await _client
+        .delete(
+          _messagesUri(id),
+          headers: await _headers(),
+        )
+        .timeout(timeout);
+    if (response.statusCode != 200) {
+      throw _responseError(response);
+    }
+  }
+
   Exception _responseError(http.Response response) {
     try {
       final decoded = jsonDecode(response.body);
       if (decoded is Map && decoded['error'] != null) {
-        return Exception(decoded['error'].toString());
+        final error = decoded['error'];
+        final message = error is Map
+            ? (error['message'] ?? error['code'] ?? 'Error del servidor')
+                .toString()
+            : error.toString();
+        return Exception(message);
       }
     } catch (_) {
       // Se usa el mensaje de estado HTTP si no hay JSON.
+    }
+    if (response.statusCode == 401) {
+      return Exception(appText(
+        'Tu sesión Google caducó. Vuelve a iniciar sesión en la aplicación.',
+        'Your Google session expired. Sign in again in the app.',
+        'Sua sessão Google expirou. Entre novamente no aplicativo.',
+        'Votre session Google a expiré. Reconnectez-vous dans l’application.',
+      ));
+    }
+    if (response.statusCode == 403) {
+      return Exception(appText(
+        'El Chat está reservado para compradores con licencia de pago activa.',
+        'Chat is reserved for buyers with an active paid license.',
+        'O Chat é exclusivo para compradores com licença paga ativa.',
+        'Le Chat est réservé aux acheteurs avec une licence payante active.',
+      ));
     }
     if (response.statusCode == 429) {
       return Exception(appText(
@@ -137,7 +202,6 @@ class PublicChatService {
     return Exception('HTTP ' + response.statusCode.toString());
   }
 }
-
 class PublicChatScreen extends StatefulWidget {
   const PublicChatScreen({super.key, this.isActive = true});
 
@@ -158,6 +222,7 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
   bool _loading = true;
   bool _refreshing = false;
   bool _sending = false;
+  bool _canModerate = false;
   String? _error;
 
   @override
@@ -188,7 +253,7 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
   void _startPolling() {
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(
-      const Duration(seconds: 4),
+      const Duration(seconds: 8),
       (_) => _refreshMessages(silent: true),
     );
   }
@@ -223,6 +288,7 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
       if (!mounted) return;
       setState(() {
         _messages = messages;
+        _canModerate = _service.canModerate;
         _loading = false;
         _error = null;
       });
@@ -285,6 +351,46 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
     }
   }
 
+  Future<void> _deleteMessage(PublicChatMessage item) async {
+    if (!_canModerate || item.deleted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _chatPanel,
+        title: Text(appText(
+          'Eliminar mensaje',
+          'Delete message',
+          'Excluir mensagem',
+          'Supprimer le message',
+        )),
+        content: Text(appText(
+          'El mensaje se ocultará para todos los compradores.',
+          'The message will be hidden from all buyers.',
+          'A mensagem será ocultada para todos os compradores.',
+          'Le message sera masqué pour tous les acheteurs.',
+        )),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(appText('Cancelar', 'Cancel', 'Cancelar', 'Annuler')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: Text(appText('Eliminar', 'Delete', 'Excluir', 'Supprimer')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _service.deleteMessage(item.id);
+      await _refreshMessages();
+    } catch (error) {
+      _showMessage(error.toString());
+    }
+  }
+
   void _showMessage(String value) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -308,9 +414,19 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
         backgroundColor: _chatBg,
         title: AppSectionTitle(
           icon: Icons.forum_rounded,
-          title: tr('public_chat').toUpperCase(),
+          title: appText(
+            'CHAT DE COMPRADORES',
+            'BUYERS CHAT',
+            'CHAT DE COMPRADORES',
+            'CHAT DES ACHETEURS',
+          ).toUpperCase(),
           accent: _chatCyan,
-          subtitle: tr('public_chat_online'),
+          subtitle: appText(
+            'COMUNIDAD PRIVADA · LICENCIA ACTIVA',
+            'PRIVATE COMMUNITY · ACTIVE LICENSE',
+            'COMUNIDADE PRIVADA · LICENÇA ATIVA',
+            'COMMUNAUTÉ PRIVÉE · LICENCE ACTIVE',
+          ),
         ),
         actions: <Widget>[
           IconButton(
@@ -324,6 +440,32 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
       body: SafeArea(
         child: Column(
           children: <Widget>[
+            Container(
+              margin: const EdgeInsets.fromLTRB(12, 8, 12, 5),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(
+                color: _chatCyan.withAlpha(12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _chatCyan.withAlpha(100)),
+              ),
+              child: Row(
+                children: <Widget>[
+                  const Icon(Icons.verified_user_rounded, color: _chatGreen, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      appText(
+                        'Acceso privado para compradores con licencia de pago activa. Tu cuenta Google verifica tu membresía.',
+                        'Private access for buyers with an active paid license. Your Google account verifies membership.',
+                        'Acesso privado para compradores com licença paga ativa. Sua conta Google confirma a assinatura.',
+                        'Accès privé aux acheteurs avec une licence payante active. Votre compte Google vérifie votre adhésion.',
+                      ),
+                      style: const TextStyle(color: _chatMuted, fontSize: 10, height: 1.35),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             Container(
               margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
               padding: const EdgeInsets.all(11),
@@ -343,8 +485,18 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
                       maxLength: PublicChatService.maxNameLength,
                       textCapitalization: TextCapitalization.words,
                       decoration: InputDecoration(
-                        labelText: tr('public_chat_name'),
-                        hintText: tr('public_chat_name_hint'),
+                        labelText: appText(
+                          'Alias de comprador',
+                          'Buyer nickname',
+                          'Apelido do comprador',
+                          'Pseudo acheteur',
+                        ),
+                        hintText: appText(
+                          'Nombre que verán los demás miembros',
+                          'Name other members will see',
+                          'Nome que os outros membros verão',
+                          'Nom visible par les autres membres',
+                        ),
                         counterText: '',
                         isDense: true,
                         border: InputBorder.none,
@@ -411,6 +563,9 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
                               return _ChatMessageBubble(
                                 message: item,
                                 time: _timeLabel(item.createdAt),
+                                onDelete: _canModerate && !item.deleted
+                                    ? () => _deleteMessage(item)
+                                    : null,
                               );
                             },
                           ),
@@ -437,7 +592,12 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
                           textCapitalization: TextCapitalization.sentences,
                           textInputAction: TextInputAction.newline,
                           decoration: InputDecoration(
-                            hintText: tr('public_chat_message_hint'),
+                            hintText: appText(
+                              'Escribe a la comunidad de compradores…',
+                              'Write to the buyers community…',
+                              'Escreva para a comunidade de compradores…',
+                              'Écrivez à la communauté des acheteurs…',
+                            ),
                             counterText: '',
                             filled: true,
                             fillColor: _chatBg,
@@ -474,7 +634,12 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    tr('public_chat_rules'),
+                    appText(
+                      'Comunidad privada: no compartas contraseñas, datos bancarios ni enlaces sospechosos.',
+                      'Private community: do not share passwords, banking details or suspicious links.',
+                      'Comunidade privada: não compartilhe senhas, dados bancários ou links suspeitos.',
+                      'Communauté privée : ne partagez pas de mots de passe, données bancaires ou liens suspects.',
+                    ),
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                         color: _chatMuted, fontSize: 9, height: 1.35),
@@ -493,10 +658,12 @@ class _ChatMessageBubble extends StatelessWidget {
   const _ChatMessageBubble({
     required this.message,
     required this.time,
+    this.onDelete,
   });
 
   final PublicChatMessage message;
   final String time;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -530,13 +697,35 @@ class _ChatMessageBubble extends StatelessWidget {
               ),
               Text(time,
                   style: const TextStyle(color: _chatMuted, fontSize: 9)),
+              if (onDelete != null)
+                IconButton(
+                  tooltip: appText(
+                    'Eliminar mensaje',
+                    'Delete message',
+                    'Excluir mensagem',
+                    'Supprimer le message',
+                  ),
+                  onPressed: onDelete,
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                  icon: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: Colors.redAccent,
+                    size: 16,
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 6),
           SelectableText(
             message.text,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 13, height: 1.35),
+            style: TextStyle(
+              color: message.deleted ? _chatMuted : Colors.white,
+              fontSize: 13,
+              height: 1.35,
+              fontStyle: message.deleted ? FontStyle.italic : FontStyle.normal,
+            ),
           ),
         ],
       ),
