@@ -10,6 +10,33 @@ import 'package:deporte_total_360/sportsapi_app_service.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('lista todos los deportes favoritos aunque no tengan encuentros publicados', () async {
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-favorite-catalog.example';
+    var fixtureRequests = 0;
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/favorites')) {
+        return http.Response(jsonEncode({
+          'sports': [
+            {'id': 'football', 'name': 'Fútbol', 'competitions': ['Premier League']},
+            {'id': 'basketball', 'name': 'Baloncesto', 'competitions': ['NBA']},
+          ],
+        }), 200);
+      }
+      if (request.url.path.endsWith('/fixtures')) fixtureRequests++;
+      return http.Response(jsonEncode({'data': [], 'meta': {'hasNextPage': false}}), 200);
+    });
+    try {
+      final names = await SportsApiAppService(client: client)
+          .fetchFavoriteAgendaSportNames();
+      expect(names, ['Baloncesto', 'Fútbol']);
+      expect(fixtureRequests, 0);
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
+  });
+
   test('carga favoritos y eventos de equipo y carreras desde SportsAPI', () async {
     final previousBase = sportsApiBaseUrl.value;
     sportsApiBaseUrl.value = 'https://worker.example';
@@ -46,21 +73,38 @@ void main() {
         if (request.url.queryParameters['sport'] != 'cycling') {
           return http.Response(jsonEncode({'data': [], 'meta': {'count': 0}}), 200);
         }
+        final page = int.parse(request.url.queryParameters['page'] ?? '0');
+        final rows = page == 0
+            ? [{
+                'id': 202,
+                'name': 'Tour de France',
+                'sport': 'cycling',
+                'startDate': '2030-01-01',
+                'status': 'scheduled',
+                'series': {'id': 30, 'name': 'Cycling Men'},
+                'season': {'id': 40, 'name': '2030'},
+                'sessions': [
+                  {'id': 303, 'type': 'practice', 'startTime': '2030-01-01T09:00:00Z'},
+                  {'id': 304, 'type': 'stage', 'startTime': '2030-01-01T12:00:00Z'}
+                ]
+              }]
+            : page == 1
+                ? [{
+                    'id': 203,
+                    'name': 'Tour de France',
+                    'sport': 'cycling',
+                    'startDate': '2030-01-01',
+                    'status': 'scheduled',
+                    'series': {'id': 30, 'name': 'Cycling Men'},
+                    'season': {'id': 40, 'name': '2030'},
+                    'sessions': [
+                      {'id': 305, 'type': 'stage', 'startTime': '2030-01-01T15:00:00Z'}
+                    ]
+                  }]
+                : [];
         return http.Response(jsonEncode({
-          'data': [{
-            'id': 202,
-            'name': 'Tour de France',
-            'sport': 'cycling',
-            'startDate': '2030-01-01',
-            'status': 'scheduled',
-            'series': {'id': 30, 'name': 'Cycling Men'},
-            'season': {'id': 40, 'name': '2030'},
-            'sessions': [
-              {'id': 303, 'type': 'practice', 'startTime': '2030-01-01T09:00:00Z'},
-              {'id': 304, 'type': 'stage', 'startTime': '2030-01-01T12:00:00Z'}
-            ]
-          }],
-          'meta': {'count': 1}
+          'data': rows,
+          'meta': {'count': rows.length, 'hasNextPage': page == 0}
         }), 200);
       }
       return http.Response(jsonEncode({'data': {}, 'meta': {}}), 200);
@@ -76,13 +120,18 @@ void main() {
       expect(events.map((event) => event.id), contains('sportsapi-fixture-101'));
       expect(events.map((event) => event.id), contains('sportsapi-race-202-303'));
       expect(events.map((event) => event.id), contains('sportsapi-race-202-304'));
+      expect(events.map((event) => event.id), contains('sportsapi-race-203-305'));
       expect(
         events.firstWhere((event) => event.id == 'sportsapi-race-202-303').competition,
         'Tour de France',
       );
       expect(events.firstWhere((event) => event.id == 'sportsapi-fixture-101').homeTeam, 'Team One');
       expect(requested.where((uri) => uri.path.endsWith('/fixtures')), hasLength(1));
-      expect(requested.where((uri) => uri.path.endsWith('/races')), hasLength(1));
+      expect(requested.where((uri) => uri.path.endsWith('/races')), hasLength(2));
+      expect(
+        requested.where((uri) => uri.path.endsWith('/races')).map((uri) => uri.queryParameters['page']),
+        ['0', '1'],
+      );
     } finally {
       sportsApiBaseUrl.value = previousBase;
       client.close();
@@ -440,15 +489,19 @@ void main() {
     try {
       final api = SportsApiAppService(client: client);
       final start = DateTime(2031, 2, 3);
+      final progressEventCounts = <int>[];
       final window = await api.fetchFavoriteAgendaWindow(
         startDate: start,
         days: 7,
+        onProgress: (partial) => progressEventCounts.add(partial.events.length),
       );
 
       expect(window.days, 7);
       expect(window.unavailableDates, isEmpty);
       expect(window.events, hasLength(14));
       expect(window.events.map((event) => event.id).toSet(), hasLength(14));
+      expect(progressEventCounts, isNotEmpty);
+      expect(progressEventCounts.any((count) => count > 0), isTrue);
       final localStart = DateTime(start.year, start.month, start.day);
       final localEnd = localStart.add(const Duration(days: 7));
       final firstUtc = localStart.toUtc();
@@ -490,6 +543,7 @@ void main() {
         forceRefresh: true,
       );
       expect(refreshed.events, hasLength(14));
+      expect(requested.where((uri) => uri.queryParameters['refresh'] == '1'), isNotEmpty);
       expect(requested.where((uri) => uri.path.endsWith('/favorites')), hasLength(2));
       expect(requested, hasLength(utcDays * 4 + 2));
     } finally {
@@ -691,7 +745,12 @@ void main() {
       if (request.url.path.endsWith('/favorites')) {
         return http.Response(jsonEncode({
           'sports': [
-            {'id': 'football', 'name': 'Fútbol', 'competitions': ['LaLiga']}
+            {
+              'id': 'football',
+              'name': 'Fútbol',
+              'competitions': ['LaLiga EA SPORTS'],
+              'competitionAliases': {'LaLiga EA SPORTS': ['LaLiga', 'La Liga']},
+            }
           ]
         }), 200);
       }
@@ -703,7 +762,7 @@ void main() {
             'startTime': '2030-01-01T12:00:00Z',
             'home': {'name': 'Equipo A'},
             'away': {'name': 'Equipo B'},
-            'league': {'id': 140, 'name': 'LaLiga EA SPORTS'},
+            'league': {'id': 140, 'name': 'La Liga'},
             'season': {'id': 2030},
             'status': {'type': 'scheduled'}
           }],
@@ -720,7 +779,7 @@ void main() {
       );
       expect(events, hasLength(1));
       expect(events.single.id, 'sportsapi-fixture-303');
-      expect(events.single.competition, 'LaLiga EA SPORTS');
+      expect(events.single.competition, 'La Liga');
     } finally {
       sportsApiBaseUrl.value = previousBase;
       client.close();
