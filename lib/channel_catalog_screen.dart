@@ -2316,6 +2316,28 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
+  Future<void> _setChannelSportsClassification(
+    SportsChannel channel,
+  ) async {
+    if (_working) return;
+    final next = !channel.isSports;
+    setState(() => _working = true);
+    try {
+      await _service.setChannelSportsClassification(
+        channel.id,
+        isSports: next,
+      );
+      await _loadAdmin(showLoading: false);
+      _message(next
+          ? 'Canal clasificado como deportivo. Ya puedes publicarlo.'
+          : 'Canal clasificado como general y ocultado de Canales deportivos.');
+    } catch (error) {
+      _message('No se pudo cambiar la clasificación: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   Future<void> _setChannelLanguage(
     SportsChannel channel,
     String language,
@@ -2446,11 +2468,31 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                   ],
                 ),
                 Text(
-                  sport ? 'DEPORTIVO' : 'SIN CLASIFICAR',
+                  sport ? 'DEPORTIVO' : 'GENERAL / SIN CLASIFICAR',
                   style: TextStyle(
                     color: sport ? _channelGreen : _channelMuted,
                     fontWeight: FontWeight.w800,
                     fontSize: 8,
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _working
+                      ? null
+                      : () => _setChannelSportsClassification(channel),
+                  style: TextButton.styleFrom(
+                    foregroundColor: sport ? _channelMuted : _channelGreen,
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 24),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  icon: Icon(
+                    sport ? Icons.category_outlined : Icons.sports_soccer_rounded,
+                    size: 13,
+                  ),
+                  label: Text(
+                    sport ? 'MARCAR COMO GENERAL' : 'MARCAR COMO DEPORTIVO',
+                    style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w800),
                   ),
                 ),
                 Align(
