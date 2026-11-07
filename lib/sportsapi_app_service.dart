@@ -64,7 +64,7 @@ String _normalizeAgendaFilterText(String value) {
       .replaceAll(RegExp(r'[íìïî]'), 'i')
       .replaceAll(RegExp(r'[óòöô]'), 'o')
       .replaceAll(RegExp(r'[úùüû]'), 'u')
-      .replaceAll(RegExp(r'\\s+'), ' ');
+      .replaceAll(RegExp(r'\s+'), ' ');
 }
 
 class _FavoriteAgendaSport {
@@ -704,7 +704,7 @@ class SportsApiAppService {
     }
 
     await Future.wait<void>(List<Future<void>>.generate(
-      entries.length.clamp(1, 5),
+      entries.length.clamp(1, 5).toInt(),
       (_) => runSportWorker(),
       growable: false,
     ));
