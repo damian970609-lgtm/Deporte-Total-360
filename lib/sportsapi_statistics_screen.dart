@@ -67,6 +67,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
   String? _coverageWarning;
   bool _catalogExpanded = false;
   int _eventsRequestGeneration = 0;
+  int _statisticsRequestGeneration = 0;
 
   _FavouriteSport get _sport =>
       _sports.firstWhere((item) => item.id == _sportId, orElse: () => _sports.first);
@@ -164,6 +165,8 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       _selectedEvent = null;
       _statistics = <MapEntry<String, String>>[];
       _statsError = null;
+      _loadingStats = false;
+      _statisticsRequestGeneration++;
       _showingStandings = false;
       _statusFilter = 'all';
       _eventSearchController.clear();
@@ -318,6 +321,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
   }
 
   Future<void> _loadStatistics(SportsAgendaEvent event) async {
+    final request = ++_statisticsRequestGeneration;
     setState(() {
       _selectedEvent = event;
       _loadingStats = true;
@@ -340,7 +344,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
         throw const FormatException('Este evento todavía no tiene estadísticas enlazadas a SportsAPI.');
       }
       final rows = _formatStatistics(response);
-      if (!mounted) return;
+      if (!mounted || request != _statisticsRequestGeneration) return;
       setState(() {
         _loadingStats = false;
         _statistics = rows.take(48).toList(growable: false);
@@ -349,7 +353,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
         }
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || request != _statisticsRequestGeneration) return;
       setState(() {
         _loadingStats = false;
         _statsError = error.toString();
@@ -358,6 +362,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
   }
 
   Future<void> _loadStandings(SportsAgendaEvent event) async {
+    final request = ++_statisticsRequestGeneration;
     setState(() {
       _selectedEvent = event;
       _loadingStats = true;
@@ -383,7 +388,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
         );
       }
       final rows = _flatten(response);
-      if (!mounted) return;
+      if (!mounted || request != _statisticsRequestGeneration) return;
       setState(() {
         _loadingStats = false;
         _statistics = rows.take(60).toList(growable: false);
@@ -392,7 +397,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
         }
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || request != _statisticsRequestGeneration) return;
       setState(() {
         _loadingStats = false;
         _statsError = error.toString();
@@ -584,6 +589,9 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
                 _selectedEvent = null;
                 _statistics = <MapEntry<String, String>>[];
                 _statsError = null;
+                _loadingStats = false;
+                _showingStandings = false;
+                _statisticsRequestGeneration++;
               }),
               avatar: Icon(sport.icon, size: 15,
                   color: _sportId == sport.id ? _apiStatsBg : _apiStatsCyan),
