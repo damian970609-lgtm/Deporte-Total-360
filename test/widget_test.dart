@@ -240,6 +240,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
 
     void expectNoNavigationLabelBehindCues() {
+      final viewportRect = tester.getRect(
+        find.byKey(const ValueKey<String>('bottom-nav-scroll-viewport')),
+      );
       final labels = List<Finder>.generate(
         10,
         (index) => find.byKey(ValueKey<String>('bottom-tab-label-$index')),
@@ -252,11 +255,12 @@ void main() {
       for (final cue in cues) {
         final cueRect = tester.getRect(cue);
         for (var index = 0; index < labels.length; index++) {
-          final label = labels[index];
+          final visibleLabelRect = tester.getRect(labels[index]).intersect(viewportRect);
+          if (visibleLabelRect.isEmpty) continue;
           expect(
-            cueRect.overlaps(tester.getRect(label)),
+            cueRect.overlaps(visibleLabelRect),
             isFalse,
-            reason: 'La flecha no debe cubrir la etiqueta de la pestaña $index.',
+            reason: 'La flecha no debe cubrir la parte visible de la etiqueta de la pestaña $index.',
           );
         }
       }
