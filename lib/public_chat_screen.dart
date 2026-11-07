@@ -294,6 +294,46 @@ class _PublicChatScreenState extends State<PublicChatScreen> {
     }
   }
 
+  Future<void> _deleteMessage(PublicChatMessage item) async {
+    if (!_canModerate || item.deleted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _chatPanel,
+        title: Text(appText(
+          'Eliminar mensaje',
+          'Delete message',
+          'Excluir mensagem',
+          'Supprimer le message',
+        )),
+        content: Text(appText(
+          'El mensaje se ocultará para todos los compradores.',
+          'The message will be hidden from all buyers.',
+          'A mensagem será ocultada para todos os compradores.',
+          'Le message sera masqué pour tous les acheteurs.',
+        )),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(appText('Cancelar', 'Cancel', 'Cancelar', 'Annuler')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: Text(appText('Eliminar', 'Delete', 'Excluir', 'Supprimer')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _service.deleteMessage(item.id);
+      await _refreshMessages();
+    } catch (error) {
+      _showMessage(error.toString());
+    }
+  }
+
   Future<void> _reportMessage(PublicChatMessage item) async {
     if(item.isMine||item.deleted)return;
     final reason=await showDialog<String>(
