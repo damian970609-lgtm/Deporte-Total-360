@@ -2,6 +2,9 @@ name: Crear APK de DEPORTE TOTAL 360
 
 on:
   workflow_dispatch:
+  schedule:
+    # 17:30 en Guyana (UTC-4): análisis, pruebas, validación y APK diaria.
+    - cron: '30 21 * * *'
   pull_request:
     branches:
       - main
