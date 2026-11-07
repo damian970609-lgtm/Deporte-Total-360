@@ -85,7 +85,7 @@ class SportsChannel {
       logoUrl: logoUrl,
       groupTitle: groupTitle,
       isSports: json['isSports'] == true,
-      visible: json['visible'] != false,
+      visible: json['visible'] == true,
       language: language,
     );
   }
