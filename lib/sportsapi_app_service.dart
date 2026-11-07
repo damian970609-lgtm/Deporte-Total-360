@@ -778,7 +778,7 @@ class SportsApiAppService {
               RegExp(r'Retry-After:\s*(\d+)', caseSensitive: false)
                   .firstMatch(message);
           final retrySeconds = int.tryParse(retryMatch?.group(1) ?? '');
-          if (retrySeconds != null && retrySeconds > 120) rethrow;
+          if (retrySeconds != null && retrySeconds > 10) rethrow;
           await Future<void>.delayed(
             Duration(seconds: retrySeconds ?? 7),
           );
