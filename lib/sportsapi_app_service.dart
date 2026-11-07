@@ -124,7 +124,7 @@ class _FavoriteAgendaSport {
 
   bool matchesRow(Map<String, dynamic> row, {required bool isRace}) {
     // Ciclismo se selecciona por carrera (row.name), no por la serie general.
-    dynamic raw = id == 'cycling' && isRace
+    dynamic raw = this.id == 'cycling' && isRace
         ? row['name']
         : row[isRace ? 'series' : 'league'] ?? row['competition'];
     for (final wrapperKey in const <String>['fixture', 'event', 'game']) {
@@ -790,6 +790,7 @@ class SportsApiAppService {
           final isRace =
               entry.id == 'cycling' || entry.id == 'motorsport';
           final rows = <Map<String, dynamic>>[];
+          var keepWorkerFallback = false;
           if (isRace) {
             final envelope = await fetchCompleteEnvelope(
               '/races',
@@ -801,6 +802,11 @@ class SportsApiAppService {
                 'SportsAPI devolvió una agenda de carreras con formato inválido.',
               );
             }
+            final raceMeta = envelope['meta'] is Map
+                ? Map<String, dynamic>.from(envelope['meta'] as Map)
+                : <String, dynamic>{};
+            keepWorkerFallback =
+                raceMeta['favoriteCompetitionFilterFallback'] == true;
             rows.addAll(payload.whereType<Map>().map(
               (raw) => Map<String, dynamic>.from(raw),
             ));
@@ -827,6 +833,8 @@ class SportsApiAppService {
               final meta = envelope['meta'] is Map
                   ? Map<String, dynamic>.from(envelope['meta'] as Map)
                   : <String, dynamic>{};
+              keepWorkerFallback = keepWorkerFallback ||
+                  meta['favoriteCompetitionFilterFallback'] == true;
               if (meta['hasNextPage'] != true) {
                 finishedPages = true;
                 break;
@@ -842,13 +850,8 @@ class SportsApiAppService {
           // El endpoint /favorites es la fuente de verdad: solo se admiten
           // competiciones seleccionadas, comparando primero el ID y después
           // el nombre normalizado cuando el proveedor no trae ese ID.
-          final meta = envelope['meta'] is Map
-              ? Map<String, dynamic>.from(envelope['meta'] as Map)
-              : <String, dynamic>{};
           // Si el Worker usó el respaldo para diferencias de nombres, no
           // volver a eliminar en Flutter todos los eventos que él conservó.
-          final keepWorkerFallback =
-              meta['favoriteCompetitionFilterFallback'] == true;
           final selectedRows = keepWorkerFallback
               ? rows
               : rows.where(
