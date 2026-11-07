@@ -229,6 +229,51 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('la flecha de navegación no cubre el nombre de Estadísticas', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(686, 900);
+
+    await tester.pumpWidget(const MaterialApp(home: MainShell()));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    final cue = find.byKey(const ValueKey<String>('bottom-nav-scroll-right'));
+    final statisticsLabel = find.text('Estadísticas');
+    expect(cue, findsOneWidget);
+    expect(statisticsLabel, findsOneWidget);
+    expect(tester.getRect(cue).overlaps(tester.getRect(statisticsLabel)), isFalse);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('Inicio respeta la preferencia del sistema para reducir movimiento', (tester) async {
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(disableAnimations: true),
+        child: MaterialApp(
+          home: HomeDashboard(
+            onNavigate: (_) {},
+            onSportSelected: (_) {},
+            onTelegram: () {},
+            onContact: () {},
+            onDonations: () {},
+            onFantasy: () {},
+            onStatistics: () {},
+            onOpenAgenda: () {},
+            onChat: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 10));
+    expect(find.byKey(const ValueKey<String>('home-sports-crest')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('muestra las diez secciones principales y presenta Chat antes de Ajustes', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
     // Pintar un segundo frame comprueba el render inicial de Inicio, no solo
