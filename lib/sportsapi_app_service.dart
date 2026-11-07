@@ -117,9 +117,20 @@ class _FavoriteAgendaSport {
 
   bool _matchesCompetition({required String id, required String name}) {
     if (allCompetitions) return true;
+    if (id.isNotEmpty && competitionIds.contains(id)) return true;
+
     final normalizedName = _normalizeAgendaFilterText(name);
-    return (id.isNotEmpty && competitionIds.contains(id)) ||
-        (normalizedName.isNotEmpty && competitionNames.contains(normalizedName));
+    if (normalizedName.isEmpty) return false;
+
+    // SportsAPI puede añadir patrocinadores, sufijos o variantes de nombre
+    // sin cambiar la competición (p. ej. "LaLiga EA SPORTS").
+    return competitionNames.any((selectedName) {
+      if (selectedName == normalizedName) return true;
+      return (selectedName.length >= 5 &&
+              normalizedName.startsWith('$selectedName ')) ||
+          (normalizedName.length >= 5 &&
+              selectedName.startsWith('$normalizedName '));
+    });
   }
 
   bool matchesRow(Map<String, dynamic> row, {required bool isRace}) {
@@ -170,8 +181,8 @@ class SportsApiAppService {
     }
   }
 
-  static const Duration _timeout = Duration(seconds: 10);
-  static const Duration _windowTimeout = Duration(seconds: 60);
+  static const Duration _timeout = Duration(seconds: 120);
+  static const Duration _windowTimeout = Duration(minutes: 20);
   static const Duration _favoritesCacheDuration = Duration(minutes: 2);
 
   static final Map<String, ({
@@ -538,12 +549,18 @@ class SportsApiAppService {
     _agendaInFlight[cacheKey] = future;
     return future.then((result) {
       _agendaCache[cacheKey] = result;
+      final parsedDay = DateTime.tryParse(day);
+      final todayUtc = DateTime.now().toUtc();
+      final isTodayUtc = parsedDay != null &&
+          parsedDay.year == todayUtc.year &&
+          parsedDay.month == todayUtc.month &&
+          parsedDay.day == todayUtc.day;
       _agendaCacheExpiry[cacheKey] = DateTime.now().add(
         result.incomplete
             ? const Duration(minutes: 1)
-            : result.events.isEmpty
-                ? const Duration(minutes: 3)
-                : const Duration(minutes: 2),
+            : isTodayUtc
+                ? const Duration(minutes: 30)
+                : const Duration(hours: 6),
       );
       return result;
     }).whenComplete(() {
@@ -551,8 +568,8 @@ class SportsApiAppService {
     });
   }
 
-  /// Descarga hoy y los seis días siguientes. Se consultan dos fechas a la
-  /// vez para limitar el número de conexiones concurrentes al Worker.
+  /// Descarga hoy y los seis días siguientes. Las fechas y los deportes se
+  /// consultan en serie para respetar el límite compartido de SportsAPI.
   Future<SportsAgendaWindow> fetchFavoriteAgendaWindow({
     DateTime? startDate,
     int days = 7,
@@ -601,9 +618,7 @@ class SportsApiAppService {
         expiresAt: DateTime.now().add(
           window.unavailableDates.isNotEmpty
               ? const Duration(minutes: 1)
-              : window.events.isEmpty
-                  ? const Duration(minutes: 3)
-                  : const Duration(minutes: 2),
+              : const Duration(minutes: 30),
         ),
       );
       return window;
@@ -665,8 +680,8 @@ class SportsApiAppService {
       }
     }
 
-    // Procesa dos fechas UTC en paralelo. Dentro de cada día se mantiene
-    // un límite por deporte para acelerar la semana sin saturar el proveedor.
+    // Procesa una fecha UTC a la vez; cada deporte también se consulta en
+    // serie. El Worker aplica además el límite global entre dispositivos.
     var nextDayIndex = 0;
     Future<void> runUtcDayWorker() async {
       while (true) {
@@ -700,7 +715,7 @@ class SportsApiAppService {
     }
 
     await Future.wait<void>(List<Future<void>>.generate(
-      utcDays.clamp(1, 2).toInt(),
+      1,
       (_) => runUtcDayWorker(),
       growable: false,
     ));
@@ -737,8 +752,9 @@ class SportsApiAppService {
         return Map<String, dynamic>.from(raw);
       }
 
-      // No repetir límites 429 ni esperar Retry-After de 30–60 segundos:
-      // la agenda conserva los deportes disponibles y reintenta más tarde.
+      // Reintenta una vez ante 429/errores temporales respetando Retry-After.
+      // Si el proveedor informa que la cuota diaria se agotó, se conserva
+      // el resto de deportes y se marca la fecha como incompleta.
       for (var attempt = 0; attempt < 2; attempt++) {
         try {
           final envelope = await request();
@@ -754,17 +770,17 @@ class SportsApiAppService {
         } catch (error) {
           final message = error.toString();
           final retryable =
-              RegExp(r'HTTP (408|5[0-9][0-9])').hasMatch(message) ||
+              RegExp(r'HTTP (408|429|5[0-9][0-9])').hasMatch(message) ||
               message.contains('No se pudo conectar');
           if (!retryable || attempt == 1) rethrow;
 
           final retryMatch =
-              RegExp(r'Retry-After:\\s*(\\d+)', caseSensitive: false)
+              RegExp(r'Retry-After:\s*(\d+)', caseSensitive: false)
                   .firstMatch(message);
           final retrySeconds = int.tryParse(retryMatch?.group(1) ?? '');
-          if (retrySeconds != null && retrySeconds > 4) rethrow;
+          if (retrySeconds != null && retrySeconds > 10) rethrow;
           await Future<void>.delayed(
-            Duration(milliseconds: 500 * (attempt + 1)),
+            Duration(seconds: retrySeconds ?? 7),
           );
           continue;
         }
@@ -873,7 +889,7 @@ class SportsApiAppService {
     }
 
     await Future.wait<void>(List<Future<void>>.generate(
-      entries.length.clamp(1, 3).toInt(),
+      1,
       (_) => runSportWorker(),
       growable: false,
     ));
