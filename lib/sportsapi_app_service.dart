@@ -57,10 +57,23 @@ class _AgendaSportResult {
 }
 
 class SportsApiAppService {
-  SportsApiAppService({http.Client? client}) : _client = client ?? http.Client();
+  SportsApiAppService({http.Client? client})
+      : _client = client ?? http.Client(),
+        _ownsClient = client == null;
 
   final http.Client _client;
-  static const Duration _timeout = Duration(seconds: 25);
+  final bool _ownsClient;
+  bool _clientClosed = false;
+
+  void _closeOwnedClient() {
+    if (_ownsClient && !_clientClosed) {
+      _clientClosed = true;
+      _client.close();
+    }
+  }
+
+  static const Duration _timeout = Duration(seconds: 10);
+  static const Duration _windowTimeout = Duration(seconds: 30);
 
   Uri _uri(String route, [Map<String, String> query = const <String, String>{}]) {
     final base = SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value);
@@ -111,6 +124,7 @@ class SportsApiAppService {
       }
       return decoded['data'];
     } on TimeoutException {
+      _closeOwnedClient();
       throw const SportsApiException('La consulta de SportsAPI tardó demasiado.');
     } on SportsApiException {
       rethrow;
@@ -196,8 +210,11 @@ class SportsApiAppService {
     _agendaInFlight[day] = future;
     return future.then((result) {
       _agendaCache[day] = result;
-      _agendaCacheExpiry[day] =
-          DateTime.now().add(const Duration(hours: 6));
+      _agendaCacheExpiry[day] = DateTime.now().add(
+        result.incomplete
+            ? const Duration(minutes: 1)
+            : const Duration(hours: 6),
+      );
       return result;
     }).whenComplete(() {
       _agendaInFlight.remove(day);
@@ -231,12 +248,24 @@ class SportsApiAppService {
     final pending = _agendaWindowInFlight[cacheKey];
     if (pending != null) return pending;
 
-    final future = _fetchFavoriteAgendaWindow(firstDay, safeDays);
+    final future = _fetchFavoriteAgendaWindow(firstDay, safeDays).timeout(
+      _windowTimeout,
+      onTimeout: () {
+        _closeOwnedClient();
+        throw const SportsApiException(
+          'La agenda superó el tiempo máximo de carga. Comprueba la conexión y vuelve a intentarlo.',
+        );
+      },
+    );
     _agendaWindowInFlight[cacheKey] = future;
     return future.then((window) {
       _agendaWindowCache[cacheKey] = (
         window: window,
-        expiresAt: DateTime.now().add(const Duration(hours: 6)),
+        expiresAt: DateTime.now().add(
+          window.unavailableDates.isEmpty
+              ? const Duration(hours: 6)
+              : const Duration(minutes: 1),
+        ),
       );
       return window;
     }).whenComplete(() {
@@ -359,7 +388,9 @@ class SportsApiAppService {
         return Map<String, dynamic>.from(raw);
       }
 
-      for (var attempt = 0; attempt < 3; attempt++) {
+      // No repetir límites 429 ni esperar Retry-After de 30–60 segundos:
+      // la agenda conserva los deportes disponibles y reintenta más tarde.
+      for (var attempt = 0; attempt < 2; attempt++) {
         try {
           final envelope = await request();
           final meta = envelope['meta'] is Map
@@ -374,22 +405,26 @@ class SportsApiAppService {
         } catch (error) {
           final message = error.toString();
           final retryable =
-              RegExp(r'HTTP (408|429|5[0-9][0-9])').hasMatch(message) ||
+              RegExp(r'HTTP (408|5[0-9][0-9])').hasMatch(message) ||
               message.contains('tardó demasiado') ||
               message.contains('No se pudo conectar');
-          if (!retryable || attempt == 2) rethrow;
+          if (!retryable || attempt == 1) rethrow;
 
           final retryMatch =
               RegExp(r'Retry-After:\s*(\d+)', caseSensitive: false)
                   .firstMatch(message);
           final retrySeconds = int.tryParse(retryMatch?.group(1) ?? '');
-          final wait = retrySeconds == null
-              ? Duration(milliseconds: 700 * (attempt + 1))
-              : Duration(seconds: retrySeconds.clamp(1, 90).toInt());
-          await Future<void>.delayed(wait);
+          // Solo se admite un reintento corto. Si el servidor pide esperar
+          // más de cuatro segundos, se marca la cobertura como parcial.
+          if (retrySeconds != null && retrySeconds > 4) rethrow;
+          await Future<void>.delayed(
+            Duration(milliseconds: 500 * (attempt + 1)),
+          );
           continue;
         }
-        await Future<void>.delayed(Duration(milliseconds: 300 * (attempt + 1)));
+        await Future<void>.delayed(
+          Duration(milliseconds: 250 * (attempt + 1)),
+        );
       }
       throw const SportsApiException(
         'SportsAPI no respondió con datos completos después de tres intentos.',
