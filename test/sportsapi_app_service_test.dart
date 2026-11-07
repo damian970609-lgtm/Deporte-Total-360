@@ -684,4 +684,62 @@ void main() {
       client.close();
     }
   });
+
+  test('conserva eventos de la primera página cuando la siguiente responde 429', () async {
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-partial-page-429.example';
+    final requestedPages = <String>[];
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/favorites')) {
+        return http.Response(jsonEncode({
+          'sports': [
+            {'id': 'football', 'name': 'Fútbol', 'competitions': ['Liga de prueba']}
+          ]
+        }), 200);
+      }
+      if (request.url.path.endsWith('/fixtures')) {
+        final date = request.url.queryParameters['date']!;
+        final page = request.url.queryParameters['page'] ?? '0';
+        requestedPages.add('$date:$page');
+        if (page == '1') {
+          return http.Response(
+            jsonEncode({'error': {'code': 'rate_limited', 'message': 'Too many requests'}}),
+            429,
+            headers: {'retry-after': '60'},
+          );
+        }
+        return http.Response(jsonEncode({
+          'data': [{
+            'id': date.replaceAll('-', ''),
+            'startTime': '\${date}T12:00:00Z',
+            'status': {'type': 'scheduled'},
+            'home': {'name': 'Equipo de prueba'},
+            'away': {'name': 'Rival de prueba'},
+            'league': {'id': 1, 'name': 'Liga de prueba'},
+          }],
+          'meta': {'hasNextPage': true, 'complete': true},
+        }), 200);
+      }
+      return http.Response(jsonEncode({'data': [], 'meta': {}}), 200);
+    });
+
+    try {
+      final window = await SportsApiAppService(client: client)
+          .fetchFavoriteAgendaWindow(
+        startDate: DateTime(2037, 6, 10),
+        days: 1,
+      );
+      expect(requestedPages, isNotEmpty);
+      expect(requestedPages.any((page) => page.endsWith(':0')), isTrue);
+      expect(requestedPages.any((page) => page.endsWith(':1')), isTrue);
+      expect(window.events, isNotEmpty);
+      expect(window.events.any((event) =>
+          event.title.contains('Equipo de prueba')), isTrue);
+      expect(window.unavailableDates, isNotEmpty);
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
+  });
+
 }

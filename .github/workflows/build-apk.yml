@@ -13,6 +13,7 @@ on:
       # Rama de integración de confianza: compila APK firmada en eventos push,
       # sin exponer secretos durante las comprobaciones pull_request.
       - codex/complete-live-schedule
+      - fix/sportsapi-favorites-agenda-statistics
     paths:
       - 'lib/**'
       - 'test/**'

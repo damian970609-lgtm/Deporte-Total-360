@@ -64,7 +64,9 @@ String _normalizeAgendaFilterText(String value) {
       .replaceAll(RegExp(r'[íìïî]'), 'i')
       .replaceAll(RegExp(r'[óòöô]'), 'o')
       .replaceAll(RegExp(r'[úùüû]'), 'u')
-      .replaceAll(RegExp(r'\s+'), ' ');
+      .replaceAll(RegExp(r'[^a-z0-9 ]'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
 }
 
 String _normalizeAgendaSportId(String value) {
@@ -117,9 +119,39 @@ class _FavoriteAgendaSport {
 
   bool _matchesCompetition({required String id, required String name}) {
     if (allCompetitions) return true;
-    final normalizedName = _normalizeAgendaFilterText(name);
-    return (id.isNotEmpty && competitionIds.contains(id)) ||
-        (normalizedName.isNotEmpty && competitionNames.contains(normalizedName));
+    if (id.isNotEmpty && competitionIds.contains(id)) return true;
+    final normalizedName =
+        _normalizeAgendaFilterText(name).replaceAll(' ', '');
+    if (normalizedName.isEmpty) return false;
+
+    bool matchesName(String selected) {
+      var normalizedSelected =
+          _normalizeAgendaFilterText(selected).replaceAll(' ', '');
+      if (normalizedSelected == normalizedName) return true;
+
+      // Algunos proveedores anteponen el organismo (UEFA/FIFA) o amplían
+      // el nombre comercial de una competición entre temporadas.
+      for (final prefix in const <String>[
+        'uefa', 'fifa', 'concacaf', 'conmebol', 'caf', 'afc', 'ofc',
+        'ihf', 'ehf',
+      ]) {
+        if (normalizedSelected.startsWith(prefix) &&
+            normalizedSelected.length > prefix.length + 3) {
+          normalizedSelected = normalizedSelected.substring(prefix.length);
+          break;
+        }
+      }
+      if (normalizedSelected == normalizedName) return true;
+
+      // Permite variantes seguras por sufijos/prefijos sin confundir nombres
+      // cortos y genéricos como "League" o "Cup".
+      return normalizedSelected.length >= 8 &&
+          normalizedName.length >= 8 &&
+          (normalizedSelected.startsWith(normalizedName) ||
+              normalizedName.startsWith(normalizedSelected));
+    }
+
+    return competitionNames.any(matchesName);
   }
 
   bool matchesRow(Map<String, dynamic> row, {required bool isRace}) {
@@ -170,8 +202,10 @@ class SportsApiAppService {
     }
   }
 
-  static const Duration _timeout = Duration(seconds: 10);
-  static const Duration _windowTimeout = Duration(seconds: 60);
+  // La cola global del Worker puede espaciar peticiones para respetar el
+  // límite por minuto del plan Free. La ventana semanal necesita más margen.
+  static const Duration _timeout = Duration(minutes: 3);
+  static const Duration _windowTimeout = Duration(minutes: 20);
   static const Duration _favoritesCacheDuration = Duration(minutes: 2);
 
   static final Map<String, ({
@@ -699,11 +733,9 @@ class SportsApiAppService {
       }
     }
 
-    await Future.wait<void>(List<Future<void>>.generate(
-      utcDays.clamp(1, 2).toInt(),
-      (_) => runUtcDayWorker(),
-      growable: false,
-    ));
+    // El plan gratuito limita el proveedor por minuto: una sola fecha y un
+    // deporte a la vez. El Worker añade una cola global compartida por APKs.
+    await runUtcDayWorker();
 
     final events = resultsById.values.where((event) {
       final localEventStart = event.startsAt.toLocal();
@@ -737,8 +769,9 @@ class SportsApiAppService {
         return Map<String, dynamic>.from(raw);
       }
 
-      // No repetir límites 429 ni esperar Retry-After de 30–60 segundos:
-      // la agenda conserva los deportes disponibles y reintenta más tarde.
+      // No reintenta 429: conserva Retry-After y evita consumir más cuota.
+      // Si SportsAPI marca complete=false, intenta una vez y luego devuelve
+      // la cobertura parcial en lugar de descartar fixtures válidos.
       for (var attempt = 0; attempt < 2; attempt++) {
         try {
           final envelope = await request();
@@ -747,9 +780,10 @@ class SportsApiAppService {
               : <String, dynamic>{};
           if (meta['complete'] != false) return envelope;
           if (attempt == 1) {
-            throw const SportsApiException(
-              'SportsAPI devolvió datos incompletos en dos intentos.',
-            );
+            return <String, dynamic>{
+              ...envelope,
+              '_sportsApiIncomplete': true,
+            };
           }
         } catch (error) {
           final message = error.toString();
@@ -759,7 +793,7 @@ class SportsApiAppService {
           if (!retryable || attempt == 1) rethrow;
 
           final retryMatch =
-              RegExp(r'Retry-After:\\s*(\\d+)', caseSensitive: false)
+              RegExp(r'Retry-After:\s*(\d+)', caseSensitive: false)
                   .firstMatch(message);
           final retrySeconds = int.tryParse(retryMatch?.group(1) ?? '');
           if (retrySeconds != null && retrySeconds > 4) rethrow;
@@ -790,15 +824,37 @@ class SportsApiAppService {
         final index = nextIndex++;
         if (index >= entries.length) return;
         final entry = entries[index];
+        final isRace =
+            entry.id == 'cycling' || entry.id == 'motorsport';
+        final rows = <Map<String, dynamic>>[];
+        var sportIncomplete = false;
+
+        List<SportsAgendaEvent> buildEvents() {
+          final selectedRows = rows.where(
+            (row) => entry.matchesRow(row, isRace: isRace),
+          ).toList(growable: false);
+          return isRace
+              ? selectedRows
+                  .expand((row) => _raceEvents(
+                        row,
+                        entry.name,
+                        day,
+                        useRaceNameAsCompetition: entry.id == 'cycling',
+                      ))
+                  .toList(growable: false)
+              : selectedRows
+                  .map((row) => _fixtureEvent(row, entry.name))
+                  .whereType<SportsAgendaEvent>()
+                  .toList(growable: false);
+        }
+
         try {
-          final isRace =
-              entry.id == 'cycling' || entry.id == 'motorsport';
-          final rows = <Map<String, dynamic>>[];
           if (isRace) {
             final envelope = await fetchCompleteEnvelope(
               '/races',
               <String, String>{'date': day, 'sport': entry.id},
             );
+            sportIncomplete = envelope['_sportsApiIncomplete'] == true;
             final payload = envelope['data'];
             if (payload is! List) {
               throw const FormatException(
@@ -819,6 +875,8 @@ class SportsApiAppService {
                   'page': page.toString(),
                 },
               );
+              sportIncomplete = sportIncomplete ||
+                  envelope['_sportsApiIncomplete'] == true;
               final payload = envelope['data'];
               if (payload is! List) {
                 throw const FormatException(
@@ -843,40 +901,23 @@ class SportsApiAppService {
             }
           }
 
-          // El endpoint /favorites es la fuente de verdad. La APK aplica
-          // siempre el filtro de nuevo; nunca acepta como respaldo una lista
-          // completa que podría contener ligas no seleccionadas.
-          final selectedRows = rows.where(
-            (row) => entry.matchesRow(row, isRace: isRace),
-          ).toList(growable: false);
-          final events = isRace
-              ? selectedRows
-                  .expand((row) => _raceEvents(
-                        row,
-                        entry.name,
-                        day,
-                        useRaceNameAsCompetition: entry.id == 'cycling',
-                      ))
-                  .toList(growable: false)
-              : selectedRows
-                  .map((row) => _fixtureEvent(row, entry.name))
-                  .whereType<SportsAgendaEvent>()
-                  .toList(growable: false);
-          resultsByIndex[index] = _AgendaSportResult(events: events);
+          // Se conservan los eventos de páginas ya recibidas aunque una página
+          // posterior indique cobertura incompleta.
+          resultsByIndex[index] = _AgendaSportResult(
+            events: buildEvents(),
+            failed: sportIncomplete,
+          );
         } catch (_) {
-          resultsByIndex[index] = const _AgendaSportResult(
-            events: <SportsAgendaEvent>[],
+          // Un 429/503 en una página posterior no debe borrar los partidos
+          // que ya se habían recibido para este deporte.
+          resultsByIndex[index] = _AgendaSportResult(
+            events: buildEvents(),
             failed: true,
           );
         }
       }
     }
-
-    await Future.wait<void>(List<Future<void>>.generate(
-      entries.length.clamp(1, 3).toInt(),
-      (_) => runSportWorker(),
-      growable: false,
-    ));
+    await runSportWorker();
     final results = resultsByIndex.cast<_AgendaSportResult>();
     final successfulSports =
         results.where((result) => !result.failed).length;
