@@ -139,7 +139,8 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
     }
 
     try {
-      final window = await SportsApiAppService().fetchFavoriteAgendaWindow(
+      final agendaApi = SportsApiAppService();
+      final window = await agendaApi.fetchFavoriteAgendaWindow(
         startDate: _windowStartDate,
         days: _windowDays,
         forceRefresh: forceRefresh,
@@ -154,7 +155,9 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
       var events = List<SportsAgendaEvent>.of(window.events);
       var unavailable = List<DateTime>.of(window.unavailableDates);
       if (unavailable.isNotEmpty) {
-        final stored = await SportsAgendaStore.load();
+        final stored = await agendaApi.filterFavoriteAgendaEvents(
+          await SportsAgendaStore.load(),
+        );
         for (final event in stored) {
           if (unavailable.any((day) => _sameDay(day, event.startsAt))) {
             events.add(event);
@@ -189,10 +192,13 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
       // Nunca debe sustituir silenciosamente la ventana completa de SportAPI.
       final end = _windowStartDate.add(const Duration(days: _windowDays));
       final byId = <String, SportsAgendaEvent>{};
+      final agendaApi = SportsApiAppService();
       final published = await AutomaticLiveService().fetchPublishedSchedule();
       if (published != null) {
-        for (final item in published) {
-          final event = item.event;
+        final selectedPublished = await agendaApi.filterFavoriteAgendaEvents(
+          published.map((item) => item.event),
+        );
+        for (final event in selectedPublished) {
           final localStart = event.startsAt.toLocal();
           if (!localStart.isBefore(_windowStartDate) &&
               localStart.isBefore(end)) {
@@ -200,7 +206,10 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
           }
         }
       }
-      for (final event in await SportsAgendaStore.load()) {
+      final selectedStored = await agendaApi.filterFavoriteAgendaEvents(
+        await SportsAgendaStore.load(),
+      );
+      for (final event in selectedStored) {
         final localStart = event.startsAt.toLocal();
         if (!localStart.isBefore(_windowStartDate) &&
             localStart.isBefore(end)) {
