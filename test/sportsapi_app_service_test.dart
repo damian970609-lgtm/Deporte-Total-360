@@ -182,6 +182,104 @@ void main() {
     }
   });
 
+  test('combina la lista vacía de competiciones con las ligas seleccionadas y acepta mapas por ID', () async {
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-selection-shapes.example';
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/favorites')) {
+        return http.Response(jsonEncode({
+          'sports': [
+            {
+              'id': 'football',
+              'name': 'Fútbol',
+              'competitions': [],
+              'selectedCompetitions': [
+                {'leagueId': 39, 'leagueName': 'Premier League'},
+              ],
+            },
+            {
+              'id': 'basketball',
+              'name': 'Baloncesto',
+              'competitions': {'12': true, '999': false},
+            },
+          ],
+        }), 200);
+      }
+      if (request.url.path.endsWith('/fixtures')) {
+        final sport = request.url.queryParameters['sport'];
+        final rows = sport == 'football'
+            ? [
+                {'id': 301, 'startTime': '2036-05-07T12:00:00Z',
+                 'status': {'type': 'scheduled'}, 'home': {'name': 'Premier'},
+                 'away': {'name': 'Rival'}, 'league': {'id': 39, 'name': 'Premier League'}},
+                {'id': 302, 'startTime': '2036-05-07T14:00:00Z',
+                 'status': {'type': 'scheduled'}, 'home': {'name': 'Otra liga'},
+                 'away': {'name': 'Rival'}, 'league': {'id': 140, 'name': 'Otra liga'}},
+              ]
+            : [
+                {'id': 401, 'startTime': '2036-05-07T16:00:00Z',
+                 'status': {'type': 'scheduled'}, 'home': {'name': 'NBA'},
+                 'away': {'name': 'Rival'}, 'league': {'id': 12, 'name': 'NBA'}},
+                {'id': 402, 'startTime': '2036-05-07T18:00:00Z',
+                 'status': {'type': 'scheduled'}, 'home': {'name': 'Otra liga'},
+                 'away': {'name': 'Rival'}, 'league': {'id': 999, 'name': 'Otra liga'}},
+              ];
+        return http.Response(jsonEncode({
+          'data': rows, 'meta': {'hasNextPage': false, 'complete': true},
+        }), 200);
+      }
+      return http.Response(jsonEncode({
+        'data': [], 'meta': {'hasNextPage': false, 'complete': true},
+      }), 200);
+    });
+
+    try {
+      final events = await SportsApiAppService(client: client)
+          .fetchFavoriteAgendaEvents(date: DateTime.utc(2036, 5, 7));
+      expect(events.map((event) => event.id).toSet(), {
+        'sportsapi-fixture-301', 'sportsapi-fixture-401',
+      });
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
+  });
+
+  test('un deporte favorito sin lista de ligas usa todas sus competiciones', () async {
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-empty-selection.example';
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/favorites')) {
+        return http.Response(jsonEncode({
+          'data': {'sports': [{'id': 'football', 'name': 'Fútbol'}]},
+        }), 200);
+      }
+      if (request.url.path.endsWith('/fixtures')) {
+        return http.Response(jsonEncode({
+          'data': [{
+            'id': 501, 'startTime': '2036-05-08T12:00:00Z',
+            'status': {'type': 'scheduled'}, 'home': {'name': 'Equipo A'},
+            'away': {'name': 'Equipo B'},
+            'league': {'id': 39, 'name': 'Premier League'},
+          }],
+          'meta': {'hasNextPage': false, 'complete': true},
+        }), 200);
+      }
+      return http.Response(jsonEncode({
+        'data': [], 'meta': {'hasNextPage': false, 'complete': true},
+      }), 200);
+    });
+
+    try {
+      final events = await SportsApiAppService(client: client)
+          .fetchFavoriteAgendaEvents(date: DateTime.utc(2036, 5, 8));
+      expect(events.map((event) => event.id), contains('sportsapi-fixture-501'));
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
+  });
+
   test('carga y reutiliza la ventana de los próximos siete días', () async {
     final previousBase = sportsApiBaseUrl.value;
     sportsApiBaseUrl.value = 'https://worker-window.example';
