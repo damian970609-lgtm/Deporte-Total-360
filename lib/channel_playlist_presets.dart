@@ -106,7 +106,7 @@ const List<ChannelPlaylistPreset> channelPlaylistPresets =
   ),
   ChannelPlaylistPreset(
     label: 'Teleonline · TV abierta',
-    url: 'https://teleonline.github.io/listas/tv.m3u8',
+    url: 'https://raw.githubusercontent.com/teleonline/listas/main/tv.m3u8',
     description: 'Catálogo público de televisión en abierto',
   ),
   ChannelPlaylistPreset(
