@@ -1580,14 +1580,16 @@ class _ChannelFullscreenScreenState extends State<_ChannelFullscreenScreen> {
 }
 
 class ChannelAdminScreen extends StatefulWidget {
-  const ChannelAdminScreen({super.key});
+  const ChannelAdminScreen({super.key, this.service});
+
+  final ChannelCatalogService? service;
 
   @override
   State<ChannelAdminScreen> createState() => _ChannelAdminScreenState();
 }
 
 class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
-  final ChannelCatalogService _service = channelCatalogService;
+  late final ChannelCatalogService _service;
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _labelController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
@@ -1596,6 +1598,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   final ScrollController _adminScrollController = ScrollController();
   String _licenseType = 'free';
   String _selectedSportsPresetUrl = channelSportsPlaylistPresets.first.url;
+  String _selectedGeneralPresetUrl = channelPlaylistPresets.first.url;
   List<AppLicenseRecord> _licenseRecords = <AppLicenseRecord>[];
   String? _licensesError;
   List<SportsChannel> _channels = <SportsChannel>[];
@@ -1616,6 +1619,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   @override
   void initState() {
     super.initState();
+    _service = widget.service ?? channelCatalogService;
     _adminScrollController.addListener(_handleAdminScroll);
     _working = true;
     unawaited(_restoreAdminSession());
@@ -1976,6 +1980,40 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
+  Future<void> _addGeneralPreset() async {
+    if (_sources.length >= maxChannelPlaylistSources) {
+      _message('Has alcanzado el límite de $maxChannelPlaylistSources listas.');
+      return;
+    }
+    final preset = channelPlaylistPresets.firstWhere(
+      (item) => item.url == _selectedGeneralPresetUrl,
+      orElse: () => channelPlaylistPresets.first,
+    );
+    if (containsChannelPlaylistUrl(
+      _sources.map((source) => source.url),
+      preset.url,
+    )) {
+      _message('Esta lista ya está registrada en tu catálogo.');
+      return;
+    }
+    setState(() => _working = true);
+    try {
+      await _service.addPlaylist(url: preset.url, label: preset.label);
+      await _service.refreshSources();
+      final sources = await _service.fetchSources();
+      if (!mounted) return;
+      setState(() {
+        _sources = sources;
+        _sourcesError = null;
+      });
+      _message('Lista añadida: ' + preset.label + '. Se importará en segundo plano y se publicarán solo canales deportivos compatibles.');
+    } catch (error) {
+      _message('No se pudo añadir la lista: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   Future<void> _refreshSources() async {
     setState(() => _working = true);
     try {
@@ -1990,18 +2028,18 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   }
 
   Future<void> _removePlaylistSource(ChannelPlaylistSource source) async {
-    if (source.status != 'error') return;
+    if (_working) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: _channelPanel,
         title: const Text(
-          'Quitar lista con error',
+          'Quitar lista registrada',
           style: TextStyle(color: _channelPink),
         ),
         content: Text(
           '¿Quieres quitar "' + source.label +
-              '" del catálogo de fuentes? Los canales ya importados se conservarán.',
+              '" y detener sus futuras actualizaciones? Los canales ya importados se conservarán y seguirán pudiendo administrarse por separado.',
           style: const TextStyle(color: _channelMuted),
         ),
         actions: <Widget>[
@@ -2076,13 +2114,18 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       final result = await _service.diagnoseStream(channel.url);
       if (!mounted) return;
       setState(() => _diagnosticResult = result);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _diagnosticResult = 'No se pudo completar el diagnóstico: ' + error.toString());
     } finally {
       if (mounted) setState(() => _diagnosingPreview = false);
     }
   }
 
   Future<void> _toggleVisibility(SportsChannel channel) async {
+    if (_working) return;
     final next = !channel.visible;
+    setState(() => _working = true);
     try {
       await _service.setVisibility(channel.id, visible: next);
       await _loadAdmin(showLoading: false);
@@ -2091,6 +2134,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           : 'Canal ocultado para todos los usuarios.');
     } catch (error) {
       _message(error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
     }
   }
 
@@ -2172,6 +2217,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     switch (source.status) {
       case 'queued':
         return 'EN COLA';
+      case 'importing':
+        return 'IMPORTANDO…';
       case 'imported':
         return 'ACTUALIZADA';
       case 'error':
@@ -2179,6 +2226,32 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       default:
         return source.status.toUpperCase();
     }
+  }
+
+  Color _sourceStatusColor(ChannelPlaylistSource source) {
+    switch (source.status) {
+      case 'error':
+        return _channelPink;
+      case 'importing':
+      case 'queued':
+        return _channelCyan;
+      default:
+        return _channelGreen;
+    }
+  }
+
+  String? _sourceLastUpdated(ChannelPlaylistSource source) {
+    if (source.lastImportedAt.isEmpty) return null;
+    final parsed = DateTime.tryParse(source.lastImportedAt);
+    if (parsed == null) return source.lastImportedAt;
+    final local = parsed.toLocal();
+    String twoDigits(int value) => value.toString().padLeft(2, '0');
+    return 'Última importación: ' +
+        twoDigits(local.day) + '/' +
+        twoDigits(local.month) + '/' +
+        local.year.toString() + ' ' +
+        twoDigits(local.hour) + ':' +
+        twoDigits(local.minute);
   }
 
   Widget _adminCard({required Widget child}) {
