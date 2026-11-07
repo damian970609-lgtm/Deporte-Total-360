@@ -2,9 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:deporte_total_360/channel_playlist_presets.dart';
 
 void main() {
-  test('ofrece exactamente 24 listas predeterminadas con URLs HTTPS únicas', () {
-    expect(channelPlaylistPresets, hasLength(24));
-    expect(maxChannelPlaylistSources, equals(48));
+  test('ofrece exactamente 100 listas predeterminadas con URLs HTTPS únicas', () {
+    expect(channelPlaylistPresets, hasLength(100));
+    expect(maxChannelPlaylistSources, equals(100));
 
     final normalizedUrls = channelPlaylistPresets
         .map((preset) => normalizeChannelPlaylistUrl(preset.url))
