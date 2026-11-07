@@ -172,6 +172,18 @@ void main() {
     expect(channel.language, 'unknown');
   });
 
+  test('un canal sin visibilidad explícita permanece oculto hasta su publicación', () {
+    final channel = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'new-sports-channel',
+      'identifier': 'new-sports-channel',
+      'name': 'Canal deportivo nuevo',
+      'url': 'https://media.example/new-channel.m3u8',
+      'isSports': true,
+    });
+
+    expect(channel.visible, isFalse);
+  });
+
   test('Google OAuth confirma que APK y Worker comparten el cliente Web', () async {
     final clientId = 'dt360-web.apps.googleusercontent.com';
     final client = MockClient((request) async {
