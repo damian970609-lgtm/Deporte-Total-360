@@ -81,19 +81,25 @@ class SportsApiAppService {
         headers: const <String, String>{'Accept': 'application/json'},
       ).timeout(_timeout);
       if (response.statusCode != 200) {
-        String message = 'El servidor SportsAPI respondió HTTP ${response.statusCode}.';
+        var detail = '';
         try {
           final error = jsonDecode(response.body);
           if (error is Map && error['error'] != null) {
             final value = error['error'];
-            message = value is Map
-                ? (value['message'] ?? value['code'] ?? message).toString()
+            detail = value is Map
+                ? (value['message'] ?? value['code'] ?? '').toString()
                 : value.toString();
           }
         } catch (_) {
-          // Conserva el código HTTP si el servidor no devuelve JSON.
+          // Se conserva el código HTTP aunque el servidor no envíe JSON.
         }
-        throw SportsApiException(message);
+        if (detail.length > 220) detail = '${detail.substring(0, 217)}…';
+        final retryAfter = response.headers['retry-after'];
+        throw SportsApiException(
+          'El servidor SportsAPI respondió HTTP ${response.statusCode}'
+          '${detail.isEmpty ? '.' : ': $detail'}'
+          '${retryAfter == null ? '' : ' Retry-After: $retryAfter'}',
+        );
       }
       final decoded = jsonDecode(response.body);
       if (decoded is! Map) {
@@ -191,7 +197,7 @@ class SportsApiAppService {
     return future.then((result) {
       _agendaCache[day] = result;
       _agendaCacheExpiry[day] =
-          DateTime.now().add(const Duration(minutes: 5));
+          DateTime.now().add(const Duration(hours: 6));
       return result;
     }).whenComplete(() {
       _agendaInFlight.remove(day);
@@ -203,6 +209,7 @@ class SportsApiAppService {
   Future<SportsAgendaWindow> fetchFavoriteAgendaWindow({
     DateTime? startDate,
     int days = 7,
+    bool forceRefresh = false,
   }) {
     final requested = (startDate ?? DateTime.now()).toLocal();
     final firstDay = DateTime(requested.year, requested.month, requested.day);
@@ -211,6 +218,11 @@ class SportsApiAppService {
         firstDay.month.toString().padLeft(2, '0') + '-' +
         firstDay.day.toString().padLeft(2, '0');
     final cacheKey = firstKey + ':' + safeDays.toString();
+    if (forceRefresh) {
+      _agendaWindowCache.remove(cacheKey);
+      _agendaCache.clear();
+      _agendaCacheExpiry.clear();
+    }
     final now = DateTime.now();
     final cached = _agendaWindowCache[cacheKey];
     if (cached != null && now.isBefore(cached.expiresAt)) {
@@ -224,7 +236,7 @@ class SportsApiAppService {
     return future.then((window) {
       _agendaWindowCache[cacheKey] = (
         window: window,
-        expiresAt: DateTime.now().add(const Duration(minutes: 5)),
+        expiresAt: DateTime.now().add(const Duration(hours: 6)),
       );
       return window;
     }).whenComplete(() {
@@ -362,10 +374,20 @@ class SportsApiAppService {
         } catch (error) {
           final message = error.toString();
           final retryable =
-              RegExp('HTTP (408|429|5[0-9][0-9])').hasMatch(message) ||
+              RegExp(r'HTTP (408|429|5[0-9][0-9])').hasMatch(message) ||
               message.contains('tardó demasiado') ||
               message.contains('No se pudo conectar');
           if (!retryable || attempt == 2) rethrow;
+
+          final retryMatch =
+              RegExp(r'Retry-After:\s*(\d+)', caseSensitive: false)
+                  .firstMatch(message);
+          final retrySeconds = int.tryParse(retryMatch?.group(1) ?? '');
+          final wait = retrySeconds == null
+              ? Duration(milliseconds: 700 * (attempt + 1))
+              : Duration(seconds: retrySeconds.clamp(1, 90).toInt());
+          await Future<void>.delayed(wait);
+          continue;
         }
         await Future<void>.delayed(Duration(milliseconds: 300 * (attempt + 1)));
       }
