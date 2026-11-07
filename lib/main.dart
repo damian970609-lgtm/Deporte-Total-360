@@ -894,6 +894,12 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Reserva dos carriles estables cuando las diez pestañas no caben.
+    // Así la aparición/desaparición de las flechas no cambia el viewport ni
+    // desplaza el contenido mientras el usuario recorre la navegación.
+    final navigationNeedsScroll =
+        _bottomNavigationItemWidth(context) * 10 > MediaQuery.sizeOf(context).width;
+
     final pages = <Widget>[
       HomeDashboard(
         onNavigate: _selectTab,
@@ -980,9 +986,8 @@ class _MainShellState extends State<MainShell> {
                   Padding(
                     // Reserva el espacio de las flechas: nunca deben tapar el
                     // texto ni el icono de una sección de navegación.
-                    padding: EdgeInsets.only(
-                      left: _bottomCanScrollLeft ? 38 : 0,
-                      right: _bottomCanScrollRight ? 38 : 0,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: navigationNeedsScroll ? 38 : 0,
                     ),
                     child: NotificationListener<ScrollMetricsNotification>(
                       onNotification: (_) {
