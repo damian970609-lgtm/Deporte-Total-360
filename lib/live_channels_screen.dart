@@ -2083,7 +2083,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
                     }
                   },
                   child: AspectRatio(
-                    aspectRatio: controller!.value.aspectRatio > 0
+                    aspectRatio: controller.value.aspectRatio > 0
                         ? controller.value.aspectRatio
                         : 16 / 9,
                     child: VideoPlayer(controller),
