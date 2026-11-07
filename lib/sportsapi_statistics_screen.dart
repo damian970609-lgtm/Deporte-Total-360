@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'app_section_design.dart';
@@ -23,10 +25,12 @@ class SportsApiStatisticsScreen extends StatefulWidget {
     super.key,
     this.initialSport = 'Fútbol',
     this.onOpenAgenda,
+    this.api,
   });
 
   final String initialSport;
   final VoidCallback? onOpenAgenda;
+  final SportsApiAppService? api;
 
   @override
   State<SportsApiStatisticsScreen> createState() => _SportsApiStatisticsScreenState();
@@ -46,17 +50,23 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     _FavouriteSport('handball', 'Balonmano', Icons.sports_handball_rounded),
   ];
 
-  final SportsApiAppService _api = SportsApiAppService();
+  late final SportsApiAppService _api;
+  final TextEditingController _eventSearchController = TextEditingController();
   String _sportId = 'football';
+  DateTime _selectedDate = DateTime.now();
+  String _statusFilter = 'all';
   List<Map<String, dynamic>> _catalog = <Map<String, dynamic>>[];
   List<SportsAgendaEvent> _events = <SportsAgendaEvent>[];
   SportsAgendaEvent? _selectedEvent;
   List<MapEntry<String, String>> _statistics = <MapEntry<String, String>>[];
   bool _loading = false;
   bool _loadingStats = false;
+  bool _showingStandings = false;
   String? _error;
   String? _statsError;
+  String? _coverageWarning;
   bool _catalogExpanded = false;
+  int _eventsRequestGeneration = 0;
 
   _FavouriteSport get _sport =>
       _sports.firstWhere((item) => item.id == _sportId, orElse: () => _sports.first);
@@ -71,35 +81,72 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
   @override
   void initState() {
     super.initState();
+    _api = widget.api ?? SportsApiAppService();
+    _selectedDate = _startOfDay(DateTime.now());
     final match = _sports.where((item) =>
-      item.id == widget.initialSport || item.name.toLowerCase() == widget.initialSport.toLowerCase());
+      item.id == widget.initialSport ||
+      item.name.toLowerCase() == widget.initialSport.toLowerCase());
     if (match.isNotEmpty) _sportId = match.first.id;
     _loadInitial();
   }
 
-  Future<void> _loadInitial() async {
+  @override
+  void dispose() {
+    _eventSearchController.dispose();
+    super.dispose();
+  }
+
+  DateTime _startOfDay(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
+
+  bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  Future<void> _loadInitial() => _loadEvents();
+
+  /// Carga el día local seleccionado. El servicio convierte la ventana local
+  /// en todos los días UTC que la intersectan (importante para Guyana UTC-4).
+  Future<void> _loadEvents({bool forceRefresh = false}) async {
+    final generation = ++_eventsRequestGeneration;
+    final selectedId = _selectedEvent?.id;
     setState(() {
       _loading = true;
       _error = null;
+      _coverageWarning = null;
     });
     try {
-      final results = await Future.wait<dynamic>(<Future<dynamic>>[
-        _api.fetchFavoriteSports(),
-        _api.fetchFavoriteAgendaEvents(),
-      ]);
-      final catalog = results[0] as List<Map<String, dynamic>>;
-      final events = results[1] as List<SportsAgendaEvent>;
-      if (!mounted) return;
+      final window = await _api.fetchFavoriteAgendaWindow(
+        startDate: _selectedDate,
+        days: 1,
+        forceRefresh: forceRefresh,
+      );
+      final catalog = await _api.fetchFavoriteSports();
+      if (!mounted || generation != _eventsRequestGeneration) return;
+      SportsAgendaEvent? restoredSelection;
+      if (selectedId != null) {
+        for (final event in window.events) {
+          if (event.id == selectedId) {
+            restoredSelection = event;
+            break;
+          }
+        }
+      }
       setState(() {
         _catalog = catalog;
-        _events = events;
-        _loading = false;
-        if (events.isEmpty) {
-          _error = 'SportsAPI no devolvió eventos para hoy. Comprueba la conexión, la fecha UTC y la cobertura de tus competiciones favoritas.';
+        _events = window.events;
+        _selectedEvent = restoredSelection;
+        if (restoredSelection == null) {
+          _statistics = <MapEntry<String, String>>[];
+          _statsError = null;
+          _showingStandings = false;
         }
+        _loading = false;
+        _coverageWarning = window.unavailableDates.isEmpty
+            ? null
+            : 'Cobertura parcial: el proveedor no respondió para todas las franjas horarias de este día. Los eventos recibidos sí se muestran.';
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _eventsRequestGeneration) return;
       setState(() {
         _loading = false;
         _error = error.toString();
@@ -107,36 +154,94 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     }
   }
 
-  Future<void> _refresh() async {
+  Future<void> _refresh() => _loadEvents(forceRefresh: true);
+
+  Future<void> _setSelectedDate(DateTime value) async {
+    final next = _startOfDay(value);
+    if (_sameDay(next, _selectedDate)) return;
     setState(() {
-      _loading = true;
-      _error = null;
+      _selectedDate = next;
       _selectedEvent = null;
       _statistics = <MapEntry<String, String>>[];
       _statsError = null;
+      _showingStandings = false;
+      _statusFilter = 'all';
+      _eventSearchController.clear();
     });
-    try {
-      final events = await _api.fetchFavoriteAgendaEvents();
-      if (!mounted) return;
-      setState(() {
-        _events = events;
-        _loading = false;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = error.toString();
-      });
+    await _loadEvents();
+  }
+
+  Future<void> _changeDate(int days) => _setSelectedDate(
+        _selectedDate.add(Duration(days: days)),
+      );
+
+  Future<void> _chooseDate() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      helpText: 'SELECCIONAR FECHA',
+      cancelText: 'CANCELAR',
+      confirmText: 'ACEPTAR',
+    );
+    if (date != null) await _setSelectedDate(date);
+  }
+
+  String get _dateLabel {
+    const weekdays = <String>[
+      'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'
+    ];
+    const months = <String>[
+      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+    ];
+    final today = _startOfDay(DateTime.now());
+    final prefix = _sameDay(_selectedDate, today)
+        ? 'HOY'
+        : _sameDay(_selectedDate, today.add(const Duration(days: 1)))
+            ? 'MAÑANA'
+            : _sameDay(_selectedDate, today.subtract(const Duration(days: 1)))
+                ? 'AYER'
+                : '';
+    final day = weekdays[_selectedDate.weekday - 1] + ', ' +
+        _selectedDate.day.toString() + ' ' +
+        months[_selectedDate.month - 1] + ' ' +
+        _selectedDate.year.toString();
+    return prefix.isEmpty ? day.toUpperCase() : '$prefix · ${day.toUpperCase()}';
+  }
+
+  String _eventCategory(SportsAgendaEvent event) {
+    final status = '${event.status} ${event.statusLabel}'.toLowerCase();
+    if (RegExp(r'live|in.?progress|in progress|en vivo|started|running|quarter|period').hasMatch(status)) {
+      return 'live';
     }
+    if (RegExp(r'finished|completed|ended|full.?time|\bft\b|finalizado|terminado|final').hasMatch(status)) {
+      return 'finished';
+    }
+    if (event.startsAt.isAfter(DateTime.now()) ||
+        RegExp(r'scheduled|not.?started|upcoming|programado|pendiente').hasMatch(status)) {
+      return 'upcoming';
+    }
+    return 'other';
   }
 
   List<SportsAgendaEvent> get _visibleEvents {
     final expected = _sport.name.toLowerCase();
-    return _events.where((event) =>
-      event.sport.toLowerCase() == expected ||
-      event.sport.toLowerCase() == _sport.id
-    ).toList()
+    final query = _eventSearchController.text.trim().toLowerCase();
+    return _events.where((event) {
+      final sportMatches = event.sport.toLowerCase() == expected ||
+          event.sport.toLowerCase() == _sport.id;
+      if (!sportMatches) return false;
+      final queryMatches = query.isEmpty ||
+          <String>[
+            event.title, event.competition, event.homeTeam, event.awayTeam,
+            event.sport,
+          ].join(' ').toLowerCase().contains(query);
+      if (!queryMatches) return false;
+      if (_statusFilter == 'all') return true;
+      return _eventCategory(event) == _statusFilter;
+    }).toList()
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
   }
 
@@ -216,6 +321,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     setState(() {
       _selectedEvent = event;
       _loadingStats = true;
+      _showingStandings = false;
       _statsError = null;
       _statistics = <MapEntry<String, String>>[];
     });
@@ -255,6 +361,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     setState(() {
       _selectedEvent = event;
       _loadingStats = true;
+      _showingStandings = true;
       _statsError = null;
       _statistics = <MapEntry<String, String>>[];
     });
@@ -297,6 +404,94 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
   String _time(DateTime value) {
     final local = value.toLocal();
     return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+  }
+
+  double? _numericValue(String value) {
+    final normalized = value.trim().replaceAll(',', '.');
+    final match = RegExp(r'[-+]?\d+(?:\.\d+)?').firstMatch(normalized);
+    return match == null ? null : double.tryParse(match.group(0)!);
+  }
+
+  Widget _comparisonBar(String label, String value, double ratio, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(child: Text(label,
+                  style: const TextStyle(color: _apiStatsMuted, fontSize: 9))),
+              Text(value, style: TextStyle(
+                  color: color, fontSize: 10, fontWeight: FontWeight.w900)),
+            ],
+          ),
+          const SizedBox(height: 3),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(5),
+            child: LinearProgressIndicator(
+              value: ratio.clamp(0.0, 1.0),
+              minHeight: 6,
+              backgroundColor: const Color(0xFF202631),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statisticItem(MapEntry<String, String> item) {
+    final localIndex = item.value.indexOf('Local:');
+    final awayIndex = item.value.indexOf('Visitante:');
+    if (localIndex >= 0 && awayIndex > localIndex) {
+      final local = item.value.substring(localIndex + 6, awayIndex)
+          .replaceAll(RegExp(r'[·\s]+$'), '').trim();
+      final away = item.value.substring(awayIndex + 10).trim();
+      final localNumber = _numericValue(local);
+      final awayNumber = _numericValue(away);
+      if (localNumber != null && awayNumber != null) {
+        final maximum = math.max(localNumber.abs(), awayNumber.abs());
+        final safeMaximum = maximum == 0 ? 1.0 : maximum;
+        final title = item.key.split(' · ').last;
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0B1018),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _apiStatsLine.withAlpha(150)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(title, style: const TextStyle(
+                  color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900)),
+              if (item.key.contains(' · '))
+                Text(item.key.substring(0, item.key.lastIndexOf(' · ')),
+                    style: const TextStyle(color: _apiStatsMuted, fontSize: 8)),
+              _comparisonBar('LOCAL', local, localNumber.abs() / safeMaximum, _apiStatsCyan),
+              _comparisonBar('VISITANTE', away, awayNumber.abs() / safeMaximum, _apiStatsPink),
+            ],
+          ),
+        );
+      }
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Expanded(child: Text(item.key,
+              style: const TextStyle(color: _apiStatsMuted, fontSize: 10))),
+          const SizedBox(width: 12),
+          Flexible(child: Text(item.value,
+              textAlign: TextAlign.end,
+              style: const TextStyle(color: Colors.white, fontSize: 10,
+                  fontWeight: FontWeight.w800))),
+        ],
+      ),
+    );
   }
 
   @override
