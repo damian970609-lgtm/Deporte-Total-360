@@ -60,6 +60,17 @@ class _AdminTestService extends ChannelCatalogService {
       <AppLicenseRecord>[];
 
   @override
+  Future<Map<String, dynamic>> addPlaylistSourcesToCatalog({
+    required List<Map<String, String>> sources,
+  }) async => <String, dynamic>{
+        'added': sources.length,
+        'duplicates': 0,
+        'total': 100,
+        'limit': 100,
+        'complete': true,
+      };
+
+  @override
   Future<void> deletePlaylistSource({required String id}) async {
     deletedSourceIds.add(id);
   }
@@ -128,7 +139,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('LISTAS GENERALES · 24 FUENTES'), findsOneWidget);
+    expect(find.text('CATÁLOGO DE FUENTES · 100 LISTAS'), findsOneWidget);
+    expect(find.text('COMPLETAR CATÁLOGO HASTA 100 LISTAS'), findsOneWidget);
     expect(find.text('AÑADIR LISTA GENERAL'), findsOneWidget);
 
     await tester.ensureVisible(find.text('LISTAS REGISTRADAS'));
