@@ -568,8 +568,8 @@ class SportsApiAppService {
     });
   }
 
-  /// Descarga hoy y los seis días siguientes. Se consultan dos fechas a la
-  /// vez para limitar el número de conexiones concurrentes al Worker.
+  /// Descarga hoy y los seis días siguientes. Las fechas y los deportes se
+  /// consultan en serie para respetar el límite compartido de SportsAPI.
   Future<SportsAgendaWindow> fetchFavoriteAgendaWindow({
     DateTime? startDate,
     int days = 7,
@@ -680,8 +680,8 @@ class SportsApiAppService {
       }
     }
 
-    // Procesa dos fechas UTC en paralelo. Dentro de cada día se mantiene
-    // un límite por deporte para acelerar la semana sin saturar el proveedor.
+    // Procesa una fecha UTC a la vez; cada deporte también se consulta en
+    // serie. El Worker aplica además el límite global entre dispositivos.
     var nextDayIndex = 0;
     Future<void> runUtcDayWorker() async {
       while (true) {
@@ -752,8 +752,9 @@ class SportsApiAppService {
         return Map<String, dynamic>.from(raw);
       }
 
-      // No repetir límites 429 ni esperar Retry-After de 30–60 segundos:
-      // la agenda conserva los deportes disponibles y reintenta más tarde.
+      // Reintenta una vez ante 429/errores temporales respetando Retry-After.
+      // Si el proveedor informa que la cuota diaria se agotó, se conserva
+      // el resto de deportes y se marca la fecha como incompleta.
       for (var attempt = 0; attempt < 2; attempt++) {
         try {
           final envelope = await request();
