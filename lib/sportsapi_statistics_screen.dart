@@ -23,7 +23,7 @@ class _FavouriteSport {
 class SportsApiStatisticsScreen extends StatefulWidget {
   const SportsApiStatisticsScreen({
     super.key,
-    this.initialSport = 'Fútbol',
+    this.initialSport = 'Todos',
     this.onOpenAgenda,
     this.api,
   });
@@ -52,7 +52,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
 
   late final SportsApiAppService _api;
   final TextEditingController _eventSearchController = TextEditingController();
-  String _sportId = 'football';
+  String _sportId = 'all';
   DateTime _selectedDate = DateTime.now();
   String _statusFilter = 'all';
   List<Map<String, dynamic>> _catalog = <Map<String, dynamic>>[];
@@ -71,6 +71,9 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
 
   _FavouriteSport get _sport =>
       _sports.firstWhere((item) => item.id == _sportId, orElse: () => _sports.first);
+
+  String get _selectedSportLabel =>
+      _sportId == 'all' ? 'tus deportes favoritos' : _sport.name;
 
   String _catalogSportId(Map<String, dynamic> row) {
     final raw = <dynamic>[
@@ -170,7 +173,8 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
             .toSet();
         setState(() {
           _catalog = catalog;
-          if (knownFavoriteIds.isNotEmpty &&
+          if (_sportId != 'all' &&
+              knownFavoriteIds.isNotEmpty &&
               !knownFavoriteIds.contains(_sportId)) {
             _sportId = _sports.firstWhere(
               (sport) => knownFavoriteIds.contains(sport.id),
@@ -302,12 +306,24 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     return 'other';
   }
 
+  String _eventSportId(SportsAgendaEvent event) =>
+      _catalogSportId(<String, dynamic>{'sport': event.sport});
+
+  IconData _eventSportIcon(SportsAgendaEvent event) {
+    final id = _eventSportId(event);
+    return _sports
+        .firstWhere((sport) => sport.id == id, orElse: () => _sports.first)
+        .icon;
+  }
+
   List<SportsAgendaEvent> get _visibleEvents {
-    final expected = _sport.name.toLowerCase();
+    final favoriteSportIds = _availableSports.map((sport) => sport.id).toSet();
     final query = _eventSearchController.text.trim().toLowerCase();
     return _events.where((event) {
-      final sportMatches = event.sport.toLowerCase() == expected ||
-          event.sport.toLowerCase() == _sport.id;
+      final eventSportId = _eventSportId(event);
+      final sportMatches = _sportId == 'all'
+          ? favoriteSportIds.contains(eventSportId)
+          : eventSportId == _sportId;
       if (!sportMatches) return false;
       final queryMatches = query.isEmpty ||
           <String>[
@@ -574,17 +590,29 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final competitions = _currentCatalog?['competitions'];
-    final competitionNames = competitions is List
-        ? competitions.map((value) {
-            if (value is Map) {
-              return (value['name'] ?? value['title'] ?? value['label'] ?? '')
-                  .toString()
-                  .trim();
-            }
-            return value.toString().trim();
-          }).where((name) => name.isNotEmpty).toList(growable: false)
-        : <String>[];
+    final favoriteRows = _sportId == 'all'
+        ? _catalog
+        : _catalog.where((row) => _catalogSportId(row) == _sportId).toList(growable: false);
+    final prefixSport = _sportId == 'all' && favoriteRows.length > 1;
+    final competitionNames = <String>[];
+    for (final row in favoriteRows) {
+      final sportName = (row['name'] ?? row['sportName'] ?? 'Deporte').toString();
+      final values = row['competitions'] ?? row['leagues'] ??
+          row['selectedCompetitions'] ?? row['selectedLeagues'];
+      if (values is List) {
+        for (final value in values) {
+          final name = value is Map
+              ? (value['name'] ?? value['title'] ?? value['label'] ?? '').toString().trim()
+              : value.toString().trim();
+          if (name.isNotEmpty) competitionNames.add(prefixSport ? '$sportName · $name' : name);
+        }
+      }
+    }
+    final competitionSummary = _sportId == 'all' && _availableSports.length == 1
+        ? '${competitionNames.length} competiciones configuradas para ${_availableSports.first.name}'
+        : _sportId == 'all'
+            ? '${competitionNames.length} competiciones favoritas · ${_availableSports.length} deportes'
+            : '${competitionNames.length} competiciones configuradas para ${_sport.name}';
     final events = _visibleEvents;
 
     return Scaffold(
@@ -663,7 +691,30 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
             Wrap(
               spacing: 7,
               runSpacing: 7,
-              children: _availableSports.map((sport) => ChoiceChip(
+              children: <Widget>[
+                ChoiceChip(
+                  key: const ValueKey<String>('stats-filter-sport-all'),
+                  selected: _sportId == 'all',
+                  onSelected: (_) => setState(() {
+                    _sportId = 'all';
+                    _selectedEvent = null;
+                    _statistics = <MapEntry<String, String>>[];
+                    _statsError = null;
+                    _loadingStats = false;
+                    _showingStandings = false;
+                    _statisticsRequestGeneration++;
+                  }),
+                  label: const Text('TODOS'),
+                  selectedColor: _apiStatsCyan,
+                  backgroundColor: _apiStatsPanel,
+                  labelStyle: TextStyle(
+                    color: _sportId == 'all' ? _apiStatsBg : Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  side: BorderSide(color: _sportId == 'all' ? _apiStatsCyan : _apiStatsLine),
+                ),
+                ..._availableSports.map((sport) => ChoiceChip(
               selected: _sportId == sport.id,
               onSelected: (_) => setState(() {
                 _sportId = sport.id;
@@ -686,6 +737,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
               ),
               side: BorderSide(color: _sportId == sport.id ? _apiStatsCyan : _apiStatsLine),
             )).toList(growable: false),
+              ],
             )
           else if (!_loading)
             _message('No se encontraron deportes favoritos en el catálogo de SportsAPI.'),
@@ -755,7 +807,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
               collapsedIconColor: _apiStatsMuted,
               title: const Text('COMPETICIONES FAVORITAS',
                   style: TextStyle(color: _apiStatsCyan, fontSize: 10, fontWeight: FontWeight.w900)),
-              subtitle: Text('${competitionNames.length} competiciones configuradas para ${_sport.name}',
+              subtitle: Text(competitionSummary,
                   style: const TextStyle(color: _apiStatsMuted, fontSize: 9)),
               children: <Widget>[
                 Padding(
@@ -820,7 +872,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
             )
           else if (events.isEmpty)
             _message(_statusFilter == 'all' && _eventSearchController.text.isEmpty
-                ? 'No hay eventos publicados para ${_sport.name} en esta fecha. Prueba otro día o actualiza los datos.'
+                ? 'No hay eventos publicados para $_selectedSportLabel en esta fecha. Prueba otro día o actualiza los datos.'
                 : 'No hay eventos que coincidan con la búsqueda y el filtro seleccionados.')
           else
             ...events.map((event) => _eventCard(event)),
@@ -929,7 +981,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
             ),
             child: Row(
               children: <Widget>[
-                Icon(_sport.icon, color: isLive ? _apiStatsPink : _apiStatsCyan, size: 22),
+                Icon(_eventSportIcon(event), color: isLive ? _apiStatsPink : _apiStatsCyan, size: 22),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
