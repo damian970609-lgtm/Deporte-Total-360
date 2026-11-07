@@ -9,7 +9,7 @@ Archivos principales:
 - lib/automatic_live_service.dart y lib/automatic_live_screen.dart: consumo prioritario del calendario central persistente de Cloudflare, con respaldo local, cruce XMLTV de canales visibles, verificación de señales en español e inglés, priorización del partido elegido desde Agenda y asignación a ocho reproductores.
 - lib/live_media_format.dart y lib/live_channels_screen.dart: detección explícita de HLS, DASH, Smooth Streaming y vídeo progresivo, adaptación de calidad automática con ExoPlayer, selector manual por pistas y transición fullscreen/miniatura sin recrear el controlador.
 - lib/sports_summaries_screen.dart: categorías deportivas y reproducción de YouTube dentro de la app mediante WebView.
-- lib/public_chat_screen.dart: comunidad privada de compradores, autenticación vinculada a las licencias de pago, actualización de mensajes y moderación administrativa.
+- lib/public_chat_screen.dart: comunidad privada de compradores con alias estable por cuenta, denuncias de mensajes, revisión administrativa, eliminación moderada y sesión Google vinculada a licencias de pago.
 - lib/sports_statistics_screen.dart: búsqueda de ligas y clasificaciones.
 - lib/sports_api_service.dart: cliente legado de API-Sports/Worker, conservado para compatibilidad.
 - lib/sportsapi_app_service.dart y lib/sportsapi_statistics_screen.dart: conexión segura con las rutas SportsAPI.app del Worker; estadísticas de partidos y resultados de carreras sin introducir claves en la APK.
