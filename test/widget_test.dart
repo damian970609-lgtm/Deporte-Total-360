@@ -132,55 +132,18 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el panel ofrece las listas generales y permite quitar una fuente importada', (tester) async {
-    final service = _AdminTestService();
+  testWidgets('el panel privado exige autenticación antes de mostrar las listas', (tester) async {
+    final service = _AdminTestService(autoSignIn: false);
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
     );
     await tester.pumpAndSettle();
 
-    final listViewFinder = find.byKey(
-      const ValueKey<String>('channel-admin-scroll'),
-    );
-    expect(listViewFinder, findsOneWidget);
-    expect(find.text('Sesión: admin@example.com'), findsOneWidget);
+    expect(find.text('PANEL PRIVADO DE CANALES'), findsOneWidget);
+    expect(find.text('ENTRAR CON GOOGLE'), findsOneWidget);
+    expect(find.text('CATÁLOGO DE FUENTES · 100 LISTAS'), findsNothing);
+    expect(service.deletedSourceIds, isEmpty);
 
-    Future<void> reveal(String text) async {
-      final target = find.text(text);
-      final listView = tester.widget<ListView>(listViewFinder);
-      final controller = listView.controller!;
-      for (var attempt = 0; attempt < 60 && target.evaluate().isEmpty; attempt++) {
-        final position = controller.position;
-        if (position.pixels >= position.maxScrollExtent) break;
-        final nextOffset = (position.pixels + 420)
-            .clamp(0.0, position.maxScrollExtent)
-            .toDouble();
-        controller.jumpTo(nextOffset);
-        await tester.pumpAndSettle();
-      }
-      expect(target, findsOneWidget, reason: 'No se encontró la sección: $text');
-      await tester.ensureVisible(target);
-      await tester.pumpAndSettle();
-    }
-
-    await reveal('CATÁLOGO DE FUENTES · 100 LISTAS');
-    expect(find.text('COMPLETAR CATÁLOGO HASTA 100 LISTAS'), findsOneWidget);
-    expect(find.text('AÑADIR LISTA GENERAL'), findsOneWidget);
-
-    await reveal('LISTAS REGISTRADAS');
-    await reveal('Lista importada');
-    expect(find.text('Lista en cola'), findsOneWidget);
-    final removeImported = find.byKey(
-      const ValueKey<String>('remove-source-source-imported'),
-    );
-    expect(removeImported, findsOneWidget);
-    await tester.tap(removeImported);
-    await tester.pumpAndSettle();
-    expect(find.text('Quitar lista registrada'), findsOneWidget);
-    await tester.tap(find.text('QUITAR'));
-    await tester.pumpAndSettle();
-
-    expect(service.deletedSourceIds, <String>['source-imported']);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
