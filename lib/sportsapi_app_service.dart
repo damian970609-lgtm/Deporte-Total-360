@@ -588,6 +588,20 @@ class SportsApiAppService {
     }
     final pending = _agendaInFlight[cacheKey];
     if (pending != null) {
+      if (forceRefresh) {
+        return pending.then(
+          (_) => _fetchCachedAgendaDay(
+            date,
+            forceRefresh: true,
+            onProgress: onProgress,
+          ),
+          onError: (_) => _fetchCachedAgendaDay(
+            date,
+            forceRefresh: true,
+            onProgress: onProgress,
+          ),
+        );
+      }
       return pending.then((result) {
         onProgress?.call(result);
         return result;
@@ -660,6 +674,22 @@ class SportsApiAppService {
     }
     final pending = _agendaWindowInFlight[cacheKey];
     if (pending != null) {
+      if (forceRefresh) {
+        return pending.then(
+          (_) => fetchFavoriteAgendaWindow(
+            startDate: firstDay,
+            days: safeDays,
+            forceRefresh: true,
+            onProgress: onProgress,
+          ),
+          onError: (_) => fetchFavoriteAgendaWindow(
+            startDate: firstDay,
+            days: safeDays,
+            forceRefresh: true,
+            onProgress: onProgress,
+          ),
+        );
+      }
       return pending.then((window) {
         onProgress?.call(window);
         return window;
