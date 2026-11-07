@@ -250,7 +250,7 @@ void main() {
     expect(find.text('Chat'), findsOneWidget);
     expect(find.text('Ajustes'), findsOneWidget);
     // La sala pública no arranca hasta seleccionar su pestaña.
-    expect(find.text('CHAT PÚBLICO'), findsNothing);
+    expect(find.text('CHAT DE COMPRADORES'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
