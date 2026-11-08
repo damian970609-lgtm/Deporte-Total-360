@@ -675,6 +675,7 @@ class ChannelCatalogService {
   }
 
   Future<Map<String, String>> userAuthorizationHeaders() async {
+    if (_accessTokenProvider != null) return _authHeaders();
     final trialHeaders = await trialSessionHeaders();
     return trialHeaders ?? _authHeaders();
   }
