@@ -120,6 +120,18 @@ void main() {
 
       final stored = await SportsAgendaStore.load();
       expect(stored.map((item) => item.id), <String>['tomorrow']);
+      expect(
+        await SportsAgendaStore.isWindowFresh(startDate: today),
+        isTrue,
+        reason: 'La jornada de hoy mantiene su propia vigencia.',
+      );
+      expect(
+        await SportsAgendaStore.isWindowFresh(
+          startDate: today.add(const Duration(days: 1)),
+        ),
+        isTrue,
+        reason: 'Guardar hoy no invalida la jornada de mañana.',
+      );
     });
   });
 
