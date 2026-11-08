@@ -332,7 +332,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     setState(() => _loading = false);
     // Las tablas se cargan en segundo plano tras recibir la lista de eventos.
     // El servicio usa una clave de caché por competición y día local.
-    unawaited(_loadDailyStandings());
+    unawaited(_loadDailyStandings(forceRefresh: forceRefresh));
   }
 
   Future<void> _refresh() => _loadEvents(forceRefresh: true);
@@ -566,7 +566,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
     }
   }
 
-  Future<void> _loadDailyStandings() async {
+  Future<void> _loadDailyStandings({bool forceRefresh = false}) async {
     if (_loadingDailyStandings) return;
     final competitions = _dailyStandingsEvents;
     final request = ++_dailyStandingsRequestGeneration;
@@ -598,12 +598,14 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
             leagueId: event.providerLeagueId!,
             seasonId: event.providerSeasonId!,
             eventDate: _selectedDate,
+            forceRefresh: forceRefresh,
           );
         } else {
           response = await _api.fetchSeriesStandings(
             seriesId: event.providerSeriesId!,
             seasonId: event.providerSeasonId!,
             eventDate: _selectedDate,
+            forceRefresh: forceRefresh,
           );
         }
         final rows = _flatten(response);
@@ -1072,7 +1074,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
                       tooltip: 'Actualizar tablas del día',
                       onPressed: _loadingDailyStandings
                           ? null
-                          : _loadDailyStandings,
+                          : () => _loadDailyStandings(forceRefresh: true),
                       icon: _loadingDailyStandings
                           ? const SizedBox(
                               width: 15,
