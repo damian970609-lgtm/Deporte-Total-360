@@ -44,7 +44,7 @@ class SportsAgendaScreen extends StatefulWidget {
 
 class _SportsAgendaScreenState extends State<SportsAgendaScreen>
     with WidgetsBindingObserver {
-  static const int _windowDays = 7;
+  static const int _windowDays = 1;
   late DateTime _windowStartDate;
   late DateTime _selectedDate;
 
@@ -67,7 +67,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _windowStartDate = _dateOnly(DateTime.now());
-    _selectedDate = _dateOnly(widget.initialDate ?? DateTime.now());
+    _selectedDate = _windowStartDate;
     if (_selectedDate.isBefore(_windowStartDate) ||
         !_selectedDate.isBefore(
           _windowStartDate.add(const Duration(days: _windowDays)),
@@ -118,14 +118,11 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
   }
 
   void _syncRefreshTimer() {
+    // La jornada se obtiene una vez y queda guardada en el teléfono.
+    // No repetimos la descarga completa cada tres minutos ni al volver a la
+    // pestaña; la actualización manual evita consumir cuota innecesaria.
     _refreshTimer?.cancel();
     _refreshTimer = null;
-    if (widget.isActive) {
-      _refreshTimer = Timer.periodic(
-        const Duration(minutes: 3),
-        (_) => _refresh(),
-      );
-    }
   }
 
   Future<SportsAgendaWindow> _loadWindow({
@@ -262,16 +259,59 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
   Future<void> _refresh({bool forceRefresh = false}) async {
     if (_refreshing) return;
     final today = _dateOnly(DateTime.now());
-    if (!_sameDay(today, _windowStartDate)) {
+    final dayChanged = !_sameDay(today, _windowStartDate);
+    if (dayChanged) {
       _windowStartDate = today;
-      if (_selectedDate.isBefore(today) ||
-          !_selectedDate.isBefore(today.add(const Duration(days: _windowDays)))) {
-        _selectedDate = today;
-      }
+      _selectedDate = today;
+      _selectedSport = 'Todos';
+      _statusFilter = 'Todos';
+      _query = '';
+      _searchController.clear();
+      _events = <SportsAgendaEvent>[];
+      _unavailableDates = <DateTime>[];
+      _hasLoaded = false;
     }
 
     _refreshing = true;
     final version = ++_refreshVersion;
+
+    // Primero pinta la jornada guardada. Si es del mismo día y sigue vigente,
+    // no vuelve a consultar el calendario completo al abrir o reanudar la APK.
+    if (!forceRefresh) {
+      try {
+        final agendaApi = SportsApiAppService();
+        final stored = await SportsAgendaStore.loadWindow(
+          startDate: _windowStartDate,
+          days: _windowDays,
+        );
+        final cached = await agendaApi.filterFavoriteAgendaEvents(stored);
+        if (!mounted || version != _refreshVersion) return;
+        if (cached.isNotEmpty || await SportsAgendaStore.isWindowFresh(
+          startDate: _windowStartDate,
+        )) {
+          final sports = await agendaApi.fetchFavoriteAgendaSportNames();
+          if (!mounted || version != _refreshVersion) return;
+          setState(() {
+            _events = cached;
+            _favoriteSportNames = sports;
+            _unavailableDates = <DateTime>[];
+            _loading = false;
+            _hasLoaded = true;
+            _error = null;
+          });
+          unawaited(_syncMatchReminders(cached));
+          if (await SportsAgendaStore.isWindowFresh(
+            startDate: _windowStartDate,
+          )) {
+            _refreshing = false;
+            return;
+          }
+        }
+      } catch (_) {
+        // Si la copia local no se puede leer o filtrar, se intenta actualizar.
+      }
+    }
+
     if (mounted) {
       setState(() {
         if (!_hasLoaded) _loading = true;
@@ -615,6 +655,11 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
   }
 
   Widget _buildDateSelector() {
+    // La Agenda es deliberadamente diaria: no descarga ni presenta la semana.
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildDateSelectorLegacy() {
     return SizedBox(
       height: 62,
       child: ListView.separated(
@@ -1023,7 +1068,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
           icon: Icons.calendar_month_rounded,
           title: 'AGENDA DEPORTIVA',
           accent: _agendaCyan,
-          subtitle: 'PRÓXIMOS 7 DÍAS · SPORTSAPI.APP',
+          subtitle: 'JORNADA DE HOY · SPORTSAPI.APP',
         ),
         actions: <Widget>[
           IconButton(
@@ -1056,7 +1101,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
                 Expanded(
                   child: Text(
                     _loading
-                        ? 'Sincronizando los próximos siete días…'
+                        ? 'Sincronizando la jornada de hoy…'
                         : events.length.toString() +
                             ' eventos · ' +
                             _dayLabel(_selectedDate),
@@ -1078,7 +1123,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
                   )
                 else
                   const Text(
-                    'ACTUALIZACIÓN AUTOMÁTICA',
+                    'JORNADA DIARIA · CACHÉ LOCAL',
                     style: TextStyle(
                       color: _agendaGreen,
                       fontSize: 8,
