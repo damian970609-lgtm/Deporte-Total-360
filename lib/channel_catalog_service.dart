@@ -193,6 +193,173 @@ class ChannelPlaylistSource {
   }
 }
 
+
+/// Snapshot local, separado por cuenta, para que un fallo parcial de Cloudflare
+/// no borre las fuentes o los canales que sí se descargaron correctamente.
+class ChannelAdminSnapshot {
+  const ChannelAdminSnapshot({
+    required this.email,
+    required this.savedAt,
+    required this.channels,
+    required this.sources,
+    required this.hasChannels,
+    required this.hasSources,
+  });
+
+  final String email;
+  final String savedAt;
+  final List<SportsChannel> channels;
+  final List<ChannelPlaylistSource> sources;
+  final bool hasChannels;
+  final bool hasSources;
+}
+
+class ChannelAdminSnapshotStore {
+  static const String _keyPrefix = 'dt360_admin_snapshot_v1_';
+  static final Map<String, Future<void>> _pendingWrites =
+      <String, Future<void>>{};
+
+  static String _cacheKey(String normalizedEmail) {
+    final account = base64Url
+        .encode(utf8.encode(normalizedEmail))
+        .replaceAll('=', '');
+    return '$_keyPrefix$account';
+  }
+
+  /// Devuelve solo la copia perteneciente a la cuenta solicitada.
+  /// Una fila dañada se omite sin invalidar el resto del snapshot.
+  static Future<ChannelAdminSnapshot?> load({
+    required String email,
+  }) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    if (normalizedEmail.isEmpty) return null;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_cacheKey(normalizedEmail));
+      if (raw == null || raw.isEmpty) return null;
+
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map ||
+          (decoded['email'] ?? '').toString().trim().toLowerCase() !=
+              normalizedEmail) {
+        return null;
+      }
+
+      final channelRows = decoded['channels'];
+      final sourceRows = decoded['sources'];
+      final channels = <SportsChannel>[];
+      if (channelRows is List) {
+        for (final row in channelRows.whereType<Map>()) {
+          try {
+            channels.add(
+              SportsChannel.fromJson(Map<String, dynamic>.from(row)),
+            );
+          } on FormatException {
+            // La corrupción de una entrada no debe borrar las demás.
+          }
+        }
+      }
+
+      final sources = <ChannelPlaylistSource>[];
+      if (sourceRows is List) {
+        for (final row in sourceRows.whereType<Map>()) {
+          try {
+            sources.add(
+              ChannelPlaylistSource.fromJson(
+                Map<String, dynamic>.from(row),
+              ),
+            );
+          } on FormatException {
+            // Conserva las fuentes válidas aunque una fila esté dañada.
+          }
+        }
+      }
+
+      return ChannelAdminSnapshot(
+        email: normalizedEmail,
+        savedAt: (decoded['savedAt'] ?? '').toString(),
+        channels: channels.take(maxCachedChannelCatalogEntries).toList(
+          growable: false,
+        ),
+        sources: sources.toList(growable: false),
+        hasChannels: channelRows is List,
+        hasSources: sourceRows is List,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Actualiza solo los conjuntos indicados. Las escrituras de una misma
+  /// cuenta se serializan para evitar que dos respuestas simultáneas lean
+  /// la misma versión anterior y se pisen entre sí.
+  static Future<void> save({
+    required String email,
+    List<SportsChannel>? channels,
+    List<ChannelPlaylistSource>? sources,
+  }) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    if (normalizedEmail.isEmpty || (channels == null && sources == null)) {
+      return;
+    }
+
+    final key = _cacheKey(normalizedEmail);
+    final previousWrite = _pendingWrites[key] ?? Future<void>.value();
+    final operation = previousWrite.catchError((Object _) {}).then<void>(
+      (_) async {
+        final prefs = await SharedPreferences.getInstance();
+        Map<String, dynamic> previous = <String, dynamic>{};
+        final raw = prefs.getString(key);
+        if (raw != null && raw.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(raw);
+            if (decoded is Map &&
+                (decoded['email'] ?? '').toString().trim().toLowerCase() ==
+                    normalizedEmail) {
+              previous = Map<String, dynamic>.from(decoded);
+            }
+          } catch (_) {
+            // La copia dañada se reemplaza por el contenido disponible.
+          }
+        }
+
+        await prefs.setString(
+          key,
+          jsonEncode(<String, Object>{
+            'email': normalizedEmail,
+            'savedAt': DateTime.now().toIso8601String(),
+            'channels': channels == null
+                ? (previous['channels'] is List
+                    ? previous['channels'] as List
+                    : <Object>[])
+                : channels
+                    .take(maxCachedChannelCatalogEntries)
+                    .map((channel) => channel.toJson())
+                    .toList(growable: false),
+            'sources': sources == null
+                ? (previous['sources'] is List
+                    ? previous['sources'] as List
+                    : <Object>[])
+                : sources
+                    .map((source) => source.toJson())
+                    .toList(growable: false),
+          }),
+        );
+      },
+    );
+    _pendingWrites[key] = operation;
+
+    try {
+      await operation;
+    } finally {
+      if (identical(_pendingWrites[key], operation)) {
+        _pendingWrites.remove(key);
+      }
+    }
+  }
+}
+
 class ChannelCatalogPage {
   const ChannelCatalogPage({
     required this.channels,

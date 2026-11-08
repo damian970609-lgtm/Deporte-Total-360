@@ -24,7 +24,6 @@ const Color _channelYellow = Color(0xFFFFFFFF);
 const Color _channelMuted = Color(0xFFEAF0F8);
 const String _channelFavoritesKey = 'dt360_channel_catalog_favorites_v1';
 const String _channelCatalogCacheKey = channelCatalogSnapshotCacheKey;
-const String _adminSnapshotPrefix = 'dt360_admin_snapshot_v1_';
 const int _maxCachedChannels = maxCachedChannelCatalogEntries;
 
 
@@ -1673,62 +1672,24 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     );
   }
 
-  String _adminSnapshotKey(String email) {
-    final account = base64Url
-        .encode(utf8.encode(email.trim().toLowerCase()))
-        .replaceAll('=', '');
-    return '$_adminSnapshotPrefix$account';
-  }
-
   Future<void> _loadCachedAdminSnapshot(String email) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_adminSnapshotKey(email));
-      if (raw == null || raw.isEmpty) return;
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map ||
-          (decoded['email'] ?? '').toString().trim().toLowerCase() !=
-              email.trim().toLowerCase()) {
-        return;
-      }
+      final snapshot = await ChannelAdminSnapshotStore.load(email: email);
+      if (!mounted || snapshot == null) return;
 
-      final channelRows = decoded['channels'];
-      final sourceRows = decoded['sources'];
-      final channels = <SportsChannel>[];
-      if (channelRows is List) {
-        for (final row in channelRows.whereType<Map>()) {
-          try {
-            channels.add(
-              SportsChannel.fromJson(Map<String, dynamic>.from(row)),
-            );
-          } on FormatException {
-            // Se conserva el resto de canales aunque una fila esté dañada.
-          }
-        }
-      }
-      final sources = sourceRows is List
-          ? sourceRows
-              .whereType<Map>()
-              .map((row) => ChannelPlaylistSource.fromJson(
-                    Map<String, dynamic>.from(row),
-                  ))
-              .toList(growable: false)
-          : <ChannelPlaylistSource>[];
-
-      if (!mounted) return;
       setState(() {
-        if (channelRows is List) {
-          _channels = channels;
-          _catalogTotal = channels.length;
-          _nextAdminOffset = channels.length;
+        if (snapshot.hasChannels) {
+          _channels = snapshot.channels;
+          _catalogTotal = snapshot.channels.length;
+          _nextAdminOffset = snapshot.channels.length;
           _hasMore = false;
         }
-        if (sourceRows is List) _sources = sources;
-        if (channelRows is List && channels.isNotEmpty) {
+        if (snapshot.hasSources) _sources = snapshot.sources;
+        if (snapshot.hasChannels && snapshot.channels.isNotEmpty) {
           _error =
               'Copia local del catálogo. Se actualizará cuando Cloudflare responda.';
         }
-        if (sourceRows is List) {
+        if (snapshot.hasSources) {
           _sourcesError =
               'Listas conservadas en este teléfono. El modo sin conexión es de solo lectura.';
         }
@@ -1744,43 +1705,14 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   }) async {
     final email = (_email ?? _service.signedInEmail ?? '').trim();
     if (email.isEmpty || (!saveChannels && !saveSources)) return;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final key = _adminSnapshotKey(email);
-      final raw = prefs.getString(key);
-      Map<String, dynamic> previous = <String, dynamic>{};
-      if (raw != null && raw.isNotEmpty) {
-        try {
-          final decoded = jsonDecode(raw);
-          if (decoded is Map &&
-              (decoded['email'] ?? '').toString().trim().toLowerCase() ==
-                  email.toLowerCase()) {
-            previous = Map<String, dynamic>.from(decoded);
-          }
-        } catch (_) {
-          // Se crea una copia nueva si la anterior está dañada.
-        }
-      }
-      await prefs.setString(
-        key,
-        jsonEncode(<String, Object>{
-          'email': email.toLowerCase(),
-          'savedAt': DateTime.now().toIso8601String(),
-          'channels': saveChannels
-              ? _channels.map((channel) => channel.toJson()).toList()
-              : (previous['channels'] is List
-                  ? previous['channels'] as List
-                  : <Object>[]),
-          'sources': saveSources
-              ? _sources.map((source) => source.toJson()).toList()
-              : (previous['sources'] is List
-                  ? previous['sources'] as List
-                  : <Object>[]),
-        }),
-      );
-    } catch (_) {
-      // La copia remota sigue siendo la fuente maestra.
-    }
+
+    await ChannelAdminSnapshotStore.save(
+      email: email,
+      channels: saveChannels ? List<SportsChannel>.from(_channels) : null,
+      sources: saveSources
+          ? List<ChannelPlaylistSource>.from(_sources)
+          : null,
+    );
   }
 
   Future<void> _signIn() async {

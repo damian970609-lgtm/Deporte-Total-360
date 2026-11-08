@@ -47,6 +47,122 @@ void main() {
     expect(restored.map((channel) => channel.id), ['sports-visible']);
   });
 
+  SportsChannel snapshotChannel(String id, String name) {
+    return SportsChannel.fromJson(<String, dynamic>{
+      'id': id,
+      'identifier': id,
+      'name': name,
+      'url': 'https://media.example/$id.m3u8',
+      'isSports': true,
+      'visible': true,
+      'language': 'es',
+    });
+  }
+
+  const snapshotSource = ChannelPlaylistSource(
+    id: 'sports-list',
+    url: 'https://lists.example/sports.m3u',
+    label: 'Lista deportiva',
+    status: 'imported',
+    format: 'm3u',
+    importedCount: 32,
+    lastImportedAt: '2026-11-07T12:00:00Z',
+  );
+
+  test('guardar fuentes no borra los canales guardados de la misma cuenta', () async {
+    SharedPreferences.setMockInitialValues({});
+    final channel = snapshotChannel('espn', 'ESPN');
+
+    await ChannelAdminSnapshotStore.save(
+      email: 'ADMIN@example.com',
+      channels: [channel],
+    );
+    await ChannelAdminSnapshotStore.save(
+      email: 'admin@example.com',
+      sources: [snapshotSource],
+    );
+
+    final snapshot = await ChannelAdminSnapshotStore.load(
+      email: 'Admin@example.com',
+    );
+
+    expect(snapshot, isNotNull);
+    expect(snapshot!.hasChannels, isTrue);
+    expect(snapshot.hasSources, isTrue);
+    expect(snapshot.channels.map((item) => item.id), ['espn']);
+    expect(snapshot.sources.map((item) => item.id), ['sports-list']);
+  });
+
+  test('guardar canales no borra las fuentes guardadas de la misma cuenta', () async {
+    SharedPreferences.setMockInitialValues({});
+
+    await ChannelAdminSnapshotStore.save(
+      email: 'admin@example.com',
+      sources: [snapshotSource],
+    );
+    await ChannelAdminSnapshotStore.save(
+      email: 'admin@example.com',
+      channels: [snapshotChannel('fox-sports', 'FOX Sports')],
+    );
+
+    final snapshot = await ChannelAdminSnapshotStore.load(
+      email: 'admin@example.com',
+    );
+
+    expect(snapshot, isNotNull);
+    expect(snapshot!.channels.single.name, 'FOX Sports');
+    expect(snapshot.sources.single.id, 'sports-list');
+  });
+
+  test('serializa escrituras simultáneas de canales y fuentes sin perder datos', () async {
+    SharedPreferences.setMockInitialValues({});
+
+    await Future.wait([
+      ChannelAdminSnapshotStore.save(
+        email: 'admin@example.com',
+        channels: [snapshotChannel('espn', 'ESPN')],
+      ),
+      ChannelAdminSnapshotStore.save(
+        email: 'admin@example.com',
+        sources: [snapshotSource],
+      ),
+    ]);
+
+    final snapshot = await ChannelAdminSnapshotStore.load(
+      email: 'admin@example.com',
+    );
+
+    expect(snapshot, isNotNull);
+    expect(snapshot!.channels.map((item) => item.id), ['espn']);
+    expect(snapshot.sources.map((item) => item.id), ['sports-list']);
+  });
+
+  test('mantiene aisladas las copias locales de cuentas diferentes', () async {
+    SharedPreferences.setMockInitialValues({});
+
+    await ChannelAdminSnapshotStore.save(
+      email: 'admin-one@example.com',
+      channels: [snapshotChannel('channel-one', 'Canal uno')],
+      sources: [snapshotSource],
+    );
+    await ChannelAdminSnapshotStore.save(
+      email: 'admin-two@example.com',
+      channels: [snapshotChannel('channel-two', 'Canal dos')],
+    );
+
+    final first = await ChannelAdminSnapshotStore.load(
+      email: 'admin-one@example.com',
+    );
+    final second = await ChannelAdminSnapshotStore.load(
+      email: 'admin-two@example.com',
+    );
+
+    expect(first!.channels.single.id, 'channel-one');
+    expect(first.sources.single.id, 'sports-list');
+    expect(second!.channels.single.id, 'channel-two');
+    expect(second.sources, isEmpty);
+  });
+
   test('las fuentes de listas se pueden guardar y restaurar sin perder metadatos', () {
     const source = ChannelPlaylistSource(
       id: 'sports-list',

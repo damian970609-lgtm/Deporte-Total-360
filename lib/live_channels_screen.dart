@@ -2077,7 +2077,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
                 child: GestureDetector(
                   onTap: () {
                     if (isPlaying) {
-                      unawaited(_openFullscreen(controller!));
+                      unawaited(_openFullscreen(controller));
                     } else {
                       setState(() => _showControls = !_showControls);
                     }
