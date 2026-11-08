@@ -14,7 +14,6 @@ import 'channel_catalog_screen.dart';
 import 'channel_catalog_service.dart';
 
 import 'fantasy_screen.dart';
-import 'news_screen.dart';
 import 'notification_service.dart';
 import 'public_chat_screen.dart';
 import 'sports_api_service.dart';
@@ -759,12 +758,11 @@ class _MainShellState extends State<MainShell> {
   static const int _liveTab = 1;
   static const int _channelsTab = 2;
   static const int _agendaTab = 3;
-  static const int _newsTab = 4;
-  static const int _fantasyTab = 5;
-  static const int _statisticsTab = 6;
-  static const int _summariesTab = 7;
-  static const int _chatTab = 8;
-  static const int _settingsTab = 9;
+  static const int _fantasyTab = 4;
+  static const int _statisticsTab = 5;
+  static const int _summariesTab = 6;
+  static const int _chatTab = 7;
+  static const int _settingsTab = 8;
 
   int _selectedIndex = _homeTab;
   String _selectedStatisticsSport = 'Todos';
@@ -994,7 +992,7 @@ class _MainShellState extends State<MainShell> {
     final navigationAvailableWidth =
         media.size.width - media.padding.left - media.padding.right;
     final navigationNeedsScroll =
-        _bottomNavigationItemWidth(context) * 10 > navigationAvailableWidth;
+        _bottomNavigationItemWidth(context) * 9 > navigationAvailableWidth;
 
     final pages = <Widget>[
       HomeDashboard(
@@ -1027,7 +1025,6 @@ class _MainShellState extends State<MainShell> {
               },
             )
           : const SizedBox.shrink(),
-      _visitedTabs.contains(_newsTab) ? const NewsScreen() : const SizedBox.shrink(),
       _visitedTabs.contains(_fantasyTab) ? const FantasyScreen() : const SizedBox.shrink(),
       _visitedTabs.contains(_statisticsTab)
           ? SportsApiStatisticsScreen(
@@ -1103,7 +1100,6 @@ class _MainShellState extends State<MainShell> {
                             _buildBottomTab(_liveTab, Icons.live_tv_rounded, 'Deportes en vivo', appPink),
                             _buildBottomTab(_channelsTab, Icons.grid_view_rounded, 'Canales deportivos', appCyan),
                             _buildBottomTab(_agendaTab, Icons.calendar_month_rounded, 'Agenda de hoy', appGreen),
-                            _buildBottomTab(_newsTab, Icons.article_rounded, tr('news'), appGreen),
                             _buildBottomTab(_fantasyTab, Icons.emoji_events_rounded, 'Mister Fantasy', appYellow),
                             _buildBottomTab(_statisticsTab, Icons.query_stats_rounded, tr('statistics'), appCyan),
                             _buildBottomTab(
