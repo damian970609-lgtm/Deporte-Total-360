@@ -210,7 +210,13 @@ void main() {
 
         final nextDateButton =
             find.byKey(const ValueKey<String>('stats-date-next'));
-        await tester.ensureVisible(nextDateButton);
+        // La cabecera queda fuera del viewport tras abrir las estadísticas;
+        // ListView descarta sus widgets diferidos. Desplázate hasta reconstruirla.
+        await tester.scrollUntilVisible(
+          nextDateButton,
+          220,
+          scrollable: find.byType(Scrollable).first,
+        );
         await tester.tap(nextDateButton);
         await tester.pumpAndSettle();
 
