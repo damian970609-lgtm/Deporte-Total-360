@@ -204,11 +204,14 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
       // SportsAgendaStore solo guarda eventos que ya pasaron por el filtro de
       // deportes y ligas favoritas. No volver a consultar /favorites aquí:
       // ese segundo viaje al Worker anulaba precisamente el respaldo sin cuota.
+      final agendaApi = SportsApiAppService();
       try {
         final published = await AutomaticLiveService().fetchPublishedSchedule();
         if (published != null) {
-          for (final item in published) {
-            final event = item.event;
+          final filteredPublished = await agendaApi.filterFavoriteAgendaEvents(
+            published.map((item) => item.event),
+          );
+          for (final event in filteredPublished) {
             final localStart = event.startsAt.toLocal();
             if (!localStart.isBefore(_windowStartDate) &&
                 localStart.isBefore(end)) {
@@ -219,13 +222,14 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
       } catch (_) {
         // La copia persistente local sigue siendo suficiente para abrir Agenda.
       }
-      final selectedStored = await SportsAgendaStore.load();
+      final stored = await SportsAgendaStore.loadWindow(
+        startDate: _windowStartDate,
+        days: _windowDays,
+      );
+      final selectedStored =
+          await agendaApi.filterFavoriteAgendaEvents(stored);
       for (final event in selectedStored) {
-        final localStart = event.startsAt.toLocal();
-        if (!localStart.isBefore(_windowStartDate) &&
-            localStart.isBefore(end)) {
-          byId.putIfAbsent(event.id, () => event);
-        }
+        byId.putIfAbsent(event.id, () => event);
       }
       if (mounted && _favoriteSportNames.isEmpty && selectedStored.isNotEmpty) {
         final cachedSports = selectedStored
@@ -657,61 +661,6 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
   Widget _buildDateSelector() {
     // La Agenda es deliberadamente diaria: no descarga ni presenta la semana.
     return const SizedBox.shrink();
-  }
-
-  Widget _buildDateSelectorLegacy() {
-    return SizedBox(
-      height: 62,
-      child: ListView.separated(
-        key: const ValueKey<String>('agenda-seven-day-selector'),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-        scrollDirection: Axis.horizontal,
-        itemCount: _windowDays,
-        separatorBuilder: (_, __) => const SizedBox(width: 7),
-        itemBuilder: (context, index) {
-          final date = _windowStartDate.add(Duration(days: index));
-          final selected = _sameDay(date, _selectedDate);
-          return ChoiceChip(
-            key: ValueKey<String>('agenda-day-' + index.toString()),
-            selected: selected,
-            onSelected: (_) => setState(() {
-              _selectedDate = date;
-              _statusFilter = 'Todos';
-            }),
-            label: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  _dayLabel(date),
-                  style: const TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                Text(
-                  _dateSubtitle(date),
-                  style: const TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            labelStyle: TextStyle(
-              color: selected ? Colors.black : _agendaMuted,
-            ),
-            backgroundColor: _agendaPanel,
-            selectedColor: _agendaGreen,
-            side: BorderSide(
-              color: selected ? _agendaGreen : _agendaLine,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          );
-        },
-      ),
-    );
   }
 
   Widget _buildFilters() {
