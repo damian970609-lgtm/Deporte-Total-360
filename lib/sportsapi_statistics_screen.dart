@@ -274,15 +274,17 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
         });
       } catch (error) {
         if (!mounted || generation != _eventsRequestGeneration) return;
-        List<SportsAgendaEvent> stored = <SportsAgendaEvent>[];
+        List<SportsAgendaEvent> offlineEvents = <SportsAgendaEvent>[];
         try {
-          stored = await SportsAgendaStore.load();
+          final stored = await SportsAgendaStore.loadWindow(
+            startDate: _selectedDate,
+            days: 1,
+          );
+          offlineEvents = await _api.filterFavoriteAgendaEvents(stored);
+          offlineEvents.sort((a, b) => a.startsAt.compareTo(b.startsAt));
         } catch (_) {
           // Si no hay almacenamiento local disponible, muestra el error de red.
         }
-        final offlineEvents = stored.where((event) =>
-            _sameDay(event.startsAt.toLocal(), _selectedDate)).toList()
-          ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
         if (!mounted || generation != _eventsRequestGeneration) return;
         if (offlineEvents.isNotEmpty) {
           setState(() {
