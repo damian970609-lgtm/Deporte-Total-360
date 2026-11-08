@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'sports_api_service.dart';
 import 'automatic_live_service.dart';
@@ -253,6 +254,37 @@ class SportsApiAppService {
     }
   }
 
+  static const String _favoriteSportsSnapshotKey =
+      'dt360_sportsapi_favorite_sports_snapshot_v1';
+
+  Future<List<Map<String, dynamic>>> _readFavoriteSportsSnapshot() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_favoriteSportsSnapshotKey);
+      if (raw == null || raw.isEmpty) return <Map<String, dynamic>>[];
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return <Map<String, dynamic>>[];
+      return decoded
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(growable: false);
+    } catch (_) {
+      return <Map<String, dynamic>>[];
+    }
+  }
+
+  Future<void> _saveFavoriteSportsSnapshot(
+    List<Map<String, dynamic>> sports,
+  ) async {
+    if (sports.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_favoriteSportsSnapshotKey, jsonEncode(sports));
+    } catch (_) {
+      // Una copia local no debe invalidar una respuesta correcta del Worker.
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchFavoriteSports({
     bool forceRefresh = false,
   }) async {
@@ -292,13 +324,29 @@ class SportsApiAppService {
           .toList(growable: false);
     }();
     _favoriteSportsInFlight[base] = future;
-    return future.then((sports) {
-      _favoriteSportsCache[base] = (
-        sports: sports,
-        expiresAt: DateTime.now().add(_favoritesCacheDuration),
-      );
-      return sports;
-    }).whenComplete(() {
+    return future.then<List<Map<String, dynamic>>>(
+      (sports) async {
+        _favoriteSportsCache[base] = (
+          sports: sports,
+          expiresAt: DateTime.now().add(_favoritesCacheDuration),
+        );
+        await _saveFavoriteSportsSnapshot(sports);
+        return sports;
+      },
+      onError: (Object error, StackTrace stackTrace) async {
+        // El catálogo es pequeño y casi estático. Una caída de Cloudflare no
+        // debe borrar del selector los deportes/ligas ya conocidos.
+        final snapshot = await _readFavoriteSportsSnapshot();
+        if (snapshot.isNotEmpty) {
+          _favoriteSportsCache[base] = (
+            sports: snapshot,
+            expiresAt: DateTime.now().add(const Duration(minutes: 10)),
+          );
+          return snapshot;
+        }
+        Error.throwWithStackTrace(error, stackTrace);
+      },
+    ).whenComplete(() {
       _favoriteSportsInFlight.remove(base);
     });
   }
@@ -612,11 +660,37 @@ class SportsApiAppService {
       });
     }
 
-    final future = _fetchFavoriteAgendaEvents(
-      day,
-      forceRefresh: forceRefresh,
-      onProgress: onProgress,
-    );
+    final future = () async {
+      try {
+        return await _fetchFavoriteAgendaEvents(
+          day,
+          forceRefresh: forceRefresh,
+          onProgress: onProgress,
+        );
+      } catch (error, stackTrace) {
+        // Recupera la última jornada válida guardada en el teléfono. Las
+        // fechas se comparan en UTC porque el proveedor pagina por día UTC.
+        try {
+          final utcStart = DateTime.parse(day).toUtc();
+          final utcEnd = utcStart.add(const Duration(days: 1));
+          final stored = await SportsAgendaStore.load();
+          final events = stored.where((event) {
+            final start = event.startsAt.toUtc();
+            return !start.isBefore(utcStart) && start.isBefore(utcEnd);
+          }).toList()
+            ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+          if (events.isNotEmpty) {
+            return _AgendaSportsResult(
+              events: events,
+              incomplete: true,
+            );
+          }
+        } catch (_) {
+          // Se vuelve a propagar el error original si no existe snapshot.
+        }
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+    }();
     _agendaInFlight[cacheKey] = future;
     return future.then((result) {
       _agendaCache[cacheKey] = result;
