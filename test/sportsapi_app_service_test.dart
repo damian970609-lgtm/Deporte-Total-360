@@ -876,4 +876,56 @@ void main() {
     }
   });
 
+
+  test('las estadísticas de un partido se guardan por jornada y solo refrescan al vencer o forzar', () async {
+    SharedPreferences.setMockInitialValues({});
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-daily-statistics-cache.example';
+    final requested = <Uri>[];
+    final client = MockClient((request) async {
+      requested.add(request.url);
+      return http.Response(
+        jsonEncode({
+          'data': {
+            'periods': [
+              {
+                'name': 'Partido',
+                'groups': [
+                  {
+                    'name': 'General',
+                    'items': [
+                      {'name': 'Posesión', 'home': '55%', 'away': '45%'},
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          'meta': {},
+        }),
+        200,
+      );
+    });
+
+    try {
+      final api = SportsApiAppService(client: client);
+      final today = DateTime.now();
+      final first = await api.fetchFixtureStatistics(101, eventDate: today);
+      final cached = await api.fetchFixtureStatistics(101, eventDate: today);
+      expect(first, cached);
+      expect(requested, hasLength(1));
+
+      await api.fetchFixtureStatistics(
+        101,
+        eventDate: today,
+        forceRefresh: true,
+      );
+      expect(requested, hasLength(2));
+      expect(requested.last.queryParameters['refresh'], '1');
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
+  });
+
 }
