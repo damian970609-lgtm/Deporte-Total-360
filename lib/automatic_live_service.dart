@@ -403,6 +403,49 @@ class SportsAgendaEvent {
 
 class SportsAgendaStore {
   static const String _key = 'dt360_sportsapi_agenda_events_v1';
+  static const String _windowDateKey = 'dt360_sportsapi_agenda_window_date_v1';
+  static const String _windowSavedAtKey = 'dt360_sportsapi_agenda_window_saved_at_v1';
+
+  static String _dayKey(DateTime value) {
+    final local = value.toLocal();
+    return local.year.toString().padLeft(4, '0') + '-' +
+        local.month.toString().padLeft(2, '0') + '-' +
+        local.day.toString().padLeft(2, '0');
+  }
+
+  /// Lee solo los eventos de la jornada local solicitada.
+  static Future<List<SportsAgendaEvent>> loadWindow({
+    required DateTime startDate,
+    int days = 1,
+  }) async {
+    final start = DateTime(startDate.year, startDate.month, startDate.day);
+    final end = start.add(Duration(days: days.clamp(1, 7).toInt()));
+    return (await load()).where((event) {
+      final localStart = event.startsAt.toLocal();
+      return !localStart.isBefore(start) && localStart.isBefore(end);
+    }).toList(growable: false)
+      ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+  }
+
+  /// Una copia diaria se considera vigente hasta el final del día salvo que
+  /// el usuario solicite una actualización manual.
+  static Future<bool> isWindowFresh({
+    required DateTime startDate,
+    Duration maxAge = const Duration(hours: 18),
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getString(_windowDateKey) != _dayKey(startDate)) return false;
+      final savedAt = DateTime.tryParse(
+        prefs.getString(_windowSavedAtKey) ?? '',
+      );
+      if (savedAt == null) return false;
+      final age = DateTime.now().difference(savedAt);
+      return !age.isNegative && age <= maxAge;
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// Sustituye la captura anterior por el contenido visible más reciente.
   /// Así los eventos retirados de la agenda no quedan programados.
@@ -467,6 +510,8 @@ class SportsAgendaStore {
       _key,
       jsonEncode(byId.values.map((event) => event.toJson()).toList()),
     );
+    await prefs.setString(_windowDateKey, _dayKey(start));
+    await prefs.setString(_windowSavedAtKey, DateTime.now().toIso8601String());
   }
 
   static Future<List<SportsAgendaEvent>> load() async {
