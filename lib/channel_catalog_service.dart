@@ -755,7 +755,7 @@ class ChannelCatalogService {
         ..._authHeaders(),
         'Content-Type': 'application/json',
       },
-      body: jsonEncode(<String, int>{'count': count.clamp(1, 10)}),
+      body: jsonEncode(<String, int>{'count': count.clamp(1, 10).toInt()}),
     ).timeout(const Duration(seconds: 20));
     final payload = _decode(result);
     final rows = payload['codes'];
