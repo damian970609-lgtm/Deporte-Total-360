@@ -149,6 +149,16 @@ void main() {
         );
         await tester.pumpAndSettle();
 
+        // Comprueba controles de cabecera antes de desplazarse por la lista,
+        // porque ListView construye de forma diferida los elementos fuera de vista.
+        expect(find.byKey(const ValueKey<String>('stats-date-picker')), findsOneWidget);
+        expect(find.text('TABLAS DE POSICIONES · TUS COMPETICIONES'), findsOneWidget);
+        expect(
+          requestedPaths,
+          contains('/api/sportsapi/leagues/39/standings'),
+        );
+        expect(find.text('Alpha FC'), findsWidgets);
+
         final eventsHeading = find.text('EVENTOS DEL DÍA');
         await tester.scrollUntilVisible(
           eventsHeading,
@@ -163,21 +173,21 @@ void main() {
           scrollable: find.byType(Scrollable).first,
         );
         expect(firstEvent, findsOneWidget);
-        expect(find.text('Fútbol'), findsOneWidget);
+        expect(find.text('Fútbol'), findsWidgets);
         expect(find.text('Baloncesto'), findsNothing);
-        expect(find.byKey(const ValueKey<String>('stats-date-picker')), findsOneWidget);
-        expect(find.text('TABLAS DE POSICIONES · TUS COMPETICIONES'), findsOneWidget);
-        expect(
-          requestedPaths,
-          contains('/api/sportsapi/leagues/39/standings'),
-        );
-        expect(find.text('Alpha FC'), findsWidgets);
 
         final search = find.byType(TextField);
+        await tester.ensureVisible(search);
         await tester.enterText(search, 'Beta');
         await tester.pump();
+        await tester.scrollUntilVisible(
+          find.text('Alpha FC vs Beta FC'),
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
         expect(find.text('Alpha FC vs Beta FC'), findsOneWidget);
 
+        await tester.ensureVisible(find.byKey(const ValueKey<String>('stats-filter-live')));
         await tester.tap(find.byKey(const ValueKey<String>('stats-filter-live')));
         await tester.pump();
         expect(find.text('Alpha FC vs Beta FC'), findsOneWidget);
