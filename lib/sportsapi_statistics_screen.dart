@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -1045,7 +1046,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${_dailyStandingsEvents.length} competiciones con eventos hoy. Se consulta una tabla por competición y temporada; los datos se guardan solo para esta jornada.',
+                  '${_dailyStandingsEvents.length} competiciones con eventos en esta fecha. Se consulta una tabla por competición y temporada; los datos se guardan solo para esta jornada.',
                   style: const TextStyle(
                     color: _apiStatsMuted,
                     fontSize: 9,
@@ -1061,7 +1062,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
                             ? 'CARGANDO $_dailyStandingsCompleted/${_dailyStandingsEvents.length}'
                             : _dailyStandings.isNotEmpty
                                 ? 'TABLAS CARGADAS: ${_dailyStandings.length} DATOS'
-                                : 'TABLAS DEL DÍA',
+                                : 'TABLAS DE ESTA JORNADA',
                         style: const TextStyle(
                           color: _apiStatsCyan,
                           fontSize: 9,
@@ -1071,7 +1072,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
                     ),
                     IconButton(
                       key: const ValueKey<String>('stats-refresh-daily-standings'),
-                      tooltip: 'Actualizar tablas del día',
+                      tooltip: 'Actualizar tablas de esta jornada',
                       onPressed: _loadingDailyStandings
                           ? null
                           : () => _loadDailyStandings(forceRefresh: true),
