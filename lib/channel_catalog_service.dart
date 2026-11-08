@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
@@ -366,12 +367,14 @@ class ChannelCatalogPage {
     required this.total,
     required this.offset,
     required this.hasMore,
+    this.totalIsEstimate = false,
   });
 
   final List<SportsChannel> channels;
   final int total;
   final int offset;
   final bool hasMore;
+  final bool totalIsEstimate;
 }
 
 class ChannelCatalogException implements Exception {
@@ -644,6 +647,125 @@ class ChannelCatalogService {
     };
   }
 
+  static const String _trialDeviceKey = 'dt360_vip_trial_device_v1';
+  static const String _trialSessionKey = 'dt360_vip_trial_session_v1';
+
+  Future<String> _getTrialDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = (prefs.getString(_trialDeviceKey) ?? '').trim().toLowerCase();
+    if (RegExp(r'^[a-f0-9]{64}$').hasMatch(saved)) return saved;
+    final random = math.Random.secure();
+    final generated = List<int>.generate(
+      32,
+      (_) => random.nextInt(256),
+      growable: false,
+    ).map((value) => value.toRadixString(16).padLeft(2, '0')).join();
+    await prefs.setString(_trialDeviceKey, generated);
+    return generated;
+  }
+
+  Future<Map<String, String>?> trialSessionHeaders() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = (prefs.getString(_trialSessionKey) ?? '').trim().toLowerCase();
+    if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(token)) return null;
+    final deviceId = await _getTrialDeviceId();
+    return <String, String>{
+      'Accept': 'application/json',
+      'Authorization': 'Bearer ' + token,
+      'X-DT360-Device-ID': deviceId,
+    };
+  }
+
+  Future<Map<String, String>> userAuthorizationHeaders() async {
+    if (_accessTokenProvider != null) return _authHeaders();
+    final trialHeaders = await trialSessionHeaders();
+    return trialHeaders ?? _authHeaders();
+  }
+
+  Future<bool> validateTrialSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = (prefs.getString(_trialSessionKey) ?? '').trim().toLowerCase();
+    if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(token)) return false;
+    final deviceId = await _getTrialDeviceId();
+    try {
+      final result = await _client.post(
+        Uri.parse(_baseUrl + '/api/trials/check'),
+        headers: const <String, String>{
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(<String, String>{
+          'sessionToken': token,
+          'deviceId': deviceId,
+        }),
+      ).timeout(const Duration(seconds: 12));
+      final payload = _decode(result);
+      final allowed = payload['allowed'] == true;
+      if (!allowed) await prefs.remove(_trialSessionKey);
+      return allowed;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> redeemTrialCode(String code) async {
+    final normalized = code.trim().replaceAll(RegExp(r'\s+'), '').toUpperCase();
+    if (!RegExp(r'^[A-F0-9]{16,40}$').hasMatch(normalized)) {
+      throw const ChannelCatalogException('Introduce un código VIP válido.');
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final deviceId = await _getTrialDeviceId();
+    final result = await _client.post(
+      Uri.parse(_baseUrl + '/api/trials/redeem'),
+      headers: const <String, String>{
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(<String, String>{
+        'code': normalized,
+        'deviceId': deviceId,
+      }),
+    ).timeout(const Duration(seconds: 20));
+    final payload = _decode(result);
+    final token = (payload['sessionToken'] ?? '').toString().trim().toLowerCase();
+    if (payload['activated'] != true ||
+        !RegExp(r'^[a-f0-9]{64}$').hasMatch(token)) {
+      throw const ChannelCatalogException(
+        'Cloudflare no confirmó la activación del código VIP.',
+      );
+    }
+    await prefs.setString(_trialSessionKey, token);
+  }
+
+  Future<void> clearTrialSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_trialSessionKey);
+  }
+
+  Future<Map<String, dynamic>> fetchTrialPassSummary() async {
+    final result = await _client.get(
+      Uri.parse(_baseUrl + '/api/channels/admin/trials'),
+      headers: _authHeaders(),
+    ).timeout(const Duration(seconds: 20));
+    return _decode(result);
+  }
+
+  Future<List<String>> generateTrialPassCodes({int count = 10}) async {
+    final result = await _client.post(
+      Uri.parse(_baseUrl + '/api/channels/admin/trials'),
+      headers: <String, String>{
+        ..._authHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(<String, int>{'count': count.clamp(1, 10).toInt()}),
+    ).timeout(const Duration(seconds: 20));
+    final payload = _decode(result);
+    final rows = payload['codes'];
+    if (rows is! List) return <String>[];
+    return rows.map((value) => value.toString()).toList(growable: false);
+  }
+
+
   bool _tokenNeedsRefresh(String token) {
     final parts = token.split('.');
     if (parts.length != 3) return false;
@@ -665,6 +787,8 @@ class ChannelCatalogService {
   /// en segundo plano cuando el ID token está próximo a caducar.
   Future<Map<String, String>> chatAuthorizationHeaders() async {
     if (_accessTokenProvider != null) return _authHeaders();
+    final trialHeaders = await trialSessionHeaders();
+    if (trialHeaders != null) return trialHeaders;
 
     final token = _idToken;
     if (token == null || token.isEmpty || _tokenNeedsRefresh(token)) {
@@ -673,7 +797,7 @@ class ChannelCatalogService {
       final restoredEmail = await restoreSession();
       if (restoredEmail == null) {
         throw const ChannelCatalogException(
-          'Tu sesión Google caducó. Vuelve a iniciar sesión en Deporte Total 360° para usar el Chat.',
+          'Tu sesión Google caducó. Activa un pase VIP o vuelve a iniciar sesión para usar el Chat.',
         );
       }
     }
@@ -731,6 +855,7 @@ class ChannelCatalogService {
       total: total,
       offset: responseOffset,
       hasMore: hasMore,
+      totalIsEstimate: payload['totalIsEstimate'] == true,
     );
   }
 
@@ -782,6 +907,7 @@ class ChannelCatalogService {
       total: total,
       offset: responseOffset,
       hasMore: hasMore,
+      totalIsEstimate: payload['totalIsEstimate'] == true,
     );
   }
 
@@ -1121,7 +1247,7 @@ class ChannelCatalogService {
   Future<Set<String>> fetchFavorites() async {
     final result = await _client.get(
       Uri.parse(_baseUrl + '/api/channels/favorites'),
-      headers: _authHeaders(),
+      headers: await userAuthorizationHeaders(),
     ).timeout(const Duration(seconds: 20));
     final rows = _decode(result)['channelIds'];
     if (rows is! List) return <String>{};
@@ -1132,7 +1258,7 @@ class ChannelCatalogService {
     final result = await _client.put(
       Uri.parse(_baseUrl + '/api/channels/favorites'),
       headers: <String, String>{
-        ..._authHeaders(),
+        ...await userAuthorizationHeaders(),
         'Content-Type': 'application/json',
       },
       body: jsonEncode(<String, Object>{

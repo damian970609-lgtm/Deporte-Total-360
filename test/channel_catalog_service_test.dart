@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:deporte_total_360/channel_catalog_service.dart';
+import 'package:deporte_total_360/sports_api_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -230,6 +231,62 @@ void main() {
   test('no inventa bandera para idioma desconocido', () {
     expect(channelLanguageDisplayLabel('unknown'), isNull);
     expect(channelLanguageDisplayLabel('fr'), isNull);
+  });
+
+  test('un pase VIP sin Google permite guardar y recuperar favoritos de canales', () async {
+    SharedPreferences.setMockInitialValues({});
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-vip-favorites.example';
+    final seenFavoriteHeaders = <Map<String, String>>[];
+    final sessionToken = List<String>.filled(64, 'c').join();
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/api/trials/redeem')) {
+        return http.Response(jsonEncode({
+          'activated': true,
+          'sessionToken': sessionToken,
+          'licenseType': 'trial',
+          'expiresAt': DateTime.now().add(const Duration(days: 30)).toIso8601String(),
+        }), 200);
+      }
+      if (request.url.path.endsWith('/api/trials/check')) {
+        return http.Response(jsonEncode({
+          'allowed': true,
+          'status': 'active',
+          'licenseType': 'trial',
+        }), 200);
+      }
+      if (request.url.path.endsWith('/api/channels/favorites')) {
+        seenFavoriteHeaders.add(Map<String, String>.from(request.headers));
+        if (request.method == 'GET') {
+          return http.Response(jsonEncode({'channelIds': ['sports-channel-1']}), 200);
+        }
+        return http.Response(jsonEncode({'saved': true, 'count': 1}), 200);
+      }
+      return http.Response(jsonEncode({'error': 'Ruta inesperada'}), 404);
+    });
+
+    try {
+      final service = ChannelCatalogService(client: client);
+      await service.redeemTrialCode('ABCD1234EF567890ABCD');
+      expect(await service.validateTrialSession(), isTrue);
+      expect(await service.fetchFavorites(), {'sports-channel-1'});
+      await service.saveFavorites({'sports-channel-1'});
+
+      expect(seenFavoriteHeaders, hasLength(2));
+      for (final headers in seenFavoriteHeaders) {
+        final authorization = headers.entries
+            .firstWhere((entry) => entry.key.toLowerCase() == 'authorization')
+            .value;
+        final deviceId = headers.entries
+            .firstWhere((entry) => entry.key.toLowerCase() == 'x-dt360-device-id')
+            .value;
+        expect(authorization, 'Bearer $sessionToken');
+        expect(deviceId, matches(RegExp(r'^[a-f0-9]{64}$')));
+      }
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
   });
 
   test('el catálogo puede serializar y restaurar canales completos para uso sin conexión', () {

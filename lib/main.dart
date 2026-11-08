@@ -14,7 +14,6 @@ import 'channel_catalog_screen.dart';
 import 'channel_catalog_service.dart';
 
 import 'fantasy_screen.dart';
-import 'news_screen.dart';
 import 'notification_service.dart';
 import 'public_chat_screen.dart';
 import 'sports_api_service.dart';
@@ -307,6 +306,7 @@ class _AppAccessGateState extends State<AppAccessGate> {
   String? _email;
   String? _message;
   bool _working = false;
+  final TextEditingController _trialCodeController = TextEditingController();
 
   @override
   void initState() {
@@ -331,6 +331,14 @@ class _AppAccessGateState extends State<AppAccessGate> {
     }
     try {
       await _prepareApiSettings();
+      if (await _licenseService.validateTrialSession()) {
+        if (!mounted) return;
+        setState(() {
+          _email = 'Pase VIP de prueba';
+          _stage = _AccessGateStage.authorized;
+        });
+        return;
+      }
       final email = await _licenseService.restoreSession();
       if (!mounted) return;
       if (email == null) {
@@ -368,6 +376,45 @@ class _AppAccessGateState extends State<AppAccessGate> {
         _message = error.toString();
       });
     }
+  }
+
+  Future<void> _redeemTrialCode() async {
+    if (_working) return;
+    final code = _trialCodeController.text.trim();
+    if (code.isEmpty) {
+      setState(() => _message = 'Introduce el código VIP que te entregó el administrador.');
+      return;
+    }
+    setState(() {
+      _working = true;
+      _message = null;
+    });
+    try {
+      await _licenseService.redeemTrialCode(code);
+      final valid = await _licenseService.validateTrialSession();
+      if (!valid) {
+        throw const ChannelCatalogException(
+          'El código se activó, pero no se pudo validar la sesión de prueba.',
+        );
+      }
+      if (!mounted) return;
+      _trialCodeController.clear();
+      setState(() {
+        _email = 'Pase VIP de prueba';
+        _stage = _AccessGateStage.authorized;
+        _message = null;
+      });
+    } catch (error) {
+      if (mounted) setState(() => _message = error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _trialCodeController.dispose();
+    super.dispose();
   }
 
   Future<void> _signIn() async {
@@ -566,10 +613,53 @@ class _AppAccessGateState extends State<AppAccessGate> {
                               ),
                             ),
                           ),
+                          const SizedBox(height: 18),
+                          const Row(
+                            children: <Widget>[
+                              Expanded(child: Divider(color: appLine)),
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 10),
+                                child: Text('O ENTRA CON UN PASE VIP',
+                                  style: TextStyle(color: appMuted, fontSize: 9,
+                                    fontWeight: FontWeight.w900)),
+                              ),
+                              Expanded(child: Divider(color: appLine)),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _trialCodeController,
+                            enabled: !_working,
+                            textCapitalization: TextCapitalization.characters,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white,
+                              fontWeight: FontWeight.w900, letterSpacing: 1.5),
+                            decoration: const InputDecoration(
+                              labelText: 'Código VIP de prueba',
+                              hintText: 'PEGA AQUÍ TU CÓDIGO',
+                              prefixIcon: Icon(Icons.key_rounded, color: appGreen),
+                            ),
+                          ),
+                          const SizedBox(height: 9),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: _working ? null : _redeemTrialCode,
+                              icon: const Icon(Icons.verified_user_rounded),
+                              label: const Text('ACTIVAR PASE VIP · SIN GOOGLE'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: appGreen,
+                                side: const BorderSide(color: appGreen),
+                                padding: const EdgeInsets.symmetric(vertical: 13),
+                              ),
+                            ),
+                          ),
                           if (denied) ...<Widget>[
                             const SizedBox(height: 10),
                             const Text(
-                              'Para comprar una licencia o recibir una invitación, contacta al administrador.',
+                              'También puedes usar un código VIP temporal de prueba. No necesitas Google ni realizar pagos.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: appMuted,
@@ -668,12 +758,11 @@ class _MainShellState extends State<MainShell> {
   static const int _liveTab = 1;
   static const int _channelsTab = 2;
   static const int _agendaTab = 3;
-  static const int _newsTab = 4;
-  static const int _fantasyTab = 5;
-  static const int _statisticsTab = 6;
-  static const int _summariesTab = 7;
-  static const int _chatTab = 8;
-  static const int _settingsTab = 9;
+  static const int _fantasyTab = 4;
+  static const int _statisticsTab = 5;
+  static const int _summariesTab = 6;
+  static const int _chatTab = 7;
+  static const int _settingsTab = 8;
 
   int _selectedIndex = _homeTab;
   String _selectedStatisticsSport = 'Todos';
@@ -903,7 +992,7 @@ class _MainShellState extends State<MainShell> {
     final navigationAvailableWidth =
         media.size.width - media.padding.left - media.padding.right;
     final navigationNeedsScroll =
-        _bottomNavigationItemWidth(context) * 10 > navigationAvailableWidth;
+        _bottomNavigationItemWidth(context) * 9 > navigationAvailableWidth;
 
     final pages = <Widget>[
       HomeDashboard(
@@ -936,7 +1025,6 @@ class _MainShellState extends State<MainShell> {
               },
             )
           : const SizedBox.shrink(),
-      _visitedTabs.contains(_newsTab) ? const NewsScreen() : const SizedBox.shrink(),
       _visitedTabs.contains(_fantasyTab) ? const FantasyScreen() : const SizedBox.shrink(),
       _visitedTabs.contains(_statisticsTab)
           ? SportsApiStatisticsScreen(
@@ -1012,7 +1100,6 @@ class _MainShellState extends State<MainShell> {
                             _buildBottomTab(_liveTab, Icons.live_tv_rounded, 'Deportes en vivo', appPink),
                             _buildBottomTab(_channelsTab, Icons.grid_view_rounded, 'Canales deportivos', appCyan),
                             _buildBottomTab(_agendaTab, Icons.calendar_month_rounded, 'Agenda de hoy', appGreen),
-                            _buildBottomTab(_newsTab, Icons.article_rounded, tr('news'), appGreen),
                             _buildBottomTab(_fantasyTab, Icons.emoji_events_rounded, 'Mister Fantasy', appYellow),
                             _buildBottomTab(_statisticsTab, Icons.query_stats_rounded, tr('statistics'), appCyan),
                             _buildBottomTab(

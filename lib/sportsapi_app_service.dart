@@ -65,7 +65,9 @@ String _normalizeAgendaFilterText(String value) {
       .replaceAll(RegExp(r'[íìïî]'), 'i')
       .replaceAll(RegExp(r'[óòöô]'), 'o')
       .replaceAll(RegExp(r'[úùüû]'), 'u')
-      .replaceAll(RegExp(r'\s+'), ' ');
+      .replaceAll(RegExp(r'[^a-z0-9 ]'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
 }
 
 String _normalizeAgendaSportId(String value) {
@@ -119,19 +121,32 @@ class _FavoriteAgendaSport {
   bool _matchesCompetition({required String id, required String name}) {
     if (allCompetitions) return true;
     if (id.isNotEmpty && competitionIds.contains(id)) return true;
-
-    final normalizedName = _normalizeAgendaFilterText(name);
+    final normalizedName =
+        _normalizeAgendaFilterText(name).replaceAll(' ', '');
     if (normalizedName.isEmpty) return false;
 
-    // SportsAPI puede añadir patrocinadores, sufijos o variantes de nombre
-    // sin cambiar la competición (p. ej. "LaLiga EA SPORTS").
-    return competitionNames.any((selectedName) {
-      if (selectedName == normalizedName) return true;
-      return (selectedName.length >= 5 &&
-              normalizedName.startsWith('$selectedName ')) ||
-          (normalizedName.length >= 5 &&
-              selectedName.startsWith('$normalizedName '));
-    });
+    bool matchesName(String selected) {
+      var normalizedSelected =
+          _normalizeAgendaFilterText(selected).replaceAll(' ', '');
+      if (normalizedSelected == normalizedName) return true;
+      for (final prefix in const <String>[
+        'uefa', 'fifa', 'concacaf', 'conmebol', 'caf', 'afc', 'ofc',
+        'ihf', 'ehf',
+      ]) {
+        if (normalizedSelected.startsWith(prefix) &&
+            normalizedSelected.length > prefix.length + 3) {
+          normalizedSelected = normalizedSelected.substring(prefix.length);
+          break;
+        }
+      }
+      if (normalizedSelected == normalizedName) return true;
+      return normalizedSelected.length >= 8 &&
+          normalizedName.length >= 8 &&
+          (normalizedSelected.startsWith(normalizedName) ||
+              normalizedName.startsWith(normalizedSelected));
+    }
+
+    return competitionNames.any(matchesName);
   }
 
   bool matchesRow(Map<String, dynamic> row, {required bool isRace}) {
@@ -182,9 +197,11 @@ class SportsApiAppService {
     }
   }
 
-  static const Duration _timeout = Duration(seconds: 45);
+  // La cola compartida puede espaciar llamadas cuando hay varios usuarios.
+  // Dejamos margen para esperar turno sin relanzar consultas que gasten cuota.
+  static const Duration _timeout = Duration(minutes: 3);
   static const Duration _windowTimeout = Duration(minutes: 20);
-  static const Duration _favoritesCacheDuration = Duration(minutes: 2);
+  static const Duration _favoritesCacheDuration = Duration(hours: 24);
 
   static final Map<String, ({
     List<Map<String, dynamic>> sports,
@@ -256,6 +273,78 @@ class SportsApiAppService {
 
   static const String _favoriteSportsSnapshotKey =
       'dt360_sportsapi_favorite_sports_snapshot_v1';
+  static const String _favoriteSportsSnapshotSavedAtKey =
+      'dt360_sportsapi_favorite_sports_saved_at_v1';
+
+  static String _localDayKey(DateTime value) {
+    final local = value.toLocal();
+    return local.year.toString().padLeft(4, '0') + '-' +
+        local.month.toString().padLeft(2, '0') + '-' +
+        local.day.toString().padLeft(2, '0');
+  }
+
+  Future<dynamic> _fetchDailyCachedData({
+    required String cacheName,
+    required DateTime date,
+    required Future<dynamic> Function() loader,
+    Duration maxAge = const Duration(hours: 20),
+    bool forceRefresh = false,
+  }) async {
+    final dayKey = _localDayKey(date);
+    final base = SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value) ??
+        sportsApiBaseUrl.value.trim();
+    final safeBase = base.toLowerCase().replaceAll(
+      RegExp(r'[^a-z0-9]+'),
+      '_',
+    );
+    final cacheKey = 'dt360_stats_v2_' + safeBase + '_' +
+        cacheName.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_') + '_' + dayKey;
+    SharedPreferences? prefs;
+    dynamic cachedData;
+    DateTime? cachedAt;
+    try {
+      prefs = await SharedPreferences.getInstance();
+      if (!forceRefresh) {
+        final raw = prefs.getString(cacheKey);
+        if (raw != null && raw.isNotEmpty) {
+          final decoded = jsonDecode(raw);
+          if (decoded is Map && decoded['day'] == dayKey) {
+            cachedData = decoded['data'];
+            cachedAt = DateTime.tryParse(
+              (decoded['savedAt'] ?? '').toString(),
+            );
+            if (cachedAt != null) {
+              final age = DateTime.now().difference(cachedAt);
+              if (!age.isNegative && age <= maxAge) return cachedData;
+            }
+          }
+        }
+      }
+    } catch (_) {
+      // La indisponibilidad de SharedPreferences no impide consultar SportsAPI.
+    }
+
+    try {
+      final value = await loader();
+      try {
+        await prefs?.setString(
+          cacheKey,
+          jsonEncode(<String, dynamic>{
+            'day': dayKey,
+            'savedAt': DateTime.now().toIso8601String(),
+            'data': value,
+          }),
+        );
+      } catch (_) {
+        // La respuesta del proveedor es válida aunque no pueda persistirse.
+      }
+      return value;
+    } catch (_) {
+      // En una caída temporal se conserva la última respuesta del mismo día.
+      if (cachedAt != null && cachedData != null) return cachedData;
+      rethrow;
+    }
+  }
 
   Future<List<Map<String, dynamic>>> _readFavoriteSportsSnapshot() async {
     try {
@@ -273,6 +362,20 @@ class SportsApiAppService {
     }
   }
 
+  Future<bool> _favoriteSportsSnapshotIsFresh() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedAt = DateTime.tryParse(
+        prefs.getString(_favoriteSportsSnapshotSavedAtKey) ?? '',
+      );
+      if (savedAt == null) return false;
+      final age = DateTime.now().difference(savedAt);
+      return !age.isNegative && age <= _favoritesCacheDuration;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _saveFavoriteSportsSnapshot(
     List<Map<String, dynamic>> sports,
   ) async {
@@ -280,6 +383,10 @@ class SportsApiAppService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_favoriteSportsSnapshotKey, jsonEncode(sports));
+      await prefs.setString(
+        _favoriteSportsSnapshotSavedAtKey,
+        DateTime.now().toIso8601String(),
+      );
     } catch (_) {
       // Una copia local no debe invalidar una respuesta correcta del Worker.
     }
@@ -300,6 +407,16 @@ class SportsApiAppService {
     final cached = _favoriteSportsCache[base];
     if (cached != null && now.isBefore(cached.expiresAt)) {
       return cached.sports;
+    }
+    if (!forceRefresh) {
+      final snapshot = await _readFavoriteSportsSnapshot();
+      if (snapshot.isNotEmpty && await _favoriteSportsSnapshotIsFresh()) {
+        _favoriteSportsCache[base] = (
+          sports: snapshot,
+          expiresAt: DateTime.now().add(_favoritesCacheDuration),
+        );
+        return snapshot;
+      }
     }
     final pending = _favoriteSportsInFlight[base];
     if (pending != null) return pending;
@@ -994,9 +1111,10 @@ class SportsApiAppService {
               : <String, dynamic>{};
           if (meta['complete'] != false) return envelope;
           if (attempt == 1) {
-            throw const SportsApiException(
-              'SportsAPI devolvió datos incompletos en dos intentos.',
-            );
+            return <String, dynamic>{
+              ...envelope,
+              '_sportsApiIncomplete': true,
+            };
           }
         } catch (error) {
           final message = error.toString();
@@ -1009,7 +1127,7 @@ class SportsApiAppService {
               RegExp(r'Retry-After:\s*(\d+)', caseSensitive: false)
                   .firstMatch(message);
           final retrySeconds = int.tryParse(retryMatch?.group(1) ?? '');
-          if (retrySeconds != null && retrySeconds > 10) rethrow;
+          if (retrySeconds != null && retrySeconds > 4) rethrow;
           await Future<void>.delayed(
             Duration(seconds: retrySeconds ?? 7),
           );
@@ -1055,10 +1173,31 @@ class SportsApiAppService {
         final index = nextIndex++;
         if (index >= entries.length) return;
         final entry = entries[index];
+        final isRace =
+            entry.id == 'cycling' || entry.id == 'motorsport';
+        final rows = <Map<String, dynamic>>[];
+        var sportIncomplete = false;
+
+        List<SportsAgendaEvent> buildEvents() {
+          final selectedRows = rows.where(
+            (row) => entry.matchesRow(row, isRace: isRace),
+          ).toList(growable: false);
+          return isRace
+              ? selectedRows
+                  .expand((row) => _raceEvents(
+                        row,
+                        entry.name,
+                        day,
+                        useRaceNameAsCompetition: entry.id == 'cycling',
+                      ))
+                  .toList(growable: false)
+              : selectedRows
+                  .map((row) => _fixtureEvent(row, entry.name))
+                  .whereType<SportsAgendaEvent>()
+                  .toList(growable: false);
+        }
+
         try {
-          final isRace =
-              entry.id == 'cycling' || entry.id == 'motorsport';
-          final rows = <Map<String, dynamic>>[];
           var finishedPages = false;
           for (var page = 0; page < 100; page++) {
             final envelope = await fetchCompleteEnvelope(
@@ -1069,6 +1208,8 @@ class SportsApiAppService {
                 'page': page.toString(),
               },
             );
+            sportIncomplete = sportIncomplete ||
+                envelope['_sportsApiIncomplete'] == true;
             final payload = envelope['data'];
             if (payload is! List) {
               throw FormatException(
@@ -1090,32 +1231,18 @@ class SportsApiAppService {
           }
           if (!finishedPages) {
             throw SportsApiException(
-              'SportsAPI superó el límite seguro de cien páginas para ${entry.name}.',
+              'SportsAPI superó el límite seguro de cien páginas para \${entry.name}.',
             );
           }
-
-          // /favorites es la fuente de verdad. Flutter vuelve a aplicar los
-          // filtros para no mostrar competiciones que no están seleccionadas.
-          final selectedRows = rows.where(
-            (row) => entry.matchesRow(row, isRace: isRace),
-          ).toList(growable: false);
-          final events = isRace
-              ? selectedRows
-                  .expand((row) => _raceEvents(
-                        row,
-                        entry.name,
-                        day,
-                        useRaceNameAsCompetition: entry.id == 'cycling',
-                      ))
-                  .toList(growable: false)
-              : selectedRows
-                  .map((row) => _fixtureEvent(row, entry.name))
-                  .whereType<SportsAgendaEvent>()
-                  .toList(growable: false);
-          resultsByIndex[index] = _AgendaSportResult(events: events);
+          resultsByIndex[index] = _AgendaSportResult(
+            events: buildEvents(),
+            failed: sportIncomplete,
+          );
         } catch (_) {
-          resultsByIndex[index] = const _AgendaSportResult(
-            events: <SportsAgendaEvent>[],
+          // Un 429/503 en una página posterior no debe borrar los partidos
+          // que ya se habían recibido para este deporte.
+          resultsByIndex[index] = _AgendaSportResult(
+            events: buildEvents(),
             failed: true,
           );
         }
@@ -1129,8 +1256,12 @@ class SportsApiAppService {
       growable: false,
     ));
     final results = resultsByIndex.cast<_AgendaSportResult>();
-    final successfulSports =
-        results.where((result) => !result.failed).length;
+    // Una primera página válida cuenta como respuesta útil aunque una página
+    // posterior haya sido limitada por 429. La jornada queda parcial, pero no
+    // se descartan los eventos ya recibidos.
+    final successfulSports = results.where(
+      (result) => !result.failed || result.events.isNotEmpty,
+    ).length;
     if (successfulSports == 0) {
       throw const SportsApiException(
         'No se pudo consultar ninguno de tus deportes favoritos en SportsAPI.',
@@ -1319,32 +1450,80 @@ class SportsApiAppService {
     return dayEvents;
   }
 
-    Future<dynamic> fetchFixtureStatistics(int fixtureId) {
-    return _get('/fixtures/$fixtureId/statistics');
+  Future<dynamic> fetchFixtureStatistics(
+    int fixtureId, {
+    DateTime? eventDate,
+    Duration maxAge = const Duration(hours: 20),
+    bool forceRefresh = false,
+  }) {
+    final date = eventDate ?? DateTime.now();
+    return _fetchDailyCachedData(
+      cacheName: 'fixture_stats_$fixtureId',
+      date: date,
+      maxAge: maxAge,
+      forceRefresh: forceRefresh,
+      loader: () => _get('/fixtures/$fixtureId/statistics', <String, String>{
+        if (forceRefresh) 'refresh': '1',
+      }),
+    );
   }
 
-  Future<dynamic> fetchRaceResults(int raceId, {int? sessionId}) {
-    return _get('/races/$raceId/results', <String, String>{
-      if (sessionId != null && sessionId > 0) 'session': sessionId.toString(),
-    });
+  Future<dynamic> fetchRaceResults(
+    int raceId, {
+    int? sessionId,
+    DateTime? eventDate,
+    Duration maxAge = const Duration(hours: 8),
+    bool forceRefresh = false,
+  }) {
+    final date = eventDate ?? DateTime.now();
+    return _fetchDailyCachedData(
+      cacheName: 'race_results_${raceId}_${sessionId ?? 0}',
+      date: date,
+      maxAge: maxAge,
+      forceRefresh: forceRefresh,
+      loader: () => _get('/races/$raceId/results', <String, String>{
+        if (sessionId != null && sessionId > 0) 'session': sessionId.toString(),
+        if (forceRefresh) 'refresh': '1',
+      }),
+    );
   }
 
   Future<dynamic> fetchLeagueStandings({
     required int leagueId,
     required int seasonId,
+    DateTime? eventDate,
+    bool forceRefresh = false,
   }) {
-    return _get('/leagues/$leagueId/standings', <String, String>{
-      'season': seasonId.toString(),
-    });
+    final date = eventDate ?? DateTime.now();
+    return _fetchDailyCachedData(
+      cacheName: 'league_standings_${leagueId}_$seasonId',
+      date: date,
+      maxAge: const Duration(hours: 20),
+      forceRefresh: forceRefresh,
+      loader: () => _get('/leagues/$leagueId/standings', <String, String>{
+        'season': seasonId.toString(),
+        if (forceRefresh) 'refresh': '1',
+      }),
+    );
   }
 
   Future<dynamic> fetchSeriesStandings({
     required int seriesId,
     required int seasonId,
+    DateTime? eventDate,
+    bool forceRefresh = false,
   }) {
-    return _get('/series/$seriesId/standings', <String, String>{
-      'season': seasonId.toString(),
-      'type': 'competitors',
-    });
+    final date = eventDate ?? DateTime.now();
+    return _fetchDailyCachedData(
+      cacheName: 'series_standings_${seriesId}_$seasonId',
+      date: date,
+      maxAge: const Duration(hours: 20),
+      forceRefresh: forceRefresh,
+      loader: () => _get('/series/$seriesId/standings', <String, String>{
+        'season': seasonId.toString(),
+        'type': 'competitors',
+        if (forceRefresh) 'refresh': '1',
+      }),
+    );
   }
 }

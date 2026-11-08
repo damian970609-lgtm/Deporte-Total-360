@@ -141,7 +141,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('permite cambiar de fecha y abrir la transmisión del evento seleccionado', (tester) async {
+  testWidgets('mantiene la Agenda limitada a hoy y permite abrir sus transmisiones', (tester) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     String? openedEventId;
@@ -150,7 +150,7 @@ void main() {
       MaterialApp(
         home: SportsAgendaScreen(
           isActive: false,
-          initialDate: today,
+          initialDate: today.add(const Duration(days: 1)),
           onOpenLive: (eventId) => openedEventId = eventId,
           loadEvents: () async => <SportsAgendaEvent>[
             SportsAgendaEvent(
@@ -180,17 +180,14 @@ void main() {
 
     expect(find.text('Team A'), findsOneWidget);
     expect(find.text('Team C'), findsNothing);
-
-    await tester.tap(find.byKey(const ValueKey<String>('agenda-day-1')));
-    await tester.pump();
-
-    expect(find.text('Team A'), findsNothing);
-    expect(find.text('Team C'), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('agenda-seven-day-selector')), findsNothing);
+    expect(find.byKey(const ValueKey<String>('agenda-day-1')), findsNothing);
 
     await tester.tap(
-      find.byKey(const ValueKey<String>('agenda-live-event-event-tomorrow')),
+      find.byKey(const ValueKey<String>('agenda-live-event-event-today')),
     );
-    expect(openedEventId, 'event-tomorrow');
+    expect(openedEventId, 'event-today');
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('muestra un estado vacío cuando SportAPI no publica eventos', (tester) async {

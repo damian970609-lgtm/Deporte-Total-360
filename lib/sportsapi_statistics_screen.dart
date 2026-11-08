@@ -193,6 +193,28 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
 
     Future<void> loadWindow() async {
       try {
+        if (!forceRefresh) {
+          final stored = await SportsAgendaStore.loadWindow(
+            startDate: _selectedDate,
+            days: 1,
+          );
+          final filteredStored =
+              await _api.filterFavoriteAgendaEvents(stored);
+          final fresh = await SportsAgendaStore.isWindowFresh(
+            startDate: _selectedDate,
+          );
+          if (!mounted || generation != _eventsRequestGeneration) return;
+          if (filteredStored.isNotEmpty || fresh) {
+            setState(() {
+              _events = filteredStored;
+              _error = null;
+              _coverageWarning = filteredStored.isNotEmpty
+                  ? 'Mostrando los últimos eventos guardados en este teléfono. Se actualizarán cuando venza la caché diaria o solicites actualizar.'
+                  : null;
+            });
+            if (fresh) return;
+          }
+        }
         final window = await _api.fetchFavoriteAgendaWindow(
           startDate: _selectedDate,
           days: 1,
@@ -255,15 +277,17 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
         });
       } catch (error) {
         if (!mounted || generation != _eventsRequestGeneration) return;
-        List<SportsAgendaEvent> stored = <SportsAgendaEvent>[];
+        List<SportsAgendaEvent> offlineEvents = <SportsAgendaEvent>[];
         try {
-          stored = await SportsAgendaStore.load();
+          final stored = await SportsAgendaStore.loadWindow(
+            startDate: _selectedDate,
+            days: 1,
+          );
+          offlineEvents = await _api.filterFavoriteAgendaEvents(stored);
+          offlineEvents.sort((a, b) => a.startsAt.compareTo(b.startsAt));
         } catch (_) {
           // Si no hay almacenamiento local disponible, muestra el error de red.
         }
-        final offlineEvents = stored.where((event) =>
-            _sameDay(event.startsAt.toLocal(), _selectedDate)).toList()
-          ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
         if (!mounted || generation != _eventsRequestGeneration) return;
         if (offlineEvents.isNotEmpty) {
           setState(() {
@@ -476,11 +500,19 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       final fixture = RegExp(r'^sportsapi-fixture-(\d+)$').firstMatch(event.id);
       final race = RegExp(r'^sportsapi-race-(\d+)-(\d+)$').firstMatch(event.id);
       if (fixture != null) {
-        response = await _api.fetchFixtureStatistics(int.parse(fixture.group(1)!));
+        response = await _api.fetchFixtureStatistics(
+          int.parse(fixture.group(1)!),
+          eventDate: _selectedDate,
+          maxAge: _eventCategory(event) == 'finished'
+              ? const Duration(hours: 20)
+              : const Duration(minutes: 3),
+        );
       } else if (race != null) {
         response = await _api.fetchRaceResults(
           int.parse(race.group(1)!),
           sessionId: int.parse(race.group(2)!),
+          eventDate: _selectedDate,
+          maxAge: const Duration(hours: 8),
         );
       } else {
         throw const FormatException('Este evento todavía no tiene estadísticas enlazadas a SportsAPI.');
@@ -489,7 +521,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       if (!mounted || request != _statisticsRequestGeneration) return;
       setState(() {
         _loadingStats = false;
-        _statistics = rows.take(48).toList(growable: false);
+        _statistics = rows.toList(growable: false);
         if (_statistics.isEmpty) {
           _statsError = 'SportsAPI todavía no ha publicado estadísticas para este evento.';
         }
@@ -518,11 +550,13 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
         response = await _api.fetchLeagueStandings(
           leagueId: event.providerLeagueId!,
           seasonId: event.providerSeasonId!,
+          eventDate: _selectedDate,
         );
       } else if (event.providerSeriesId != null && event.providerSeasonId != null) {
         response = await _api.fetchSeriesStandings(
           seriesId: event.providerSeriesId!,
           seasonId: event.providerSeasonId!,
+          eventDate: _selectedDate,
         );
       } else {
         throw const FormatException(
@@ -533,7 +567,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       if (!mounted || request != _statisticsRequestGeneration) return;
       setState(() {
         _loadingStats = false;
-        _statistics = rows.take(60).toList(growable: false);
+        _statistics = rows.toList(growable: false);
         if (_statistics.isEmpty) {
           _statsError = 'SportsAPI todavía no ha publicado una clasificación para esta competición.';
         }

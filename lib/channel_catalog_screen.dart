@@ -82,6 +82,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
   int _catalogRequestId = 0;
   int _nextCatalogOffset = 0;
   int _catalogTotal = 0;
+  bool _catalogTotalIsEstimate = false;
   bool _hasMoreChannels = false;
   bool _loadingMoreChannels = false;
   String? _loadMoreError;
@@ -156,6 +157,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
         _cachedChannels = cached.take(_maxCachedChannels).toList();
         _channels = List<SportsChannel>.from(_cachedChannels);
         _catalogTotal = _cachedChannels.length;
+        _catalogTotalIsEstimate = false;
         _nextCatalogOffset = _cachedChannels.length;
         _hasMoreChannels = false;
         _catalogNotice =
@@ -200,6 +202,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
         // cuota, los canales guardados deben seguir visibles en este teléfono.
         _channels = fallback;
         _catalogTotal = fallback.length;
+        _catalogTotalIsEstimate = false;
         _nextCatalogOffset = fallback.length;
         _hasMoreChannels = false;
       });
@@ -214,6 +217,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
       setState(() {
         _channels = page.channels;
         _catalogTotal = page.total;
+        _catalogTotalIsEstimate = page.totalIsEstimate;
         _nextCatalogOffset = page.offset + page.channels.length;
         _hasMoreChannels = page.hasMore;
         _selectedChannel = _firstOrNull(
@@ -244,6 +248,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
               ? List<SportsChannel>.from(_cachedChannels)
               : fallback;
           _catalogTotal = _channels.length;
+          _catalogTotalIsEstimate = false;
           _nextCatalogOffset = _channels.length;
           _hasMoreChannels = false;
           _error = null;
@@ -312,6 +317,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
           ].take(_maxCachedChannels).toList();
         }
         _catalogTotal = page.total;
+        _catalogTotalIsEstimate = page.totalIsEstimate;
         _nextCatalogOffset = page.offset + page.channels.length;
         _hasMoreChannels = page.hasMore;
       });
@@ -605,8 +611,9 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
                               ),
                             ),
                             child: Text(
-                              channels.length.toString() + ' / ' +
-                                  _catalogTotal.toString(),
+                              _catalogTotalIsEstimate
+                                   ? channels.length.toString() + '+ canales'
+                                   : _catalogTotal.toString() + ' canales',
                               style: const TextStyle(
                                 color: _channelCyan,
                                 fontSize: 10,
@@ -1601,6 +1608,9 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   String _selectedGeneralPresetUrl = channelPlaylistPresets.first.url;
   List<AppLicenseRecord> _licenseRecords = <AppLicenseRecord>[];
   String? _licensesError;
+  Map<String, dynamic> _trialSummary = <String, dynamic>{};
+  List<String> _newTrialCodes = <String>[];
+  String? _trialError;
   List<SportsChannel> _channels = <SportsChannel>[];
   SportsChannel? _previewChannel;
   List<ChannelPlaylistSource> _sources = <ChannelPlaylistSource>[];
@@ -1609,6 +1619,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   bool _rightsConfirmed = false;
   bool _hasMore = true;
   int _catalogTotal = 0;
+  bool _catalogTotalIsEstimate = false;
   int _nextAdminOffset = 0;
   bool _diagnosingPreview = false;
   String? _diagnosticResult;
@@ -1681,6 +1692,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         if (snapshot.hasChannels) {
           _channels = snapshot.channels;
           _catalogTotal = snapshot.channels.length;
+          _catalogTotalIsEstimate = false;
           _nextAdminOffset = snapshot.channels.length;
           _hasMore = false;
         }
@@ -1746,8 +1758,9 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _sources = <ChannelPlaylistSource>[];
         _licenseRecords = <AppLicenseRecord>[];
         _previewChannel = null;
-        _catalogTotal = 0;
-        _nextAdminOffset = 0;
+          _catalogTotal = 0;
+          _catalogTotalIsEstimate = false;
+          _nextAdminOffset = 0;
         _hasMore = false;
       });
     }
@@ -1774,6 +1787,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       setState(() {
         _channels = page.channels;
         _catalogTotal = page.total;
+        _catalogTotalIsEstimate = page.totalIsEstimate;
         _nextAdminOffset = page.offset + page.channels.length;
         final previewId = _previewChannel?.id;
         if (previewId != null) {
@@ -1822,6 +1836,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
 
     await _loadLicenses();
+    await _loadTrialSummary();
   }
 
   Future<void> _loadLicenses() async {
@@ -1836,6 +1851,50 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       if (!mounted) return;
       setState(() => _licensesError = error.toString());
     }
+  }
+
+  Future<void> _loadTrialSummary() async {
+    try {
+      final summary = await _service.fetchTrialPassSummary();
+      if (!mounted) return;
+      setState(() {
+        _trialSummary = summary;
+        _trialError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _trialError = error.toString());
+    }
+  }
+
+  Future<void> _generateTrialCodes() async {
+    if (_working) return;
+    setState(() {
+      _working = true;
+      _trialError = null;
+      _newTrialCodes = <String>[];
+    });
+    try {
+      final codes = await _service.generateTrialPassCodes(count: 10);
+      await _loadTrialSummary();
+      if (!mounted) return;
+      setState(() => _newTrialCodes = codes);
+      _message(codes.isEmpty
+          ? 'Ya están ocupadas las diez plazas VIP. Libera una plaza antes de generar más.'
+          : 'Se generaron ${codes.length} códigos VIP de un solo uso.');
+    } catch (error) {
+      if (mounted) setState(() => _trialError = error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _copyTrialCodes() async {
+    if (_newTrialCodes.isEmpty) return;
+    await Clipboard.setData(
+      ClipboardData(text: _newTrialCodes.join('\n')),
+    );
+    _message('Códigos VIP copiados. Guárdalos ahora: no se volverán a mostrar.');
   }
 
   Future<void> _grantLicense() async {
@@ -1939,6 +1998,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           page.channels.where((channel) => knownIds.add(channel.id)),
         );
         _catalogTotal = page.total;
+        _catalogTotalIsEstimate = page.totalIsEstimate;
         _nextAdminOffset = page.offset + page.channels.length;
         _hasMore = page.hasMore;
         _loading = false;
@@ -2456,6 +2516,27 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         local.year.toString() + ' ' +
         twoDigits(local.hour) + ':' +
         twoDigits(local.minute);
+  }
+
+  Widget _licenseMetric(String label, String value, Color accent) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: _channelPanel2,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: accent.withAlpha(110)),
+      ),
+      child: Column(
+        children: <Widget>[
+          Text(value, style: TextStyle(color: accent, fontSize: 15,
+            fontWeight: FontWeight.w900)),
+          const SizedBox(height: 3),
+          Text(label, textAlign: TextAlign.center,
+            style: const TextStyle(color: _channelMuted, fontSize: 7,
+              fontWeight: FontWeight.w900)),
+        ],
+      ),
+    );
   }
 
   Widget _adminCard({required Widget child}) {
@@ -3073,6 +3154,154 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
                           const Text(
+                            'DIEZ PLAZAS VIP · PRUEBAS SIN GOOGLE',
+                            style: TextStyle(
+                              color: _channelGreen,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          const Text(
+                            'Genera hasta 10 códigos individuales. Cada código se canjea una sola vez, queda vinculado al primer teléfono que lo activa y concede 30 días de acceso de prueba. No requiere Google ni pago.',
+                            style: TextStyle(
+                              color: _channelMuted,
+                              fontSize: 10,
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: <Widget>[
+                              Expanded(child: _licenseMetric(
+                                'DISPONIBLES',
+                                (_trialSummary['available'] ?? 0).toString(),
+                                _channelGreen,
+                              )),
+                              const SizedBox(width: 7),
+                              Expanded(child: _licenseMetric(
+                                'ACTIVAS',
+                                (_trialSummary['active'] ?? 0).toString(),
+                                _channelCyan,
+                              )),
+                              const SizedBox(width: 7),
+                              Expanded(child: _licenseMetric(
+                                'LÍMITE',
+                                '10',
+                                Colors.white,
+                              )),
+                            ],
+                          ),
+                          if (_trialError != null) ...<Widget>[
+                            const SizedBox(height: 7),
+                            Text(
+                              'No se pudo consultar o generar los pases: $_trialError',
+                              style: const TextStyle(
+                                color: _channelPink,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: _working ? null : _generateTrialCodes,
+                              icon: const Icon(Icons.vpn_key_rounded),
+                              label: const Text('GENERAR CÓDIGOS VIP DISPONIBLES'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: _channelGreen,
+                                foregroundColor: _channelBg,
+                              ),
+                            ),
+                          ),
+                          if (_newTrialCodes.isNotEmpty) ...<Widget>[
+                            const SizedBox(height: 10),
+                            Row(
+                              children: <Widget>[
+                                const Expanded(
+                                  child: Text(
+                                    'CÓDIGOS NUEVOS · COPIAR Y ENTREGAR',
+                                    style: TextStyle(
+                                      color: _channelCyan,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Copiar todos los códigos',
+                                  onPressed: _copyTrialCodes,
+                                  icon: const Icon(Icons.copy_rounded,
+                                    color: _channelGreen),
+                                ),
+                              ],
+                            ),
+                            for (var index = 0; index < _newTrialCodes.length; index++)
+                              Container(
+                                margin: const EdgeInsets.only(top: 5),
+                                padding: const EdgeInsets.all(9),
+                                decoration: BoxDecoration(
+                                  color: _channelPanel2,
+                                  borderRadius: BorderRadius.circular(9),
+                                  border: Border.all(color: _channelLine),
+                                ),
+                                child: Row(
+                                  children: <Widget>[
+                                    SizedBox(
+                                      width: 22,
+                                      child: Text(
+                                        (index + 1).toString().padLeft(2, '0'),
+                                        style: const TextStyle(
+                                          color: _channelMuted,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: SelectableText(
+                                        _newTrialCodes[index],
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          letterSpacing: 1,
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      visualDensity: VisualDensity.compact,
+                                      tooltip: 'Copiar código',
+                                      onPressed: () async {
+                                        await Clipboard.setData(
+                                          ClipboardData(text: _newTrialCodes[index]),
+                                        );
+                                        _message('Código VIP copiado.');
+                                      },
+                                      icon: const Icon(Icons.content_copy_rounded,
+                                        size: 16, color: _channelCyan),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            const SizedBox(height: 7),
+                            const Text(
+                              'IMPORTANTE: copia y entrega estos códigos ahora. Por seguridad, el servidor almacena solo sus hashes.',
+                              style: TextStyle(
+                                color: _channelMuted,
+                                fontSize: 9,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    _adminCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          const Text(
                             'LICENCIAS · VENTAS Y REGALOS',
                             style: TextStyle(
                               color: _channelGreen,
@@ -3514,7 +3743,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                           ),
                         ),
                         Text(
-                          _catalogTotal.toString() + ' total · ' +
+                          (_catalogTotalIsEstimate ? 'Más de ' : '') +
+                              _catalogTotal.toString() + ' total · ' +
                               _channels.length.toString() + ' cargados',
                           style: const TextStyle(
                             color: _channelMuted,
