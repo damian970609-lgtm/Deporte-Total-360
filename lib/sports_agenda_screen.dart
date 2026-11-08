@@ -281,7 +281,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
 
     // Primero pinta la jornada guardada. Si es del mismo día y sigue vigente,
     // no vuelve a consultar el calendario completo al abrir o reanudar la APK.
-    if (!forceRefresh) {
+    if (!forceRefresh && widget.loadEvents == null) {
       try {
         final agendaApi = SportsApiAppService();
         final stored = await SportsAgendaStore.loadWindow(
