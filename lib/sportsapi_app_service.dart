@@ -259,6 +259,76 @@ class SportsApiAppService {
   static const String _favoriteSportsSnapshotSavedAtKey =
       'dt360_sportsapi_favorite_sports_saved_at_v1';
 
+  static String _localDayKey(DateTime value) {
+    final local = value.toLocal();
+    return local.year.toString().padLeft(4, '0') + '-' +
+        local.month.toString().padLeft(2, '0') + '-' +
+        local.day.toString().padLeft(2, '0');
+  }
+
+  Future<dynamic> _fetchDailyCachedData({
+    required String cacheName,
+    required DateTime date,
+    required Future<dynamic> Function() loader,
+    Duration maxAge = const Duration(hours: 20),
+    bool forceRefresh = false,
+  }) async {
+    final dayKey = _localDayKey(date);
+    final base = SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value) ??
+        sportsApiBaseUrl.value.trim();
+    final safeBase = base.toLowerCase().replaceAll(
+      RegExp(r'[^a-z0-9]+'),
+      '_',
+    );
+    final cacheKey = 'dt360_stats_v2_' + safeBase + '_' +
+        cacheName.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_') + '_' + dayKey;
+    SharedPreferences? prefs;
+    dynamic cachedData;
+    DateTime? cachedAt;
+    try {
+      prefs = await SharedPreferences.getInstance();
+      if (!forceRefresh) {
+        final raw = prefs.getString(cacheKey);
+        if (raw != null && raw.isNotEmpty) {
+          final decoded = jsonDecode(raw);
+          if (decoded is Map && decoded['day'] == dayKey) {
+            cachedData = decoded['data'];
+            cachedAt = DateTime.tryParse(
+              (decoded['savedAt'] ?? '').toString(),
+            );
+            if (cachedAt != null) {
+              final age = DateTime.now().difference(cachedAt);
+              if (!age.isNegative && age <= maxAge) return cachedData;
+            }
+          }
+        }
+      }
+    } catch (_) {
+      // La indisponibilidad de SharedPreferences no impide consultar SportsAPI.
+    }
+
+    try {
+      final value = await loader();
+      try {
+        await prefs?.setString(
+          cacheKey,
+          jsonEncode(<String, dynamic>{
+            'day': dayKey,
+            'savedAt': DateTime.now().toIso8601String(),
+            'data': value,
+          }),
+        );
+      } catch (_) {
+        // La respuesta del proveedor es válida aunque no pueda persistirse.
+      }
+      return value;
+    } catch (_) {
+      // En una caída temporal se conserva la última respuesta del mismo día.
+      if (cachedAt != null && cachedData != null) return cachedData;
+      rethrow;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> _readFavoriteSportsSnapshot() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -1349,32 +1419,80 @@ class SportsApiAppService {
     return dayEvents;
   }
 
-    Future<dynamic> fetchFixtureStatistics(int fixtureId) {
-    return _get('/fixtures/$fixtureId/statistics');
+  Future<dynamic> fetchFixtureStatistics(
+    int fixtureId, {
+    DateTime? eventDate,
+    Duration maxAge = const Duration(hours: 20),
+    bool forceRefresh = false,
+  }) {
+    final date = eventDate ?? DateTime.now();
+    return _fetchDailyCachedData(
+      cacheName: 'fixture_stats_$fixtureId',
+      date: date,
+      maxAge: maxAge,
+      forceRefresh: forceRefresh,
+      loader: () => _get('/fixtures/$fixtureId/statistics', <String, String>{
+        if (forceRefresh) 'refresh': '1',
+      }),
+    );
   }
 
-  Future<dynamic> fetchRaceResults(int raceId, {int? sessionId}) {
-    return _get('/races/$raceId/results', <String, String>{
-      if (sessionId != null && sessionId > 0) 'session': sessionId.toString(),
-    });
+  Future<dynamic> fetchRaceResults(
+    int raceId, {
+    int? sessionId,
+    DateTime? eventDate,
+    Duration maxAge = const Duration(hours: 8),
+    bool forceRefresh = false,
+  }) {
+    final date = eventDate ?? DateTime.now();
+    return _fetchDailyCachedData(
+      cacheName: 'race_results_${raceId}_${sessionId ?? 0}',
+      date: date,
+      maxAge: maxAge,
+      forceRefresh: forceRefresh,
+      loader: () => _get('/races/$raceId/results', <String, String>{
+        if (sessionId != null && sessionId > 0) 'session': sessionId.toString(),
+        if (forceRefresh) 'refresh': '1',
+      }),
+    );
   }
 
   Future<dynamic> fetchLeagueStandings({
     required int leagueId,
     required int seasonId,
+    DateTime? eventDate,
+    bool forceRefresh = false,
   }) {
-    return _get('/leagues/$leagueId/standings', <String, String>{
-      'season': seasonId.toString(),
-    });
+    final date = eventDate ?? DateTime.now();
+    return _fetchDailyCachedData(
+      cacheName: 'league_standings_${leagueId}_$seasonId',
+      date: date,
+      maxAge: const Duration(hours: 20),
+      forceRefresh: forceRefresh,
+      loader: () => _get('/leagues/$leagueId/standings', <String, String>{
+        'season': seasonId.toString(),
+        if (forceRefresh) 'refresh': '1',
+      }),
+    );
   }
 
   Future<dynamic> fetchSeriesStandings({
     required int seriesId,
     required int seasonId,
+    DateTime? eventDate,
+    bool forceRefresh = false,
   }) {
-    return _get('/series/$seriesId/standings', <String, String>{
-      'season': seasonId.toString(),
-      'type': 'competitors',
-    });
+    final date = eventDate ?? DateTime.now();
+    return _fetchDailyCachedData(
+      cacheName: 'series_standings_${seriesId}_$seasonId',
+      date: date,
+      maxAge: const Duration(hours: 20),
+      forceRefresh: forceRefresh,
+      loader: () => _get('/series/$seriesId/standings', <String, String>{
+        'season': seasonId.toString(),
+        'type': 'competitors',
+        if (forceRefresh) 'refresh': '1',
+      }),
+    );
   }
 }
