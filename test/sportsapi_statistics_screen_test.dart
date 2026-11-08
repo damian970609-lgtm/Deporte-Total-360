@@ -149,8 +149,20 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('EVENTOS DEL DÍA'), findsOneWidget);
-        expect(find.text('Alpha FC vs Beta FC'), findsOneWidget);
+        final eventsHeading = find.text('EVENTOS DEL DÍA');
+        await tester.scrollUntilVisible(
+          eventsHeading,
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(eventsHeading, findsOneWidget);
+        final firstEvent = find.text('Alpha FC vs Beta FC');
+        await tester.scrollUntilVisible(
+          firstEvent,
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(firstEvent, findsOneWidget);
         expect(find.text('Fútbol'), findsOneWidget);
         expect(find.text('Baloncesto'), findsNothing);
         expect(find.byKey(const ValueKey<String>('stats-date-picker')), findsOneWidget);
@@ -285,8 +297,20 @@ void main() {
         ));
         await tester.pumpAndSettle();
 
-        expect(find.text('Alpha FC vs Beta FC'), findsOneWidget);
-        expect(find.text('Basket Club vs Rival Basket'), findsOneWidget);
+        final alphaEvent = find.text('Alpha FC vs Beta FC');
+        await tester.scrollUntilVisible(
+          alphaEvent,
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(alphaEvent, findsOneWidget);
+        final basketEvent = find.text('Basket Club vs Rival Basket');
+        await tester.scrollUntilVisible(
+          basketEvent,
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(basketEvent, findsOneWidget);
         expect(find.byKey(const ValueKey<String>('stats-filter-sport-all')), findsOneWidget);
 
         final basketballChip = find.widgetWithText(ChoiceChip, 'Baloncesto');
@@ -339,7 +363,13 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('Alpha FC vs Beta FC'), findsOneWidget);
+        final offlineEvent = find.text('Alpha FC vs Beta FC');
+        await tester.scrollUntilVisible(
+          offlineEvent,
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(offlineEvent, findsOneWidget);
         expect(
           find.textContaining('últimos eventos guardados en este teléfono'),
           findsOneWidget,
