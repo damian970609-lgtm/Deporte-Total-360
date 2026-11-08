@@ -238,7 +238,7 @@ void main() {
     final previousBase = sportsApiBaseUrl.value;
     sportsApiBaseUrl.value = 'https://worker-vip-favorites.example';
     final seenFavoriteHeaders = <Map<String, String>>[];
-    final sessionToken = 'c' * 64;
+    final sessionToken = List<String>.filled(64, 'c').join();
     final client = MockClient((request) async {
       if (request.url.path.endsWith('/api/trials/redeem')) {
         return http.Response(jsonEncode({
