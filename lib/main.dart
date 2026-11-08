@@ -307,6 +307,7 @@ class _AppAccessGateState extends State<AppAccessGate> {
   String? _email;
   String? _message;
   bool _working = false;
+  final TextEditingController _trialCodeController = TextEditingController();
 
   @override
   void initState() {
@@ -331,6 +332,14 @@ class _AppAccessGateState extends State<AppAccessGate> {
     }
     try {
       await _prepareApiSettings();
+      if (await _licenseService.validateTrialSession()) {
+        if (!mounted) return;
+        setState(() {
+          _email = 'Pase VIP de prueba';
+          _stage = _AccessGateStage.authorized;
+        });
+        return;
+      }
       final email = await _licenseService.restoreSession();
       if (!mounted) return;
       if (email == null) {
@@ -368,6 +377,45 @@ class _AppAccessGateState extends State<AppAccessGate> {
         _message = error.toString();
       });
     }
+  }
+
+  Future<void> _redeemTrialCode() async {
+    if (_working) return;
+    final code = _trialCodeController.text.trim();
+    if (code.isEmpty) {
+      setState(() => _message = 'Introduce el código VIP que te entregó el administrador.');
+      return;
+    }
+    setState(() {
+      _working = true;
+      _message = null;
+    });
+    try {
+      await _licenseService.redeemTrialCode(code);
+      final valid = await _licenseService.validateTrialSession();
+      if (!valid) {
+        throw const ChannelCatalogException(
+          'El código se activó, pero no se pudo validar la sesión de prueba.',
+        );
+      }
+      if (!mounted) return;
+      _trialCodeController.clear();
+      setState(() {
+        _email = 'Pase VIP de prueba';
+        _stage = _AccessGateStage.authorized;
+        _message = null;
+      });
+    } catch (error) {
+      if (mounted) setState(() => _message = error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _trialCodeController.dispose();
+    super.dispose();
   }
 
   Future<void> _signIn() async {
@@ -566,10 +614,53 @@ class _AppAccessGateState extends State<AppAccessGate> {
                               ),
                             ),
                           ),
+                          const SizedBox(height: 18),
+                          const Row(
+                            children: <Widget>[
+                              Expanded(child: Divider(color: appLine)),
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 10),
+                                child: Text('O ENTRA CON UN PASE VIP',
+                                  style: TextStyle(color: appMuted, fontSize: 9,
+                                    fontWeight: FontWeight.w900)),
+                              ),
+                              Expanded(child: Divider(color: appLine)),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _trialCodeController,
+                            enabled: !_working,
+                            textCapitalization: TextCapitalization.characters,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white,
+                              fontWeight: FontWeight.w900, letterSpacing: 1.5),
+                            decoration: const InputDecoration(
+                              labelText: 'Código VIP de prueba',
+                              hintText: 'PEGA AQUÍ TU CÓDIGO',
+                              prefixIcon: Icon(Icons.key_rounded, color: appGreen),
+                            ),
+                          ),
+                          const SizedBox(height: 9),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: _working ? null : _redeemTrialCode,
+                              icon: const Icon(Icons.verified_user_rounded),
+                              label: const Text('ACTIVAR PASE VIP · SIN GOOGLE'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: appGreen,
+                                side: const BorderSide(color: appGreen),
+                                padding: const EdgeInsets.symmetric(vertical: 13),
+                              ),
+                            ),
+                          ),
                           if (denied) ...<Widget>[
                             const SizedBox(height: 10),
                             const Text(
-                              'Para comprar una licencia o recibir una invitación, contacta al administrador.',
+                              'También puedes usar un código VIP temporal de prueba. No necesitas Google ni realizar pagos.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: appMuted,
