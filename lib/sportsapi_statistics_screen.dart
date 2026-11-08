@@ -110,6 +110,14 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
 
   List<_FavouriteSport> get _availableSports {
     final favoriteIds = _catalog.map(_catalogSportId).toSet();
+    // En instalaciones que aún no tienen una copia local del catálogo, usa
+    // las disciplinas de los eventos guardados para que la vista offline no
+    // oculte todo el contenido detrás de un filtro vacío.
+    if (favoriteIds.isEmpty) {
+      favoriteIds.addAll(_events.map(
+        (event) => _catalogSportId(<String, dynamic>{'sport': event.sport}),
+      ));
+    }
     return _sports
         .where((sport) => favoriteIds.contains(sport.id))
         .toList(growable: false);
