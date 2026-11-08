@@ -6,6 +6,8 @@ import 'package:http/testing.dart';
 
 import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sportsapi_app_service.dart';
+import 'package:deporte_total_360/automatic_live_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -797,6 +799,77 @@ void main() {
       expect(events, hasLength(1));
       expect(events.single.id, 'sportsapi-fixture-303');
       expect(events.single.competition, 'La Liga');
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
+  });
+
+
+  test('recupera el catálogo de deportes favoritos desde SharedPreferences si falla el Worker', () async {
+    SharedPreferences.setMockInitialValues({});
+    final previousBase = sportsApiBaseUrl.value;
+    const base = 'https://worker-favorites-offline.example';
+    sportsApiBaseUrl.value = base;
+    final firstClient = MockClient((request) async => http.Response(jsonEncode({
+      'sports': [
+        {'id': 'football', 'name': 'Fútbol', 'competitions': ['Premier League']},
+        {'id': 'basketball', 'name': 'Baloncesto', 'competitions': ['NBA']}
+      ]
+    }), 200));
+    final failedClient = MockClient((request) async => http.Response('{}', 503));
+    try {
+      final first = SportsApiAppService(client: firstClient);
+      final saved = await first.fetchFavoriteSports();
+      expect(saved, hasLength(2));
+
+      final offline = await SportsApiAppService(client: failedClient)
+          .fetchFavoriteSports(forceRefresh: true);
+      expect(offline.map((item) => item['id']), ['football', 'basketball']);
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      firstClient.close();
+      failedClient.close();
+    }
+  });
+
+  test('recupera la agenda guardada si todas las consultas del Worker fallan', () async {
+    SharedPreferences.setMockInitialValues({});
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-agenda-offline.example';
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final saved = SportsAgendaEvent(
+      id: 'sportsapi-fixture-offline-202',
+      title: 'Equipo Uno vs Equipo Dos',
+      sport: 'Fútbol',
+      competition: 'Premier League',
+      homeTeam: 'Equipo Uno',
+      awayTeam: 'Equipo Dos',
+      startsAt: start.add(const Duration(hours: 14)),
+      detailUrl: 'https://deporte-total-360-api.example/api/sportsapi/fixtures/202',
+    );
+    await SportsAgendaStore.saveWindow(
+      <SportsAgendaEvent>[saved],
+      startDate: start,
+      days: 1,
+    );
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/favorites')) {
+        return http.Response(jsonEncode({
+          'sports': [
+            {'id': 'football', 'name': 'Fútbol', 'competitions': ['Premier League']}
+          ]
+        }), 200);
+      }
+      return http.Response(jsonEncode({'error': {'message': 'quota'}}), 503,
+          headers: {'retry-after': '30'});
+    });
+    try {
+      final window = await SportsApiAppService(client: client)
+          .fetchFavoriteAgendaWindow(startDate: start, days: 1);
+      expect(window.events.map((event) => event.id), contains(saved.id));
+      expect(window.unavailableDates, isNotEmpty);
     } finally {
       sportsApiBaseUrl.value = previousBase;
       client.close();
