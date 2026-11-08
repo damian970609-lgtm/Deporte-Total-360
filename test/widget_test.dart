@@ -339,7 +339,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('muestra las nueve secciones principales y presenta Chat antes de Ajustes', (tester) async {
+  testWidgets('muestra las ocho secciones principales y presenta Chat antes de Ajustes', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
     // Pintar un segundo frame comprueba el render inicial de Inicio, no solo
     // que el árbol de widgets se pueda construir.
@@ -355,7 +355,7 @@ void main() {
     expect(find.text('Agenda de hoy'), findsOneWidget);
     expect(find.text('Mister Fantasy'), findsOneWidget);
     expect(find.text('Estadísticas'), findsWidgets);
-    expect(find.text('Resúmenes'), findsOneWidget);
+    expect(find.text('Resúmenes'), findsNothing);
     expect(find.text('Chat'), findsOneWidget);
     expect(find.text('Ajustes'), findsOneWidget);
     // La sala pública no arranca hasta seleccionar su pestaña.
@@ -363,7 +363,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('la navegación inferior permite recorrer las nueve secciones', (tester) async {
+  testWidgets('la navegación inferior permite recorrer las ocho secciones', (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     tester.view.devicePixelRatio = 1;
