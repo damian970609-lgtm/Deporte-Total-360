@@ -1111,9 +1111,10 @@ class SportsApiAppService {
               : <String, dynamic>{};
           if (meta['complete'] != false) return envelope;
           if (attempt == 1) {
-            throw const SportsApiException(
-              'SportsAPI devolvió datos incompletos en dos intentos.',
-            );
+            return <String, dynamic>{
+              ...envelope,
+              '_sportsApiIncomplete': true,
+            };
           }
         } catch (error) {
           final message = error.toString();
@@ -1126,7 +1127,7 @@ class SportsApiAppService {
               RegExp(r'Retry-After:\s*(\d+)', caseSensitive: false)
                   .firstMatch(message);
           final retrySeconds = int.tryParse(retryMatch?.group(1) ?? '');
-          if (retrySeconds != null && retrySeconds > 10) rethrow;
+          if (retrySeconds != null && retrySeconds > 4) rethrow;
           await Future<void>.delayed(
             Duration(seconds: retrySeconds ?? 7),
           );
@@ -1172,10 +1173,31 @@ class SportsApiAppService {
         final index = nextIndex++;
         if (index >= entries.length) return;
         final entry = entries[index];
+        final isRace =
+            entry.id == 'cycling' || entry.id == 'motorsport';
+        final rows = <Map<String, dynamic>>[];
+        var sportIncomplete = false;
+
+        List<SportsAgendaEvent> buildEvents() {
+          final selectedRows = rows.where(
+            (row) => entry.matchesRow(row, isRace: isRace),
+          ).toList(growable: false);
+          return isRace
+              ? selectedRows
+                  .expand((row) => _raceEvents(
+                        row,
+                        entry.name,
+                        day,
+                        useRaceNameAsCompetition: entry.id == 'cycling',
+                      ))
+                  .toList(growable: false)
+              : selectedRows
+                  .map((row) => _fixtureEvent(row, entry.name))
+                  .whereType<SportsAgendaEvent>()
+                  .toList(growable: false);
+        }
+
         try {
-          final isRace =
-              entry.id == 'cycling' || entry.id == 'motorsport';
-          final rows = <Map<String, dynamic>>[];
           var finishedPages = false;
           for (var page = 0; page < 100; page++) {
             final envelope = await fetchCompleteEnvelope(
@@ -1186,6 +1208,8 @@ class SportsApiAppService {
                 'page': page.toString(),
               },
             );
+            sportIncomplete = sportIncomplete ||
+                envelope['_sportsApiIncomplete'] == true;
             final payload = envelope['data'];
             if (payload is! List) {
               throw FormatException(
@@ -1207,32 +1231,18 @@ class SportsApiAppService {
           }
           if (!finishedPages) {
             throw SportsApiException(
-              'SportsAPI superó el límite seguro de cien páginas para ${entry.name}.',
+              'SportsAPI superó el límite seguro de cien páginas para \${entry.name}.',
             );
           }
-
-          // /favorites es la fuente de verdad. Flutter vuelve a aplicar los
-          // filtros para no mostrar competiciones que no están seleccionadas.
-          final selectedRows = rows.where(
-            (row) => entry.matchesRow(row, isRace: isRace),
-          ).toList(growable: false);
-          final events = isRace
-              ? selectedRows
-                  .expand((row) => _raceEvents(
-                        row,
-                        entry.name,
-                        day,
-                        useRaceNameAsCompetition: entry.id == 'cycling',
-                      ))
-                  .toList(growable: false)
-              : selectedRows
-                  .map((row) => _fixtureEvent(row, entry.name))
-                  .whereType<SportsAgendaEvent>()
-                  .toList(growable: false);
-          resultsByIndex[index] = _AgendaSportResult(events: events);
+          resultsByIndex[index] = _AgendaSportResult(
+            events: buildEvents(),
+            failed: sportIncomplete,
+          );
         } catch (_) {
-          resultsByIndex[index] = const _AgendaSportResult(
-            events: <SportsAgendaEvent>[],
+          // Un 429/503 en una página posterior no debe borrar los partidos
+          // que ya se habían recibido para este deporte.
+          resultsByIndex[index] = _AgendaSportResult(
+            events: buildEvents(),
             failed: true,
           );
         }
