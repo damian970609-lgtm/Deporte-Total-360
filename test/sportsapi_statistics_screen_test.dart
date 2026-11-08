@@ -8,6 +8,8 @@ import 'package:http/testing.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
 import 'package:deporte_total_360/sportsapi_app_service.dart';
 import 'package:deporte_total_360/sportsapi_statistics_screen.dart';
+import 'package:deporte_total_360/automatic_live_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _FavoritesOnlyApi extends SportsApiAppService {
   _FavoritesOnlyApi(http.Client client) : super(client: client);
@@ -275,6 +277,51 @@ void main() {
       } finally {
         await tester.pumpWidget(const SizedBox.shrink());
         sportsApiBaseUrl.value = previousBase;
+        client.close();
+      }
+    },
+  );
+
+
+  testWidgets(
+    'recupera eventos guardados en el teléfono cuando el Worker no responde',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final savedEvent = SportsAgendaEvent(
+        id: 'sportsapi-fixture-offline-101',
+        title: 'Alpha FC vs Beta FC',
+        sport: 'Fútbol',
+        competition: 'Premier League',
+        homeTeam: 'Alpha FC',
+        awayTeam: 'Beta FC',
+        startsAt: today.add(const Duration(hours: 18)),
+        detailUrl: 'https://deporte-total-360-api.example/api/sportsapi/fixtures/101',
+      );
+      await SportsAgendaStore.saveWindow(
+        <SportsAgendaEvent>[savedEvent],
+        startDate: today,
+        days: 1,
+      );
+
+      final client = MockClient((request) async => http.Response('{}', 503));
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: SportsApiStatisticsScreen(api: _FavoritesOnlyApi(client)),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Alpha FC vs Beta FC'), findsOneWidget);
+        expect(
+          find.textContaining('últimos eventos guardados en este teléfono'),
+          findsOneWidget,
+        );
+        expect(find.text('No se pudo cargar la agenda'), findsNothing);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
         client.close();
       }
     },
