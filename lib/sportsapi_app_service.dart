@@ -1256,8 +1256,12 @@ class SportsApiAppService {
       growable: false,
     ));
     final results = resultsByIndex.cast<_AgendaSportResult>();
-    final successfulSports =
-        results.where((result) => !result.failed).length;
+    // Una primera página válida cuenta como respuesta útil aunque una página
+    // posterior haya sido limitada por 429. La jornada queda parcial, pero no
+    // se descartan los eventos ya recibidos.
+    final successfulSports = results.where(
+      (result) => !result.failed || result.events.isNotEmpty,
+    ).length;
     if (successfulSports == 0) {
       throw const SportsApiException(
         'No se pudo consultar ninguno de tus deportes favoritos en SportsAPI.',
