@@ -662,14 +662,40 @@ class SportsApiAppService {
 
     final future = () async {
       try {
-        return await _fetchFavoriteAgendaEvents(
+        final result = await _fetchFavoriteAgendaEvents(
           day,
           forceRefresh: forceRefresh,
           onProgress: onProgress,
         );
+        if (result.incomplete) {
+          // Algunos deportes pueden fallar mientras otros responden. Fusiona
+          // la respuesta parcial con el último snapshot válido del teléfono.
+          try {
+            final utcStart = DateTime.parse(day).toUtc();
+            final utcEnd = utcStart.add(const Duration(days: 1));
+            final stored = await SportsAgendaStore.load();
+            final merged = <String, SportsAgendaEvent>{
+              for (final event in result.events) event.id: event,
+            };
+            for (final event in stored) {
+              final start = event.startsAt.toUtc();
+              if (!start.isBefore(utcStart) && start.isBefore(utcEnd)) {
+                merged.putIfAbsent(event.id, () => event);
+              }
+            }
+            if (merged.length > result.events.length) {
+              final events = merged.values.toList()
+                ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+              return _AgendaSportsResult(events: events, incomplete: true);
+            }
+          } catch (_) {
+            // Se conserva la respuesta parcial si no se puede leer el snapshot.
+          }
+        }
+        return result;
       } catch (error, stackTrace) {
-        // Recupera la última jornada válida guardada en el teléfono. Las
-        // fechas se comparan en UTC porque el proveedor pagina por día UTC.
+        // Si todo el catálogo falla antes de producir una respuesta parcial,
+        // recupera la última jornada válida guardada en el teléfono.
         try {
           final utcStart = DateTime.parse(day).toUtc();
           final utcEnd = utcStart.add(const Duration(days: 1));
@@ -680,10 +706,7 @@ class SportsApiAppService {
           }).toList()
             ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
           if (events.isNotEmpty) {
-            return _AgendaSportsResult(
-              events: events,
-              incomplete: true,
-            );
+            return _AgendaSportsResult(events: events, incomplete: true);
           }
         } catch (_) {
           // Se vuelve a propagar el error original si no existe snapshot.
