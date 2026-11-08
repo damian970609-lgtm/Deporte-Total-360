@@ -367,12 +367,14 @@ class ChannelCatalogPage {
     required this.total,
     required this.offset,
     required this.hasMore,
+    this.totalIsEstimate = false,
   });
 
   final List<SportsChannel> channels;
   final int total;
   final int offset;
   final bool hasMore;
+  final bool totalIsEstimate;
 }
 
 class ChannelCatalogException implements Exception {
@@ -853,6 +855,7 @@ class ChannelCatalogService {
       total: total,
       offset: responseOffset,
       hasMore: hasMore,
+      totalIsEstimate: payload['totalIsEstimate'] == true,
     );
   }
 
@@ -904,6 +907,7 @@ class ChannelCatalogService {
       total: total,
       offset: responseOffset,
       hasMore: hasMore,
+      totalIsEstimate: payload['totalIsEstimate'] == true,
     );
   }
 
