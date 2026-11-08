@@ -191,9 +191,34 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
           forceRefresh: forceRefresh,
         );
         if (!mounted || generation != _eventsRequestGeneration) return;
+
+        final eventsById = <String, SportsAgendaEvent>{
+          for (final event in window.events) event.id: event,
+        };
+        var restoredOfflineEvents = false;
+        if (window.unavailableDates.isNotEmpty) {
+          // Una fecha parcialmente cubierta no debe perder los eventos de
+          // otros deportes que el teléfono ya había guardado correctamente.
+          for (final stored in await SportsAgendaStore.load()) {
+            if (_sameDay(stored.startsAt.toLocal(), _selectedDate)) {
+              if (!eventsById.containsKey(stored.id)) {
+                eventsById[stored.id] = stored;
+                restoredOfflineEvents = true;
+              }
+            }
+          }
+        }
+        final visibleWindow = eventsById.values.toList()
+          ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+        await SportsAgendaStore.saveWindow(
+          visibleWindow,
+          startDate: _selectedDate,
+          days: 1,
+        );
+
         SportsAgendaEvent? restoredSelection;
         if (selectedId != null && selectedSportId == _sportId) {
-          for (final event in window.events) {
+          for (final event in visibleWindow) {
             if (event.id == selectedId) {
               restoredSelection = event;
               break;
@@ -201,8 +226,9 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
           }
         }
         setState(() {
-          _events = window.events;
+          _events = visibleWindow;
           _selectedEvent = restoredSelection;
+          _error = null;
           if (restoredSelection == null) {
             _statistics = <MapEntry<String, String>>[];
             _statsError = null;
@@ -210,11 +236,27 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
           }
           _coverageWarning = window.unavailableDates.isEmpty
               ? null
-              : 'Cobertura parcial: el proveedor no respondió para todas las franjas horarias de este día. Los eventos recibidos sí se muestran.';
+              : restoredOfflineEvents
+                  ? 'Cobertura parcial de SportsAPI. Se conservaron también los eventos guardados en este teléfono.'
+                  : 'Cobertura parcial: el proveedor no respondió para todas las franjas horarias de este día. Los eventos recibidos sí se muestran.';
         });
       } catch (error) {
         if (!mounted || generation != _eventsRequestGeneration) return;
-        setState(() => _error = error.toString());
+        final stored = await SportsAgendaStore.load();
+        final offlineEvents = stored.where((event) =>
+            _sameDay(event.startsAt.toLocal(), _selectedDate)).toList()
+          ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+        if (!mounted || generation != _eventsRequestGeneration) return;
+        if (offlineEvents.isNotEmpty) {
+          setState(() {
+            _events = offlineEvents;
+            _error = null;
+            _coverageWarning =
+                'Sin conexión con SportsAPI. Se muestran los últimos eventos guardados en este teléfono; pueden estar desactualizados.';
+          });
+        } else {
+          setState(() => _error = error.toString());
+        }
       }
     }
 
