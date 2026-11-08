@@ -929,6 +929,62 @@ void main() {
   });
 
 
+  test('las clasificaciones se consultan una vez por jornada local', () async {
+    SharedPreferences.setMockInitialValues({});
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-daily-standings-cache.example';
+    final requested = <Uri>[];
+    final client = MockClient((request) async {
+      requested.add(request.url);
+      return http.Response(
+        jsonEncode({
+          'data': [
+            {'rank': 1, 'team': {'name': 'Equipo Uno'}, 'points': 12},
+          ],
+          'meta': {},
+        }),
+        200,
+      );
+    });
+
+    try {
+      final api = SportsApiAppService(client: client);
+      final today = DateTime.now();
+      final tomorrow = today.add(const Duration(days: 1));
+
+      await api.fetchLeagueStandings(
+        leagueId: 39,
+        seasonId: 2026,
+        eventDate: today,
+      );
+      await api.fetchLeagueStandings(
+        leagueId: 39,
+        seasonId: 2026,
+        eventDate: today,
+      );
+      expect(requested, hasLength(1));
+
+      await api.fetchLeagueStandings(
+        leagueId: 39,
+        seasonId: 2026,
+        eventDate: tomorrow,
+      );
+      await api.fetchLeagueStandings(
+        leagueId: 39,
+        seasonId: 2026,
+        eventDate: tomorrow,
+      );
+      expect(requested, hasLength(2));
+      expect(
+        requested.map((uri) => uri.path),
+        everyElement('/api/sportsapi/leagues/39/standings'),
+      );
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
+  });
+
   test('conserva los eventos de la primera página cuando la siguiente responde 429', () async {
     SharedPreferences.setMockInitialValues({});
     final previousBase = sportsApiBaseUrl.value;
