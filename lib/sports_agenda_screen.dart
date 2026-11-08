@@ -1135,7 +1135,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
                             icon: Icons.event_busy_rounded,
                             title: 'NO HAY EVENTOS PARA ESTA FECHA',
                             message: _events.isEmpty
-                                ? 'No se encontraron eventos en los próximos siete días. Comprueba la conexión y vuelve a actualizar.'
+                                ? 'No se encontraron eventos de tus deportes favoritos para hoy. Comprueba la conexión y vuelve a actualizar.'
                                 : 'No hay eventos que coincidan con esta fecha y estos filtros. Prueba otro día o elimina los filtros.',
                           )
                         : RefreshIndicator(
