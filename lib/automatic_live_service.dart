@@ -431,7 +431,7 @@ class SportsAgendaStore {
   /// el usuario solicite una actualización manual.
   static Future<bool> isWindowFresh({
     required DateTime startDate,
-    Duration maxAge = const Duration(hours: 18),
+    Duration maxAge = const Duration(hours: 24),
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
