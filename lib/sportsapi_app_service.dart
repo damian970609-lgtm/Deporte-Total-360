@@ -184,7 +184,7 @@ class SportsApiAppService {
 
   static const Duration _timeout = Duration(seconds: 45);
   static const Duration _windowTimeout = Duration(minutes: 20);
-  static const Duration _favoritesCacheDuration = Duration(minutes: 2);
+  static const Duration _favoritesCacheDuration = Duration(hours: 18);
 
   static final Map<String, ({
     List<Map<String, dynamic>> sports,
@@ -256,6 +256,8 @@ class SportsApiAppService {
 
   static const String _favoriteSportsSnapshotKey =
       'dt360_sportsapi_favorite_sports_snapshot_v1';
+  static const String _favoriteSportsSnapshotSavedAtKey =
+      'dt360_sportsapi_favorite_sports_saved_at_v1';
 
   Future<List<Map<String, dynamic>>> _readFavoriteSportsSnapshot() async {
     try {
@@ -273,6 +275,20 @@ class SportsApiAppService {
     }
   }
 
+  Future<bool> _favoriteSportsSnapshotIsFresh() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedAt = DateTime.tryParse(
+        prefs.getString(_favoriteSportsSnapshotSavedAtKey) ?? '',
+      );
+      if (savedAt == null) return false;
+      final age = DateTime.now().difference(savedAt);
+      return !age.isNegative && age <= _favoritesCacheDuration;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _saveFavoriteSportsSnapshot(
     List<Map<String, dynamic>> sports,
   ) async {
@@ -280,6 +296,10 @@ class SportsApiAppService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_favoriteSportsSnapshotKey, jsonEncode(sports));
+      await prefs.setString(
+        _favoriteSportsSnapshotSavedAtKey,
+        DateTime.now().toIso8601String(),
+      );
     } catch (_) {
       // Una copia local no debe invalidar una respuesta correcta del Worker.
     }
@@ -300,6 +320,16 @@ class SportsApiAppService {
     final cached = _favoriteSportsCache[base];
     if (cached != null && now.isBefore(cached.expiresAt)) {
       return cached.sports;
+    }
+    if (!forceRefresh) {
+      final snapshot = await _readFavoriteSportsSnapshot();
+      if (snapshot.isNotEmpty && await _favoriteSportsSnapshotIsFresh()) {
+        _favoriteSportsCache[base] = (
+          sports: snapshot,
+          expiresAt: DateTime.now().add(_favoritesCacheDuration),
+        );
+        return snapshot;
+      }
     }
     final pending = _favoriteSportsInFlight[base];
     if (pending != null) return pending;
