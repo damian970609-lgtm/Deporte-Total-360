@@ -210,11 +210,16 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
         }
         final visibleWindow = eventsById.values.toList()
           ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
-        await SportsAgendaStore.saveWindow(
-          visibleWindow,
-          startDate: _selectedDate,
-          days: 1,
-        );
+        try {
+          await SportsAgendaStore.saveWindow(
+            visibleWindow,
+            startDate: _selectedDate,
+            days: 1,
+          );
+        } catch (_) {
+          // El calendario remoto no debe quedarse cargando si el almacén
+          // local no está disponible temporalmente.
+        }
 
         SportsAgendaEvent? restoredSelection;
         if (selectedId != null && selectedSportId == _sportId) {
@@ -242,7 +247,12 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
         });
       } catch (error) {
         if (!mounted || generation != _eventsRequestGeneration) return;
-        final stored = await SportsAgendaStore.load();
+        List<SportsAgendaEvent> stored = <SportsAgendaEvent>[];
+        try {
+          stored = await SportsAgendaStore.load();
+        } catch (_) {
+          // Si no hay almacenamiento local disponible, muestra el error de red.
+        }
         final offlineEvents = stored.where((event) =>
             _sameDay(event.startsAt.toLocal(), _selectedDate)).toList()
           ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
