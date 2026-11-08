@@ -82,6 +82,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
   int _catalogRequestId = 0;
   int _nextCatalogOffset = 0;
   int _catalogTotal = 0;
+  bool _catalogTotalIsEstimate = false;
   bool _hasMoreChannels = false;
   bool _loadingMoreChannels = false;
   String? _loadMoreError;
@@ -214,6 +215,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
       setState(() {
         _channels = page.channels;
         _catalogTotal = page.total;
+        _catalogTotalIsEstimate = page.totalIsEstimate;
         _nextCatalogOffset = page.offset + page.channels.length;
         _hasMoreChannels = page.hasMore;
         _selectedChannel = _firstOrNull(
@@ -312,6 +314,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
           ].take(_maxCachedChannels).toList();
         }
         _catalogTotal = page.total;
+        _catalogTotalIsEstimate = page.totalIsEstimate;
         _nextCatalogOffset = page.offset + page.channels.length;
         _hasMoreChannels = page.hasMore;
       });
@@ -1612,6 +1615,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   bool _rightsConfirmed = false;
   bool _hasMore = true;
   int _catalogTotal = 0;
+  bool _catalogTotalIsEstimate = false;
   int _nextAdminOffset = 0;
   bool _diagnosingPreview = false;
   String? _diagnosticResult;
@@ -1777,6 +1781,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       setState(() {
         _channels = page.channels;
         _catalogTotal = page.total;
+        _catalogTotalIsEstimate = page.totalIsEstimate;
         _nextAdminOffset = page.offset + page.channels.length;
         final previewId = _previewChannel?.id;
         if (previewId != null) {
@@ -1987,6 +1992,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           page.channels.where((channel) => knownIds.add(channel.id)),
         );
         _catalogTotal = page.total;
+        _catalogTotalIsEstimate = page.totalIsEstimate;
         _nextAdminOffset = page.offset + page.channels.length;
         _hasMore = page.hasMore;
         _loading = false;
@@ -3731,7 +3737,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                           ),
                         ),
                         Text(
-                          _catalogTotal.toString() + ' total · ' +
+                          (_catalogTotalIsEstimate ? 'Más de ' : '') +
+                              _catalogTotal.toString() + ' total · ' +
                               _channels.length.toString() + ' cargados',
                           style: const TextStyle(
                             color: _channelMuted,
