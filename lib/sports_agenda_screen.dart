@@ -126,9 +126,11 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
   }
 
   Future<SportsAgendaWindow> _loadWindow({
+    required DateTime startDate,
     bool forceRefresh = false,
     void Function(SportsAgendaWindow window)? onProgress,
   }) async {
+    final dayStart = _dateOnly(startDate);
     final injectedLoader = widget.loadEvents;
     if (injectedLoader != null) {
       final events = await injectedLoader() ?? <SportsAgendaEvent>[];
@@ -136,7 +138,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
           .where((sport) => sport.isNotEmpty).toSet().toList()..sort();
       if (mounted) setState(() => _favoriteSportNames = sports);
       final window = SportsAgendaWindow(
-        startDate: _windowStartDate,
+        startDate: dayStart,
         days: _windowDays,
         events: events,
       );
@@ -155,7 +157,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
         // La falta del catálogo no debe bloquear los eventos ni la caché local.
       }
       final window = await agendaApi.fetchFavoriteAgendaWindow(
-        startDate: _windowStartDate,
+        startDate: dayStart,
         days: _windowDays,
         forceRefresh: forceRefresh,
         onProgress: onProgress,
@@ -199,7 +201,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
     } catch (_) {
       // El calendario automático puede contener solo el próximo evento.
       // Nunca debe sustituir silenciosamente la ventana completa de SportAPI.
-      final end = _windowStartDate.add(const Duration(days: _windowDays));
+      final end = dayStart.add(const Duration(days: _windowDays));
       final byId = <String, SportsAgendaEvent>{};
       // SportsAgendaStore solo guarda eventos que ya pasaron por el filtro de
       // deportes y ligas favoritas. No volver a consultar /favorites aquí:
@@ -213,7 +215,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
           );
           for (final event in filteredPublished) {
             final localStart = event.startsAt.toLocal();
-            if (!localStart.isBefore(_windowStartDate) &&
+            if (!localStart.isBefore(dayStart) &&
                 localStart.isBefore(end)) {
               byId[event.id] = event;
             }
@@ -223,7 +225,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
         // La copia persistente local sigue siendo suficiente para abrir Agenda.
       }
       final stored = await SportsAgendaStore.loadWindow(
-        startDate: _windowStartDate,
+        startDate: dayStart,
         days: _windowDays,
       );
       final selectedStored =
@@ -246,17 +248,72 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
         ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
       if (fallbackEvents.isNotEmpty) {
         return SportsAgendaWindow(
-          startDate: _windowStartDate,
+          startDate: dayStart,
           days: _windowDays,
           events: fallbackEvents,
           unavailableDates: List<DateTime>.generate(
             _windowDays,
-            (index) => _windowStartDate.add(Duration(days: index)),
+            (index) => dayStart.add(Duration(days: index)),
             growable: false,
           ),
         );
       }
       rethrow;
+    }
+  }
+
+  bool _preloadingTomorrow = false;
+
+  /// Precarga la siguiente jornada una sola vez por día local. La consulta
+  /// utiliza únicamente deportes y competiciones marcados como favoritos.
+  /// Los resultados quedan guardados en el teléfono para el cambio de fecha.
+  Future<void> _preloadNextDay() async {
+    if (widget.loadEvents != null || _preloadingTomorrow) return;
+    _preloadingTomorrow = true;
+    try {
+      final nextDay = _windowStartDate.add(const Duration(days: 1));
+      if (await SportsAgendaStore.isWindowFresh(startDate: nextDay)) return;
+
+      final api = SportsApiAppService();
+      final stored = await SportsAgendaStore.loadWindow(
+        startDate: nextDay,
+        days: 1,
+      );
+      final cachedFavorites = await api.filterFavoriteAgendaEvents(stored);
+      final window = await api.fetchFavoriteAgendaWindow(
+        startDate: nextDay,
+        days: 1,
+      );
+
+      // Si ningún deporte respondió, no reemplazar una copia previa por vacío.
+      if (window.events.isEmpty &&
+          window.unavailableDates.length == window.days) {
+        return;
+      }
+
+      final byId = <String, SportsAgendaEvent>{
+        for (final event in cachedFavorites) event.id: event,
+      };
+      final freshFavorites =
+          await api.filterFavoriteAgendaEvents(window.events);
+      for (final event in freshFavorites) {
+        byId[event.id] = event;
+      }
+      final events = byId.values.toList(growable: false)
+        ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+
+      await SportsAgendaStore.saveWindow(
+        events,
+        startDate: nextDay,
+        days: 1,
+        freshness: window.unavailableDates.isEmpty
+            ? const Duration(hours: 24)
+            : const Duration(minutes: 15),
+      );
+    } catch (_) {
+      // La precarga de mañana es complementaria: nunca debe bloquear Agenda.
+    } finally {
+      _preloadingTomorrow = false;
     }
   }
 
@@ -307,6 +364,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
           if (await SportsAgendaStore.isWindowFresh(
             startDate: _windowStartDate,
           )) {
+            unawaited(_preloadNextDay());
             _refreshing = false;
             return;
           }
@@ -325,6 +383,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
 
     try {
       final window = await _loadWindow(
+        startDate: _windowStartDate,
         forceRefresh: forceRefresh,
         onProgress: (partial) {
           if (!mounted || version != _refreshVersion) return;
@@ -351,6 +410,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
         _hasLoaded = true;
       });
       unawaited(_syncMatchReminders(window.events));
+      unawaited(_preloadNextDay());
     } catch (error) {
       if (!mounted || version != _refreshVersion) return;
       setState(() {
