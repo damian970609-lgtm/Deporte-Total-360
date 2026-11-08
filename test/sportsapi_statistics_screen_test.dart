@@ -39,6 +39,10 @@ class _FavoritesOnlyApi extends SportsApiAppService {
 }
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets(
     'Estadísticas permite buscar, filtrar, comparar datos y navegar entre fechas locales',
     (tester) async {
