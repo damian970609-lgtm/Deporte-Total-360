@@ -91,6 +91,21 @@ void main() {
             200,
           );
         }
+        if (request.url.path.endsWith('/leagues/39/standings')) {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'rank': 1,
+                  'team': {'name': 'Alpha FC'},
+                  'points': 10,
+                },
+              ],
+              'meta': {},
+            }),
+            200,
+          );
+        }
         if (request.url.path.endsWith('/fixtures/101/statistics')) {
           return http.Response(
             jsonEncode({
@@ -139,6 +154,18 @@ void main() {
         expect(find.text('Fútbol'), findsOneWidget);
         expect(find.text('Baloncesto'), findsNothing);
         expect(find.byKey(const ValueKey<String>('stats-date-picker')), findsOneWidget);
+
+        final standingsButton =
+            find.byKey(const ValueKey<String>('stats-load-daily-standings'));
+        await tester.ensureVisible(standingsButton);
+        await tester.tap(standingsButton);
+        await tester.pumpAndSettle();
+        expect(
+          requestedPaths,
+          contains('/api/sportsapi/leagues/39/standings'),
+        );
+        expect(find.textContaining('Premier League ·'), findsWidgets);
+        expect(find.text('10'), findsWidgets);
 
         final search = find.byType(TextField);
         await tester.enterText(search, 'Beta');
