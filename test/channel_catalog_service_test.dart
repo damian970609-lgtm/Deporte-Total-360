@@ -274,8 +274,14 @@ void main() {
 
       expect(seenFavoriteHeaders, hasLength(2));
       for (final headers in seenFavoriteHeaders) {
-        expect(headers['authorization'], 'Bearer $sessionToken');
-        expect(headers['x-dt360-device-id'], matches(RegExp(r'^[a-f0-9]{64}$')));
+        final authorization = headers.entries
+            .firstWhere((entry) => entry.key.toLowerCase() == 'authorization')
+            .value;
+        final deviceId = headers.entries
+            .firstWhere((entry) => entry.key.toLowerCase() == 'x-dt360-device-id')
+            .value;
+        expect(authorization, 'Bearer $sessionToken');
+        expect(deviceId, matches(RegExp(r'^[a-f0-9]{64}$')));
       }
     } finally {
       sportsApiBaseUrl.value = previousBase;
