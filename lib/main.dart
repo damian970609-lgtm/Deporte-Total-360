@@ -18,7 +18,6 @@ import 'notification_service.dart';
 import 'public_chat_screen.dart';
 import 'sports_api_service.dart';
 import 'sportsapi_statistics_screen.dart';
-import 'sports_summaries_screen.dart';
 import 'sports_agenda_screen.dart';
 
 // Identidad visual unificada: blanco, negro, azul, rojo y verde neón.
@@ -760,9 +759,8 @@ class _MainShellState extends State<MainShell> {
   static const int _agendaTab = 3;
   static const int _fantasyTab = 4;
   static const int _statisticsTab = 5;
-  static const int _summariesTab = 6;
-  static const int _chatTab = 7;
-  static const int _settingsTab = 8;
+  static const int _chatTab = 6;
+  static const int _settingsTab = 7;
 
   int _selectedIndex = _homeTab;
   String _selectedStatisticsSport = 'Todos';
@@ -985,14 +983,14 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    // Reserva dos carriles estables cuando las diez pestañas no caben.
+    // Reserva carriles estables cuando las ocho secciones no caben.
     // Así la aparición/desaparición de las flechas no cambia el viewport ni
     // desplaza el contenido mientras el usuario recorre la navegación.
     final media = MediaQuery.of(context);
     final navigationAvailableWidth =
         media.size.width - media.padding.left - media.padding.right;
     final navigationNeedsScroll =
-        _bottomNavigationItemWidth(context) * 9 > navigationAvailableWidth;
+        _bottomNavigationItemWidth(context) * 8 > navigationAvailableWidth;
 
     final pages = <Widget>[
       HomeDashboard(
@@ -1032,9 +1030,6 @@ class _MainShellState extends State<MainShell> {
               initialSport: _selectedStatisticsSport,
               onOpenAgenda: () => _selectTab(_agendaTab),
             )
-          : const SizedBox.shrink(),
-      _visitedTabs.contains(_summariesTab)
-          ? const SportsSummariesScreen()
           : const SizedBox.shrink(),
       _visitedTabs.contains(_chatTab)
           ? PublicChatScreen(isActive: _selectedIndex == _chatTab)
@@ -1102,12 +1097,6 @@ class _MainShellState extends State<MainShell> {
                             _buildBottomTab(_agendaTab, Icons.calendar_month_rounded, 'Agenda de hoy', appGreen),
                             _buildBottomTab(_fantasyTab, Icons.emoji_events_rounded, 'Mister Fantasy', appYellow),
                             _buildBottomTab(_statisticsTab, Icons.query_stats_rounded, tr('statistics'), appCyan),
-                            _buildBottomTab(
-                              _summariesTab,
-                              Icons.play_circle_fill_rounded,
-                              appText('Resúmenes', 'Highlights', 'Resumos', 'Résumés'),
-                              appRed,
-                            ),
                             _buildBottomTab(_chatTab, Icons.forum_rounded, tr('chat'), appGreen),
                             _buildBottomTab(_settingsTab, Icons.settings_rounded, tr('settings'), appBlue),
                           ],

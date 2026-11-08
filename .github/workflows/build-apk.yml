@@ -13,6 +13,8 @@ on:
       - main
       - integration/zona-live-catalog-20261103
       - feature/cloudflare-channel-catalog-20261105
+      # Rama controlada para producir el APK firmado de prueba diaria 1.0.4+9.
+      - feature/remove-summaries-daily-standings-20261108
       # Rama de integración de confianza: compila APK firmada en eventos push,
       # sin exponer secretos durante las comprobaciones pull_request.
       - codex/complete-live-schedule

@@ -91,6 +91,21 @@ void main() {
             200,
           );
         }
+        if (request.url.path.endsWith('/leagues/39/standings')) {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'rank': 1,
+                  'team': {'name': 'Alpha FC'},
+                  'points': 10,
+                },
+              ],
+              'meta': {},
+            }),
+            200,
+          );
+        }
         if (request.url.path.endsWith('/fixtures/101/statistics')) {
           return http.Response(
             jsonEncode({
@@ -134,17 +149,45 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('EVENTOS DEL DÍA'), findsOneWidget);
-        expect(find.text('Alpha FC vs Beta FC'), findsOneWidget);
-        expect(find.text('Fútbol'), findsOneWidget);
-        expect(find.text('Baloncesto'), findsNothing);
+        // Comprueba controles de cabecera antes de desplazarse por la lista,
+        // porque ListView construye de forma diferida los elementos fuera de vista.
         expect(find.byKey(const ValueKey<String>('stats-date-picker')), findsOneWidget);
+        expect(find.text('TABLAS DE POSICIONES · TUS COMPETICIONES'), findsOneWidget);
+        expect(
+          requestedPaths,
+          contains('/api/sportsapi/leagues/39/standings'),
+        );
+        expect(find.text('Alpha FC'), findsWidgets);
+
+        final eventsHeading = find.text('EVENTOS DEL DÍA');
+        await tester.scrollUntilVisible(
+          eventsHeading,
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(eventsHeading, findsOneWidget);
+        final firstEvent = find.text('Alpha FC vs Beta FC');
+        await tester.scrollUntilVisible(
+          firstEvent,
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(firstEvent, findsOneWidget);
+        expect(find.text('Fútbol'), findsWidgets);
+        expect(find.text('Baloncesto'), findsNothing);
 
         final search = find.byType(TextField);
+        await tester.ensureVisible(search);
         await tester.enterText(search, 'Beta');
         await tester.pump();
+        await tester.scrollUntilVisible(
+          find.text('Alpha FC vs Beta FC'),
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
         expect(find.text('Alpha FC vs Beta FC'), findsOneWidget);
 
+        await tester.ensureVisible(find.byKey(const ValueKey<String>('stats-filter-live')));
         await tester.tap(find.byKey(const ValueKey<String>('stats-filter-live')));
         await tester.pump();
         expect(find.text('Alpha FC vs Beta FC'), findsOneWidget);
@@ -167,7 +210,13 @@ void main() {
 
         final nextDateButton =
             find.byKey(const ValueKey<String>('stats-date-next'));
-        await tester.ensureVisible(nextDateButton);
+        // La cabecera quedó fuera del viewport y ListView descartó sus widgets.
+        // Vuelve al inicio por posición para reconstruir la fecha antes de tocarla.
+        final scrollable =
+            tester.state<ScrollableState>(find.byType(Scrollable).first);
+        scrollable.position.jumpTo(scrollable.position.minScrollExtent);
+        await tester.pumpAndSettle();
+        expect(nextDateButton, findsOneWidget);
         await tester.tap(nextDateButton);
         await tester.pumpAndSettle();
 
@@ -264,8 +313,20 @@ void main() {
         ));
         await tester.pumpAndSettle();
 
-        expect(find.text('Alpha FC vs Beta FC'), findsOneWidget);
-        expect(find.text('Basket Club vs Rival Basket'), findsOneWidget);
+        final alphaEvent = find.text('Alpha FC vs Beta FC');
+        await tester.scrollUntilVisible(
+          alphaEvent,
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(alphaEvent, findsOneWidget);
+        final basketEvent = find.text('Basket Club vs Rival Basket');
+        await tester.scrollUntilVisible(
+          basketEvent,
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(basketEvent, findsOneWidget);
         expect(find.byKey(const ValueKey<String>('stats-filter-sport-all')), findsOneWidget);
 
         final basketballChip = find.widgetWithText(ChoiceChip, 'Baloncesto');
@@ -318,7 +379,13 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('Alpha FC vs Beta FC'), findsOneWidget);
+        final offlineEvent = find.text('Alpha FC vs Beta FC');
+        await tester.scrollUntilVisible(
+          offlineEvent,
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(offlineEvent, findsOneWidget);
         expect(
           find.textContaining('últimos eventos guardados en este teléfono'),
           findsOneWidget,

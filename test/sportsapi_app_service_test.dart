@@ -929,6 +929,72 @@ void main() {
   });
 
 
+  test('las tablas de posiciones se guardan por jornada y reinician al cambiar la fecha', () async {
+    SharedPreferences.setMockInitialValues({});
+    final previousBase = sportsApiBaseUrl.value;
+    sportsApiBaseUrl.value = 'https://worker-daily-standings-cache.example';
+    final requested = <Uri>[];
+    final client = MockClient((request) async {
+      requested.add(request.url);
+      return http.Response(
+        jsonEncode({
+          'data': [
+            {
+              'rank': requested.length,
+              'team': {'name': 'Equipo ${requested.length}'},
+              'points': 12,
+            },
+          ],
+          'meta': {},
+        }),
+        200,
+      );
+    });
+
+    try {
+      final api = SportsApiAppService(client: client);
+      final today = DateTime.now();
+      final tomorrow = today.add(const Duration(days: 1));
+
+      final first = await api.fetchLeagueStandings(
+        leagueId: 39,
+        seasonId: 2026,
+        eventDate: today,
+      );
+      final cached = await api.fetchLeagueStandings(
+        leagueId: 39,
+        seasonId: 2026,
+        eventDate: today,
+      );
+      expect(first, cached);
+      expect(requested, hasLength(1));
+
+      await api.fetchLeagueStandings(
+        leagueId: 39,
+        seasonId: 2026,
+        eventDate: tomorrow,
+      );
+      expect(requested, hasLength(2));
+
+      await api.fetchLeagueStandings(
+        leagueId: 39,
+        seasonId: 2026,
+        eventDate: today,
+        forceRefresh: true,
+      );
+      expect(requested, hasLength(3));
+      expect(
+        requested.map((uri) => uri.path),
+        everyElement('/api/sportsapi/leagues/39/standings'),
+      );
+      expect(requested.every((uri) => uri.queryParameters['season'] == '2026'),
+          isTrue);
+    } finally {
+      sportsApiBaseUrl.value = previousBase;
+      client.close();
+    }
+  });
+
   test('conserva los eventos de la primera página cuando la siguiente responde 429', () async {
     SharedPreferences.setMockInitialValues({});
     final previousBase = sportsApiBaseUrl.value;
