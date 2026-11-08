@@ -157,6 +157,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
         _cachedChannels = cached.take(_maxCachedChannels).toList();
         _channels = List<SportsChannel>.from(_cachedChannels);
         _catalogTotal = _cachedChannels.length;
+        _catalogTotalIsEstimate = false;
         _nextCatalogOffset = _cachedChannels.length;
         _hasMoreChannels = false;
         _catalogNotice =
@@ -201,6 +202,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
         // cuota, los canales guardados deben seguir visibles en este teléfono.
         _channels = fallback;
         _catalogTotal = fallback.length;
+        _catalogTotalIsEstimate = false;
         _nextCatalogOffset = fallback.length;
         _hasMoreChannels = false;
       });
@@ -246,6 +248,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
               ? List<SportsChannel>.from(_cachedChannels)
               : fallback;
           _catalogTotal = _channels.length;
+          _catalogTotalIsEstimate = false;
           _nextCatalogOffset = _channels.length;
           _hasMoreChannels = false;
           _error = null;
@@ -608,8 +611,9 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
                               ),
                             ),
                             child: Text(
-                              channels.length.toString() + ' / ' +
-                                  _catalogTotal.toString(),
+                              _catalogTotalIsEstimate
+                                   ? channels.length.toString() + '+ canales'
+                                   : _catalogTotal.toString() + ' canales',
                               style: const TextStyle(
                                 color: _channelCyan,
                                 fontSize: 10,
@@ -1688,6 +1692,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         if (snapshot.hasChannels) {
           _channels = snapshot.channels;
           _catalogTotal = snapshot.channels.length;
+          _catalogTotalIsEstimate = false;
           _nextAdminOffset = snapshot.channels.length;
           _hasMore = false;
         }
@@ -1753,8 +1758,9 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _sources = <ChannelPlaylistSource>[];
         _licenseRecords = <AppLicenseRecord>[];
         _previewChannel = null;
-        _catalogTotal = 0;
-        _nextAdminOffset = 0;
+          _catalogTotal = 0;
+          _catalogTotalIsEstimate = false;
+          _nextAdminOffset = 0;
         _hasMore = false;
       });
     }
