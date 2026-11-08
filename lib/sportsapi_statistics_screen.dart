@@ -59,9 +59,14 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
   List<SportsAgendaEvent> _events = <SportsAgendaEvent>[];
   SportsAgendaEvent? _selectedEvent;
   List<MapEntry<String, String>> _statistics = <MapEntry<String, String>>[];
+  List<MapEntry<String, String>> _dailyStandings = <MapEntry<String, String>>[];
   bool _loading = false;
   bool _loadingStats = false;
   bool _showingStandings = false;
+  bool _loadingDailyStandings = false;
+  int _dailyStandingsCompleted = 0;
+  String? _dailyStandingsError;
+  int _dailyStandingsRequestGeneration = 0;
   String? _error;
   String? _statsError;
   String? _coverageWarning;
@@ -74,6 +79,24 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
 
   String get _selectedSportLabel =>
       _sportId == 'all' ? 'tus deportes favoritos' : _sport.name;
+
+  /// Solo competencias que aparecen en los eventos de la jornada y tienen
+  /// identificadores de liga/serie y temporada necesarios para pedir tablas.
+  List<SportsAgendaEvent> get _dailyStandingsEvents {
+    final unique = <String, SportsAgendaEvent>{};
+    for (final event in _events) {
+      final season = event.providerSeasonId;
+      final league = event.providerLeagueId;
+      final series = event.providerSeriesId;
+      if (season == null) continue;
+      if (league != null) {
+        unique.putIfAbsent('league:$league:$season', () => event);
+      } else if (series != null) {
+        unique.putIfAbsent('series:$series:$season', () => event);
+      }
+    }
+    return unique.values.toList(growable: false);
+  }
 
   String _catalogSportId(Map<String, dynamic> row) {
     final raw = <dynamic>[
@@ -321,6 +344,11 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
       _statsError = null;
       _loadingStats = false;
       _statisticsRequestGeneration++;
+      _dailyStandingsRequestGeneration++;
+      _dailyStandings = <MapEntry<String, String>>[];
+      _dailyStandingsCompleted = 0;
+      _dailyStandingsError = null;
+      _loadingDailyStandings = false;
       _showingStandings = false;
       _statusFilter = 'all';
       _eventSearchController.clear();
@@ -533,6 +561,76 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
         _statsError = error.toString();
       });
     }
+  }
+
+  Future<void> _loadDailyStandings() async {
+    if (_loadingDailyStandings) return;
+    final competitions = _dailyStandingsEvents;
+    final request = ++_dailyStandingsRequestGeneration;
+    if (competitions.isEmpty) {
+      setState(() {
+        _dailyStandings = <MapEntry<String, String>>[];
+        _dailyStandingsError =
+            'SportsAPI no entregó identificadores y temporadas para las competiciones de hoy.';
+      });
+      return;
+    }
+
+    setState(() {
+      _loadingDailyStandings = true;
+      _dailyStandingsCompleted = 0;
+      _dailyStandingsError = null;
+      _dailyStandings = <MapEntry<String, String>>[];
+    });
+
+    final results = <MapEntry<String, String>>[];
+    var failed = 0;
+    for (final event in competitions) {
+      if (!mounted || request != _dailyStandingsRequestGeneration) return;
+      try {
+        dynamic response;
+        if (event.providerLeagueId != null) {
+          response = await _api.fetchLeagueStandings(
+            leagueId: event.providerLeagueId!,
+            seasonId: event.providerSeasonId!,
+            eventDate: _selectedDate,
+          );
+        } else {
+          response = await _api.fetchSeriesStandings(
+            seriesId: event.providerSeriesId!,
+            seasonId: event.providerSeasonId!,
+            eventDate: _selectedDate,
+          );
+        }
+        final rows = _flatten(response);
+        for (final row in rows) {
+          results.add(MapEntry<String, String>(
+            '${event.sport} · ${event.competition} · ${row.key}',
+            row.value,
+          ));
+        }
+        if (rows.isEmpty) failed++;
+      } catch (_) {
+        failed++;
+      }
+      if (!mounted || request != _dailyStandingsRequestGeneration) return;
+      setState(() {
+        _dailyStandings = List<MapEntry<String, String>>.from(results);
+        _dailyStandingsCompleted++;
+      });
+    }
+
+    if (!mounted || request != _dailyStandingsRequestGeneration) return;
+    setState(() {
+      _loadingDailyStandings = false;
+      if (results.isEmpty) {
+        _dailyStandingsError =
+            'SportsAPI no publicó tablas para las competiciones identificadas hoy.';
+      } else if (failed > 0) {
+        _dailyStandingsError =
+            'Se cargaron ${competitions.length - failed} de ${competitions.length} tablas. Las demás no respondieron o no tienen clasificación publicada.';
+      }
+    });
   }
 
   Future<void> _loadStandings(SportsAgendaEvent event) async {
@@ -918,6 +1016,84 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
                 ),
                 ],
               ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(
+              color: _apiStatsPanel,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _apiStatsLine),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text(
+                  'TABLAS DE POSICIONES · TUS COMPETICIONES',
+                  style: TextStyle(
+                    color: _apiStatsCyan,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${_dailyStandingsEvents.length} competiciones con eventos hoy. Cada tabla se guarda por fecha local y se consulta de nuevo al comenzar otra jornada.',
+                  style: const TextStyle(
+                    color: _apiStatsMuted,
+                    fontSize: 9,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    key: const ValueKey<String>('stats-load-daily-standings'),
+                    onPressed: _loadingDailyStandings ||
+                            _dailyStandingsEvents.isEmpty
+                        ? null
+                        : _loadDailyStandings,
+                    icon: _loadingDailyStandings
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: _apiStatsCyan,
+                            ),
+                          )
+                        : const Icon(Icons.leaderboard_rounded, size: 15),
+                    label: Text(_loadingDailyStandings
+                        ? 'CARGANDO TABLAS $_dailyStandingsCompleted/${_dailyStandingsEvents.length}'
+                        : 'CONSULTAR TABLAS DE POSICIONES DE HOY'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _apiStatsCyan,
+                      side: const BorderSide(color: _apiStatsLine),
+                      textStyle: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+                if (_dailyStandingsError != null) ...<Widget>[
+                  const SizedBox(height: 6),
+                  Text(
+                    _dailyStandingsError!,
+                    style: const TextStyle(
+                      color: _apiStatsMuted,
+                      fontSize: 9,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+                if (_dailyStandings.isNotEmpty) ...<Widget>[
+                  const Divider(color: _apiStatsLine, height: 16),
+                  for (final item in _dailyStandings) _statisticItem(item),
+                ],
+              ],
             ),
           ),
           const SizedBox(height: 13),
