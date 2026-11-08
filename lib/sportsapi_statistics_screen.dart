@@ -208,6 +208,9 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
             setState(() {
               _events = filteredStored;
               _error = null;
+              _coverageWarning = filteredStored.isNotEmpty
+                  ? 'Mostrando los últimos eventos guardados en este teléfono. Se actualizarán cuando venza la caché diaria o solicites actualizar.'
+                  : null;
             });
             if (fresh) return;
           }
