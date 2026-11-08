@@ -233,7 +233,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(686, 900);
+    tester.view.physicalSize = const Size(580, 900);
 
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
     await tester.pump();
@@ -244,7 +244,7 @@ void main() {
         find.byKey(const ValueKey<String>('bottom-nav-scroll-viewport')),
       );
       final labels = List<Finder>.generate(
-        9,
+        8,
         (index) => find.byKey(ValueKey<String>('bottom-tab-label-$index')),
       );
       final cues = <Finder>[
