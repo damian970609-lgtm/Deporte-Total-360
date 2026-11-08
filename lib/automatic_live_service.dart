@@ -403,8 +403,11 @@ class SportsAgendaEvent {
 
 class SportsAgendaStore {
   static const String _key = 'dt360_sportsapi_agenda_events_v1';
+  // Metadatos por fecha: guardar mañana no invalida la copia de hoy.
   static const String _windowDateKey = 'dt360_sportsapi_agenda_window_date_v1';
   static const String _windowSavedAtKey = 'dt360_sportsapi_agenda_window_saved_at_v1';
+  static const String _windowSavedAtPrefix = 'dt360_sportsapi_agenda_saved_at_';
+  static const String _windowFreshUntilPrefix = 'dt360_sportsapi_agenda_fresh_until_';
 
   static String _dayKey(DateTime value) {
     final local = value.toLocal();
@@ -412,6 +415,12 @@ class SportsAgendaStore {
         local.month.toString().padLeft(2, '0') + '-' +
         local.day.toString().padLeft(2, '0');
   }
+
+  static String _savedAtKey(DateTime value) =>
+      _windowSavedAtPrefix + _dayKey(value);
+
+  static String _freshUntilKey(DateTime value) =>
+      _windowFreshUntilPrefix + _dayKey(value);
 
   /// Lee solo los eventos de la jornada local solicitada.
   static Future<List<SportsAgendaEvent>> loadWindow({
@@ -427,21 +436,27 @@ class SportsAgendaStore {
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
   }
 
-  /// Una copia diaria se considera vigente hasta el final del día salvo que
-  /// el usuario solicite una actualización manual.
+  /// Cada jornada mantiene su propia vigencia. La precarga de mañana no
+  /// fuerza una descarga de hoy ni la vuelve a marcar como obsoleta.
   static Future<bool> isWindowFresh({
     required DateTime startDate,
     Duration maxAge = const Duration(hours: 24),
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (prefs.getString(_windowDateKey) != _dayKey(startDate)) return false;
+      final now = DateTime.now();
       final savedAt = DateTime.tryParse(
-        prefs.getString(_windowSavedAtKey) ?? '',
+        prefs.getString(_savedAtKey(startDate)) ??
+            (prefs.getString(_windowDateKey) == _dayKey(startDate)
+                ? (prefs.getString(_windowSavedAtKey) ?? '')
+                : ''),
       );
-      if (savedAt == null) return false;
-      final age = DateTime.now().difference(savedAt);
-      return !age.isNegative && age <= maxAge;
+      final age = savedAt == null ? null : now.difference(savedAt);
+      if (age == null || age.isNegative || age > maxAge) return false;
+      final rawExpiry = prefs.getString(_freshUntilKey(startDate));
+      if (rawExpiry == null || rawExpiry.isEmpty) return true;
+      final expiry = DateTime.tryParse(rawExpiry);
+      return expiry != null && now.isBefore(expiry);
     } catch (_) {
       return false;
     }
@@ -471,6 +486,7 @@ class SportsAgendaStore {
     List<SportsAgendaEvent> events, {
     required DateTime startDate,
     int days = 7,
+    Duration freshness = const Duration(hours: 24),
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final start = DateTime(startDate.year, startDate.month, startDate.day);
@@ -510,8 +526,16 @@ class SportsAgendaStore {
       _key,
       jsonEncode(byId.values.map((event) => event.toJson()).toList()),
     );
+    final savedAt = DateTime.now();
+    final freshUntil = savedAt.add(freshness);
+    for (var index = 0; index < safeDays; index++) {
+      final day = start.add(Duration(days: index));
+      await prefs.setString(_savedAtKey(day), savedAt.toIso8601String());
+      await prefs.setString(_freshUntilKey(day), freshUntil.toIso8601String());
+    }
+    // Mantiene las claves antiguas para instalaciones que todavía las leen.
     await prefs.setString(_windowDateKey, _dayKey(start));
-    await prefs.setString(_windowSavedAtKey, DateTime.now().toIso8601String());
+    await prefs.setString(_windowSavedAtKey, savedAt.toIso8601String());
   }
 
   static Future<List<SportsAgendaEvent>> load() async {
