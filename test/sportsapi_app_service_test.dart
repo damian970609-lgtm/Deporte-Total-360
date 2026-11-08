@@ -956,7 +956,7 @@ void main() {
         return http.Response(jsonEncode({
           'data': [{
             'id': date.replaceAll('-', ''),
-            'startTime': '\${date}T12:00:00Z',
+            'startTime': '${date}T12:00:00Z',
             'status': {'type': 'scheduled'},
             'home': {'name': 'Equipo de prueba'},
             'away': {'name': 'Rival de prueba'},
