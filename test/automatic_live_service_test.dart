@@ -120,6 +120,18 @@ void main() {
 
       final stored = await SportsAgendaStore.load();
       expect(stored.map((item) => item.id), <String>['tomorrow']);
+      expect(
+        await SportsAgendaStore.isWindowFresh(startDate: today),
+        isTrue,
+        reason: 'La actualización de hoy debe marcar vigente solo hoy.',
+      );
+      expect(
+        await SportsAgendaStore.isWindowFresh(
+          startDate: today.add(const Duration(days: 1)),
+        ),
+        isTrue,
+        reason: 'La copia precargada de mañana conserva su propia vigencia.',
+      );
     });
   });
 
