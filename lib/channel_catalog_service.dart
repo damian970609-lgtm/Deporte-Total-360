@@ -652,7 +652,114 @@ class ChannelCatalogService {
   Future<String> _getTrialDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = (prefs.getString(_trialDeviceKey) ?? '').trim().toLowerCase();
-    if (RegExp(r'^[a-f0-9]{64}
+    if (RegExp(r'^[a-f0-9]{64}$').hasMatch(saved)) return saved;
+    final random = math.Random.secure();
+    final generated = List<int>.generate(
+      32,
+      (_) => random.nextInt(256),
+      growable: false,
+    ).map((value) => value.toRadixString(16).padLeft(2, '0')).join();
+    await prefs.setString(_trialDeviceKey, generated);
+    return generated;
+  }
+
+  Future<Map<String, String>?> trialSessionHeaders() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = (prefs.getString(_trialSessionKey) ?? '').trim().toLowerCase();
+    if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(token)) return null;
+    final deviceId = await _getTrialDeviceId();
+    return <String, String>{
+      'Accept': 'application/json',
+      'Authorization': 'Bearer ' + token,
+      'X-DT360-Device-ID': deviceId,
+    };
+  }
+
+  /// Comprueba el pase VIP con Cloudflare. No requiere Google.
+  Future<bool> validateTrialSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = (prefs.getString(_trialSessionKey) ?? '').trim().toLowerCase();
+    if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(token)) return false;
+    final deviceId = await _getTrialDeviceId();
+    try {
+      final result = await _client.post(
+        Uri.parse(_baseUrl + '/api/trials/check'),
+        headers: const <String, String>{
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(<String, String>{
+          'sessionToken': token,
+          'deviceId': deviceId,
+        }),
+      ).timeout(const Duration(seconds: 12));
+      final payload = _decode(result);
+      final allowed = payload['allowed'] == true;
+      if (!allowed) await prefs.remove(_trialSessionKey);
+      return allowed;
+    } catch (_) {
+      // Un fallo de red no borra el token local: se podrá comprobar otra vez.
+      return false;
+    }
+  }
+
+  Future<void> redeemTrialCode(String code) async {
+    final normalized = code.trim().replaceAll(RegExp(r'\s+'), '').toUpperCase();
+    if (!RegExp(r'^[A-F0-9]{16,40}$').hasMatch(normalized)) {
+      throw const ChannelCatalogException('Introduce un código VIP válido.');
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final deviceId = await _getTrialDeviceId();
+    final result = await _client.post(
+      Uri.parse(_baseUrl + '/api/trials/redeem'),
+      headers: const <String, String>{
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(<String, String>{
+        'code': normalized,
+        'deviceId': deviceId,
+      }),
+    ).timeout(const Duration(seconds: 20));
+    final payload = _decode(result);
+    final token = (payload['sessionToken'] ?? '').toString().trim().toLowerCase();
+    if (payload['activated'] != true ||
+        !RegExp(r'^[a-f0-9]{64}$').hasMatch(token)) {
+      throw const ChannelCatalogException(
+        'Cloudflare no confirmó la activación del código VIP.',
+      );
+    }
+    await prefs.setString(_trialSessionKey, token);
+  }
+
+  Future<void> clearTrialSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_trialSessionKey);
+  }
+
+  Future<Map<String, dynamic>> fetchTrialPassSummary() async {
+    final result = await _client.get(
+      Uri.parse(_baseUrl + '/api/channels/admin/trials'),
+      headers: _authHeaders(),
+    ).timeout(const Duration(seconds: 20));
+    return _decode(result);
+  }
+
+  Future<List<String>> generateTrialPassCodes({int count = 10}) async {
+    final result = await _client.post(
+      Uri.parse(_baseUrl + '/api/channels/admin/trials'),
+      headers: <String, String>{
+        ..._authHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(<String, int>{'count': count.clamp(1, 10)}),
+    ).timeout(const Duration(seconds: 20));
+    final payload = _decode(result);
+    final rows = payload['codes'];
+    if (rows is! List) return <String>[];
+    return rows.map((value) => value.toString()).toList(growable: false);
+  }
+
   bool _tokenNeedsRefresh(String token) {
     final parts = token.split('.');
     if (parts.length != 3) return false;
