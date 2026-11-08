@@ -65,7 +65,9 @@ String _normalizeAgendaFilterText(String value) {
       .replaceAll(RegExp(r'[íìïî]'), 'i')
       .replaceAll(RegExp(r'[óòöô]'), 'o')
       .replaceAll(RegExp(r'[úùüû]'), 'u')
-      .replaceAll(RegExp(r'\s+'), ' ');
+      .replaceAll(RegExp(r'[^a-z0-9 ]'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
 }
 
 String _normalizeAgendaSportId(String value) {
@@ -119,19 +121,32 @@ class _FavoriteAgendaSport {
   bool _matchesCompetition({required String id, required String name}) {
     if (allCompetitions) return true;
     if (id.isNotEmpty && competitionIds.contains(id)) return true;
-
-    final normalizedName = _normalizeAgendaFilterText(name);
+    final normalizedName =
+        _normalizeAgendaFilterText(name).replaceAll(' ', '');
     if (normalizedName.isEmpty) return false;
 
-    // SportsAPI puede añadir patrocinadores, sufijos o variantes de nombre
-    // sin cambiar la competición (p. ej. "LaLiga EA SPORTS").
-    return competitionNames.any((selectedName) {
-      if (selectedName == normalizedName) return true;
-      return (selectedName.length >= 5 &&
-              normalizedName.startsWith('$selectedName ')) ||
-          (normalizedName.length >= 5 &&
-              selectedName.startsWith('$normalizedName '));
-    });
+    bool matchesName(String selected) {
+      var normalizedSelected =
+          _normalizeAgendaFilterText(selected).replaceAll(' ', '');
+      if (normalizedSelected == normalizedName) return true;
+      for (final prefix in const <String>[
+        'uefa', 'fifa', 'concacaf', 'conmebol', 'caf', 'afc', 'ofc',
+        'ihf', 'ehf',
+      ]) {
+        if (normalizedSelected.startsWith(prefix) &&
+            normalizedSelected.length > prefix.length + 3) {
+          normalizedSelected = normalizedSelected.substring(prefix.length);
+          break;
+        }
+      }
+      if (normalizedSelected == normalizedName) return true;
+      return normalizedSelected.length >= 8 &&
+          normalizedName.length >= 8 &&
+          (normalizedSelected.startsWith(normalizedName) ||
+              normalizedName.startsWith(normalizedSelected));
+    }
+
+    return competitionNames.any(matchesName);
   }
 
   bool matchesRow(Map<String, dynamic> row, {required bool isRace}) {
@@ -182,7 +197,9 @@ class SportsApiAppService {
     }
   }
 
-  static const Duration _timeout = Duration(seconds: 45);
+  // La cola compartida puede espaciar llamadas cuando hay varios usuarios.
+  // Dejamos margen para esperar turno sin relanzar consultas que gasten cuota.
+  static const Duration _timeout = Duration(minutes: 3);
   static const Duration _windowTimeout = Duration(minutes: 20);
   static const Duration _favoritesCacheDuration = Duration(hours: 18);
 
