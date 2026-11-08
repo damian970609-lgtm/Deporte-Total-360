@@ -201,7 +201,7 @@ class SportsApiAppService {
   // Dejamos margen para esperar turno sin relanzar consultas que gasten cuota.
   static const Duration _timeout = Duration(minutes: 3);
   static const Duration _windowTimeout = Duration(minutes: 20);
-  static const Duration _favoritesCacheDuration = Duration(hours: 18);
+  static const Duration _favoritesCacheDuration = Duration(hours: 24);
 
   static final Map<String, ({
     List<Map<String, dynamic>> sports,
