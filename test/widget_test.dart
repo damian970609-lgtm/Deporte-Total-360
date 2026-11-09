@@ -149,6 +149,9 @@ void main() {
     );
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey<String>('settings-update-apk')));
+    // Espera a que termine la transición de MaterialPageRoute antes de
+    // comprobar el contenido de la pantalla recién abierta.
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
     expect(find.text('ACTUALIZAR APK'), findsOneWidget);
     expect(find.text('INSTALACIÓN SEGURA'), findsOneWidget);
