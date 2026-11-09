@@ -1138,7 +1138,7 @@ class HomeDashboard extends StatelessWidget {
     required this.onChat,
   });
 
-  // Se mantienen todos los callbacks y contratos existentes.
+  // Acciones que siguen disponibles desde la pantalla de Inicio.
   final ValueChanged<int> onNavigate;
   final VoidCallback onTelegram;
   final VoidCallback onContact;
