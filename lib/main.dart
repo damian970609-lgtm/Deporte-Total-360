@@ -2088,10 +2088,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   title: Text(
                     appText(
-                      'Servidor de estadísticas',
-                      'Statistics server',
-                      'Servidor de estatísticas',
-                      'Serveur des statistiques',
+                      'Servidor de datos deportivos',
+                      'Sports data server',
+                      'Servidor de dados esportivos',
+                      'Serveur de données sportives',
                     ),
                     style: const TextStyle(
                       color: Colors.white,
@@ -2101,10 +2101,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   subtitle: Text(
                     appText(
-                      'Comprobar la conexión del servicio de estadísticas y configurar el Worker.',
-                      'Check the statistics service and configure the public Worker URL.',
-                      'Verifique a conexão do serviço de estatísticas e configure o Worker.',
-                      'Vérifier le service de statistiques et configurer le Worker.',
+                      'Comprobar la conexión de datos deportivos y configurar el Worker.',
+                      'Check the sports data service and configure the public Worker URL.',
+                      'Verifique a conexão dos dados esportivos e configure o Worker.',
+                      'Vérifier le service de données sportives et configurer le Worker.',
                     ),
                     style: const TextStyle(color: appMuted, fontSize: 11, height: 1.4),
                   ),
