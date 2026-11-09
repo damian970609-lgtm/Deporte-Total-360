@@ -155,7 +155,6 @@ Future<void> _initializeAppServices() async {
   try {
     final prefs = await SharedPreferences.getInstance();
     appLanguage.value = parseLanguage(prefs.getString('app_language'));
-    telegramLink.value = prefs.getString('telegram_public_link') ?? '';
     final savedApiUrl = prefs.getString('sports_api_base_url');
     sportsApiBaseUrl.value =
         SportsApiService.normalizeBaseUrl(savedApiUrl ?? '') ??
@@ -759,8 +758,7 @@ class _MainShellState extends State<MainShell> {
   static const int _agendaTab = 3;
   static const int _fantasyTab = 4;
   static const int _chatTab = 5;
-  static const int _updateTab = 6;
-  static const int _settingsTab = 7;
+  static const int _settingsTab = 6;
 
   int _selectedIndex = _homeTab;
   String? _selectedAgendaEventId;
@@ -785,46 +783,6 @@ class _MainShellState extends State<MainShell> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(builder: (_) => const DonationsScreen()),
     );
-  }
-
-  Future<void> _openTelegram() async {
-    final link = telegramLink.value.trim();
-    if (link.isEmpty) {
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          backgroundColor: appPanel,
-          title: Text(
-            appText('Canal de Telegram', 'Telegram channel', 'Canal do Telegram', 'Canal Telegram'),
-            style: const TextStyle(color: appCyan, fontWeight: FontWeight.w900),
-          ),
-          content: Text(
-            appText(
-              'Este espacio queda reservado para tu canal. Todavía no hay un enlace público configurado; no abriremos uno genérico.',
-              'This space is reserved for your channel. No public link is configured yet; we will not open a generic or invented one.',
-              'Este espaço está reservado para seu canal. Ainda não há um link público configurado; não abriremos um link genérico ou inventado.',
-              'Cet espace est réservé à votre chaîne. Aucun lien public n’est encore configuré ; aucun lien générique ou inventé ne sera ouvert.'),
-            style: const TextStyle(color: appMuted, height: 1.45),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text(appText('Cerrar', 'Close', 'Fechar', 'Fermer')),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                _selectTab(_settingsTab);
-              },
-              child: Text(appText('Configurar enlace', 'Set link', 'Configurar link', 'Configurer le lien')),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-    await openExternalLink(context, link, label: 'Telegram');
   }
 
   Future<void> _handleSystemBack() async {
@@ -972,19 +930,18 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    // Reserva dos carriles estables cuando las diez pestañas no caben.
+    // Reserva dos carriles estables cuando las siete pestañas no caben.
     // Así la aparición/desaparición de las flechas no cambia el viewport ni
     // desplaza el contenido mientras el usuario recorre la navegación.
     final media = MediaQuery.of(context);
     final navigationAvailableWidth =
         media.size.width - media.padding.left - media.padding.right;
     final navigationNeedsScroll =
-        _bottomNavigationItemWidth(context) * 8 > navigationAvailableWidth;
+        _bottomNavigationItemWidth(context) * 7 > navigationAvailableWidth;
 
     final pages = <Widget>[
       HomeDashboard(
         onNavigate: _selectTab,
-        onTelegram: _openTelegram,
         onContact: () => openExternalLink(context, contactUrl, label: 'WhatsApp'),
         onDonations: _openDonations,
         onFantasy: _openFantasy,
@@ -1013,9 +970,6 @@ class _MainShellState extends State<MainShell> {
       _visitedTabs.contains(_fantasyTab) ? const FantasyScreen() : const SizedBox.shrink(),
       _visitedTabs.contains(_chatTab)
           ? PublicChatScreen(isActive: _selectedIndex == _chatTab)
-          : const SizedBox.shrink(),
-      _visitedTabs.contains(_updateTab)
-          ? const AppUpdateScreen()
           : const SizedBox.shrink(),
       _visitedTabs.contains(_settingsTab) ? const SettingsScreen() : const SizedBox.shrink(),
     ];
@@ -1080,7 +1034,6 @@ class _MainShellState extends State<MainShell> {
                             _buildBottomTab(_agendaTab, Icons.calendar_month_rounded, 'Agenda de hoy', appGreen),
                             _buildBottomTab(_fantasyTab, Icons.emoji_events_rounded, 'Mister Fantasy', appYellow),
                             _buildBottomTab(_chatTab, Icons.forum_rounded, tr('chat'), appGreen),
-                            _buildBottomTab(_updateTab, Icons.system_update_alt_rounded, 'Actualización', appCyan),
                             _buildBottomTab(_settingsTab, Icons.settings_rounded, tr('settings'), appBlue),
                           ],
                         ),
@@ -1130,7 +1083,6 @@ class HomeDashboard extends StatelessWidget {
   const HomeDashboard({
     super.key,
     required this.onNavigate,
-    required this.onTelegram,
     required this.onContact,
     required this.onDonations,
     required this.onFantasy,
@@ -1140,7 +1092,6 @@ class HomeDashboard extends StatelessWidget {
 
   // Acciones que siguen disponibles desde la pantalla de Inicio.
   final ValueChanged<int> onNavigate;
-  final VoidCallback onTelegram;
   final VoidCallback onContact;
   final VoidCallback onDonations;
   final VoidCallback onFantasy;
@@ -1841,14 +1792,11 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late final TextEditingController _telegramController;
-  bool _saving = false;
   bool _notificationsEnabled = false;
 
   @override
   void initState() {
     super.initState();
-    _telegramController = TextEditingController(text: telegramLink.value);
     _loadNotificationPreference();
   }
 
@@ -1897,12 +1845,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    _telegramController.dispose();
-    super.dispose();
-  }
-
   int _signatureTapCount = 0;
   DateTime? _lastSignatureTapAt;
 
@@ -1922,40 +1864,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           builder: (_) => ChannelAdminScreen(service: widget.adminService),
         ),
       );
-    }
-  }
-
-  Future<void> _save() async {
-    final link = _telegramController.text.trim();
-    if (link.isNotEmpty) {
-      final uri = Uri.tryParse(link);
-      if (uri == null ||
-          uri.scheme != 'https' ||
-          (uri.host != 't.me' && uri.host != 'telegram.me')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Usa el enlace público real https://t.me/tu_canal.')),
-        );
-        return;
-      }
-    }
-    setState(() => _saving = true);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('telegram_public_link', link);
-      telegramLink.value = link;
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Configuración guardada.')),
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se pudo guardar. Vuelve a intentarlo.')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -2077,48 +1985,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 13),
             _settingsCard(
-              border: appBlue,
-              child: Material(
-                color: Colors.transparent,
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const CircleAvatar(
-                    backgroundColor: Color(0x332D8CFF),
-                    child: Icon(Icons.cloud_sync_rounded, color: appCyan),
-                  ),
-                  title: Text(
-                    appText(
-                      'Servidor de datos deportivos',
-                      'Sports data server',
-                      'Servidor de dados esportivos',
-                      'Serveur de données sportives',
-                    ),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
-                    ),
-                  ),
-                  subtitle: Text(
-                    appText(
-                      'Comprobar la conexión de datos deportivos y configurar el Worker.',
-                      'Check the sports data service and configure the public Worker URL.',
-                      'Verifique a conexão dos dados esportivos e configure o Worker.',
-                      'Vérifier le service de données sportives et configurer le Worker.',
-                    ),
-                    style: const TextStyle(color: appMuted, fontSize: 11, height: 1.4),
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded, color: appCyan),
-                  onTap: () => Navigator.of(context).push<void>(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const DeveloperSettingsScreen(),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 13),
-            _settingsCard(
               border: appCyan,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2222,12 +2088,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
 
             _settingsCard(
-              border: appPink,
+              border: appBlue,
+              child: ListTile(
+                key: const ValueKey<String>('settings-update-apk'),
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0x332D8CFF),
+                  child: Icon(Icons.system_update_alt_rounded, color: appCyan),
+                ),
+                title: const Text(
+                  'Actualizar APK',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Comprobar y descargar la última versión oficial de Deporte Total 360°.',
+                  style: TextStyle(color: appMuted, fontSize: 11, height: 1.4),
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded, color: appCyan),
+                onTap: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AppUpdateScreen(),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _settingsCard(
+              border: appGreen,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(
-                    tr('telegram_section').toUpperCase(),
+                  const Text(
+                    'CONTACTO DEL CREADOR',
                     style: TextStyle(
                       color: appCyan,
                       fontWeight: FontWeight.w900,
@@ -2235,8 +2131,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    tr('telegram_description'),
+                  const Text(
+                    'Comunícate directamente con el creador de la aplicación por WhatsApp.',
                     style: TextStyle(
                       color: appMuted,
                       fontSize: 12,
@@ -2244,27 +2140,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   const SizedBox(height: 11),
-                  TextField(
-                    controller: _telegramController,
-                    keyboardType: TextInputType.url,
-                    autocorrect: false,
-                    decoration: InputDecoration(
-                      labelText: tr('public_link'),
-                      hintText: 'https://t.me/tu_canal',
-                      prefixIcon: Icon(Icons.send_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed: _saving ? null : _save,
-                      icon: const Icon(Icons.save_rounded),
-                      label: Text(
-                        _saving
-                            ? appText('GUARDANDO…', 'SAVING…', 'SALVANDO…', 'ENREGISTREMENT…')
-                            : appText('GUARDAR CONFIGURACIÓN', 'SAVE SETTINGS', 'SALVAR CONFIGURAÇÃO', 'ENREGISTRER LES PARAMÈTRES'),
+                      key: const ValueKey<String>('creator-whatsapp-button'),
+                      onPressed: () => openExternalLink(
+                        context,
+                        contactUrl,
+                        label: 'WhatsApp del creador',
                       ),
+                      icon: const Icon(Icons.chat_rounded),
+                      label: const Text('WHATSAPP DEL CREADOR'),
                       style: FilledButton.styleFrom(
                         backgroundColor: appGreen,
                         foregroundColor: appBg,
@@ -2272,10 +2158,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 6),
+                  const Center(
+                    child: Text(
+                      '+592 721 4741',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                        letterSpacing: .5,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
 
           ],
         ),

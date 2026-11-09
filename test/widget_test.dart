@@ -124,14 +124,22 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('Ajustes expone un acceso visible al servidor deportivo', (tester) async {
+  testWidgets('Ajustes ofrece actualización de APK y contacto directo por WhatsApp', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await tester.pumpWidget(
       const MaterialApp(home: SettingsScreen()),
     );
     await tester.pump();
 
-    expect(find.text('Servidor de datos deportivos'), findsOneWidget);
+    expect(find.text('Servidor de datos deportivos'), findsNothing);
+    expect(find.text('Actualizar APK'), findsOneWidget);
+    expect(find.text('WHATSAPP DEL CREADOR'), findsOneWidget);
+    expect(find.text('+592 721 4741'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey<String>('settings-update-apk')));
+    await tester.pump();
+    expect(find.text('ACTUALIZAR APK'), findsOneWidget);
+    expect(find.text('INSTALACIÓN SEGURA'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -141,7 +149,6 @@ void main() {
       MaterialApp(
         home: HomeDashboard(
           onNavigate: (_) {},
-          onTelegram: () {},
           onContact: () {},
           onDonations: () {},
           onFantasy: () {},
@@ -175,7 +182,6 @@ void main() {
       const MaterialApp(
         home: HomeDashboard(
           onNavigate: _noopHomeNavigate,
-          onTelegram: _noopHomeAction,
           onContact: _noopHomeAction,
           onDonations: _noopHomeAction,
           onFantasy: _noopHomeAction,
@@ -260,8 +266,7 @@ void main() {
           data: const MediaQueryData(disableAnimations: true),
           child: HomeDashboard(
             onNavigate: (_) {},
-            onTelegram: () {},
-            onContact: () {},
+              onContact: () {},
             onDonations: () {},
             onFantasy: () {},
             onOpenAgenda: () {},
@@ -290,8 +295,7 @@ void main() {
           data: const MediaQueryData(textScaler: TextScaler.linear(2.0)),
           child: HomeDashboard(
             onNavigate: (_) {},
-            onTelegram: () {},
-            onContact: () {},
+              onContact: () {},
             onDonations: () {},
             onFantasy: () {},
             onOpenAgenda: () {},
@@ -308,7 +312,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('muestra las ocho secciones principales y presenta Chat, Actualización y Ajustes', (tester) async {
+  testWidgets('muestra las siete secciones principales y presenta Chat y Ajustes', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
     // Pintar un segundo frame comprueba el render inicial de Inicio, no solo
     // que el árbol de widgets se pueda construir.
@@ -326,14 +330,14 @@ void main() {
     expect(find.text('Estadísticas'), findsNothing);
     expect(find.text('Resúmenes'), findsNothing);
     expect(find.text('Chat'), findsOneWidget);
-    expect(find.text('Actualización'), findsOneWidget);
+    expect(find.text('Actualizar APK'), findsNothing);
     expect(find.text('Ajustes'), findsOneWidget);
     // La sala pública no arranca hasta seleccionar su pestaña.
     expect(find.text('CHAT DE COMPRADORES'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('la navegación inferior permite recorrer las ocho secciones', (tester) async {
+  testWidgets('la navegación inferior permite recorrer las siete secciones', (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     tester.view.devicePixelRatio = 1;

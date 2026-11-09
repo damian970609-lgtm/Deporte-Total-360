@@ -5,8 +5,6 @@ enum AppLanguage { spanish, english, portuguese, french }
 final ValueNotifier<AppLanguage> appLanguage =
     ValueNotifier<AppLanguage>(AppLanguage.spanish);
 
-final ValueNotifier<String> telegramLink = ValueNotifier<String>('');
-
 String languageCode(AppLanguage language) {
   switch (language) {
     case AppLanguage.spanish:

@@ -215,6 +215,14 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
 
     return Scaffold(
       backgroundColor: _updateBackground,
+      appBar: AppBar(
+        backgroundColor: _updateBackground,
+        foregroundColor: Colors.white,
+        title: const Text(
+          'ACTUALIZAR APK',
+          style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: .5),
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
