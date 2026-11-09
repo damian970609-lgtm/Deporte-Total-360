@@ -46,7 +46,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     WidgetsBinding.instance.addObserver(this);
     // La búsqueda previa al evento continúa aunque el usuario esté en otra
     // pestaña. El tablero de vídeo sigue respetando widget.isActive.
-    _refresh(force: true);
+    _refresh();
     _refreshTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       if (mounted) _refresh();
     });
@@ -57,14 +57,15 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     super.didUpdateWidget(oldWidget);
     if ((!oldWidget.isActive && widget.isActive) ||
         oldWidget.selectedEventId != widget.selectedEventId) {
-      _refresh(force: true);
+      _refresh();
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _refresh(force: true);
+      // Reanudar no fuerza descargas: se respeta el snapshot local y su TTL.
+      _refresh();
     }
   }
 
@@ -79,12 +80,36 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
   Future<List<M3uChannel>> _loadSelectedSportsChannels({bool forceRefresh = false}) async {
     final now = DateTime.now();
     final cached = _selectedChannelCache;
+    const snapshotMaxAge = Duration(minutes: 15);
+    const memoryMaxAge = Duration(minutes: 15);
+
+    List<M3uChannel> asM3u(List<SportsChannel> channels) => channels
+        .map((channel) => M3uChannel(
+              name: channel.name,
+              url: channel.url,
+              tvgId: channel.identifier,
+              tvgName: channel.name,
+              group: channel.groupTitle,
+              language: channel.language,
+            ))
+        .toList(growable: false);
+
     if (!forceRefresh && cached != null && _selectedChannelCacheAt != null &&
-        now.difference(_selectedChannelCacheAt!) < const Duration(minutes: 30)) {
-      return cached.map((channel) => M3uChannel(
-        name: channel.name, url: channel.url, tvgId: channel.identifier,
-        tvgName: channel.name, group: channel.groupTitle, language: channel.language,
-      )).toList(growable: false);
+        now.difference(_selectedChannelCacheAt!) < memoryMaxAge) {
+      return asM3u(cached);
+    }
+
+    // Primero usamos el snapshot local. Solo consultamos todas las páginas del
+    // Durable Object cuando el snapshot tiene más de 15 minutos o no existe.
+    var localSnapshot = <SportsChannel>[];
+    if (!forceRefresh) {
+      localSnapshot = await loadCachedVisibleSportsChannels();
+      if (localSnapshot.isNotEmpty &&
+          await isCachedPublicChannelSnapshotFresh(maxAge: snapshotMaxAge)) {
+        _selectedChannelCache = List<SportsChannel>.unmodifiable(localSnapshot);
+        _selectedChannelCacheAt = now;
+        return asM3u(localSnapshot);
+      }
     }
 
     try {
@@ -116,30 +141,19 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
           .toList(growable: false);
       _selectedChannelCache = List<SportsChannel>.unmodifiable(selected);
       _selectedChannelCacheAt = now;
-      return selected.map((channel) => M3uChannel(
-        name: channel.name,
-        url: channel.url,
-        tvgId: channel.identifier,
-        tvgName: channel.name,
-        group: channel.groupTitle,
-        language: channel.language,
-      )).toList(growable: false);
+      return asM3u(selected);
     } catch (_) {
-      // El tablero usa la última selección confirmada, no una lista inventada
-      // ni todas las listas predeterminadas. Un fallo de cuota no borra canales.
-      final local = cached != null && cached.isNotEmpty
-          ? cached
-          : await loadCachedVisibleSportsChannels();
+      // El tablero conserva la última selección confirmada aunque Cloudflare
+      // esté limitado. No se sustituye por listas genéricas ni por canales ocultos.
+      final local = localSnapshot.isNotEmpty
+          ? localSnapshot
+          : (cached != null && cached.isNotEmpty
+              ? cached
+              : await loadCachedVisibleSportsChannels());
       if (local.isNotEmpty) {
         _selectedChannelCache = List<SportsChannel>.unmodifiable(local);
-        return local.map((channel) => M3uChannel(
-          name: channel.name,
-          url: channel.url,
-          tvgId: channel.identifier,
-          tvgName: channel.name,
-          group: channel.groupTitle,
-          language: channel.language,
-        )).toList(growable: false);
+        _selectedChannelCacheAt = now;
+        return asM3u(local);
       }
       rethrow;
     }
@@ -151,52 +165,52 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     if (mounted) setState(() {});
 
     try {
-      // SportsAPI proporciona el calendario; el catálogo del propietario
-      // aporta las URL directas que se pueden asignar a cada evento.
       final settings = await AutoLiveSettings.load();
-      final localEvents = await SportsAgendaStore.load();
-      List<SportsAgendaEvent> events;
-      try {
-        // El tablero Live obtiene primero los diez deportes favoritos, aunque
-        // el usuario nunca haya abierto la pestaña Agenda.
-        final window = await SportsApiAppService().fetchFavoriteAgendaWindow(
-          startDate: DateTime.now(),
-          days: 7,
-        );
-        events = window.events;
-        await SportsAgendaStore.saveWindow(
-          events,
-          startDate: window.startDate,
-          days: window.days,
-        );
-      } catch (_) {
-        events = localEvents;
+      final today = DateTime.now();
+      // En Vivo lee primero exactamente la jornada local que Agenda ya guardó.
+      // Solo vuelve a SportsAPI si esa captura diaria falta o venció; el sondeo
+      // de dos minutos queda limitado al cálculo local de señales/horarios.
+      var events = await SportsAgendaStore.loadWindow(
+        startDate: today,
+        days: 1,
+      );
+      final agendaIsFresh = await SportsAgendaStore.isWindowFresh(
+        startDate: today,
+        maxAge: const Duration(hours: 24),
+      );
+      if (!agendaIsFresh || force) {
+        try {
+          final window = await SportsApiAppService().fetchFavoriteAgendaWindow(
+            startDate: today,
+            days: 1,
+          );
+          events = window.events;
+          await SportsAgendaStore.saveWindow(
+            events,
+            startDate: window.startDate,
+            days: 1,
+          );
+        } catch (_) {
+          // La copia del teléfono se conserva cuando el Worker/API está limitado.
+        }
       }
 
-      // Primero se consume el calendario persistente que prepara Cloudflare
-      // aunque ningún teléfono tenga la APK abierta. Si el Worker aún no lo ha
-      // generado o está temporalmente fuera de línea, se conserva el motor local.
-      final published = await _service.fetchPublishedSchedule();
-      List<ScheduledLiveEvent> latest;
-      if (published != null &&
-          published.any((item) => item.sources.isNotEmpty)) {
-        latest = published;
-      } else {
-        final selectedChannels =
-            await _loadSelectedSportsChannels(forceRefresh: force);
-        final localSchedule = selectedChannels.isNotEmpty
-            ? await _service.schedule(
-                events: events,
-                now: DateTime.now(),
-                settings: settings,
-                availableChannels: selectedChannels,
-                forceRefresh: force,
-              )
-            : <ScheduledLiveEvent>[];
-        latest = localSchedule.isNotEmpty
-            ? localSchedule
-            : (published ?? <ScheduledLiveEvent>[]);
-      }      if (!mounted) return;
+      // No consultar /api/live/auto/schedule: esa ruta no está implementada en
+      // el Worker. La asignación se calcula con los canales visibles escogidos
+      // en Damián APK y las guías EPG configuradas en este dispositivo.
+      final selectedChannels =
+          await _loadSelectedSportsChannels(forceRefresh: force);
+      final latest = selectedChannels.isNotEmpty
+          ? await _service.schedule(
+              events: events,
+              now: DateTime.now(),
+              settings: settings,
+              availableChannels: selectedChannels,
+              forceRefresh: force,
+            )
+          : <ScheduledLiveEvent>[];
+
+      if (!mounted) return;
       setState(() {
         _agendaEvents = events;
         _scheduled = latest;

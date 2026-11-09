@@ -45,6 +45,25 @@ Future<List<SportsChannel>> loadCachedVisibleSportsChannels() async {
   }
 }
 
+const String channelCatalogSnapshotSavedAtKey =
+    'dt360_channel_catalog_snapshot_saved_at_v1';
+
+Future<bool> isCachedPublicChannelSnapshotFresh({
+  Duration maxAge = const Duration(minutes: 15),
+}) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final savedAt = DateTime.tryParse(
+      prefs.getString(channelCatalogSnapshotSavedAtKey) ?? '',
+    );
+    if (savedAt == null) return false;
+    final age = DateTime.now().difference(savedAt);
+    return !age.isNegative && age <= maxAge;
+  } catch (_) {
+    return false;
+  }
+}
+
 Future<void> saveCachedPublicChannelSnapshot(
   Iterable<SportsChannel> channels,
 ) async {
@@ -58,6 +77,10 @@ Future<void> saveCachedPublicChannelSnapshot(
       .map((channel) => channel.toJson())
       .toList(growable: false);
   await prefs.setString(channelCatalogSnapshotCacheKey, jsonEncode(snapshot));
+  await prefs.setString(
+    channelCatalogSnapshotSavedAtKey,
+    DateTime.now().toIso8601String(),
+  );
 }
 
 const String _googleServerClientId =
