@@ -2325,9 +2325,9 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
     setState(() => _testing = true);
     try {
       await SportsApiService().checkHealth(url);
-      _showMessage('Worker operativo. API-Sports queda disponible únicamente para Estadísticas.');
+      _showMessage('Worker operativo. El servicio queda disponible para los datos deportivos de la aplicación.');
     } catch (error) {
-      _showMessage('La prueba del servicio de estadísticas falló: $error');
+      _showMessage('La prueba del servicio de datos deportivos falló: $error');
     } finally {
       if (mounted) setState(() => _testing = false);
     }
