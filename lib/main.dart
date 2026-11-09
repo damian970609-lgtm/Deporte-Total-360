@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'automatic_live_screen.dart';
+import 'automatic_live_service.dart';
 import 'channel_catalog_screen.dart';
 import 'channel_catalog_service.dart';
 
@@ -2194,18 +2195,64 @@ class DeveloperSettingsScreen extends StatefulWidget {
 
 class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
   late final TextEditingController _apiUrlController;
+  late final TextEditingController _epgUrlController;
   bool _testing = false;
   bool _saving = false;
+  bool _loadingEpg = true;
+  bool _savingEpg = false;
 
   @override
   void initState() {
     super.initState();
     _apiUrlController = TextEditingController(text: sportsApiBaseUrl.value);
+    _epgUrlController = TextEditingController(text: defaultAutoLiveEpgUrl);
+    unawaited(_loadEpgSettings());
+  }
+
+  Future<void> _loadEpgSettings() async {
+    try {
+      final settings = await AutoLiveSettings.load();
+      if (!mounted) return;
+      setState(() {
+        _epgUrlController.text = settings.epgUrl;
+        _loadingEpg = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _loadingEpg = false);
+      _showMessage('No se pudo cargar la configuración EPG: $error');
+    }
+  }
+
+  Future<void> _saveEpgSettings() async {
+    if (_savingEpg || _loadingEpg) return;
+    setState(() => _savingEpg = true);
+    try {
+      final current = await AutoLiveSettings.load();
+      await AutoLiveSettings.save(
+        playlistUrl: current.playlistUrl,
+        epgUrl: _epgUrlController.text,
+        authorizationConfirmed: true,
+      );
+      _showMessage(
+        'Fuentes EPG guardadas. Se aplicarán en la próxima actualización de Deportes en vivo.',
+      );
+    } catch (error) {
+      _showMessage('No se pudo guardar la lista EPG: $error');
+    } finally {
+      if (mounted) setState(() => _savingEpg = false);
+    }
+  }
+
+  Future<void> _restoreRecommendedEpgSettings() async {
+    _epgUrlController.text = defaultAutoLiveEpgUrl;
+    await _saveEpgSettings();
   }
 
   @override
   void dispose() {
     _apiUrlController.dispose();
+    _epgUrlController.dispose();
     super.dispose();
   }
 
@@ -2392,13 +2439,108 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
                   ]),
                   SizedBox(height: 9),
                   Text(
-                    'Las listas de canales y guías de programación se descargan y actualizan automáticamente. Primero se priorizan señales en español; cuando no hay una señal española disponible, se prueban fuentes internacionales. Las direcciones y el catálogo permanecen ocultos en la interfaz y no requieren validación manual del usuario.',
+                    'La aplicación combina guías XMLTV regionales y fuentes deportivas. Puedes revisar, añadir o quitar direcciones EPG en el panel privado de abajo; las listas de canales visibles siguen gestionándose por separado.',
                     style: TextStyle(color: appMuted, fontSize: 11, height: 1.45),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: appPanel,
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: appGreen.withAlpha(160)),
+              ),
+              child: ExpansionTile(
+                initiallyExpanded: true,
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(top: 8),
+                iconColor: appGreen,
+                collapsedIconColor: appGreen,
+                leading: const Icon(Icons.live_tv_rounded, color: appGreen),
+                title: const Text(
+                  'CONFIGURAR GUÍAS EPG XMLTV',
+                  style: TextStyle(
+                    color: appGreen,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Guías en español, Latinoamérica, EE. UU., Reino Unido y deportes',
+                  style: TextStyle(color: appMuted, fontSize: 10),
+                ),
+                children: <Widget>[
+                  Text(
+                    'Una dirección por línea. Las fuentes se combinan: si una falla o su XML no es válido, las demás continúan. La aplicación admite XML y GZIP y limita el tamaño de cada guía para proteger la memoria del teléfono. La coincidencia final depende del tvg-id o del nombre del canal.',
+                    style: TextStyle(color: appMuted, fontSize: 11, height: 1.45),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _epgUrlController,
+                    enabled: !_loadingEpg && !_savingEpg,
+                    keyboardType: TextInputType.multiline,
+                    textCapitalization: TextCapitalization.none,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    minLines: 5,
+                    maxLines: 9,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      height: 1.35,
+                      fontFamily: 'monospace',
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: 'Direcciones XMLTV / EPG',
+                      hintText: 'https://servidor/guia.xml.gz',
+                      alignLabelWithHint: true,
+                      prefixIcon: Icon(Icons.link_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  if (_loadingEpg)
+                    const LinearProgressIndicator(minHeight: 2),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _loadingEpg || _savingEpg
+                          ? null
+                          : _saveEpgSettings,
+                      icon: _savingEpg
+                          ? const SizedBox(
+                              width: 17,
+                              height: 17,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save_rounded),
+                      label: Text(
+                        _savingEpg ? 'GUARDANDO EPG…' : 'GUARDAR Y APLICAR EPG',
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: appGreen,
+                        foregroundColor: appBg,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: _loadingEpg || _savingEpg
+                          ? null
+                          : _restoreRecommendedEpgSettings,
+                      icon: const Icon(Icons.restart_alt_rounded, size: 17),
+                      label: const Text('RESTAURAR EPG RECOMENDADA'),
+                      style: TextButton.styleFrom(foregroundColor: appCyan),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(

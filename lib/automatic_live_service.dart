@@ -99,9 +99,7 @@ const String defaultAutoLivePlaylistUrls =
     'https://dearbulut.github.io/iptv/playlists/online.m3u\n'
     'https://dearbulut.github.io/iptv/playlists/best.m3u';
 
-// Guías priorizadas en español (España y Latinoamérica/Caribe), con una
-// guía global al final como último respaldo.
-const String defaultAutoLiveEpgUrl =
+const String previousDefaultAutoLiveEpgUrlV2 =
     'https://iptv-epg.org/files/epg-es.xml\n'
     'https://iptv-epg.org/files/epg-ar.xml\n'
     'https://iptv-epg.org/files/epg-mx.xml\n'
@@ -126,6 +124,39 @@ const String defaultAutoLiveEpgUrl =
     'https://iptv-epg.org/files/epg-br.xml\n'
     'https://raw.githubusercontent.com/teleonline/listas/main/epg.xml.gz\n'
     'https://dearbulut.github.io/iptv/epg/guide.xml.gz';
+
+// Guías regionales en español más fuentes complementarias para canales de
+// Estados Unidos, Reino Unido y programación deportiva. Las guías ligeras
+// cubren la ventana inmediata y reducen la memoria utilizada en Android.
+const String defaultAutoLiveEpgUrl =
+    'https://iptv-epg.org/files/epg-es.xml\n'
+    'https://iptv-epg.org/files/epg-ar.xml\n'
+    'https://iptv-epg.org/files/epg-mx.xml\n'
+    'https://iptv-epg.org/files/epg-co.xml\n'
+    'https://iptv-epg.org/files/epg-ve.xml\n'
+    'https://iptv-epg.org/files/epg-cl.xml\n'
+    'https://iptv-epg.org/files/epg-pe.xml\n'
+    'https://iptv-epg.org/files/epg-uy.xml\n'
+    'https://iptv-epg.org/files/epg-py.xml\n'
+    'https://iptv-epg.org/files/epg-bo.xml\n'
+    'https://iptv-epg.org/files/epg-cr.xml\n'
+    'https://iptv-epg.org/files/epg-gt.xml\n'
+    'https://iptv-epg.org/files/epg-hn.xml\n'
+    'https://iptv-epg.org/files/epg-ni.xml\n'
+    'https://iptv-epg.org/files/epg-pa.xml\n'
+    'https://iptv-epg.org/files/epg-cw.xml\n'
+    'https://iptv-epg.org/files/epg-jm.xml\n'
+    'https://iptv-epg.org/files/epg-do.xml\n'
+    'https://iptv-epg.org/files/epg-sv.xml\n'
+    'https://iptv-epg.org/files/epg-pt.xml\n'
+    'https://iptv-epg.org/files/epg-gb.xml\n'
+    'https://iptv-epg.org/files/epg-br.xml\n'
+    'https://raw.githubusercontent.com/teleonline/listas/main/epg.xml.gz\n'
+    'https://dearbulut.github.io/iptv/epg/guide.xml.gz\n'
+    'https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/Latino_lite.xml.gz\n'
+    'https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/US_lite.xml.gz\n'
+    'https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/UK_lite.xml.gz\n'
+    'https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/Sports_guide.xml.gz';
 
 List<String> _splitPlaylistUrls(String value) => value
     .split(RegExp(r'[\r\n;]+'))
@@ -175,7 +206,8 @@ class AutoLiveSettings {
       await prefs.setString(_playlistUrlKey, playlist);
     }
     if (epg.trim() == legacyDefaultAutoLiveEpgUrl.trim() ||
-        epg.trim() == previousDefaultAutoLiveEpgUrl.trim()) {
+        epg.trim() == previousDefaultAutoLiveEpgUrl.trim() ||
+        epg.trim() == previousDefaultAutoLiveEpgUrlV2.trim()) {
       epg = defaultAutoLiveEpgUrl;
       await prefs.setString(_epgUrlKey, epg);
     }
@@ -508,7 +540,13 @@ class SportsAgendaStore {
       final localStart = event.startsAt.toLocal();
       final eventEnd =
           event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
-      if (replacedDays.contains(dayKey(localStart))) continue;
+      final eventBelongsToReplacedDay =
+          replacedDays.contains(dayKey(localStart));
+
+      // Una respuesta parcial no sabe qué otros deportes/ligas faltan.
+      // Conserva por eso los eventos anteriores del mismo día y deja que los
+      // nuevos datos sustituyan solo los identificadores que sí llegaron.
+      if (eventBelongsToReplacedDay && complete) continue;
       if (eventEnd.isAfter(cutoff)) byId[event.id] = event;
     }
 

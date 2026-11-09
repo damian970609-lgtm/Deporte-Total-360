@@ -38,6 +38,31 @@ void main() {
       expect(settings.epgUrl, defaultAutoLiveEpgUrl);
       expect(settings.epgUrls, contains('https://iptv-epg.org/files/epg-do.xml'));
       expect(settings.epgUrls, contains('https://iptv-epg.org/files/epg-gb.xml'));
+      expect(settings.epgUrls, contains(
+        'https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/Latino_lite.xml.gz',
+      ));
+      expect(settings.epgUrls, contains(
+        'https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/Sports_guide.xml.gz',
+      ));
+    });
+
+    test('migra la última lista integrada anterior y mantiene EPG personalizada', () async {
+      await AutoLiveSettings.save(
+        playlistUrl: defaultAutoLivePlaylistUrls,
+        epgUrl: previousDefaultAutoLiveEpgUrlV2,
+        authorizationConfirmed: true,
+      );
+      final migrated = await AutoLiveSettings.load();
+      expect(migrated.epgUrl, defaultAutoLiveEpgUrl);
+
+      const custom = 'https://mi-proveedor.example/guia-personalizada.xml.gz';
+      await AutoLiveSettings.save(
+        playlistUrl: defaultAutoLivePlaylistUrls,
+        epgUrl: custom,
+        authorizationConfirmed: true,
+      );
+      final preserved = await AutoLiveSettings.load();
+      expect(preserved.epgUrl, custom);
     });
   });
 
@@ -148,6 +173,25 @@ void main() {
       isFalse,
     );
 
+    final previousEvent = SportsAgendaEvent(
+      id: 'previously-cached-event',
+      title: 'Evento que llegó en una consulta anterior',
+      sport: 'Baloncesto',
+      competition: 'Otra liga',
+      startsAt: today.add(const Duration(hours: 10)),
+      detailUrl: 'https://sportsapi.app/',
+    );
+    await SportsAgendaStore.saveWindow(
+      <SportsAgendaEvent>[previousEvent],
+      startDate: today,
+      days: 1,
+      complete: true,
+    );
+    expect(
+      await SportsAgendaStore.isWindowFresh(startDate: today),
+      isTrue,
+    );
+
     await SportsAgendaStore.saveWindow(
       <SportsAgendaEvent>[event],
       startDate: today,
@@ -161,7 +205,7 @@ void main() {
     expect(
       (await SportsAgendaStore.loadWindow(startDate: today, days: 1))
           .map((item) => item.id),
-      contains('partial-cache-event'),
+      containsAll(<String>['partial-cache-event', 'previously-cached-event']),
     );
 
     await SportsAgendaStore.saveWindow(
