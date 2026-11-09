@@ -26,7 +26,7 @@ on:
       - '.github/workflows/build-apk.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 defaults:
   run:
@@ -422,8 +422,20 @@ jobs:
           FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          APP_BUILD_NUMBER: ${{ github.run_number }}
         run: |
+          set -Eeuo pipefail
+          APP_VERSION="$(awk '/^version:/ { split($2, parts, /\+/); print parts[1]; exit }' pubspec.yaml)"
+          if [[ -z "$APP_VERSION" ]]; then
+            echo "::error::No se pudo leer la versión de pubspec.yaml."
+            exit 1
+          fi
+          echo "Versión de APK: $APP_VERSION+$APP_BUILD_NUMBER"
           flutter build apk --release \
+            --build-name="$APP_VERSION" \
+            --build-number="$APP_BUILD_NUMBER" \
+            --dart-define=APP_VERSION="$APP_VERSION" \
+            --dart-define=APP_BUILD_NUMBER="$APP_BUILD_NUMBER" \
             --dart-define=FIREBASE_API_KEY="$FIREBASE_API_KEY" \
             --dart-define=FIREBASE_APP_ID="$FIREBASE_APP_ID" \
             --dart-define=FIREBASE_MESSAGING_SENDER_ID="$FIREBASE_MESSAGING_SENDER_ID" \
@@ -479,3 +491,26 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publicar APK oficial en GitHub Releases
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          set -Eeuo pipefail
+          APP_VERSION="$(awk '/^version:/ { split($2, parts, /\+/); print parts[1]; exit }' pubspec.yaml)"
+          TAG="v${APP_VERSION}+${APP_BUILD_NUMBER}"
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          test -s "$APK"
+          gh release create "$TAG" "$APK#Deporte-Total-360.apk" \
+            --title "DEPORTE TOTAL 360° $TAG" \
+            --notes "APK oficial firmada de DEPORTE TOTAL 360°. Instala encima de la versión anterior para conservar los datos locales." \
+            --target "$GITHUB_SHA" \
+            --latest
+          {
+            echo "## Publicación oficial"
+            echo
+            echo "- Versión: `$TAG`"
+            echo "- APK: [Deporte-Total-360.apk](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/Deporte-Total-360.apk)"
+          } >> "$GITHUB_STEP_SUMMARY"

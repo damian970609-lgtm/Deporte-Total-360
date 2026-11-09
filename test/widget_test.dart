@@ -6,10 +6,8 @@ import 'package:deporte_total_360/main.dart';
 import 'package:deporte_total_360/channel_catalog_screen.dart';
 import 'package:deporte_total_360/channel_catalog_service.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
-import 'package:deporte_total_360/sports_statistics_screen.dart';
 
 void _noopHomeNavigate(int _) {}
-void _noopHomeSport(String _) {}
 void _noopHomeAction() {}
 
 class _AdminTestService extends ChannelCatalogService {
@@ -77,27 +75,6 @@ class _AdminTestService extends ChannelCatalogService {
 }
 
 void main() {
-  testWidgets('estadísticas muestra selector multideporte e IDs', (tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: SportsStatisticsScreen()),
-    );
-
-    expect(find.text('ESTADÍSTICAS DEPORTIVAS'), findsOneWidget);
-    expect(find.text('BUSCAR LIGAS'), findsOneWidget);
-    expect(find.text('SPORT ID  •  football'), findsOneWidget);
-    expect(find.textContaining('Fútbol'), findsOneWidget);
-  });
-
-  testWidgets('ofrece la categoría Fórmula 1 y abre su pantalla específica', (tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: SportsStatisticsScreen(initialSport: 'Fórmula 1'),
-      ),
-    );
-
-    expect(find.text('SPORT ID  •  formula-1'), findsOneWidget);
-    expect(find.textContaining('Tipo de clasificación'), findsOneWidget);
-  });
   testWidgets('la agenda de fútbol muestra por defecto los próximos siete días', (tester) async {
     sportsApiBaseUrl.value = '';
     await tester.pumpWidget(
@@ -154,7 +131,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Servidor de estadísticas'), findsOneWidget);
+    expect(find.text('Servidor de datos deportivos'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -164,12 +141,10 @@ void main() {
       MaterialApp(
         home: HomeDashboard(
           onNavigate: (_) {},
-          onSportSelected: (_) {},
           onTelegram: () {},
           onContact: () {},
           onDonations: () {},
           onFantasy: () {},
-          onStatistics: () {},
           onOpenAgenda: () {},
           onChat: () {},
         ),
@@ -200,12 +175,10 @@ void main() {
       const MaterialApp(
         home: HomeDashboard(
           onNavigate: _noopHomeNavigate,
-          onSportSelected: _noopHomeSport,
           onTelegram: _noopHomeAction,
           onContact: _noopHomeAction,
           onDonations: _noopHomeAction,
           onFantasy: _noopHomeAction,
-          onStatistics: _noopHomeAction,
           onOpenAgenda: _noopHomeAction,
           onChat: _noopHomeAction,
         ),
@@ -233,7 +206,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(686, 900);
+    tester.view.physicalSize = const Size(600, 900);
 
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
     await tester.pump();
@@ -244,7 +217,7 @@ void main() {
         find.byKey(const ValueKey<String>('bottom-nav-scroll-viewport')),
       );
       final labels = List<Finder>.generate(
-        9,
+        8,
         (index) => find.byKey(ValueKey<String>('bottom-tab-label-$index')),
       );
       final cues = <Finder>[
@@ -287,12 +260,10 @@ void main() {
           data: const MediaQueryData(disableAnimations: true),
           child: HomeDashboard(
             onNavigate: (_) {},
-            onSportSelected: (_) {},
             onTelegram: () {},
             onContact: () {},
             onDonations: () {},
             onFantasy: () {},
-            onStatistics: () {},
             onOpenAgenda: () {},
             onChat: () {},
           ),
@@ -319,12 +290,10 @@ void main() {
           data: const MediaQueryData(textScaler: TextScaler.linear(2.0)),
           child: HomeDashboard(
             onNavigate: (_) {},
-            onSportSelected: (_) {},
             onTelegram: () {},
             onContact: () {},
             onDonations: () {},
             onFantasy: () {},
-            onStatistics: () {},
             onOpenAgenda: () {},
             onChat: () {},
           ),
@@ -339,7 +308,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('muestra las nueve secciones principales y presenta Chat antes de Ajustes', (tester) async {
+  testWidgets('muestra las ocho secciones principales y presenta Chat, Actualización y Ajustes', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
     // Pintar un segundo frame comprueba el render inicial de Inicio, no solo
     // que el árbol de widgets se pueda construir.
@@ -354,16 +323,17 @@ void main() {
     expect(find.text('TRANSMISIONES EN VIVO'), findsNothing);
     expect(find.text('Agenda de hoy'), findsOneWidget);
     expect(find.text('Mister Fantasy'), findsOneWidget);
-    expect(find.text('Estadísticas'), findsWidgets);
-    expect(find.text('Resúmenes'), findsOneWidget);
+    expect(find.text('Estadísticas'), findsNothing);
+    expect(find.text('Resúmenes'), findsNothing);
     expect(find.text('Chat'), findsOneWidget);
+    expect(find.text('Actualización'), findsOneWidget);
     expect(find.text('Ajustes'), findsOneWidget);
     // La sala pública no arranca hasta seleccionar su pestaña.
     expect(find.text('CHAT DE COMPRADORES'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('la navegación inferior permite recorrer las nueve secciones', (tester) async {
+  testWidgets('la navegación inferior permite recorrer las ocho secciones', (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     tester.view.devicePixelRatio = 1;

@@ -44,27 +44,35 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // La búsqueda previa al evento continúa aunque el usuario esté en otra
-    // pestaña. El tablero de vídeo sigue respetando widget.isActive.
-    _refresh();
+    // La pantalla se crea al abrir la pestaña; las consultas periódicas
+    // solo continúan mientras En Vivo está visible y Android está en primer plano.
+    if (widget.isActive) _refresh();
     _refreshTimer = Timer.periodic(const Duration(minutes: 2), (_) {
-      if (mounted) _refresh();
+      // El tablero no consulta API/Cloudflare cuando el usuario está en otra
+      // pestaña o Android mantiene la app en segundo plano.
+      if (mounted &&
+          widget.isActive &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        _refresh();
+      }
     });
   }
 
   @override
   void didUpdateWidget(covariant AutomaticLiveScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if ((!oldWidget.isActive && widget.isActive) ||
-        oldWidget.selectedEventId != widget.selectedEventId) {
+    if (widget.isActive &&
+        (!oldWidget.isActive ||
+            oldWidget.selectedEventId != widget.selectedEventId)) {
       _refresh();
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      // Reanudar no fuerza descargas: se respeta el snapshot local y su TTL.
+    if (state == AppLifecycleState.resumed && widget.isActive) {
+      // Solo la pestaña visible se actualiza al volver a primer plano.
+      // Se respeta el snapshot local y sus tiempos de validez.
       _refresh();
     }
   }
@@ -314,8 +322,8 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         .toList(growable: false);
   }
 
-  /// Actualiza justo al inicio o al fin del evento, además del control
-  /// periódico del catálogo que continúa ejecutándose cada 45 segundos.
+  /// Recalcula los límites de inicio y fin de evento sin consultar servicios.
+  /// Las consultas de red solo se ejecutan mientras En Vivo está visible.
   void _scheduleEventBoundaryRefresh() {
     _eventBoundaryTimer?.cancel();
     final now = DateTime.now();

@@ -17,8 +17,7 @@ import 'fantasy_screen.dart';
 import 'notification_service.dart';
 import 'public_chat_screen.dart';
 import 'sports_api_service.dart';
-import 'sportsapi_statistics_screen.dart';
-import 'sports_summaries_screen.dart';
+import 'app_update_screen.dart';
 import 'sports_agenda_screen.dart';
 
 // Identidad visual unificada: blanco, negro, azul, rojo y verde neón.
@@ -759,13 +758,11 @@ class _MainShellState extends State<MainShell> {
   static const int _channelsTab = 2;
   static const int _agendaTab = 3;
   static const int _fantasyTab = 4;
-  static const int _statisticsTab = 5;
-  static const int _summariesTab = 6;
-  static const int _chatTab = 7;
-  static const int _settingsTab = 8;
+  static const int _chatTab = 5;
+  static const int _updateTab = 6;
+  static const int _settingsTab = 7;
 
   int _selectedIndex = _homeTab;
-  String _selectedStatisticsSport = 'Todos';
   String? _selectedAgendaEventId;
   bool _handlingBack = false;
   final Set<int> _visitedTabs = <int>{_homeTab};
@@ -777,16 +774,6 @@ class _MainShellState extends State<MainShell> {
       _visitedTabs.add(index);
     });
   }
-
-  void _selectSport(String sport) {
-    setState(() {
-      _selectedStatisticsSport = sport;
-      _selectedIndex = _statisticsTab;
-      _visitedTabs.add(_statisticsTab);
-    });
-  }
-
-  void _openStatistics() => _selectTab(_statisticsTab);
 
   void _openAgenda() => _selectTab(_agendaTab);
 
@@ -992,17 +979,15 @@ class _MainShellState extends State<MainShell> {
     final navigationAvailableWidth =
         media.size.width - media.padding.left - media.padding.right;
     final navigationNeedsScroll =
-        _bottomNavigationItemWidth(context) * 9 > navigationAvailableWidth;
+        _bottomNavigationItemWidth(context) * 8 > navigationAvailableWidth;
 
     final pages = <Widget>[
       HomeDashboard(
         onNavigate: _selectTab,
-        onSportSelected: _selectSport,
         onTelegram: _openTelegram,
         onContact: () => openExternalLink(context, contactUrl, label: 'WhatsApp'),
         onDonations: _openDonations,
         onFantasy: _openFantasy,
-        onStatistics: _openStatistics,
         onOpenAgenda: _openAgenda,
         onChat: _openPublicChat,
       ),
@@ -1026,18 +1011,11 @@ class _MainShellState extends State<MainShell> {
             )
           : const SizedBox.shrink(),
       _visitedTabs.contains(_fantasyTab) ? const FantasyScreen() : const SizedBox.shrink(),
-      _visitedTabs.contains(_statisticsTab)
-          ? SportsApiStatisticsScreen(
-              key: ValueKey<String>('statistics-${_selectedStatisticsSport}'),
-              initialSport: _selectedStatisticsSport,
-              onOpenAgenda: () => _selectTab(_agendaTab),
-            )
-          : const SizedBox.shrink(),
-      _visitedTabs.contains(_summariesTab)
-          ? const SportsSummariesScreen()
-          : const SizedBox.shrink(),
       _visitedTabs.contains(_chatTab)
           ? PublicChatScreen(isActive: _selectedIndex == _chatTab)
+          : const SizedBox.shrink(),
+      _visitedTabs.contains(_updateTab)
+          ? const AppUpdateScreen()
           : const SizedBox.shrink(),
       _visitedTabs.contains(_settingsTab) ? const SettingsScreen() : const SizedBox.shrink(),
     ];
@@ -1101,14 +1079,8 @@ class _MainShellState extends State<MainShell> {
                             _buildBottomTab(_channelsTab, Icons.grid_view_rounded, 'Canales deportivos', appCyan),
                             _buildBottomTab(_agendaTab, Icons.calendar_month_rounded, 'Agenda de hoy', appGreen),
                             _buildBottomTab(_fantasyTab, Icons.emoji_events_rounded, 'Mister Fantasy', appYellow),
-                            _buildBottomTab(_statisticsTab, Icons.query_stats_rounded, tr('statistics'), appCyan),
-                            _buildBottomTab(
-                              _summariesTab,
-                              Icons.play_circle_fill_rounded,
-                              appText('Resúmenes', 'Highlights', 'Resumos', 'Résumés'),
-                              appRed,
-                            ),
                             _buildBottomTab(_chatTab, Icons.forum_rounded, tr('chat'), appGreen),
+                            _buildBottomTab(_updateTab, Icons.system_update_alt_rounded, 'Actualización', appCyan),
                             _buildBottomTab(_settingsTab, Icons.settings_rounded, tr('settings'), appBlue),
                           ],
                         ),
@@ -1158,24 +1130,20 @@ class HomeDashboard extends StatelessWidget {
   const HomeDashboard({
     super.key,
     required this.onNavigate,
-    required this.onSportSelected,
     required this.onTelegram,
     required this.onContact,
     required this.onDonations,
     required this.onFantasy,
-    required this.onStatistics,
     required this.onOpenAgenda,
     required this.onChat,
   });
 
-  // Se mantienen todos los callbacks y contratos existentes.
+  // Acciones que siguen disponibles desde la pantalla de Inicio.
   final ValueChanged<int> onNavigate;
-  final ValueChanged<String> onSportSelected;
   final VoidCallback onTelegram;
   final VoidCallback onContact;
   final VoidCallback onDonations;
   final VoidCallback onFantasy;
-  final VoidCallback onStatistics;
   final VoidCallback onOpenAgenda;
   final VoidCallback onChat;
 
@@ -2120,10 +2088,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   title: Text(
                     appText(
-                      'Servidor de estadísticas',
-                      'Statistics server',
-                      'Servidor de estatísticas',
-                      'Serveur des statistiques',
+                      'Servidor de datos deportivos',
+                      'Sports data server',
+                      'Servidor de dados esportivos',
+                      'Serveur de données sportives',
                     ),
                     style: const TextStyle(
                       color: Colors.white,
@@ -2133,10 +2101,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   subtitle: Text(
                     appText(
-                      'Comprobar la conexión del servicio de estadísticas y configurar el Worker.',
-                      'Check the statistics service and configure the public Worker URL.',
-                      'Verifique a conexão do serviço de estatísticas e configure o Worker.',
-                      'Vérifier le service de statistiques et configurer le Worker.',
+                      'Comprobar la conexión de datos deportivos y configurar el Worker.',
+                      'Check the sports data service and configure the public Worker URL.',
+                      'Verifique a conexão dos dados esportivos e configure o Worker.',
+                      'Vérifier le service de données sportives et configurer le Worker.',
                     ),
                     style: const TextStyle(color: appMuted, fontSize: 11, height: 1.4),
                   ),
@@ -2357,9 +2325,9 @@ class _DeveloperSettingsScreenState extends State<DeveloperSettingsScreen> {
     setState(() => _testing = true);
     try {
       await SportsApiService().checkHealth(url);
-      _showMessage('Worker operativo. API-Sports queda disponible únicamente para Estadísticas.');
+      _showMessage('Worker operativo. El servicio queda disponible para los datos deportivos de la aplicación.');
     } catch (error) {
-      _showMessage('La prueba del servicio de estadísticas falló: $error');
+      _showMessage('La prueba del servicio de datos deportivos falló: $error');
     } finally {
       if (mounted) setState(() => _testing = false);
     }
