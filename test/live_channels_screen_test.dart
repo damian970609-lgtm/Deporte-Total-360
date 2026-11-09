@@ -44,6 +44,21 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  test('la multivista inicia solo el primer directo y solo con la pestaña activa', () {
+    expect(
+      shouldAutomaticallyStartLiveSource(index: 0, isActive: true),
+      isTrue,
+    );
+    expect(
+      shouldAutomaticallyStartLiveSource(index: 1, isActive: true),
+      isFalse,
+    );
+    expect(
+      shouldAutomaticallyStartLiveSource(index: 0, isActive: false),
+      isFalse,
+    );
+  });
+
   group('selector de resolución', () {
     test('presenta la altura disponible como resolución legible', () {
       const track = VideoTrack(
