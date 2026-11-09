@@ -109,7 +109,7 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
 
       if (result.statusCode != 200) {
         throw FormatException(
-          'GitHub respondió con el código ' + result.statusCode.toString() + '.,
+          'GitHub respondió con el código ' + result.statusCode.toString() + '.',
         );
       }
 
