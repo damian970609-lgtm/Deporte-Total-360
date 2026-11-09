@@ -299,7 +299,10 @@ void main() {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
-            body: LivePlayerBoard(sources: <LivePlayerSource>[source]),
+            body: LivePlayerBoard(
+              sources: <LivePlayerSource>[source],
+              isActive: false,
+            ),
           ),
         ),
       );
