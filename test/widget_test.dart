@@ -378,6 +378,28 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('Agenda abre dentro del shell y conserva la pantalla ante un fallo de SportsAPI', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    sportsApiBaseUrl.value = '';
+
+    await tester.pumpWidget(const MaterialApp(home: MainShell()));
+    await tester.pump();
+
+    final agendaTab = find.text('Agenda de hoy');
+    await tester.ensureVisible(agendaTab);
+    await tester.tap(agendaTab);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(find.text('AGENDA DEPORTIVA'), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('agenda-process-panel')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('agenda-process-status')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
+  });
+
   testWidgets('Chat abre dentro de la navegación principal', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
     await tester.pump();
