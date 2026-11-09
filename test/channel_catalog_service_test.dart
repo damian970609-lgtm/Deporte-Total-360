@@ -70,6 +70,43 @@ void main() {
     lastImportedAt: '2026-11-07T12:00:00Z',
   );
 
+
+  test('el snapshot local evita consultar Cloudflare durante quince minutos', () async {
+    SharedPreferences.setMockInitialValues({});
+    final channel = snapshotChannel('espn-cache', 'ESPN');
+    await saveCachedPublicChannelSnapshot([channel]);
+
+    expect(
+      await isCachedPublicChannelSnapshotFresh(
+        maxAge: const Duration(minutes: 15),
+      ),
+      isTrue,
+    );
+    expect(
+      await loadCachedVisibleSportsChannels(),
+      hasLength(1),
+    );
+  });
+
+  test('un snapshot viejo vuelve a permitir actualizar el catálogo remoto', () async {
+    SharedPreferences.setMockInitialValues({
+      channelCatalogSnapshotCacheKey: jsonEncode([
+        snapshotChannel('espn-old', 'ESPN antiguo').toJson(),
+      ]),
+      channelCatalogSnapshotSavedAtKey:
+          DateTime.now().subtract(const Duration(hours: 1)).toIso8601String(),
+    });
+
+    expect(
+      await isCachedPublicChannelSnapshotFresh(
+        maxAge: const Duration(minutes: 15),
+      ),
+      isFalse,
+    );
+    // La copia antigua sigue disponible como respaldo ante un fallo de cuota.
+    expect((await loadCachedVisibleSportsChannels()).single.id, 'espn-old');
+  });
+
   test('guardar fuentes no borra los canales guardados de la misma cuenta', () async {
     SharedPreferences.setMockInitialValues({});
     final channel = snapshotChannel('espn', 'ESPN');
