@@ -262,6 +262,25 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
   }
 
   Future<void> _refresh({bool forceRefresh = false}) async {
+    try {
+      await _refreshInternal(forceRefresh: forceRefresh);
+    } catch (error, stackTrace) {
+      // Un error inesperado no debe cerrar la pestaña ni dejarla bloqueada.
+      debugPrint('Error inesperado al abrir/actualizar Agenda: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (!mounted) return;
+      setState(() {
+        _processStatus = 'La Agenda encontró un error inesperado: $error';
+        _loading = false;
+        _hasLoaded = true;
+        _error = 'No se pudo completar la carga de la Agenda. ' + error.toString();
+      });
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  Future<void> _refreshInternal({bool forceRefresh = false}) async {
     if (_refreshing) return;
     final today = _dateOnly(DateTime.now());
     final dayChanged = !_sameDay(today, _windowStartDate);
@@ -1068,20 +1087,6 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
                     ),
                   ),
                 ),
-                SizedBox(
-                  width: 128,
-                  child: Text(
-                    _processStatus,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      color: _agendaGreen,
-                      fontSize: 8,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
                 if (_loading)
                   const SizedBox(
                     width: 15,
@@ -1091,6 +1096,76 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
                       color: _agendaCyan,
                     ),
                   ),
+              ],
+            ),
+          ),
+          Container(
+            key: const ValueKey<String>('agenda-process-panel'),
+            width: double.infinity,
+            margin: const EdgeInsets.fromLTRB(12, 8, 12, 5),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: _agendaPanel,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _error != null
+                    ? _agendaPink.withAlpha(180)
+                    : _agendaCyan.withAlpha(110),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                Icon(
+                  _loading
+                      ? Icons.sync_rounded
+                      : _error != null
+                          ? Icons.warning_amber_rounded
+                          : Icons.monitor_heart_rounded,
+                  color: _error != null ? _agendaPink : _agendaCyan,
+                  size: 17,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      const Text(
+                        'PROCESO DE AGENDA',
+                        style: TextStyle(
+                          color: _agendaCyan,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: .3,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        _processStatus,
+                        key: const ValueKey<String>('agenda-process-status'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: _agendaMuted,
+                          fontSize: 9,
+                          height: 1.25,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_loading) ...<Widget>[
+                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: _agendaCyan,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
