@@ -131,8 +131,10 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
       if (assets is List) {
         for (final rawAsset in assets.whereType<Map>()) {
           final asset = Map<String, dynamic>.from(rawAsset);
-          final assetName = (asset['name'] ?? '').toString().toLowerCase();
-          if (assetName == 'deporte-total-360.apk') {
+          final assetName = (asset['name'] ?? '').toString().trim().toLowerCase();
+          final assetLabel = (asset['label'] ?? '').toString().trim().toLowerCase();
+          if (assetName == 'deporte-total-360.apk' ||
+              assetLabel == 'deporte-total-360.apk') {
             apkUrl = _httpsUrl(asset['browser_download_url']);
             if (apkUrl != null) break;
           }
