@@ -31,7 +31,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: AppUpdateScreen(client: client)),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.text('NUEVA VERSIÓN DISPONIBLE'), findsOneWidget);
     expect(find.text('Publicación: v1.0.6+200'), findsOneWidget);
@@ -49,7 +50,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: AppUpdateScreen(client: client)),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.text('ESTADO DE LA APLICACIÓN'), findsOneWidget);
     expect(find.text('COMPROBAR ACTUALIZACIONES'), findsOneWidget);
@@ -67,7 +69,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: AppUpdateScreen(client: client)),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.text('COMPROBACIÓN PENDIENTE'), findsOneWidget);
     expect(find.text('COMPROBAR ACTUALIZACIONES'), findsOneWidget);
