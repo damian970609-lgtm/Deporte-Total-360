@@ -44,8 +44,8 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // La búsqueda previa al evento continúa aunque el usuario esté en otra
-    // pestaña. El tablero de vídeo sigue respetando widget.isActive.
+    // La pantalla se crea al abrir la pestaña; las consultas periódicas
+    // solo continúan mientras En Vivo está visible y Android está en primer plano.
     if (widget.isActive) _refresh();
     _refreshTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       // El tablero no consulta API/Cloudflare cuando el usuario está en otra
