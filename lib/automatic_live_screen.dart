@@ -46,9 +46,15 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     WidgetsBinding.instance.addObserver(this);
     // La búsqueda previa al evento continúa aunque el usuario esté en otra
     // pestaña. El tablero de vídeo sigue respetando widget.isActive.
-    _refresh();
+    if (widget.isActive) _refresh();
     _refreshTimer = Timer.periodic(const Duration(minutes: 2), (_) {
-      if (mounted) _refresh();
+      // El tablero no consulta API/Cloudflare cuando el usuario está en otra
+      // pestaña o Android mantiene la app en segundo plano.
+      if (mounted &&
+          widget.isActive &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        _refresh();
+      }
     });
   }
 
@@ -63,8 +69,9 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      // Reanudar no fuerza descargas: se respeta el snapshot local y su TTL.
+    if (state == AppLifecycleState.resumed && widget.isActive) {
+      // Solo la pestaña visible se actualiza al volver a primer plano.
+      // Se respeta el snapshot local y sus tiempos de validez.
       _refresh();
     }
   }
