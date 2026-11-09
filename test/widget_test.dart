@@ -133,9 +133,13 @@ void main() {
 
     expect(find.text('Servidor de datos deportivos'), findsNothing);
     expect(find.text('Actualizar APK'), findsOneWidget);
+    await tester.ensureVisible(find.text('WHATSAPP DEL CREADOR'));
+    await tester.pump();
     expect(find.text('WHATSAPP DEL CREADOR'), findsOneWidget);
     expect(find.text('+592 721 4741'), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const ValueKey<String>('settings-update-apk')));
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey<String>('settings-update-apk')));
     await tester.pump();
     expect(find.text('ACTUALIZAR APK'), findsOneWidget);
@@ -212,7 +216,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(600, 900);
+    tester.view.physicalSize = const Size(500, 900);
 
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
     await tester.pump();
@@ -223,7 +227,7 @@ void main() {
         find.byKey(const ValueKey<String>('bottom-nav-scroll-viewport')),
       );
       final labels = List<Finder>.generate(
-        8,
+        7,
         (index) => find.byKey(ValueKey<String>('bottom-tab-label-$index')),
       );
       final cues = <Finder>[

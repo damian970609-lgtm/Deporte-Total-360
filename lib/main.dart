@@ -2089,7 +2089,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             _settingsCard(
               border: appBlue,
-              child: ListTile(
+              child: Material(
+                color: Colors.transparent,
+                child: ListTile(
                 key: const ValueKey<String>('settings-update-apk'),
                 contentPadding: EdgeInsets.zero,
                 leading: const CircleAvatar(
@@ -2113,6 +2115,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   MaterialPageRoute<void>(
                     builder: (_) => const AppUpdateScreen(),
                   ),
+                ),
                 ),
               ),
             ),
