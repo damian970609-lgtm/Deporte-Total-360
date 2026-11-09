@@ -1358,6 +1358,13 @@ class LivePlayerWaitingEvent {
   final String processDetail;
 }
 
+/// Solo arranca automáticamente el primer canal para evitar ocho
+/// conexiones simultáneas en teléfonos con memoria/ancho de banda limitados.
+bool shouldAutomaticallyStartLiveSource({
+  required int index,
+  required bool isActive,
+}) => isActive && index == 0;
+
 /// Formato de resolución legible para el selector de calidad.
 String videoTrackResolutionLabel(VideoTrack track) {
   final height = track.height;
@@ -1434,9 +1441,14 @@ class LivePlayerBoard extends StatelessWidget {
                                 ),
                                 source: source,
                                 initiallyMuted: index > 0,
-                                autoStart: index == 0 &&
-                                    prioritizedEventId != null &&
-                                    source.eventId == prioritizedEventId,
+                                // El listado ya ordena primero el evento priorizado.
+                                // Si se entra desde la pestaña Live, también debe
+                                // arrancar la primera señal disponible sin exigir
+                                // que el usuario venga desde la Agenda.
+                                autoStart: shouldAutomaticallyStartLiveSource(
+                                  index: index,
+                                  isActive: isActive,
+                                ),
                                 isActive: isActive,
                               ),
                             ),
@@ -2152,31 +2164,87 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
                 ),
               ),
             if (_loading)
-              const Center(
-                child: CircularProgressIndicator(color: _liveCyan),
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withAlpha(190),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: _liveCyan.withAlpha(130)),
+                  ),
+                  child: const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: _liveCyan,
+                        ),
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        'CONECTANDO A LA SEÑAL',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: _liveCyan,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             if (_error != null)
               Stack(
                 fit: StackFit.expand,
                 children: <Widget>[
                   const _OfflineSportsArtwork(compact: true),
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 2),
-                      child: TextButton.icon(
-                        onPressed: _initialize,
-                        icon: const Icon(Icons.refresh_rounded, size: 15),
-                        label: const Text('REINTENTAR'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          backgroundColor: Colors.black.withAlpha(170),
-                          textStyle: const TextStyle(
-                            fontSize: 9,
+                  Container(
+                    color: Colors.black.withAlpha(185),
+                    padding: const EdgeInsets.fromLTRB(7, 5, 7, 2),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: <Widget>[
+                        const Text(
+                          'ERROR DE REPRODUCCIÓN',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Color(0xFFFF6B7D),
+                            fontSize: 8,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
-                      ),
+                        const SizedBox(height: 3),
+                        Text(
+                          _error!,
+                          key: const ValueKey<String>('live-player-error-detail'),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 7,
+                            height: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        TextButton.icon(
+                          onPressed: _initialize,
+                          icon: const Icon(Icons.refresh_rounded, size: 15),
+                          label: const Text('REINTENTAR'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            backgroundColor: Colors.black.withAlpha(170),
+                            textStyle: const TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
