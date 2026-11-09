@@ -509,8 +509,7 @@ jobs:
             --target "$GITHUB_SHA" \
             --latest
           {
-            echo "## Publicación oficial"
-            echo
-            echo "- Versión: `$TAG`"
-            echo "- APK: [Deporte-Total-360.apk](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/Deporte-Total-360.apk)"
+            printf '%s\n' '## Publicación oficial'
+            printf '%s\n' "- Versión: $TAG"
+            printf '%s\n' "- APK: [Deporte-Total-360.apk](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/app-release.apk)"
           } >> "$GITHUB_STEP_SUMMARY"
