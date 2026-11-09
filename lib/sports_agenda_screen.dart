@@ -190,6 +190,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
         result,
         startDate: window.startDate,
         days: window.days,
+        complete: unavailable.isEmpty,
       );
       return SportsAgendaWindow(
         startDate: window.startDate,
@@ -366,7 +367,9 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
             .where((sport) => sport.isNotEmpty),
       };
       setState(() {
-        _processStatus = 'Agenda lista · ${window.events.length} evento(s) recibidos.';
+        _processStatus = window.unavailableDates.isEmpty
+            ? 'Agenda lista · ${window.events.length} evento(s) recibidos.'
+            : 'Cobertura parcial · ${window.events.length} evento(s). Faltan respuestas de algunas fuentes.';
         _events = window.events;
         if (!availableSports.contains(_selectedSport)) {
           _selectedSport = 'Todos';

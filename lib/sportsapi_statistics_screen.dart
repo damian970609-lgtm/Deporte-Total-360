@@ -245,6 +245,7 @@ class _SportsApiStatisticsScreenState extends State<SportsApiStatisticsScreen> {
             visibleWindow,
             startDate: _selectedDate,
             days: 1,
+            complete: window.unavailableDates.isEmpty,
           );
         } catch (_) {
           // El calendario remoto no debe quedarse cargando si el almacén

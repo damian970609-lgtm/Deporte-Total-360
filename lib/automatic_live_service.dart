@@ -403,8 +403,16 @@ class SportsAgendaEvent {
 
 class SportsAgendaStore {
   static const String _key = 'dt360_sportsapi_agenda_events_v1';
-  static const String _windowDateKey = 'dt360_sportsapi_agenda_window_date_v1';
-  static const String _windowSavedAtKey = 'dt360_sportsapi_agenda_window_saved_at_v1';
+  static const String _windowCompleteKeyPrefix =
+      'dt360_sportsapi_agenda_window_complete_v1_';
+  static const String _windowSavedAtKeyPrefix =
+      'dt360_sportsapi_agenda_window_saved_at_v1_';
+
+  static String _windowCompleteKey(DateTime value) =>
+      _windowCompleteKeyPrefix + _dayKey(value);
+
+  static String _windowSavedAtKey(DateTime value) =>
+      _windowSavedAtKeyPrefix + _dayKey(value);
 
   static String _dayKey(DateTime value) {
     final local = value.toLocal();
@@ -435,9 +443,14 @@ class SportsAgendaStore {
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (prefs.getString(_windowDateKey) != _dayKey(startDate)) return false;
+      // Solo una captura confirmada como completa puede evitar la consulta
+      // diaria. Las APK anteriores no tienen esta marca y se actualizarán
+      // una vez tras instalar esta corrección.
+      if (!(prefs.getBool(_windowCompleteKey(startDate)) ?? false)) {
+        return false;
+      }
       final savedAt = DateTime.tryParse(
-        prefs.getString(_windowSavedAtKey) ?? '',
+        prefs.getString(_windowSavedAtKey(startDate)) ?? '',
       );
       if (savedAt == null) return false;
       final age = DateTime.now().difference(savedAt);
@@ -471,6 +484,7 @@ class SportsAgendaStore {
     List<SportsAgendaEvent> events, {
     required DateTime startDate,
     int days = 7,
+    bool complete = true,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final start = DateTime(startDate.year, startDate.month, startDate.day);
@@ -510,8 +524,18 @@ class SportsAgendaStore {
       _key,
       jsonEncode(byId.values.map((event) => event.toJson()).toList()),
     );
-    await prefs.setString(_windowDateKey, _dayKey(start));
-    await prefs.setString(_windowSavedAtKey, DateTime.now().toIso8601String());
+
+    // La marca se almacena por fecha para que otra pantalla (por ejemplo,
+    // Estadísticas) no invalide ni certifique accidentalmente la jornada de hoy.
+    final completeKey = _windowCompleteKey(start);
+    final savedAtKey = _windowSavedAtKey(start);
+    if (complete) {
+      await prefs.setBool(completeKey, true);
+      await prefs.setString(savedAtKey, DateTime.now().toIso8601String());
+    } else {
+      await prefs.setBool(completeKey, false);
+      await prefs.remove(savedAtKey);
+    }
   }
 
   static Future<List<SportsAgendaEvent>> load() async {

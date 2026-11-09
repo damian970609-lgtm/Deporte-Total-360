@@ -218,6 +218,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
             events,
             startDate: window.startDate,
             days: 1,
+            complete: window.unavailableDates.isEmpty,
           );
         } catch (error) {
           _refreshNotice = 'No se pudo actualizar SportAPI; se conserva la agenda local. $error';

@@ -123,6 +123,78 @@ void main() {
     });
   });
 
+  test('no marca una jornada parcial como completa y conserva vigencia independiente por fecha', () async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final event = SportsAgendaEvent(
+      id: 'partial-cache-event',
+      title: 'Equipo A vs Equipo B',
+      sport: 'Fútbol',
+      competition: 'Liga de prueba',
+      startsAt: today.add(const Duration(hours: 12)),
+      detailUrl: 'https://sportsapi.app/',
+    );
+
+    // Marcadores antiguos de versiones anteriores no certifican cobertura.
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'dt360_sportsapi_agenda_window_date_v1':
+          '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}',
+      'dt360_sportsapi_agenda_window_saved_at_v1':
+          DateTime.now().toIso8601String(),
+    });
+    expect(
+      await SportsAgendaStore.isWindowFresh(startDate: today),
+      isFalse,
+    );
+
+    await SportsAgendaStore.saveWindow(
+      <SportsAgendaEvent>[event],
+      startDate: today,
+      days: 1,
+      complete: false,
+    );
+    expect(
+      await SportsAgendaStore.isWindowFresh(startDate: today),
+      isFalse,
+    );
+    expect(
+      (await SportsAgendaStore.loadWindow(startDate: today, days: 1))
+          .map((item) => item.id),
+      contains('partial-cache-event'),
+    );
+
+    await SportsAgendaStore.saveWindow(
+      const <SportsAgendaEvent>[],
+      startDate: tomorrow,
+      days: 1,
+      complete: true,
+    );
+    expect(
+      await SportsAgendaStore.isWindowFresh(startDate: tomorrow),
+      isTrue,
+    );
+    expect(
+      await SportsAgendaStore.isWindowFresh(startDate: today),
+      isFalse,
+    );
+
+    await SportsAgendaStore.saveWindow(
+      <SportsAgendaEvent>[event],
+      startDate: today,
+      days: 1,
+      complete: true,
+    );
+    expect(
+      await SportsAgendaStore.isWindowFresh(startDate: today),
+      isTrue,
+    );
+    expect(
+      await SportsAgendaStore.isWindowFresh(startDate: tomorrow),
+      isTrue,
+    );
+  });
+
   group('agenda y transmisiones publicadas desde Cloudflare', () {
     test('recibe eventos y señales verificadas desde el endpoint central', () async {
       final start = DateTime.now().add(const Duration(minutes: 5));
