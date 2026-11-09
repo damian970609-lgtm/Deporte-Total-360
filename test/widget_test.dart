@@ -141,12 +141,10 @@ void main() {
       MaterialApp(
         home: HomeDashboard(
           onNavigate: (_) {},
-          onSportSelected: (_) {},
           onTelegram: () {},
           onContact: () {},
           onDonations: () {},
           onFantasy: () {},
-          onStatistics: () {},
           onOpenAgenda: () {},
           onChat: () {},
         ),
@@ -262,12 +260,10 @@ void main() {
           data: const MediaQueryData(disableAnimations: true),
           child: HomeDashboard(
             onNavigate: (_) {},
-            onSportSelected: (_) {},
             onTelegram: () {},
             onContact: () {},
             onDonations: () {},
             onFantasy: () {},
-            onStatistics: () {},
             onOpenAgenda: () {},
             onChat: () {},
           ),
@@ -294,12 +290,10 @@ void main() {
           data: const MediaQueryData(textScaler: TextScaler.linear(2.0)),
           child: HomeDashboard(
             onNavigate: (_) {},
-            onSportSelected: (_) {},
             onTelegram: () {},
             onContact: () {},
             onDonations: () {},
             onFantasy: () {},
-            onStatistics: () {},
             onOpenAgenda: () {},
             onChat: () {},
           ),
