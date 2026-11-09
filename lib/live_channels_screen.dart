@@ -1347,11 +1347,15 @@ class LivePlayerWaitingEvent {
     required this.heading,
     required this.match,
     required this.startLabel,
+    this.processStatus = 'ESPERANDO COMPROBACIÓN',
+    this.processDetail = '',
   });
 
   final String heading;
   final String match;
   final String startLabel;
+  final String processStatus;
+  final String processDetail;
 }
 
 /// Formato de resolución legible para el selector de calidad.
@@ -1553,7 +1557,7 @@ class _OfflineSportsArtwork extends StatelessWidget {
                   ],
                 ),
                 child: Text(
-                  'FUERA DE LÍNEA',
+                  'SEÑAL PENDIENTE',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: _liveRed,
@@ -1566,7 +1570,7 @@ class _OfflineSportsArtwork extends StatelessWidget {
               if (!compact) ...<Widget>[
                 const SizedBox(height: 5),
                 const Text(
-                  'ESPERANDO TRANSMISIÓN',
+                  'CONSULTA EL ESTADO DEL PROCESO',
                   style: TextStyle(
                     color: _liveMuted,
                     fontSize: 8,
@@ -1662,6 +1666,45 @@ class _WaitingLivePlayerTile extends StatelessWidget {
                       style: const TextStyle(
                         color: _liveMuted,
                         fontSize: 7,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _liveCyan.withAlpha(12),
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(color: _liveCyan.withAlpha(100)),
+                      ),
+                      child: Column(
+                        children: <Widget>[
+                          Text(
+                            event!.processStatus,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: _liveCyan,
+                              fontSize: 7,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          if (event!.processDetail.isNotEmpty) ...<Widget>[
+                            const SizedBox(height: 2),
+                            Text(
+                              event!.processDetail,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: _liveMuted,
+                                fontSize: 6,
+                                height: 1.15,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ],
