@@ -150,7 +150,10 @@ void main() {
 
   test('no marca una jornada parcial como completa y conserva vigencia independiente por fecha', () async {
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+    // Use a future day so the store's four-hour expiry cleanup cannot make
+    // these deterministic cache-merge fixtures depend on the test run time.
+    final today = DateTime(now.year, now.month, now.day)
+        .add(const Duration(days: 1));
     final tomorrow = today.add(const Duration(days: 1));
     final event = SportsAgendaEvent(
       id: 'partial-cache-event',
@@ -436,7 +439,7 @@ void main() {
 
       expect(settings.playlistUrls, hasLength(12));
       expect(settings.playlistUrls.every(isSafeHttpUrl), isTrue);
-      expect(settings.epgUrls, hasLength(24));
+      expect(settings.epgUrls, hasLength(28));
       expect(settings.epgUrls.every(isSafeHttpUrl), isTrue);
       expect(settings.playlistUrls.first, contains('teleonline'));
       expect(settings.playlistUrls[1], contains('languages/spa.m3u'));
@@ -456,7 +459,7 @@ void main() {
       final settings = await AutoLiveSettings.load();
 
       expect(settings.playlistUrls, hasLength(12));
-      expect(settings.epgUrls, hasLength(24));
+      expect(settings.epgUrls, hasLength(28));
       expect(settings.authorizationConfirmed, isTrue);
       expect(settings.isConfigured, isTrue);
     });
@@ -472,7 +475,7 @@ void main() {
 
       expect(settings.isConfigured, isTrue);
       expect(settings.playlistUrls, hasLength(12));
-      expect(settings.epgUrls, hasLength(24));
+      expect(settings.epgUrls, hasLength(28));
     });
   });
 
