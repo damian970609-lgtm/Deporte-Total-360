@@ -425,7 +425,7 @@ jobs:
           APP_BUILD_NUMBER: ${{ github.run_number }}
         run: |
           set -Eeuo pipefail
-          APP_VERSION="$(awk '/^version:/ { split($2, parts, "+"); print parts[1]; exit }' pubspec.yaml)"
+          APP_VERSION="$(awk '/^version:/ { split($2, parts, /\+/); print parts[1]; exit }' pubspec.yaml)"
           if [[ -z "$APP_VERSION" ]]; then
             echo "::error::No se pudo leer la versión de pubspec.yaml."
             exit 1
@@ -499,7 +499,7 @@ jobs:
           APP_BUILD_NUMBER: ${{ github.run_number }}
         run: |
           set -Eeuo pipefail
-          APP_VERSION="$(awk '/^version:/ { split($2, parts, "+"); print parts[1]; exit }' pubspec.yaml)"
+          APP_VERSION="$(awk '/^version:/ { split($2, parts, /\+/); print parts[1]; exit }' pubspec.yaml)"
           TAG="v${APP_VERSION}+${APP_BUILD_NUMBER}"
           APK="build/app/outputs/flutter-apk/app-release.apk"
           test -s "$APK"
