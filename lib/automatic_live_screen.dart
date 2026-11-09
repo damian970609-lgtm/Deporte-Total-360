@@ -370,13 +370,57 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
           final startLabel = now.isBefore(event.startsAt)
               ? 'Comienza $time'
               : 'Evento iniciado · $time';
+          final prepareAt = event.startsAt.subtract(const Duration(minutes: 10));
+          final processStatus = now.isBefore(prepareAt)
+              ? 'ESPERANDO VENTANA DE PREPARACIÓN'
+              : now.isBefore(event.startsAt)
+                  ? 'BUSCANDO SEÑAL ANTES DEL INICIO'
+                  : _waitingProcessStatus();
           return LivePlayerWaitingEvent(
             heading: heading,
             match: teams,
             startLabel: startLabel,
+            processStatus: processStatus,
+            processDetail: _progress?.message ??
+                'Se comprobarán los canales seleccionados y la guía EPG.',
           );
         })
         .toList(growable: false);
+  }
+
+  String _waitingProcessStatus() {
+    switch (_progress?.stage ?? '') {
+      case 'loading_events':
+      case 'starting':
+        return 'CARGANDO EVENTOS';
+      case 'loading_channels':
+      case 'channels_empty':
+        return 'REVISANDO CANALES SELECCIONADOS';
+      case 'loading_guides':
+      case 'epg_empty':
+      case 'epg_config_missing':
+        return 'LEYENDO GUÍA EPG';
+      case 'matching_epg':
+      case 'programme_not_matched':
+        return 'BUSCANDO COINCIDENCIA DEL EVENTO';
+      case 'checking_signals':
+      case 'signals_unavailable':
+        return 'COMPROBANDO DISPONIBILIDAD DE LA SEÑAL';
+      case 'channel_not_mapped':
+        return 'CANAL SIN VINCULAR A LA GUÍA';
+      case 'ready':
+        return 'SEÑAL PREPARADA';
+      case 'agenda_empty':
+        return 'NO HAY EVENTOS EN LA AGENDA';
+      case 'outside_window':
+        return 'FUERA DE LA VENTANA DE PREPARACIÓN';
+      case 'configuration_missing':
+        return 'FALTA CONFIGURACIÓN';
+      case 'error':
+        return 'ERROR DURANTE LA COMPROBACIÓN';
+      default:
+        return _refreshing ? 'PROCESO EN CURSO' : 'ESPERANDO COMPROBACIÓN';
+    }
   }
 
   /// Recalcula los límites de inicio y fin de evento sin consultar servicios.
