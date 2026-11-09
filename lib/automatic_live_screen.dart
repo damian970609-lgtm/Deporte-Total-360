@@ -321,8 +321,8 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         .toList(growable: false);
   }
 
-  /// Actualiza justo al inicio o al fin del evento, además del control
-  /// periódico del catálogo que continúa ejecutándose cada 45 segundos.
+  /// Recalcula los límites de inicio y fin de evento sin consultar servicios.
+  /// Las consultas de red solo se ejecutan mientras En Vivo está visible.
   void _scheduleEventBoundaryRefresh() {
     _eventBoundaryTimer?.cancel();
     final now = DateTime.now();
