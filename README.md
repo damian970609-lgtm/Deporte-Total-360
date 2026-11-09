@@ -5,7 +5,7 @@ Aplicación Android en Flutter. El APK se compila en GitHub Actions; la carpeta 
 Navegación principal: Inicio, Deportes en vivo, Canales deportivos, Agenda deportiva de siete días, Mister Fantasy, Chat, Actualización y Ajustes. Estadísticas y Resúmenes se retiraron de la navegación. Chat es una pestaña de primer nivel reservada a compradores con licencia de pago activa. El Worker verifica el ID token de Google y la licencia comercial antes de cada operación; la cuenta administradora puede moderar mensajes. Inicio y Agenda utilizan los diez deportes favoritos configurados en SportsAPI.app; Deportes en vivo busca señales por separado en los catálogos M3U/XMLTV.
 
 Archivos principales:
-- lib/main.dart: navegación de diez secciones, inicio, chat y ajustes.
+- lib/main.dart: navegación de ocho secciones, inicio, chat, actualización y ajustes.
 - lib/automatic_live_service.dart y lib/automatic_live_screen.dart: consumo prioritario del calendario central persistente de Cloudflare, con respaldo local, cruce XMLTV de canales visibles, verificación de señales en español e inglés, priorización del partido elegido desde Agenda y asignación a ocho reproductores.
 - lib/live_media_format.dart y lib/live_channels_screen.dart: detección explícita de HLS, DASH, Smooth Streaming y vídeo progresivo, adaptación de calidad automática con ExoPlayer, selector manual por pistas y transición fullscreen/miniatura sin recrear el controlador.
 - lib/public_chat_screen.dart: comunidad privada de compradores con alias estable por cuenta, denuncias de mensajes, revisión administrativa, eliminación moderada y sesión Google vinculada a licencias de pago.
