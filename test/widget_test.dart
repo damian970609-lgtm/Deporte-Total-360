@@ -131,7 +131,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Servidor de estadísticas'), findsOneWidget);
+    expect(find.text('Servidor de datos deportivos'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
