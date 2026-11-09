@@ -2010,7 +2010,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
       setState(() {});
     } catch (error) {
       if (!mounted) {
-        await controller.dispose();
+        await _disposeControllerSafely(controller);
         if (identical(_controller, controller)) _controller = null;
         return;
       }
