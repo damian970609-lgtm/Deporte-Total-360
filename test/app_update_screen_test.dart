@@ -17,8 +17,9 @@ void main() {
           'html_url': 'https://github.com/damian970609-lgtm/Deporte-Total-360/releases/tag/v1.0.6+200',
           'assets': <Object>[
             <String, String>{
-              'name': 'Deporte-Total-360.apk',
-              'browser_download_url': 'https://github.com/damian970609-lgtm/Deporte-Total-360/releases/download/v1.0.6%2B200/Deporte-Total-360.apk',
+              'name': 'app-release.apk',
+              'label': 'Deporte-Total-360.apk',
+              'browser_download_url': 'https://github.com/damian970609-lgtm/Deporte-Total-360/releases/download/v1.0.6%2B200/app-release.apk',
             },
           ],
         }),
