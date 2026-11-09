@@ -64,7 +64,8 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _refresh(force: true);
+      // Reanudar no fuerza descargas: se respeta el snapshot local y su TTL.
+      _refresh();
     }
   }
 
@@ -177,7 +178,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         startDate: today,
         maxAge: const Duration(hours: 24),
       );
-      if (!agendaIsFresh) {
+      if (!agendaIsFresh || force) {
         try {
           final window = await SportsApiAppService().fetchFavoriteAgendaWindow(
             startDate: today,
