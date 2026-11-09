@@ -1923,8 +1923,23 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
 
   @override
   void dispose() {
-    _controller?.dispose();
+    final controller = _controller;
+    _controller = null;
+    unawaited(_disposeControllerSafely(controller));
     super.dispose();
+  }
+
+  Future<void> _disposeControllerSafely(
+    VideoPlayerController? controller,
+  ) async {
+    if (controller == null) return;
+    try {
+      await controller.dispose();
+    } catch (error, stackTrace) {
+      // Un fallo al liberar el player no debe propagarse y cerrar la APK.
+      debugPrint('No se pudo liberar el reproductor de vídeo: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   Future<List<VideoTrack>> _readVideoTracks(
@@ -1946,7 +1961,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
     if (!widget.isActive) return;
     final old = _controller;
     _controller = null;
-    await old?.dispose();
+    await _disposeControllerSafely(old);
     if (!mounted) return;
     setState(() {
       _loading = true;
@@ -1978,7 +1993,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
       await controller.setVolume(_muted ? 0 : 1);
       final tracks = await _readVideoTracks(controller);
       if (!mounted || !widget.isActive) {
-        await controller.dispose();
+        await _disposeControllerSafely(controller);
         if (identical(_controller, controller)) _controller = null;
         return;
       }
@@ -1988,7 +2003,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
       });
       await controller.play();
       if (!mounted) {
-        await controller.dispose();
+        await _disposeControllerSafely(controller);
         if (identical(_controller, controller)) _controller = null;
         return;
       }
@@ -2003,7 +2018,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
         _loading = false;
         _error = 'No se pudo iniciar esta señal: $error';
       });
-      await controller.dispose();
+      await _disposeControllerSafely(controller);
       if (identical(_controller, controller)) _controller = null;
     }
   }
