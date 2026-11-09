@@ -1068,6 +1068,20 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
                     ),
                   ),
                 ),
+                SizedBox(
+                  width: 128,
+                  child: Text(
+                    _processStatus,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                      color: _agendaGreen,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
                 if (_loading)
                   const SizedBox(
                     width: 15,
@@ -1075,21 +1089,6 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
                       color: _agendaCyan,
-                    ),
-                  )
-                else
-                  SizedBox(
-                    width: 128,
-                    child: Text(
-                      _processStatus,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.right,
-                      style: const TextStyle(
-                        color: _agendaGreen,
-                        fontSize: 8,
-                        fontWeight: FontWeight.w800,
-                      ),
                     ),
                   ),
               ],

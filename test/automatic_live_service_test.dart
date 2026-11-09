@@ -1060,8 +1060,7 @@ https://media.example/offline.m3u8
       final progress = <AutoLiveProgress>[];
       final service = AutomaticLiveService(
         client: MockClient((request) async {
-          fail('No debe realizarse una petición cuando no hay eventos.');
-          return http.Response('', 500);
+          throw StateError('No debe realizarse una petición cuando no hay eventos.');
         }),
       );
 
@@ -1093,8 +1092,7 @@ https://media.example/offline.m3u8
       );
       final service = AutomaticLiveService(
         client: MockClient((request) async {
-          fail('No debe descargarse EPG si no hay canales directos.');
-          return http.Response('', 500);
+          throw StateError('No debe descargarse EPG si no hay canales directos.');
         }),
       );
 
