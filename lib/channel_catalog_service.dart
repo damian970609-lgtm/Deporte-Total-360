@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -543,15 +544,21 @@ class ChannelCatalogService {
     } catch (_) {
       // El backend validará el token cuando vuelva a estar disponible.
     }
-    await _initializeGoogle();
-
+    // Algunos dispositivos/proveedores pueden dejar pendiente la
+    // recuperación ligera de Google. La puerta de acceso no debe quedarse
+    // indefinidamente en "Cargando": damos paso al inicio manual tras 8 s.
     try {
+      await _initializeGoogle().timeout(const Duration(seconds: 8));
       final Future<GoogleSignInAccount?>? attempt =
           _google.attemptLightweightAuthentication();
       if (attempt == null) return null;
-      final account = await attempt;
+      final account = await attempt.timeout(const Duration(seconds: 8));
       if (account == null) return null;
       return _rememberGoogleAccount(account);
+    } on TimeoutException {
+      _idToken = null;
+      signedInEmail = null;
+      return null;
     } on GoogleSignInException {
       // La recuperación ligera nunca debe bloquear el acceso manual.
       _idToken = null;
