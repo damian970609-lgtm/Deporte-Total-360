@@ -621,6 +621,33 @@ class AutoLiveCatalog {
   final List<XmltvProgramme> programmes;
 }
 
+/// Diagnóstico de cada etapa del asignador automático de transmisiones.
+class AutoLiveProgress {
+  const AutoLiveProgress({
+    required this.stage,
+    required this.message,
+    this.eventCount = 0,
+    this.channelCount = 0,
+    this.directChannelCount = 0,
+    this.programmeCount = 0,
+    this.matchedEventCount = 0,
+    this.candidateCount = 0,
+    this.testedCandidateCount = 0,
+    this.availableCandidateCount = 0,
+  });
+
+  final String stage;
+  final String message;
+  final int eventCount;
+  final int channelCount;
+  final int directChannelCount;
+  final int programmeCount;
+  final int matchedEventCount;
+  final int candidateCount;
+  final int testedCandidateCount;
+  final int availableCandidateCount;
+}
+
 class AutomaticLiveService {
   AutomaticLiveService({http.Client? client}) : _client = client ?? http.Client();
   final http.Client _client;
@@ -1067,24 +1094,85 @@ class AutomaticLiveService {
     return utc.subtract(Duration(minutes: sign * (hours * 60 + minutes))).toLocal();
   }
 
+
   Future<List<ScheduledLiveEvent>> schedule({
     required List<SportsAgendaEvent> events,
-    required DateTime now, required AutoLiveSettings settings,
+    required DateTime now,
+    required AutoLiveSettings settings,
     List<M3uChannel>? availableChannels,
     bool forceRefresh = false,
+    void Function(AutoLiveProgress progress)? onProgress,
   }) async {
-    final canUseSelectedChannels = availableChannels != null &&
-        settings.epgUrls.isNotEmpty && settings.epgUrls.every(isSafeHttpUrl);
-    if (availableChannels == null ? !settings.isConfigured : !canUseSelectedChannels) {
+    var channelCount = availableChannels?.length ?? 0;
+    var directChannelCount = 0;
+    var programmeCount = 0;
+    var matchedEventCount = 0;
+    var candidateCount = 0;
+    var testedCandidateCount = 0;
+    var availableCandidateCount = 0;
+
+    void report(String stage, String message) {
+      onProgress?.call(AutoLiveProgress(
+        stage: stage,
+        message: message,
+        eventCount: events.length,
+        channelCount: channelCount,
+        directChannelCount: directChannelCount,
+        programmeCount: programmeCount,
+        matchedEventCount: matchedEventCount,
+        candidateCount: candidateCount,
+        testedCandidateCount: testedCandidateCount,
+        availableCandidateCount: availableCandidateCount,
+      ));
+    }
+
+    report('starting', 'Iniciando comprobación de eventos y canales.');
+    if (events.isEmpty) {
+      report('agenda_empty', 'La Agenda no entregó eventos para hoy. Revisa la carga de SportAPI.');
       return <ScheduledLiveEvent>[];
     }
+    if (settings.epgUrls.isEmpty || !settings.epgUrls.every(isSafeHttpUrl)) {
+      report('epg_config_missing', 'No hay guías EPG válidas configuradas para buscar programas.');
+      return <ScheduledLiveEvent>[];
+    }
+    if (availableChannels == null && !settings.isConfigured) {
+      report('configuration_missing', 'La configuración de canales y guías no está completa.');
+      return <ScheduledLiveEvent>[];
+    }
+
+    final directChannels = availableChannels
+        ?.where((channel) => isDirectPlayableStream(channel.url))
+        .toList(growable: false);
+    if (availableChannels != null) {
+      channelCount = availableChannels.length;
+      directChannelCount = directChannels!.length;
+      if (directChannels.isEmpty) {
+        report('channels_empty', 'No hay canales deportivos visibles con una URL directa compatible. Revisa la selección en Damián APK.');
+        return <ScheduledLiveEvent>[];
+      }
+    }
+
+    report('loading_guides', 'Canales listos. Descargando y leyendo las guías EPG.');
     final catalog = await loadCatalog(
       playlistUrl: settings.playlistUrl,
       epgUrl: settings.epgUrl,
-      availableChannels: availableChannels,
+      availableChannels: directChannels,
       forceRefresh: forceRefresh,
     );
-    if (catalog.channels.isEmpty) return <ScheduledLiveEvent>[];
+    channelCount = catalog.channels.length;
+    directChannelCount = catalog.channels.where(
+      (channel) => isDirectPlayableStream(channel.url),
+    ).length;
+    programmeCount = catalog.programmes.length;
+    if (catalog.channels.isEmpty) {
+      report('channels_empty', 'Las guías respondieron, pero no quedó ningún canal directo válido para asociar.');
+      return <ScheduledLiveEvent>[];
+    }
+    if (catalog.programmes.isEmpty) {
+      report('epg_empty', 'Se encontraron canales, pero ninguna guía EPG entregó programas. No se puede asociar una señal por horario solamente.');
+      return <ScheduledLiveEvent>[];
+    }
+
     final byId = <String, List<M3uChannel>>{};
     final byName = <String, List<M3uChannel>>{};
     for (final channel in catalog.channels) {
@@ -1104,17 +1192,27 @@ class AutomaticLiveService {
       }
     }
 
-    final output = <ScheduledLiveEvent>[];
-    for (final event in events) {
+    final eligibleEvents = events.where((event) {
       final prepareAt = event.startsAt.subtract(const Duration(minutes: 10));
-      if (now.isBefore(prepareAt)) continue;
       final eventLimit = event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
-      if (!now.isBefore(eventLimit)) continue;
+      return !now.isBefore(prepareAt) && now.isBefore(eventLimit);
+    }).toList(growable: false);
+    if (eligibleEvents.isEmpty) {
+      report('outside_window', 'Hay eventos en Agenda, pero ninguno está dentro de la ventana de preparación (10 minutos antes del inicio hasta el final).');
+      return <ScheduledLiveEvent>[];
+    }
+
+    report('matching_epg', 'Buscando coincidencias entre los programas EPG y los eventos de Agenda.');
+    final output = <ScheduledLiveEvent>[];
+    for (final event in eligibleEvents) {
+      final prepareAt = event.startsAt.subtract(const Duration(minutes: 10));
+      final eventLimit = event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
       final programmes = catalog.programmes.where((programme) =>
         programme.startsAt.isBefore(eventLimit) &&
         programme.endsAt.isAfter(prepareAt) &&
         programmeMatchesEvent(programme.title, event)).toList()
         ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+      if (programmes.isNotEmpty) matchedEventCount++;
 
       final candidates = <ScheduledLiveSource>[];
       final used = <String>{};
@@ -1142,9 +1240,10 @@ class AutomaticLiveService {
           ));
         }
       }
+      candidateCount += candidates.length;
       if (candidates.isEmpty) continue;
-      // Se comprueban todos los canales cuyo programa EPG coincide con el evento.
-      // Las comprobaciones se realizan por lotes para no saturar la conexión.
+
+      report('checking_signals', 'Coincidencias EPG encontradas. Comprobando ${candidates.length} señal(es) para este evento.');
       candidates.sort((a, b) {
         final language = b.languagePriority.compareTo(a.languagePriority);
         return language != 0 ? language : b.qualityScore.compareTo(a.qualityScore);
@@ -1152,10 +1251,14 @@ class AutomaticLiveService {
       final verifiedCandidates = <ScheduledLiveSource>[];
       for (var batchStart = 0; batchStart < candidates.length; batchStart += 8) {
         final batch = candidates.skip(batchStart).take(8).toList(growable: false);
+        testedCandidateCount += batch.length;
         final checked = await Future.wait<ScheduledLiveSource>(
           batch.map(_probeCandidate),
         );
-        verifiedCandidates.addAll(checked.where((candidate) => candidate.available));
+        final available = checked.where((candidate) => candidate.available).toList(growable: false);
+        verifiedCandidates.addAll(available);
+        availableCandidateCount += available.length;
+        report('checking_signals', 'Señales comprobadas: $testedCandidateCount; reproducibles: $availableCandidateCount.');
       }
       if (verifiedCandidates.isEmpty) continue;
       verifiedCandidates.sort((a, b) {
@@ -1178,6 +1281,15 @@ class AutomaticLiveService {
       }
     }
     output.sort((a, b) => a.event.startsAt.compareTo(b.event.startsAt));
+    if (output.isNotEmpty) {
+      report('ready', 'Transmisiones preparadas para ${output.length} evento(s).');
+    } else if (matchedEventCount == 0) {
+      report('programme_not_matched', 'La EPG contiene programas, pero sus títulos no coinciden con los equipos o participantes de los eventos actuales.');
+    } else if (candidateCount == 0) {
+      report('channel_not_mapped', 'Hay programas coincidentes, pero sus identificadores/nombres no enlazan con los canales seleccionados.');
+    } else {
+      report('signals_unavailable', 'Se encontraron programas y candidatos, pero ninguna URL superó la comprobación de señal. Puede estar caída, bloqueada o no ser un manifiesto directo compatible.');
+    }
     return output;
   }
 

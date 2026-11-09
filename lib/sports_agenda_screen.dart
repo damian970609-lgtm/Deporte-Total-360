@@ -56,6 +56,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
   bool _hasLoaded = false;
   bool _refreshing = false;
   String? _error;
+  String _processStatus = 'Preparando la consulta de hoy…';
   String _selectedSport = 'Todos';
   String _statusFilter = 'Todos';
   String _query = '';
@@ -277,6 +278,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
     }
 
     _refreshing = true;
+    _processStatus = 'Leyendo la caché local…';
     final version = ++_refreshVersion;
 
     // Primero pinta la jornada guardada. Si es del mismo día y sigue vigente,
@@ -296,6 +298,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
           final sports = await agendaApi.fetchFavoriteAgendaSportNames();
           if (!mounted || version != _refreshVersion) return;
           setState(() {
+            _processStatus = 'Caché local restaurada · ${cached.length} evento(s).';
             _events = cached;
             _favoriteSportNames = sports;
             _unavailableDates = <DateTime>[];
@@ -318,6 +321,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
 
     if (mounted) {
       setState(() {
+        _processStatus = 'Consultando SportAPI y los deportes favoritos…';
         if (!_hasLoaded) _loading = true;
         _error = null;
       });
@@ -329,6 +333,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
         onProgress: (partial) {
           if (!mounted || version != _refreshVersion) return;
           setState(() {
+            _processStatus = 'Recibidos ${partial.events.length} evento(s); verificando cobertura…';
             _events = partial.events;
             _unavailableDates = partial.unavailableDates;
             _hasLoaded = true;
@@ -342,6 +347,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
             .where((sport) => sport.isNotEmpty),
       };
       setState(() {
+        _processStatus = 'Agenda lista · ${window.events.length} evento(s) recibidos.';
         _events = window.events;
         if (!availableSports.contains(_selectedSport)) {
           _selectedSport = 'Todos';
@@ -354,6 +360,7 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
     } catch (error) {
       if (!mounted || version != _refreshVersion) return;
       setState(() {
+        _processStatus = 'Error al consultar la Agenda: ' + error.toString();
         _loading = false;
         _hasLoaded = true;
         _error =
@@ -1071,12 +1078,18 @@ class _SportsAgendaScreenState extends State<SportsAgendaScreen>
                     ),
                   )
                 else
-                  const Text(
-                    'JORNADA DIARIA · CACHÉ LOCAL',
-                    style: TextStyle(
-                      color: _agendaGreen,
-                      fontSize: 8,
-                      fontWeight: FontWeight.w900,
+                  SizedBox(
+                    width: 128,
+                    child: Text(
+                      _processStatus,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        color: _agendaGreen,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
               ],

@@ -39,6 +39,8 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
   Timer? _refreshTimer;
   Timer? _eventBoundaryTimer;
   bool _refreshing = false;
+  AutoLiveProgress? _progress;
+  String? _refreshNotice;
 
   @override
   void initState() {
@@ -167,18 +169,28 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     }
   }
 
+
   Future<void> _refresh({bool force = false}) async {
     if (_refreshing) return;
     _refreshing = true;
-    if (mounted) setState(() {});
+    _refreshNotice = null;
+    if (mounted) {
+      setState(() {
+        _progress = AutoLiveProgress(
+          stage: 'loading_events',
+          message: 'Leyendo la Agenda guardada en este teléfono.',
+        );
+      });
+    }
 
+    var events = <SportsAgendaEvent>[];
+    var selectedChannels = <M3uChannel>[];
     try {
       final settings = await AutoLiveSettings.load();
       final today = DateTime.now();
-      // En Vivo lee primero exactamente la jornada local que Agenda ya guardó.
-      // Solo vuelve a SportsAPI si esa captura diaria falta o venció; el sondeo
-      // de dos minutos queda limitado al cálculo local de señales/horarios.
-      var events = await SportsAgendaStore.loadWindow(
+      // En Vivo reutiliza primero exactamente la jornada que Agenda guardó.
+      // Solo vuelve a SportsAPI si la captura diaria falta o venció.
+      events = await SportsAgendaStore.loadWindow(
         startDate: today,
         days: 1,
       );
@@ -187,6 +199,15 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         maxAge: const Duration(hours: 24),
       );
       if (!agendaIsFresh || force) {
+        if (mounted) {
+          setState(() {
+            _progress = AutoLiveProgress(
+              stage: 'loading_events',
+              message: 'La caché no está vigente. Consultando SportAPI para hoy.',
+              eventCount: events.length,
+            );
+          });
+        }
         try {
           final window = await SportsApiAppService().fetchFavoriteAgendaWindow(
             startDate: today,
@@ -198,25 +219,47 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
             startDate: window.startDate,
             days: 1,
           );
-        } catch (_) {
-          // La copia del teléfono se conserva cuando el Worker/API está limitado.
+        } catch (error) {
+          _refreshNotice = 'No se pudo actualizar SportAPI; se conserva la agenda local. $error';
         }
       }
 
-      // No consultar /api/live/auto/schedule: esa ruta no está implementada en
-      // el Worker. La asignación se calcula con los canales visibles escogidos
-      // en Damián APK y las guías EPG configuradas en este dispositivo.
-      final selectedChannels =
-          await _loadSelectedSportsChannels(forceRefresh: force);
-      final latest = selectedChannels.isNotEmpty
-          ? await _service.schedule(
-              events: events,
-              now: DateTime.now(),
-              settings: settings,
-              availableChannels: selectedChannels,
-              forceRefresh: force,
-            )
-          : <ScheduledLiveEvent>[];
+      if (mounted) {
+        setState(() {
+          _progress = AutoLiveProgress(
+            stage: 'loading_channels',
+            message: 'Agenda leída: ${events.length} evento(s). Leyendo los canales visibles de Damián APK.',
+            eventCount: events.length,
+          );
+        });
+      }
+      // No consultar /api/live/auto/schedule: la asignación local se calcula
+      // con los canales elegidos por el usuario y las guías EPG.
+      selectedChannels = await _loadSelectedSportsChannels(forceRefresh: force);
+      if (mounted) {
+        setState(() {
+          _progress = AutoLiveProgress(
+            stage: 'loading_guides',
+            message: 'Canales leídos. Iniciando cruce con las guías EPG.',
+            eventCount: events.length,
+            channelCount: selectedChannels.length,
+            directChannelCount: selectedChannels.where(
+              (channel) => isDirectPlayableStream(channel.url),
+            ).length,
+          );
+        });
+      }
+      final latest = await _service.schedule(
+        events: events,
+        now: DateTime.now(),
+        settings: settings,
+        availableChannels: selectedChannels,
+        forceRefresh: force,
+        onProgress: (progress) {
+          if (!mounted) return;
+          setState(() => _progress = progress);
+        },
+      );
 
       if (!mounted) return;
       setState(() {
@@ -224,8 +267,22 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         _scheduled = latest;
       });
       _scheduleEventBoundaryRefresh();
-    } catch (_) {
-      // Un fallo temporal no borra las asignaciones vigentes.
+    } catch (error) {
+      if (mounted) {
+        final detail = error.toString();
+        setState(() {
+          _refreshNotice = detail;
+          _progress = AutoLiveProgress(
+            stage: 'error',
+            message: 'El proceso se detuvo durante la carga: ${detail.length > 180 ? detail.substring(0, 180) + '…' : detail}',
+            eventCount: events.length,
+            channelCount: selectedChannels.length,
+            directChannelCount: selectedChannels.where(
+              (channel) => isDirectPlayableStream(channel.url),
+            ).length,
+          );
+        });
+      }
     } finally {
       _refreshing = false;
       if (mounted) setState(() {});
@@ -345,6 +402,127 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
     });
   }
 
+
+  Widget _buildProcessPanel() {
+    final progress = _progress;
+    final stage = progress?.stage ?? '';
+    final isError = const <String>{
+      'error', 'signals_unavailable', 'programme_not_matched',
+      'channel_not_mapped', 'epg_empty', 'channels_empty', 'agenda_empty',
+      'epg_config_missing', 'configuration_missing',
+    }.contains(stage);
+    Widget metric(String label, int value) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D1118),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: _autoCyan.withAlpha(75)),
+        ),
+        child: Text(
+          '$label: $value',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 8,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(9, 8, 9, 3),
+      padding: const EdgeInsets.all(9),
+      decoration: BoxDecoration(
+        color: const Color(0xFF07090D),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isError ? const Color(0xFFFF1744) : _autoCyan.withAlpha(150),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(
+                _refreshing
+                    ? Icons.sync_rounded
+                    : isError
+                        ? Icons.warning_amber_rounded
+                        : stage == 'ready'
+                            ? Icons.check_circle_rounded
+                            : Icons.monitor_heart_rounded,
+                size: 15,
+                color: isError ? const Color(0xFFFF1744) : _autoCyan,
+              ),
+              const SizedBox(width: 6),
+              const Expanded(
+                child: Text(
+                  'PROCESO DE TRANSMISIONES',
+                  style: TextStyle(
+                    color: _autoCyan,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: .3,
+                  ),
+                ),
+              ),
+              Text(
+                _refreshing ? 'EN CURSO' : 'DIAGNÓSTICO',
+                style: TextStyle(
+                  color: _refreshing ? _autoCyan : Colors.white70,
+                  fontSize: 8,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(
+            progress?.message ?? 'Esperando la primera comprobación.',
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 9,
+              height: 1.3,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Wrap(
+            spacing: 5,
+            runSpacing: 4,
+            children: <Widget>[
+              metric('Eventos', progress?.eventCount ?? _agendaEvents.length),
+              metric('Canales', progress?.channelCount ?? 0),
+              metric('Directos', progress?.directChannelCount ?? 0),
+              metric('EPG', progress?.programmeCount ?? 0),
+              metric('Coinciden', progress?.matchedEventCount ?? 0),
+              metric('Candidatos', progress?.candidateCount ?? 0),
+              metric('Probados', progress?.testedCandidateCount ?? 0),
+              metric('Disponibles', progress?.availableCandidateCount ?? 0),
+            ],
+          ),
+          if (_refreshNotice != null && _refreshNotice!.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 5),
+            Text(
+              _refreshNotice!,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFFFFB4C0),
+                fontSize: 8,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final activeSources = _playerSources();
@@ -370,11 +548,18 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
           ),
         ],
       ),
-      body: LivePlayerBoard(
-        sources: activeSources,
-        waitingEvents: waitingEvents,
-        isActive: widget.isActive,
-        prioritizedEventId: widget.selectedEventId,
+      body: Column(
+        children: <Widget>[
+          _buildProcessPanel(),
+          Expanded(
+            child: LivePlayerBoard(
+              sources: activeSources,
+              waitingEvents: waitingEvents,
+              isActive: widget.isActive,
+              prioritizedEventId: widget.selectedEventId,
+            ),
+          ),
+        ],
       ),
     );
   }

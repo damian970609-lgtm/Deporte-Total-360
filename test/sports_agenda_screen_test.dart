@@ -206,4 +206,31 @@ void main() {
 
     expect(find.text('NO HAY EVENTOS PARA ESTA FECHA'), findsOneWidget);
   });
+
+  testWidgets('muestra el progreso de carga de la agenda', (tester) async {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day, 12);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SportsAgendaScreen(
+          isActive: false,
+          onOpenLive: (_) {},
+          loadEvents: () async => <SportsAgendaEvent>[
+            SportsAgendaEvent(
+              id: 'agenda-progress-event',
+              title: 'Equipo Progreso vs Equipo Control',
+              sport: 'Fútbol',
+              startsAt: start,
+              detailUrl: 'https://sportsapi.app/',
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.textContaining('Agenda lista'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

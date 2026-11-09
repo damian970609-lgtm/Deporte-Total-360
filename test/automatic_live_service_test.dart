@@ -1055,5 +1055,64 @@ https://media.example/offline.m3u8
       );
     });
 
+
+    test('informa cuando no hay eventos de agenda sin consultar canales ni EPG', () async {
+      final progress = <AutoLiveProgress>[];
+      final service = AutomaticLiveService(
+        client: MockClient((request) async {
+          fail('No debe realizarse una petición cuando no hay eventos.');
+          return http.Response('', 500);
+        }),
+      );
+
+      final result = await service.schedule(
+        events: const <SportsAgendaEvent>[],
+        now: DateTime.now(),
+        settings: const AutoLiveSettings(
+          playlistUrl: '',
+          epgUrl: 'https://guide.example/epg.xml',
+          authorizationConfirmed: true,
+        ),
+        availableChannels: const <M3uChannel>[],
+        onProgress: progress.add,
+      );
+
+      expect(result, isEmpty);
+      expect(progress.last.stage, 'agenda_empty');
+      expect(progress.last.eventCount, 0);
+    });
+
+    test('informa cuando no hay canales directos seleccionados para transmisiones', () async {
+      final progress = <AutoLiveProgress>[];
+      final event = SportsAgendaEvent(
+        id: 'live-test-event',
+        title: 'Equipo Azul vs Equipo Rojo',
+        sport: 'Fútbol',
+        startsAt: DateTime.now().subtract(const Duration(minutes: 1)),
+        detailUrl: 'https://sportsapi.app/',
+      );
+      final service = AutomaticLiveService(
+        client: MockClient((request) async {
+          fail('No debe descargarse EPG si no hay canales directos.');
+          return http.Response('', 500);
+        }),
+      );
+
+      final result = await service.schedule(
+        events: <SportsAgendaEvent>[event],
+        now: DateTime.now(),
+        settings: const AutoLiveSettings(
+          playlistUrl: '',
+          epgUrl: 'https://guide.example/epg.xml',
+          authorizationConfirmed: true,
+        ),
+        availableChannels: const <M3uChannel>[],
+        onProgress: progress.add,
+      );
+
+      expect(result, isEmpty);
+      expect(progress.last.stage, 'channels_empty');
+      expect(progress.last.eventCount, 1);
+    });
   });
 }
