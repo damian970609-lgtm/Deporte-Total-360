@@ -61,8 +61,9 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
   @override
   void didUpdateWidget(covariant AutomaticLiveScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if ((!oldWidget.isActive && widget.isActive) ||
-        oldWidget.selectedEventId != widget.selectedEventId) {
+    if (widget.isActive &&
+        (!oldWidget.isActive ||
+            oldWidget.selectedEventId != widget.selectedEventId)) {
       _refresh();
     }
   }
