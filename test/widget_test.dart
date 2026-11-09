@@ -133,12 +133,20 @@ void main() {
 
     expect(find.text('Servidor de datos deportivos'), findsNothing);
     expect(find.text('Actualizar APK'), findsOneWidget);
-    await tester.ensureVisible(find.text('WHATSAPP DEL CREADOR'));
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('creator-whatsapp-button')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pump();
     expect(find.text('WHATSAPP DEL CREADOR'), findsOneWidget);
     expect(find.text('+592 721 4741'), findsOneWidget);
 
-    await tester.ensureVisible(find.byKey(const ValueKey<String>('settings-update-apk')));
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('settings-update-apk')),
+      -250,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey<String>('settings-update-apk')));
     await tester.pump();
