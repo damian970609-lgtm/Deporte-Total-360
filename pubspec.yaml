@@ -1,0 +1,43 @@
+name: deporte_total_360
+description: DEPORTE TOTAL 360°
+publish_to: "none"
+version: 1.0.5+10
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  video_player: ^2.14.1
+  google_sign_in: ^7.2.0
+  screen_brightness: ^2.1.11
+  volume_controller: ^3.7.1
+  flutter_inappwebview: ^6.1.5
+  url_launcher: ^6.3.2
+  shared_preferences: ^2.5.3
+  flutter_local_notifications: ^22.3.3
+  timezone: ^0.11.2
+  firebase_core: ^4.2.1
+  firebase_crashlytics: ^5.4.0
+  firebase_messaging: ^16.0.4
+  http: ^1.6.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/app_icon.png
+    - assets/images/file_000000006048820e9e0720f1adf548f1.png
+
+flutter_launcher_icons:
+  android: true
+  image_path: "assets/images/app_icon.png"
+  min_sdk_android: 21
