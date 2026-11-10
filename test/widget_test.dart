@@ -292,7 +292,7 @@ void main() {
       const ValueKey<String>('iptv-classify-channel-general-channel'),
     );
     await _scrollIptvUntilVisible(tester, generalAction);
-    expect(generalAction.hitTestable(), findsOneWidget);
+    expect(generalAction, findsOneWidget);
     expect(find.text('Canal General'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
