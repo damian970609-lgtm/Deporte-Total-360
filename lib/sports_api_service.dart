@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// URL pública del servidor. La clave APISPORTS_KEY nunca va dentro de la APK.
 const String defaultSportsApiBaseUrl =
@@ -14,6 +17,8 @@ final ValueNotifier<String> sportsApiBaseUrl =
 class SportsApiService {
   static const Duration _timeout = Duration(seconds: 25);
   static const Duration _cacheDuration = Duration(minutes: 3);
+  static const Duration _diskFallbackDuration = Duration(days: 7);
+  static const String _diskCacheFolder = 'dt360_sports_api_cache';
 
   // Reduce las solicitudes repetidas desde este dispositivo.
   // El límite final también depende del uso de otros dispositivos.
@@ -556,30 +561,150 @@ class SportsApiService {
 
   Future<List<Map<String, dynamic>>> _getRows(Uri uri) async {
     final key = uri.toString();
-
     final cached = _cache[key];
-
-    if (cached != null) {
-      if (DateTime.now().isBefore(cached.expiresAt)) {
-        return cached.rows;
-      }
-
-      _cache.remove(key);
+    if (cached != null && DateTime.now().isBefore(cached.expiresAt)) {
+      return cached.rows;
     }
 
     final pending = _inFlight[key];
+    if (pending != null) return pending;
 
-    if (pending != null) {
-      return pending;
-    }
-
-    final future = _requestRows(uri, key);
+    final future = _loadDiskOrNetwork(uri, key, cached?.rows);
     _inFlight[key] = future;
-
     try {
       return await future;
     } finally {
       _inFlight.remove(key);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _loadDiskOrNetwork(
+    Uri uri,
+    String cacheKey,
+    List<Map<String, dynamic>>? memoryFallback,
+  ) async {
+    final disk = await _readDiskCache(cacheKey);
+    if (disk != null) {
+      final age = DateTime.now().difference(disk.savedAt);
+      if (!age.isNegative && age <= _cacheDuration) {
+        _cache[cacheKey] = _CachedRows(
+          disk.rows,
+          DateTime.now().add(_cacheDuration),
+        );
+        return disk.rows;
+      }
+    }
+
+    try {
+      return await _requestRows(uri, cacheKey);
+    } catch (_) {
+      if (disk != null) {
+        final age = DateTime.now().difference(disk.savedAt);
+        if (!age.isNegative && age <= _diskFallbackDuration) {
+          _cache[cacheKey] = _CachedRows(
+            disk.rows,
+            DateTime.now().add(const Duration(minutes: 1)),
+          );
+          return disk.rows;
+        }
+      }
+      if (memoryFallback != null && memoryFallback.isNotEmpty) {
+        return memoryFallback;
+      }
+      rethrow;
+    }
+  }
+
+  static String _diskCacheHash(String value) {
+    var hash = 0x811c9dc5;
+    for (final unit in value.codeUnits) {
+      hash ^= unit;
+      hash = (hash * 0x01000193) & 0xffffffff;
+    }
+    return hash.toRadixString(16).padLeft(8, '0');
+  }
+
+  static String _diskCachePreferenceKey(String url) =>
+      'dt360_sports_api_disk_v1_' + _diskCacheHash(url);
+
+  static Future<File?> _diskCacheFile(String url) async {
+    try {
+      final root = await getApplicationSupportDirectory();
+      final directory = Directory('${root.path}/$_diskCacheFolder');
+      await directory.create(recursive: true);
+      return File('${directory.path}/${_diskCacheHash(url)}.json');
+    } catch (_) {
+      // En entornos sin plataforma de archivos, usa SharedPreferences.
+      return null;
+    }
+  }
+
+  static Future<_DiskCachedRows?> _readDiskCache(String url) async {
+    try {
+      final file = await _diskCacheFile(url);
+      String? raw;
+      if (file != null && await file.exists()) {
+        raw = await file.readAsString();
+      } else {
+        final prefs = await SharedPreferences.getInstance();
+        raw = prefs.getString(_diskCachePreferenceKey(url));
+      }
+      if (raw == null || raw.isEmpty) return null;
+
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map || decoded['url'] != url || decoded['rows'] is! List) {
+        return null;
+      }
+      final savedAt = DateTime.tryParse((decoded['savedAt'] ?? '').toString());
+      if (savedAt == null) return null;
+      final rows = (decoded['rows'] as List)
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList(growable: false);
+      final age = DateTime.now().difference(savedAt);
+      if (age.isNegative || age > _diskFallbackDuration) {
+        if (file != null) {
+          try { await file.delete(); } catch (_) {}
+        } else {
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.remove(_diskCachePreferenceKey(url));
+          } catch (_) {}
+        }
+        return null;
+      }
+      return _DiskCachedRows(rows, savedAt);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _writeDiskCache(
+    String url,
+    List<Map<String, dynamic>> rows,
+  ) async {
+    final raw = jsonEncode(<String, Object>{
+      'url': url,
+      'savedAt': DateTime.now().toIso8601String(),
+      'rows': rows,
+    });
+    final file = await _diskCacheFile(url);
+    if (file != null) {
+      try {
+        final temporary = File('${file.path}.tmp');
+        await temporary.writeAsString(raw, flush: true);
+        if (await file.exists()) await file.delete();
+        await temporary.rename(file.path);
+        return;
+      } catch (_) {
+        // No descarta una respuesta correcta si el disco está lleno.
+      }
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_diskCachePreferenceKey(url), raw);
+    } catch (_) {
+      // La caché es una optimización; nunca debe interrumpir la consulta.
     }
   }
 
@@ -599,7 +724,7 @@ class SportsApiService {
           emptyRows,
           DateTime.now().add(_cacheDuration),
         );
-
+        await _writeDiskCache(cacheKey, emptyRows);
         return emptyRows;
       }
 
@@ -709,7 +834,7 @@ class SportsApiService {
         rows,
         DateTime.now().add(_cacheDuration),
       );
-
+      await _writeDiskCache(cacheKey, rows);
       return rows;
     } on TimeoutException {
       throw const SportsApiException(
@@ -730,6 +855,13 @@ class _CachedRows {
 
   final List<Map<String, dynamic>> rows;
   final DateTime expiresAt;
+}
+
+class _DiskCachedRows {
+  const _DiskCachedRows(this.rows, this.savedAt);
+
+  final List<Map<String, dynamic>> rows;
+  final DateTime savedAt;
 }
 
 class SportsApiException implements Exception {
