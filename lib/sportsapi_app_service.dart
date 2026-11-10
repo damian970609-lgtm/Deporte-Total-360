@@ -93,6 +93,45 @@ bool _isTruthy(dynamic value) {
   return false;
 }
 
+/// Busca emisoras tanto en la respuesta raíz como en wrappers habituales
+/// (fixture, event, game, session). No inventa canales ni URLs.
+List<String> _broadcastNamesFromRow(
+  Map<String, dynamic> row, {
+  List<Map<String, dynamic>> additionalRows = const <Map<String, dynamic>>[],
+}) {
+  final candidates = <Map<String, dynamic>>[];
+
+  void collect(Map<String, dynamic> source) {
+    candidates.add(source);
+    for (final key in const <String>[
+      'fixture', 'event', 'game', 'session', 'broadcast',
+      'television', 'tv',
+    ]) {
+      final nested = source[key];
+      if (nested is Map) {
+        collect(Map<String, dynamic>.from(nested));
+      }
+    }
+  }
+
+  collect(row);
+  for (final source in additionalRows) {
+    collect(source);
+  }
+
+  for (final source in candidates) {
+    for (final key in const <String>[
+      'broadcastChannels', 'broadcast_channels', 'tvChannels',
+      'tv_channels', 'broadcasters', 'broadcasts', 'networks',
+      'television', 'tv', 'channels',
+    ]) {
+      final names = parseBroadcastChannelNames(source[key]);
+      if (names.isNotEmpty) return names;
+    }
+  }
+  return <String>[];
+}
+
 void _addCompetitionSelection(String raw, Set<String> ids, Set<String> names) {
   final value = raw.trim();
   if (value.isEmpty) return;
@@ -1327,14 +1366,7 @@ class SportsApiAppService {
       detailUrl: 'https://deporte-total-360-api.damian970609.workers.dev/api/sportsapi/fixtures/$id',
       // Solo se completa cuando el proveedor/Worker entrega explícitamente
       // los broadcasters del partido; la API pública puede no incluirlos.
-      broadcastChannels: parseBroadcastChannelNames(
-        row['broadcastChannels'] ??
-            row['tvChannels'] ??
-            row['broadcasters'] ??
-            row['broadcasts'] ??
-            row['networks'] ??
-            row['television'],
-      ),
+      broadcastChannels: _broadcastNamesFromRow(row),
     );
   }
 
@@ -1416,15 +1448,9 @@ class SportsApiAppService {
         startsAt: start,
         detailUrl:
             'https://deporte-total-360-api.damian970609.workers.dev/api/sportsapi/races/$id',
-        broadcastChannels: parseBroadcastChannelNames(
-          session['broadcastChannels'] ??
-              session['tvChannels'] ??
-              session['broadcasters'] ??
-              session['broadcasts'] ??
-              row['broadcastChannels'] ??
-              row['tvChannels'] ??
-              row['broadcasters'] ??
-              row['broadcasts'],
+        broadcastChannels: _broadcastNamesFromRow(
+          row,
+          additionalRows: <Map<String, dynamic>>[session],
         ),
       ));
     }
@@ -1457,12 +1483,7 @@ class SportsApiAppService {
             startsAt: start,
             detailUrl:
                 'https://deporte-total-360-api.damian970609.workers.dev/api/sportsapi/races/$id',
-            broadcastChannels: parseBroadcastChannelNames(
-              row['broadcastChannels'] ??
-                  row['tvChannels'] ??
-                  row['broadcasters'] ??
-                  row['broadcasts'],
-            ),
+            broadcastChannels: _broadcastNamesFromRow(row),
           ));
         }
       }
