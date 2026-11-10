@@ -155,7 +155,8 @@ void main() {
     expect(find.text('Canal General'), findsOneWidget);
     expect(find.text('ESPN Deportes'), findsOneWidget);
     expect(find.text('GENERAL / SIN CLASIFICAR'), findsOneWidget);
-    expect(find.text('EPG AUTOMÁTICA · 28 GUÍAS INTEGRADAS'), findsOneWidget);
+    expect(find.textContaining('EPG AUTOMÁTICA'), findsNothing);
+    expect(find.textContaining('CONFIGURAR GUÍAS EPG'), findsNothing);
     expect(find.text('2 CANALES'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
