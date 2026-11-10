@@ -305,9 +305,10 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(
-      find.text('MOSTRAR SIGUIENTES 40 CANALES · 40/200'),
-    );
+    final showMore = find.text('MOSTRAR SIGUIENTES 40 CANALES · 40/200');
+    await tester.ensureVisible(showMore);
+    await tester.pumpAndSettle();
+    await tester.tap(showMore);
     await tester.pumpAndSettle();
 
     expect(
