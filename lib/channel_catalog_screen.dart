@@ -63,8 +63,22 @@ class ChannelLanguageBadge extends StatelessWidget {
   }
 }
 
+/// Decide si la vista previa puede mantener un reproductor nativo activo.
+bool shouldInitializeChannelInlinePlayer({
+  required bool isActive,
+  required bool hasChannel,
+}) => isActive && hasChannel;
+
+/// Solo libera el reproductor al salir de la pestaña que lo contiene.
+bool shouldReleaseChannelInlinePlayer({
+  required bool wasActive,
+  required bool isActive,
+}) => wasActive && !isActive;
+
 class ChannelCatalogScreen extends StatefulWidget {
-  const ChannelCatalogScreen({super.key});
+  const ChannelCatalogScreen({super.key, this.isActive = true});
+
+  final bool isActive;
 
   @override
   State<ChannelCatalogScreen> createState() => _ChannelCatalogScreenState();
@@ -588,6 +602,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
                           _selectedChannel?.id ?? 'channel-player-empty',
                         ),
                         channel: _selectedChannel,
+                        isActive: widget.isActive,
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -885,9 +900,11 @@ class ChannelInlinePlayer extends StatefulWidget {
   const ChannelInlinePlayer({
     super.key,
     required this.channel,
+    this.isActive = true,
   });
 
   final SportsChannel? channel;
+  final bool isActive;
 
   @override
   State<ChannelInlinePlayer> createState() => _ChannelInlinePlayerState();
@@ -895,6 +912,7 @@ class ChannelInlinePlayer extends StatefulWidget {
 
 class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
   VideoPlayerController? _controller;
+  int _controllerGeneration = 0;
   bool _loading = false;
   String? _error;
   List<VideoTrack> _tracks = <VideoTrack>[];
@@ -902,22 +920,75 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
   @override
   void initState() {
     super.initState();
-    if (widget.channel != null) unawaited(_initialize());
+    if (shouldInitializeChannelInlinePlayer(
+      isActive: widget.isActive,
+      hasChannel: widget.channel != null,
+    )) {
+      unawaited(_initialize());
+    }
   }
 
   @override
   void didUpdateWidget(covariant ChannelInlinePlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.channel?.id != widget.channel?.id) {
+    if (shouldReleaseChannelInlinePlayer(
+      wasActive: oldWidget.isActive,
+      isActive: widget.isActive,
+    )) {
+      unawaited(_releaseController());
+      return;
+    }
+    if (!oldWidget.isActive && widget.isActive) {
+      if (widget.channel != null) unawaited(_initialize());
+      return;
+    }
+    if (widget.isActive && oldWidget.channel?.id != widget.channel?.id) {
       unawaited(_initialize());
     }
   }
 
   @override
   void dispose() {
-    _controller?.removeListener(_handleVideoChanged);
-    _controller?.dispose();
+    ++_controllerGeneration;
+    final controller = _controller;
+    _controller = null;
+    controller?.removeListener(_handleVideoChanged);
+    unawaited(_disposeControllerSafely(controller));
     super.dispose();
+  }
+
+  Future<void> _releaseController() async {
+    ++_controllerGeneration;
+    final controller = _controller;
+    _controller = null;
+    controller?.removeListener(_handleVideoChanged);
+    if (mounted) {
+      setState(() {
+        _loading = false;
+        _error = null;
+        _tracks = <VideoTrack>[];
+      });
+    }
+    await _disposeControllerSafely(controller);
+  }
+
+  Future<void> _disposeControllerSafely(
+    VideoPlayerController? controller,
+  ) async {
+    if (controller == null) return;
+    try {
+      if (controller.value.isInitialized && controller.value.isPlaying) {
+        await controller.pause();
+      }
+    } catch (_) {
+      // El reproductor puede estar cerrándose por un cambio de pestaña.
+    }
+    try {
+      await controller.dispose();
+    } catch (error, stackTrace) {
+      debugPrint('No se pudo liberar la vista previa del canal: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   void _handleVideoChanged() {
@@ -925,11 +996,15 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
   }
 
   Future<void> _initialize() async {
+    if (!widget.isActive) return;
+    final requestId = ++_controllerGeneration;
     final previous = _controller;
     _controller = null;
     previous?.removeListener(_handleVideoChanged);
-    await previous?.dispose();
-    if (!mounted) return;
+    await _disposeControllerSafely(previous);
+    if (!mounted || !widget.isActive || requestId != _controllerGeneration) {
+      return;
+    }
 
     final channel = widget.channel;
     if (channel == null) {
@@ -963,33 +1038,63 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
     _controller = controller;
     try {
       await controller.initialize();
+      if (!mounted ||
+          !widget.isActive ||
+          requestId != _controllerGeneration ||
+          !identical(_controller, controller)) {
+        await _disposeControllerSafely(controller);
+        if (identical(_controller, controller)) _controller = null;
+        return;
+      }
+
       await controller.setLooping(false);
       await controller.setVolume(1);
       if (controller.isVideoTrackSupportAvailable()) {
         try {
           await controller.selectVideoTrack(null);
-          _tracks = (await controller.getVideoTracks()).toList()
+          final tracks = (await controller.getVideoTracks()).toList()
             ..sort((a, b) => (b.height ?? 0).compareTo(a.height ?? 0));
+          if (mounted &&
+              widget.isActive &&
+              requestId == _controllerGeneration &&
+              identical(_controller, controller)) {
+            _tracks = tracks;
+          }
         } catch (_) {
           _tracks = <VideoTrack>[];
         }
       }
-      if (!mounted || !identical(_controller, controller)) {
-        await controller.dispose();
+      if (!mounted ||
+          !widget.isActive ||
+          requestId != _controllerGeneration ||
+          !identical(_controller, controller)) {
+        await _disposeControllerSafely(controller);
+        if (identical(_controller, controller)) _controller = null;
         return;
       }
       controller.addListener(_handleVideoChanged);
       setState(() => _loading = false);
       await controller.play();
-      if (mounted) setState(() {});
+      if (!mounted ||
+          !widget.isActive ||
+          requestId != _controllerGeneration ||
+          !identical(_controller, controller)) {
+        await _disposeControllerSafely(controller);
+        if (identical(_controller, controller)) _controller = null;
+        return;
+      }
+      setState(() {});
     } catch (error) {
-      if (mounted) {
+      if (mounted &&
+          widget.isActive &&
+          requestId == _controllerGeneration &&
+          identical(_controller, controller)) {
         setState(() {
           _loading = false;
           _error = 'No se pudo reproducir esta señal: ' + error.toString();
         });
       }
-      await controller.dispose();
+      await _disposeControllerSafely(controller);
       if (identical(_controller, controller)) _controller = null;
     }
   }
