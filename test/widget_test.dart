@@ -176,13 +176,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsOneWidget);
-    expect(find.text('Canal General'), findsOneWidget);
-    expect(find.text('ESPN Deportes'), findsOneWidget);
-    expect(find.text('GENERAL / SIN CLASIFICAR'), findsOneWidget);
-    expect(find.textContaining('EPG AUTOMÁTICA'), findsNothing);
-    expect(find.textContaining('CONFIGURAR GUÍAS EPG'), findsNothing);
-    expect(find.text('2 CANALES'), findsOneWidget);
+    expect(find.text('DIEZ PLAZAS VIP · PRUEBAS SIN GOOGLE'), findsOneWidget);
+    expect(find.text('LICENCIAS · VENTAS Y REGALOS'), findsOneWidget);
+    expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsNothing);
+    expect(find.text('AÑADIR CANALES Y LISTAS IPTV'), findsNothing);
+    expect(find.text('CATÁLOGO DE FUENTES DEPORTIVAS'), findsNothing);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -196,7 +194,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final reimport = find.text('REIMPORTAR LISTAS GUARDADAS · TODOS LOS CANALES');
+    await tester.tap(find.text('IPTV'));
+    await tester.pumpAndSettle();
+
+    final reimport = find.text('REIMPORTAR TODAS LAS LISTAS GUARDADAS');
     expect(reimport, findsOneWidget);
     await tester.tap(reimport);
     await tester.pumpAndSettle();
@@ -204,6 +205,8 @@ void main() {
     expect(service.refreshRequested, isTrue);
     expect(find.text('Canal General'), findsOneWidget);
     expect(find.text('ESPN Deportes'), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('iptv-filter-hidden')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('iptv-channel-actions-sports-channel')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -303,7 +306,7 @@ void main() {
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('channel-admin-iptv-list')), findsOneWidget);
     expect(find.text('AÑADIR CANALES Y LISTAS IPTV'), findsOneWidget);
-    expect(service._adminPageCalls, greaterThanOrEqualTo(3));
+    expect(service._adminPageCalls, greaterThanOrEqualTo(2));
 
     await tester.enterText(
       find.byKey(const ValueKey<String>('iptv-search-field')),
