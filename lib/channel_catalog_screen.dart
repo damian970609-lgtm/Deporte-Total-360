@@ -2686,6 +2686,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       isSports: isSports ?? channel.isSports,
       visible: visible ?? channel.visible,
       language: language ?? channel.language,
+      searchAliases: channel.searchAliases,
     );
   }
 
@@ -3206,9 +3207,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   Widget _buildIptvScreen() {
     final query = _iptvSearchController.text.trim().toLowerCase();
     final rows = _iptvChannels.where((channel) {
-      final searchable = (channel.name + ' ' + channel.groupTitle + ' ' +
-          channel.identifier).toLowerCase();
-      if (query.isNotEmpty && !searchable.contains(query)) return false;
+      if (!matchesSportsChannelSearch(channel, query)) return false;
       switch (_iptvChannelFilter) {
         case 'sports':
           return channel.isSports;
@@ -3351,8 +3350,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                         textInputAction: TextInputAction.search,
                         style: const TextStyle(color: Colors.white, fontSize: 11),
                         decoration: InputDecoration(
-                          labelText: 'Buscar canal por nombre',
-                          hintText: 'Escribe ESPN, FOX, beIN, etc.',
+                          labelText: 'Buscar canal, alias o identificador',
+                          hintText: 'ESPN, FOX, beIN, tvg-id o parte del enlace',
                           prefixIcon: const Icon(Icons.search_rounded, color: _channelCyan),
                           suffixIcon: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -3495,21 +3494,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
               final channelIndex = index - _sources.length - 2;
               final channel = rows[channelIndex];
               return _buildIptvChannel(channel, channelIndex);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: _adminCard(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-                    Text(source.label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 10)),
-                    const SizedBox(height: 3),
-                    Text(_sourceStatus(source) + ' · ' + source.importedCount.toString() + ' canales procesados', style: const TextStyle(color: _channelMuted, fontSize: 8)),
-                    Wrap(spacing: 6, children: <Widget>[
-                      TextButton(onPressed: _working ? null : () => _editPlaylistSource(source), child: const Text('EDITAR')),
-                      if (source.status == 'error') TextButton(onPressed: _working ? null : () => _retryPlaylistSource(source), child: const Text('REINTENTAR')),
-                      TextButton(onPressed: _working ? null : () => _removePlaylistSource(source), child: const Text('QUITAR LISTA')),
-                    ]),
-                  ]),
-                ),
-              );
+
             },
           ),
         ),
