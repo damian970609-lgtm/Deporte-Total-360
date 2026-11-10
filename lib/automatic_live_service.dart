@@ -216,7 +216,7 @@ class AutoLiveSettings {
     // combinan sin duplicados, sin exponer la lista de EPG en el panel privado.
     final automaticEpgUrls = _splitPlaylistUrls(defaultAutoLiveEpgUrl);
     final savedEpgUrls = _splitPlaylistUrls(epg).where(isSafeHttpUrl);
-    epg = <String>{...automaticEpgUrls, ...savedEpgUrls}.join('\\n');
+    epg = <String>{...automaticEpgUrls, ...savedEpgUrls}.join('\n');
     if (prefs.getString(_epgUrlKey) != epg) {
       await prefs.setString(_epgUrlKey, epg);
     }
