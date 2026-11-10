@@ -957,7 +957,7 @@ class _MainShellState extends State<MainShell> {
             )
           : const SizedBox.shrink(),
       _visitedTabs.contains(_channelsTab)
-          ? const ChannelCatalogScreen()
+          ? ChannelCatalogScreen(isActive: _selectedIndex == _channelsTab)
           : const SizedBox.shrink(),
       _visitedTabs.contains(_agendaTab)
           ? SportsAgendaScreen(
