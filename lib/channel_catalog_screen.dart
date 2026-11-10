@@ -2825,6 +2825,29 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
             ],
           ),
           const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _working ? null : _refreshSources,
+              icon: const Icon(Icons.playlist_add_check_rounded),
+              label: const Text('REIMPORTAR LISTAS GUARDADAS · TODOS LOS CANALES'),
+              style: FilledButton.styleFrom(
+                backgroundColor: _channelGreen,
+                foregroundColor: _channelBg,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Vuelve a procesar las listas guardadas por lotes para incorporar canales generales que antes se filtraban. No elimina listas ni canales existentes.',
+            style: TextStyle(
+              color: _channelMuted,
+              fontSize: 9,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 10),
           TextField(
             controller: _searchController,
             onSubmitted: (_) => _searchChannels(),
@@ -3809,7 +3832,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             Icons.sync_rounded,
                             color: _channelCyan,
                           ),
-                          tooltip: 'Actualizar listas',
+                          tooltip: 'Reimportar todas las listas guardadas',
                         ),
                       ],
                     ),
