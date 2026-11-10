@@ -373,9 +373,6 @@ void main() {
     await tester.pump();
     expect(find.text('Mostrando 2005 de 2005 canales.'), findsOneWidget);
 
-    final iptvList = find.byKey(
-      const ValueKey<String>('channel-admin-iptv-list'),
-    );
     final addSportsChannel = find.byKey(
       const ValueKey<String>('iptv-add-channel-sports-channel'),
     );
