@@ -218,7 +218,6 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
       if (!mounted || requestId != _catalogRequestId) return;
       final previousId = _selectedChannel?.id;
       setState(() {
-        _visibleAdminChannelCount = _adminVisibleChannelBatchSize;
         _channels = page.channels;
         _catalogTotal = page.total;
         _catalogTotalIsEstimate = page.totalIsEstimate;
@@ -1815,6 +1814,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       );
       if (!mounted) return;
       setState(() {
+        _visibleAdminChannelCount = _adminVisibleChannelBatchSize;
         _channels = page.channels;
         _catalogTotal = page.total;
         _catalogTotalIsEstimate = page.totalIsEstimate;
