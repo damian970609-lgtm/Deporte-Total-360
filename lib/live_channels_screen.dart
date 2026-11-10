@@ -2201,6 +2201,16 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
     _compactPlayback = false;
     ++_controllerGeneration;
     _controller = null;
+    if (mounted) {
+      // Retira VideoPlayer del árbol antes de liberar el objeto nativo.
+      setState(() {
+        _videoTracks = <VideoTrack>[];
+        _manualQualityTrackId = null;
+        _loading = false;
+        _error = null;
+        _isFullscreen = false;
+      });
+    }
     if (controller != null) {
       try {
         if (controller.value.isInitialized) await controller.pause();
@@ -2209,14 +2219,6 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
       }
       await _disposeControllerSafely(controller);
     }
-    if (!mounted) return;
-    setState(() {
-      _videoTracks = <VideoTrack>[];
-      _manualQualityTrackId = null;
-      _loading = false;
-      _error = null;
-      _isFullscreen = false;
-    });
   }
 
   @override
