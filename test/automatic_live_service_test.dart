@@ -37,14 +37,18 @@ void main() {
       final settings = await AutoLiveSettings.load();
 
       expect(settings.epgUrl, defaultAutoLiveEpgUrl);
-      expect(settings.epgUrls, contains('https://iptv-epg.org/files/epg-do.xml'));
-      expect(settings.epgUrls, contains('https://iptv-epg.org/files/epg-gb.xml'));
+      expect(settings.epgUrls, hasLength(3));
+      expect(settings.epgUrls, contains('https://teleonline.github.io/epg/epg.xml.gz'));
       expect(settings.epgUrls, contains(
         'https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/Latino_lite.xml.gz',
       ));
       expect(settings.epgUrls, contains(
         'https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/Sports_guide.xml.gz',
       ));
+      expect(
+        settings.epgUrls.any((url) => url.contains('iptv-epg.org/files/epg-')),
+        isFalse,
+      );
     });
 
     test('migra la última lista integrada anterior y mantiene EPG personalizada', () async {
@@ -64,7 +68,8 @@ void main() {
       );
       final preserved = await AutoLiveSettings.load();
       expect(preserved.epgUrls, contains(custom));
-      expect(preserved.epgUrls, contains('https://iptv-epg.org/files/epg-es.xml'));
+      expect(preserved.epgUrls, contains('https://teleonline.github.io/epg/epg.xml.gz'));
+      expect(preserved.epgUrls, hasLength(4));
       expect(preserved.epgUrls.toSet(), hasLength(preserved.epgUrls.length));
     });
   });
@@ -442,13 +447,15 @@ void main() {
 
       expect(settings.playlistUrls, hasLength(12));
       expect(settings.playlistUrls.every(isSafeHttpUrl), isTrue);
-      expect(settings.epgUrls, hasLength(28));
+      expect(settings.epgUrls, hasLength(3));
       expect(settings.epgUrls.every(isSafeHttpUrl), isTrue);
       expect(settings.playlistUrls.first, contains('teleonline'));
       expect(settings.playlistUrls[1], contains('languages/spa.m3u'));
       expect(settings.playlistUrls[2], contains('countries/es.m3u'));
-      expect(settings.epgUrls.first, contains('epg-es.xml'));
-      expect(settings.epgUrls, contains('https://raw.githubusercontent.com/teleonline/listas/main/epg.xml.gz'));
+      expect(settings.epgUrls.first, 'https://teleonline.github.io/epg/epg.xml.gz');
+      expect(settings.epgUrls, contains(
+        'https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/Sports_guide.xml.gz',
+      ));
       expect(settings.isConfigured, isTrue);
     });
 
@@ -462,7 +469,7 @@ void main() {
       final settings = await AutoLiveSettings.load();
 
       expect(settings.playlistUrls, hasLength(12));
-      expect(settings.epgUrls, hasLength(28));
+      expect(settings.epgUrls, hasLength(3));
       expect(settings.authorizationConfirmed, isTrue);
       expect(settings.isConfigured, isTrue);
     });
@@ -478,7 +485,7 @@ void main() {
 
       expect(settings.isConfigured, isTrue);
       expect(settings.playlistUrls, hasLength(12));
-      expect(settings.epgUrls, hasLength(28));
+      expect(settings.epgUrls, hasLength(3));
     });
   });
 
