@@ -678,6 +678,7 @@ class M3uChannel {
     this.logo = '',
     this.language = '',
     this.country = '',
+    this.searchAliases = const <String>[],
   });
   final String name;
   final String url;
@@ -687,6 +688,7 @@ class M3uChannel {
   final String logo;
   final String language;
   final String country;
+  final List<String> searchAliases;
 
   /// Identificador interno estable para cruzar el nombre del broadcaster
   /// con el canal visible. La reproducción siempre usa la URL real del canal.
@@ -1353,15 +1355,40 @@ class AutomaticLiveService {
         continue;
       }
       final data = pending;
+      const aliasKeys = <String>[
+        'tvg-name', 'tvg-id', 'channel-name', 'channelname', 'name',
+        'network', 'broadcaster', 'provider-name', 'source-label',
+        'alias', 'aliases', 'group-title',
+      ];
+      final aliases = <String>{};
+      for (final key in aliasKeys) {
+        final value = (data[key] ?? '').trim();
+        if (value.isNotEmpty) {
+          for (final alias in value.split(RegExp(r'[,;|]'))) {
+            final normalized = alias.trim();
+            if (normalized.isNotEmpty) aliases.add(normalized);
+          }
+        }
+      }
+      final fallbackName = <String>[
+        data['tvg-name'] ?? '',
+        data['channel-name'] ?? '',
+        data['channelname'] ?? '',
+        data['name'] ?? '',
+        data['network'] ?? '',
+        data['broadcaster'] ?? '',
+        data['tvg-id'] ?? '',
+        'Canal',
+      ].firstWhere((value) => value.trim().isNotEmpty).trim();
       result.add(M3uChannel(
-        name: pendingName.isNotEmpty ? pendingName :
-            (data['tvg-name'] ?? data['tvg-id'] ?? 'Canal').trim(),
+        name: pendingName.isNotEmpty ? pendingName : fallbackName,
         url: streamUri.toString(), tvgId: data['tvg-id'] ?? '',
         tvgName: data['tvg-name'] ?? '',
         group: data['group-title'] ?? '',
         logo: data['tvg-logo'] ?? '',
         language: data['tvg-language'] ?? data['language'] ?? '',
         country: data['tvg-country'] ?? data['country'] ?? '',
+        searchAliases: aliases.toList(growable: false),
       ));
       pending = null;
       pendingName = '';
@@ -1783,6 +1810,7 @@ class AutomaticLiveService {
       channel.tvgName,
       channel.tvgId,
       channel.internalChannelId,
+      ...channel.searchAliases,
     ].map((value) => normalizeChannelName(value).replaceAll(' ', ''))
         .where((value) => value.length >= 3);
     return aliases.any((value) =>
@@ -1799,7 +1827,8 @@ class AutomaticLiveService {
   ) {
     final metadata = normalizeText(
       channel.name + ' ' + channel.tvgName + ' ' +
-      channel.tvgId + ' ' + channel.group,
+      channel.tvgId + ' ' + channel.group + ' ' +
+      channel.searchAliases.join(' '),
     );
     if (metadata.isEmpty) return 0;
 
