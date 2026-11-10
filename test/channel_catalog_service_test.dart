@@ -375,6 +375,52 @@ void main() {
     expect(channel.language, 'es');
   });
 
+  test('la búsqueda IPTV encuentra alias y metadatos aunque el canal no traiga nombre', () {
+    final channel = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'stream-981',
+      'identifier': 'stream_981',
+      'name': '',
+      'url': 'https://cdn.example/feeds/espn_2_hd/live.m3u8',
+      'tvg_id': 'ESPN.2.us',
+      'group_title': 'Deportes premium',
+      'aliases': <String>['ESPN 2 HD', 'ESPN Dos'],
+      'isSports': true,
+      'visible': false,
+    });
+
+    expect(channel.name, 'ESPN 2 HD');
+    expect(channel.searchAliases, contains('ESPN Dos'));
+    expect(matchesSportsChannelSearch(channel, 'ESPN'), isTrue);
+    expect(matchesSportsChannelSearch(channel, 'espn.2'), isTrue);
+    expect(matchesSportsChannelSearch(channel, 'deportes premium'), isTrue);
+    expect(matchesSportsChannelSearch(channel, 'stream 981'), isTrue);
+  });
+
+  test('un canal sin nombre ni alias conserva su señal y usa una etiqueta neutra', () {
+    final channel = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'stream-456',
+      'identifier': 'stream-456',
+      'name': ' ',
+      'url': 'https://cdn.example/channels/futbol_123.m3u8',
+    });
+
+    expect(channel.name, 'futbol 123');
+    expect(matchesSportsChannelSearch(channel, 'futbol 123'), isTrue);
+  });
+
+  test('la búsqueda por texto parcial exige todas las palabras sin distinguir acentos', () {
+    final channel = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'latino-hd',
+      'identifier': 'latino-hd',
+      'name': 'Canal Latino HD',
+      'url': 'https://media.example/latino.m3u8',
+      'aliases': <String>['Deportes Españoles'],
+    });
+
+    expect(matchesSportsChannelSearch(channel, 'deportes espanoles'), isTrue);
+    expect(matchesSportsChannelSearch(channel, 'canal noticias'), isFalse);
+  });
+
   test('canal rechaza HTTP aunque el enlace termine en una extensión compatible', () {
     expect(
       () => SportsChannel.fromJson(<String, dynamic>{
