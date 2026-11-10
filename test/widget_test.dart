@@ -11,9 +11,11 @@ void _noopHomeNavigate(int _) {}
 void _noopHomeAction() {}
 
 class _AdminTestService extends ChannelCatalogService {
-  _AdminTestService({this.autoSignIn = true});
+  _AdminTestService({this.autoSignIn = true, this.adminTotal = 2});
 
   final bool autoSignIn;
+  final int adminTotal;
+  int _adminPageCalls = 0;
   final List<String> deletedSourceIds = <String>[];
   bool refreshRequested = false;
 
@@ -25,30 +27,53 @@ class _AdminTestService extends ChannelCatalogService {
   Future<ChannelCatalogPage> fetchAdminChannelPage({
     String search = '',
     int offset = 0,
+    int limit = 200,
   }) async {
-    return const ChannelCatalogPage(
-      channels: <SportsChannel>[
-        SportsChannel(
-          id: 'sports-channel',
-          identifier: 'sports-channel',
-          name: 'ESPN Deportes',
-          url: 'https://media.example/espn.m3u8',
-          isSports: true,
-          visible: false,
-          language: 'es',
-        ),
-        SportsChannel(
-          id: 'general-channel',
-          identifier: 'general-channel',
-          name: 'Canal General',
-          url: 'https://media.example/general.m3u8',
-          isSports: false,
-          visible: false,
-        ),
-      ],
-      total: 2,
-      offset: 0,
-      hasMore: false,
+    _adminPageCalls++;
+    if (limit <= 200) {
+      return const ChannelCatalogPage(
+        channels: <SportsChannel>[
+          SportsChannel(
+            id: 'sports-channel',
+            identifier: 'sports-channel',
+            name: 'ESPN Deportes',
+            url: 'https://media.example/espn.m3u8',
+            isSports: true,
+            visible: false,
+            language: 'es',
+          ),
+          SportsChannel(
+            id: 'general-channel',
+            identifier: 'general-channel',
+            name: 'Canal General',
+            url: 'https://media.example/general.m3u8',
+            isSports: false,
+            visible: false,
+          ),
+        ],
+        total: adminTotal,
+        offset: 0,
+        hasMore: adminTotal > 2,
+        totalIsEstimate: adminTotal > 2,
+      );
+    }
+    final end = (offset + limit).clamp(0, adminTotal).toInt();
+    final channels = <SportsChannel>[];
+    for (var index = offset; index < end; index++) {
+      if (index == 0) {
+        channels.add(const SportsChannel(id: 'sports-channel', identifier: 'sports-channel', name: 'ESPN Deportes', url: 'https://media.example/espn.m3u8', isSports: true, visible: false, language: 'es'));
+      } else if (index == 1) {
+        channels.add(const SportsChannel(id: 'general-channel', identifier: 'general-channel', name: 'Canal General', url: 'https://media.example/general.m3u8', isSports: false, visible: false));
+      } else {
+        channels.add(SportsChannel(id: 'channel-$index', identifier: 'channel-$index', name: 'Canal $index', url: 'https://media.example/channel-$index.m3u8', isSports: index.isEven, visible: false));
+      }
+    }
+    return ChannelCatalogPage(
+      channels: channels,
+      total: adminTotal,
+      offset: offset,
+      hasMore: end < adminTotal,
+      totalIsEstimate: end < adminTotal,
     );
   }
 
@@ -258,6 +283,27 @@ void main() {
     expect(find.text('FANTASY'), findsNothing);
     expect(find.text('Explorar →'), findsNothing);
     expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('IPTV carga más de 200 canales en una sola lista y mantiene el formulario para añadir listas', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 1200);
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final service = _AdminTestService(autoSignIn: true, adminTotal: 2005);
+    await tester.pumpWidget(MaterialApp(home: ChannelAdminScreen(service: service)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('IPTV'));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<Text>(find.byKey(const ValueKey<String>('iptv-channel-total'))).data, '2005');
+    expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('channel-admin-iptv-list')), findsOneWidget);
+    expect(find.text('AÑADIR CANALES Y LISTAS IPTV'), findsOneWidget);
+    expect(service._adminPageCalls, greaterThanOrEqualTo(3));
 
     await tester.pumpWidget(const SizedBox.shrink());
   });

@@ -9,6 +9,7 @@ import 'live_media_format.dart';
 import 'sports_api_service.dart';
 
 const int channelCatalogMaxOffset = 5000000;
+const int channelAdminCatalogPageSize = 2000;
 
 /// Copia persistente del catálogo deportivo que ya se descargó correctamente.
 /// Se conserva en el dispositivo y no depende de que Cloudflare siga disponible.
@@ -892,12 +893,15 @@ class ChannelCatalogService {
   Future<ChannelCatalogPage> fetchAdminChannelPage({
     String search = '',
     int offset = 0,
+    int limit = 200,
   }) async {
     final normalizedOffset = offset.clamp(0, channelCatalogMaxOffset).toInt();
+    final normalizedLimit = limit.clamp(1, channelAdminCatalogPageSize).toInt();
     final uri = Uri.parse(_baseUrl + '/api/channels/admin/catalog').replace(
       queryParameters: <String, String>{
         if (search.trim().isNotEmpty) 'q': search.trim(),
         'offset': normalizedOffset.toString(),
+        'limit': normalizedLimit.toString(),
       },
     );
     final result = await _client.get(uri, headers: _authHeaders())

@@ -543,6 +543,26 @@ void main() {
     client.close();
   });
 
+  test('el catálogo privado solicita el tamaño de página indicado para IPTV', () async {
+    Uri? requestedUri;
+    final client = MockClient((request) async {
+      requestedUri = request.url;
+      return http.Response(jsonEncode(<String, Object>{
+        'channels': <Object>[],
+        'total': 4000,
+        'offset': 2000,
+        'hasMore': false,
+      }), 200);
+    });
+    final service = ChannelCatalogService(client: client, accessTokenProvider: () => 'test-google-id-token');
+    final page = await service.fetchAdminChannelPage(offset: 2000, limit: 2000);
+    expect(requestedUri?.path, '/api/channels/admin/catalog');
+    expect(requestedUri?.queryParameters['offset'], '2000');
+    expect(requestedUri?.queryParameters['limit'], '2000');
+    expect(page.offset, 2000);
+    client.close();
+  });
+
   test('editar una lista actualiza su nombre y URL mediante PUT autenticado', () async {
     http.Request? sent;
     final client = MockClient((request) async {
