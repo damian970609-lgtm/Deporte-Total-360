@@ -210,7 +210,7 @@ void main() {
         throw const http.ClientException('sin conexión');
       });
 
-      final first = await SportsApiService().fetchEvents(
+      final first = await SportsApiService().fetchAgendaEvents(
         sport: 'Fútbol',
         dateFilter: 'Hoy',
       );
@@ -222,13 +222,13 @@ void main() {
         throw const http.ClientException('sin conexión');
       });
 
-      final restored = await SportsApiService().fetchEvents(
+      final restored = await SportsApiService().fetchAgendaEvents(
         sport: 'Fútbol',
         dateFilter: 'Hoy',
       );
       expect(restored, isNotEmpty);
       expect(restored.first['fixture']['id'], 9901);
-      expect(requestCount, greaterThanOrEqualTo(2));
+      expect(requestCount, 1, reason: 'La respuesta reciente debe salir de disco sin otra consulta.');
     });
 
     test('trata HTTP 204 como consulta correcta sin partidos', () async {
