@@ -284,8 +284,15 @@ void main() {
     final sportsAction = find.byKey(
       const ValueKey<String>('iptv-channel-actions-sports-channel'),
     );
-    await _scrollIptvUntilVisible(tester, sportsAction);
-    expect(sportsAction.hitTestable(), findsOneWidget);
+    final sportsActionButton = find.descendant(
+      of: sportsAction,
+      matching: find.byType(IconButton),
+    );
+    await _scrollIptvUntilVisible(tester, sportsActionButton);
+    // PopupMenuButton es el contenedor de estado y no tiene un RenderBox
+    // propio para hit testing; el IconButton descendiente es el control real.
+    expect(sportsAction, findsOneWidget);
+    expect(sportsActionButton.hitTestable(), findsOneWidget);
     expect(find.text('ESPN Deportes'), findsOneWidget);
 
     final generalAction = find.byKey(
