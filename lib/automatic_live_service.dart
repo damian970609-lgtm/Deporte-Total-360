@@ -1764,6 +1764,107 @@ class AutomaticLiveService {
     return output;
   }
 
+  /// Cruza el broadcaster con el nombre, tvg-name, tvg-id o clave local.
+  static bool channelMatchesBroadcaster(
+    M3uChannel channel,
+    String broadcasterName,
+  ) {
+    final target =
+        normalizeChannelName(broadcasterName).replaceAll(' ', '');
+    if (target.length < 3) return false;
+    final aliases = <String>[
+      channel.name,
+      channel.tvgName,
+      channel.tvgId,
+      channel.internalChannelId,
+    ].map((value) => normalizeChannelName(value).replaceAll(' ', ''))
+        .where((value) => value.length >= 3);
+    return aliases.any((value) =>
+        value == target ||
+        value.startsWith(target) ||
+        target.startsWith(value));
+  }
+
+  /// Búsqueda sin EPG: equipos y participantes primero; competición y marcas
+  /// deportivas después. Solo considera las señales visibles y seleccionadas.
+  static int alternativeChannelMatchScore(
+    M3uChannel channel,
+    SportsAgendaEvent event,
+  ) {
+    final metadata = normalizeText(
+      channel.name + ' ' + channel.tvgName + ' ' +
+      channel.tvgId + ' ' + channel.group,
+    );
+    if (metadata.isEmpty) return 0;
+
+    final home = event.homeTeam.trim();
+    final away = event.awayTeam.trim();
+    final homeMatched =
+        home.isNotEmpty && _teamMatchesProgramme(home, metadata);
+    final awayMatched =
+        away.isNotEmpty && _teamMatchesProgramme(away, metadata);
+    if (homeMatched && awayMatched) return 100;
+    if (homeMatched || awayMatched) return 78;
+
+    final participants = event.participants
+        .map((participant) => participant.name.trim())
+        .where((name) => name.isNotEmpty)
+        .toList(growable: false);
+    final sport = normalizeText(event.sport + ' ' + event.competition);
+    final individualSport = RegExp(
+      r'\b(?:mma|ufc|ciclismo|cycling|tenis|tennis|golf|boxeo|boxing|formula 1|formula uno)\b',
+    ).hasMatch(sport);
+    final participantMatches = participants
+        .where((name) => _teamMatchesProgramme(name, metadata))
+        .length;
+    if (participantMatches > 0 &&
+        (individualSport || participantMatches >= 2)) {
+      return 95;
+    }
+
+    final competition = normalizeText(event.competition);
+    if (competition.length >= 5 && metadata.contains(competition)) return 90;
+    final title = normalizeText(event.title);
+    if (title.length >= 8 && metadata.contains(title)) return 90;
+
+    final keywords = <String>[];
+    if (RegExp(r'\b(?:futbol|football|soccer|futebol)\b').hasMatch(sport)) {
+      keywords.addAll(<String>[
+        'espn', 'fox sports', 'tudn', 'bein sports', 'dazn',
+        'sky sports', 'tyc sports', 'futbol', 'football', 'soccer',
+      ]);
+    } else if (RegExp(r'\b(?:basket|basketball|baloncesto|nba)\b').hasMatch(sport)) {
+      keywords.addAll(<String>[
+        'espn', 'nba', 'tnt sports', 'basketball', 'baloncesto', 'sportv',
+      ]);
+    } else if (RegExp(r'\b(?:tenis|tennis|atp|wta)\b').hasMatch(sport)) {
+      keywords.addAll(<String>[
+        'espn', 'tennis', 'atp', 'wta', 'tennis channel', 'sportv',
+      ]);
+    } else if (RegExp(r'\bcricket\b').hasMatch(sport)) {
+      keywords.addAll(<String>[
+        'cricket', 'willow', 'sky sports', 'star sports',
+      ]);
+    } else if (RegExp(r'\b(?:baseball|beisbol|mlb)\b').hasMatch(sport)) {
+      keywords.addAll(<String>['mlb', 'baseball', 'fox sports', 'espn']);
+    } else if (RegExp(r'\brugby\b').hasMatch(sport)) {
+      keywords.addAll(<String>['rugby', 'sky sports', 'bein sports']);
+    } else if (RegExp(r'\b(?:formula 1|formula uno|motorsport|motor|moto gp)\b').hasMatch(sport)) {
+      keywords.addAll(<String>[
+        'formula 1', 'formula uno', 'f1', 'motorsport', 'moto gp',
+        'sky sports', 'espn',
+      ]);
+    } else if (RegExp(r'\b(?:mma|ufc|boxeo|boxing)\b').hasMatch(sport)) {
+      keywords.addAll(<String>[
+        'ufc', 'mma', 'boxing', 'boxeo', 'dazn', 'fight network', 'espn',
+      ]);
+    } else if (RegExp(r'\b(?:hockey|nhl)\b').hasMatch(sport)) {
+      keywords.addAll(<String>['hockey', 'nhl', 'espn']);
+    }
+
+    return keywords.any(metadata.contains) ? 65 : 0;
+  }
+
   /// Impide usar por horario una guía que anuncia claramente otro partido.
   static bool _isExplicitDifferentFixture(String value) {
     final normalized = normalizeText(value);
