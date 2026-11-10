@@ -688,6 +688,17 @@ class M3uChannel {
   final String language;
   final String country;
 
+  /// Identificador interno estable para cruzar el nombre del broadcaster
+  /// con el canal visible. La reproducción siempre usa la URL real del canal.
+  String get internalChannelId {
+    final identity = tvgId.trim().isNotEmpty
+        ? tvgId
+        : tvgName.trim().isNotEmpty
+            ? tvgName
+            : name;
+    return AutomaticLiveService.normalizeText(identity).replaceAll(' ', '-');
+  }
+
   /// 2 = español, 1 = inglés y 0 = idioma sin confirmar.
   int get languagePriority {
     final explicit = language.trim().toLowerCase();
