@@ -703,10 +703,16 @@ class ChannelCatalogService {
     return normalized;
   }
 
-  Future<void> _initializeGoogle() {
-    return _initialization ??= _google.initialize(
+  Future<void> _initializeGoogle() async {
+    final pending = _initialization ??= _google.initialize(
       serverClientId: _serverClientId.isEmpty ? null : _serverClientId,
     );
+    try {
+      await pending;
+    } catch (_) {
+      if (identical(_initialization, pending)) _initialization = null;
+      rethrow;
+    }
   }
 
   /// Comprueba antes de abrir Google que el cliente Web de la APK y el
@@ -737,40 +743,40 @@ class ChannelCatalogService {
     }
   }
 
-  /// Recupera una cuenta de Google ya autorizada sin forzar una nueva
-  /// selección. El SDK puede devolver null cuando no existe una sesión
-  /// ligera disponible; en ese caso la pantalla conserva el botón de acceso.
-  Future<String?> restoreSession() async {
-    final currentToken = _idToken;
-    final currentEmail = signedInEmail;
-    if (currentToken != null && currentToken.isNotEmpty &&
-        currentEmail != null && currentEmail.isNotEmpty) {
-      return currentEmail;
-    }
-
-    // La recuperación local de la cuenta no debe depender de una consulta al
-    // Worker: si Cloudflare agotó la cuota, el panel todavía debe poder abrir
-    // su copia privada guardada en este teléfono.
-    try {
-      await validateGoogleOAuthConfiguration();
-    } catch (_) {
-      // El backend validará el token cuando vuelva a estar disponible.
-    }
+  /// Recupera una cuenta de Google sin abrir un selector de cuentas.
+  /// No consulta Cloudflare: restaurar la identidad local no debe consumir
+  /// cuota del Worker ni depender de que el backend esté disponible.
+  Future<String?> _restoreGoogleAccount() async {
     await _initializeGoogle();
-
     try {
-      final Future<GoogleSignInAccount?>? attempt =
-          _google.attemptLightweightAuthentication();
+      final attempt = _google.attemptLightweightAuthentication();
       if (attempt == null) return null;
       final account = await attempt;
       if (account == null) return null;
       return _rememberGoogleAccount(account);
     } on GoogleSignInException {
-      // La recuperación ligera nunca debe bloquear el acceso manual.
       _idToken = null;
       signedInEmail = null;
       return null;
     }
+  }
+
+  /// Recupera el token local si sigue vigente y lo renueva mediante Google
+  /// Credential Manager cuando caducó o está cerca de caducar.
+  Future<String?> restoreSession() async {
+    final currentToken = _idToken;
+    final currentEmail = signedInEmail;
+    if (currentToken != null &&
+        currentToken.isNotEmpty &&
+        currentEmail != null &&
+        currentEmail.isNotEmpty &&
+        !_tokenNeedsRefresh(currentToken)) {
+      return currentEmail;
+    }
+
+    _idToken = null;
+    signedInEmail = null;
+    return _restoreGoogleAccount();
   }
 
   String _rememberGoogleAccount(GoogleSignInAccount account) {
@@ -790,6 +796,14 @@ class ChannelCatalogService {
     // hacerlo elimina la autorización que permitiría reutilizar la cuenta.
     final restoredEmail = await restoreSession();
     if (restoredEmail != null) return restoredEmail;
+
+    // La comprobación OAuth solo se necesita antes de un acceso interactivo.
+    // Restaurar la sesión local no debe consumir cuota del Worker.
+    try {
+      await validateGoogleOAuthConfiguration();
+    } catch (_) {
+      // Google y el backend validarán el token al ejecutar la operación.
+    }
 
     if (!_google.supportsAuthenticate()) {
       throw const ChannelCatalogException(
@@ -881,6 +895,50 @@ class ChannelCatalogService {
       'Accept': 'application/json',
       'Authorization': 'Bearer ' + token,
     };
+  }
+
+  Future<Map<String, String>> _freshAuthHeaders() async {
+    if (_accessTokenProvider != null) return _authHeaders();
+
+    final token = _idToken;
+    if (token == null || token.isEmpty || _tokenNeedsRefresh(token)) {
+      _idToken = null;
+      signedInEmail = null;
+      final restored = await _restoreGoogleAccount();
+      if (restored == null || _idToken == null || _idToken!.isEmpty) {
+        throw const ChannelCatalogException(
+          'No se pudo recuperar tu sesión Google. Entra una vez con la misma cuenta y vuelve a intentarlo.',
+        );
+      }
+    }
+    return _authHeaders();
+  }
+
+  /// Repite una sola vez una operación administrativa tras recuperar la
+  /// sesión Google cuando Cloudflare devuelve HTTP 401.
+  Future<http.Response> _authenticatedRequest(
+    Future<http.Response> Function(Map<String, String> headers) send,
+  ) async {
+    final firstHeaders = await _freshAuthHeaders();
+    final firstResponse = await send(firstHeaders);
+    if (firstResponse.statusCode != 401) return firstResponse;
+
+    if (_accessTokenProvider != null) {
+      final refreshedHeaders = _authHeaders();
+      if (refreshedHeaders['Authorization'] ==
+          firstHeaders['Authorization']) {
+        return firstResponse;
+      }
+      return send(refreshedHeaders);
+    }
+
+    _idToken = null;
+    signedInEmail = null;
+    final restored = await _restoreGoogleAccount();
+    if (restored == null || _idToken == null || _idToken!.isEmpty) {
+      return firstResponse;
+    }
+    return send(_authHeaders());
   }
 
   static const String _trialDeviceKey = 'dt360_vip_trial_device_v1';
@@ -1431,15 +1489,15 @@ class ChannelCatalogService {
     required bool visible,
   }) async {
     final encodedId = Uri.encodeComponent(channelId);
-    final result = await _client.patch(
+    final result = await _authenticatedRequest((headers) => _client.patch(
       Uri.parse(_baseUrl + '/api/channels/admin/channels/' +
           encodedId + '/visibility'),
       headers: <String, String>{
-        ..._authHeaders(),
+        ...headers,
         'Content-Type': 'application/json',
       },
       body: jsonEncode(<String, bool>{'visible': visible}),
-    ).timeout(const Duration(seconds: 20));
+    ).timeout(const Duration(seconds: 20)));
     _decode(result);
   }
 
