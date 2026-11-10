@@ -12,6 +12,7 @@ import 'package:volume_controller/volume_controller.dart';
 import 'channel_catalog_service.dart';
 import 'channel_playlist_presets.dart';
 import 'live_media_format.dart';
+import 'stream_diagnostics.dart';
 
 const Color _channelBg = Color(0xFF000000);
 const Color _channelPanel = Color(0xFF07090D);
@@ -986,7 +987,7 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = 'No se pudo reproducir esta señal: ' + error.toString();
+          _error = explainVideoPlayerError(error);
         });
       }
       await controller.dispose();
@@ -1080,6 +1081,12 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
                     TextButton(
                       onPressed: _initialize,
                       child: const Text('REINTENTAR'),
+                    ),
+                  if (_error != null)
+                    StreamDiagnosticButton(
+                      url: widget.channel!.url,
+                      compact: true,
+                      color: _channelCyan,
                     ),
                 ],
               ),

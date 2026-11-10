@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'live_media_format.dart';
+import 'stream_diagnostics.dart';
 import 'sports_api_service.dart';
 
 const int channelCatalogMaxOffset = 5000000;
@@ -955,48 +956,11 @@ class ChannelCatalogService {
     )).channels;
   }
 
-  /// Diagnóstico de conectividad. Un HTTP 403 puede ser geobloqueo,
-  /// autenticación o política del proveedor; no se presenta como certeza.
+  /// Usa el diagnóstico compartido por todos los reproductores.
+  /// Solo consulta la fuente; no modifica la URL ni la configuración del canal.
   Future<String> diagnoseStream(String value) async {
-    final uri = Uri.tryParse(value.trim());
-    if (uri == null || !isSupportedChannelPlaybackUrl(value)) {
-      return 'ENLACE NO COMPATIBLE: se necesita una URL HTTPS directa con formato multimedia admitido.';
-    }
-    try {
-      final result = await _client.get(
-        uri,
-        headers: const <String, String>{
-          'Accept': '*/*',
-          'Range': 'bytes=0-2047',
-        },
-      ).timeout(const Duration(seconds: 10));
-      switch (result.statusCode) {
-        case 200:
-        case 206:
-          return 'RESPONDE: el servidor permite la conexión inicial. La reproducción todavía depende del reproductor y de los segmentos.';
-        case 401:
-          return 'ACCESO DENEGADO (401): el proveedor requiere credenciales o autorización.';
-        case 403:
-          return 'ACCESO DENEGADO (403): posible restricción regional, permisos o bloqueo del proveedor. No se puede confirmar que sea GeoIP solo con este código.';
-        case 404:
-          return 'FUENTE NO ENCONTRADA (404): el enlace puede haber caducado o haber sido retirado.';
-        case 451:
-          return 'RESTRICCIÓN LEGAL O REGIONAL (451): el proveedor limita esta transmisión.';
-        case 429:
-          return 'LÍMITE DEL PROVEEDOR (429): espera y vuelve a intentarlo más tarde.';
-        default:
-          if (result.statusCode >= 500) {
-            return 'SERVIDOR NO DISPONIBLE (' + result.statusCode.toString() + '): prueba más tarde o utiliza una fuente autorizada alternativa.';
-          }
-          return 'RESPUESTA HTTP ' + result.statusCode.toString() + ': revisa la fuente con el proveedor.';
-      }
-    } on Exception catch (error) {
-      final message = error.toString().toLowerCase();
-      if (message.contains('timeout')) {
-        return 'TIEMPO AGOTADO: el servidor no respondió a tiempo.';
-      }
-      return 'NO SE PUDO CONECTAR: comprueba Internet, la fuente y vuelve a probar.';
-    }
+    final report = await StreamDiagnosticsService(client: _client).diagnose(value);
+    return report.toDisplayString();
   }
 
   /// Comprueba la licencia comercial o el pase gratuito de la cuenta Google
