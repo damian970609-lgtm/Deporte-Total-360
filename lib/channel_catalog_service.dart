@@ -188,11 +188,26 @@ class SportsChannel {
       'displayName',
       'display_name',
       'slug',
+      'sourceLabel',
+      'source_label',
+      'playlistName',
+      'playlist_name',
+      'providerName',
+      'provider_name',
+      'category',
+      'categoryName',
+      'category_name',
+      'rawName',
+      'raw_name',
     ]) {
       addAlias(json[key]);
     }
 
     final explicitName = (json['name'] ?? '').toString().trim();
+    final placeholderName = const <String>{
+      '', 'null', 'unknown', 'unnamed', 'n/a', 'na', '-', '--',
+      'sin nombre', 'señal sin nombre', 'channel', 'canal',
+    }.contains(explicitName.toLowerCase());
     final fallbackName = <String>[
       (json['displayName'] ?? json['display_name'] ?? '').toString().trim(),
       (json['channelName'] ?? json['channel_name'] ?? '').toString().trim(),
@@ -202,7 +217,7 @@ class SportsChannel {
     ].firstWhere((value) => value.isNotEmpty, orElse: () {
       return id.isEmpty ? 'Señal sin nombre' : 'Señal sin nombre · $id';
     });
-    final name = explicitName.isNotEmpty ? explicitName : fallbackName;
+    final name = !placeholderName ? explicitName : fallbackName;
 
     if (name.isNotEmpty && !aliases.contains(name)) {
       aliases.insert(0, name);
