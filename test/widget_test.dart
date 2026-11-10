@@ -30,7 +30,7 @@ class _AdminTestService extends ChannelCatalogService {
     int limit = 200,
   }) async {
     _adminPageCalls++;
-    if (limit <= 200) {
+    if (limit <= 200 && adminTotal <= 2) {
       return ChannelCatalogPage(
         channels: <SportsChannel>[
           SportsChannel(
@@ -282,6 +282,40 @@ void main() {
     expect(find.text('TELEGRAM'), findsNothing);
     expect(find.text('FANTASY'), findsNothing);
     expect(find.text('Explorar →'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('el inventario privado renderiza canales por bloques para evitar saturar Android', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final service = _AdminTestService(autoSignIn: true, adminTotal: 205);
+    await tester.pumpWidget(
+      MaterialApp(home: ChannelAdminScreen(service: service)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('MOSTRANDO 40 DE 200 CANALES CARGADOS'),
+      findsOneWidget,
+    );
+    expect(find.text('Canal 199'), findsNothing);
+    expect(
+      find.text('MOSTRAR SIGUIENTES 40 CANALES · 40/200'),
+      findsOneWidget,
+    );
+
+    final showMore = find.text('MOSTRAR SIGUIENTES 40 CANALES · 40/200');
+    await tester.ensureVisible(showMore);
+    await tester.pumpAndSettle();
+    await tester.tap(showMore);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('MOSTRANDO 80 DE 200 CANALES CARGADOS'),
+      findsOneWidget,
+    );
+    expect(find.text('Canal 40'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
