@@ -1704,7 +1704,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   late final ChannelCatalogService _service;
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _labelController = TextEditingController();
-  final TextEditingController _searchController = TextEditingController();
   final TextEditingController _licenseEmailController = TextEditingController();
   final TextEditingController _licenseNoteController = TextEditingController();
   final ScrollController _adminScrollController = ScrollController();
@@ -1722,10 +1721,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   bool _loading = false;
   bool _working = false;
   bool _rightsConfirmed = false;
-  bool _hasMore = true;
-  int _catalogTotal = 0;
-  bool _catalogTotalIsEstimate = false;
-  int _nextAdminOffset = 0;
   bool _diagnosingPreview = false;
   String? _diagnosticResult;
   String? _email;
@@ -1745,7 +1740,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   void initState() {
     super.initState();
     _service = widget.service ?? channelCatalogService;
-    _adminScrollController.addListener(_handleAdminScroll);
     _working = true;
     unawaited(_restoreAdminSession());
   }
@@ -1768,22 +1762,11 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
-  void _handleAdminScroll() {
-    if (_showIptvSection || !_adminScrollController.hasClients ||
-        _loading || _working || !_hasMore || _error != null) {
-      return;
-    }
-    if (_adminScrollController.position.extentAfter < 650) {
-      unawaited(_loadMore());
-    }
-  }
 
   @override
   void dispose() {
-    _adminScrollController.removeListener(_handleAdminScroll);
     _urlController.dispose();
     _labelController.dispose();
-    _searchController.dispose();
     _licenseEmailController.dispose();
     _licenseNoteController.dispose();
     _iptvSearchController.dispose();
@@ -1807,10 +1790,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         if (snapshot.hasChannels) {
           _channels = List<SportsChannel>.from(snapshot.channels);
           _iptvChannels = List<SportsChannel>.unmodifiable(snapshot.channels);
-          _catalogTotal = snapshot.channels.length;
-          _catalogTotalIsEstimate = false;
-          _nextAdminOffset = snapshot.channels.length;
-          _hasMore = false;
           _iptvLoaded = false;
         }
         if (snapshot.hasSources) _sources = snapshot.sources;
@@ -1881,10 +1860,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _iptvSelectedChannel = null;
         _iptvLoaded = false;
         _iptvError = null;
-          _catalogTotal = 0;
-          _catalogTotalIsEstimate = false;
-          _nextAdminOffset = 0;
-        _hasMore = false;
       });
     }
   }
@@ -2044,64 +2019,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       _message('No se pudo revocar la licencia: $error');
     } finally {
       if (mounted) setState(() => _working = false);
-    }
-  }
-
-  Future<void> _searchChannels() async {
-    if (_loading) return;
-    await _loadAdmin();
-    if (!mounted) return;
-    if (_error == null) {
-      _message(_channels.isEmpty
-          ? 'No se encontraron canales con ese nombre.'
-          : 'Canales encontrados: ' + _channels.length.toString());
-    }
-  }
-
-  Future<void> _clearChannelSearch() async {
-    _searchController.clear();
-    await _loadAdmin();
-  }
-
-  Future<void> _loadMore() async {
-    if (_loading || !_hasMore) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final page = await _service.fetchAdminChannelPage(
-        search: _searchController.text,
-        offset: _nextAdminOffset,
-        limit: 200,
-      );
-      if (page.channels.isEmpty && page.hasMore) {
-        throw const ChannelCatalogException(
-          'El servidor no entregó la siguiente página del catálogo. Vuelve a intentarlo.',
-        );
-      }
-      if (!mounted) return;
-      setState(() {
-        final knownIds = _channels.map((channel) => channel.id).toSet();
-        _channels.addAll(
-          page.channels.where((channel) => knownIds.add(channel.id)),
-        );
-        _catalogTotal = page.total;
-        _catalogTotalIsEstimate = page.totalIsEstimate;
-        _nextAdminOffset = page.offset + page.channels.length;
-        _hasMore = page.hasMore;
-        _loading = false;
-        _error = null;
-      });
-      await _saveLocalAdminSnapshot(saveChannels: true, saveSources: false);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = _channels.isNotEmpty
-            ? 'Cloudflare no está disponible. Se mantiene la última copia del catálogo.'
-            : error.toString();
-      });
     }
   }
 
@@ -2520,7 +2437,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         if (_iptvSelectedChannel?.id == channel.id) _iptvSelectedChannel = null;
         if (_previewChannel?.id == channel.id) _previewChannel = null;
         _diagnosticResult = null;
-        _catalogTotal = _catalogTotal > 0 ? _catalogTotal - 1 : 0;
       });
       await _saveLocalAdminSnapshot(saveChannels: true, saveSources: false);
       _message('Canal eliminado. Su URL quedó bloqueada para futuras importaciones.');
@@ -2978,10 +2894,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       setState(() {
         _iptvChannels = complete;
         _channels = List<SportsChannel>.from(complete);
-        _catalogTotal = complete.length;
-        _catalogTotalIsEstimate = false;
-        _nextAdminOffset = complete.length;
-        _hasMore = false;
         _iptvLoaded = true;
         if (_iptvSelectedChannel != null) {
           _iptvSelectedChannel = allById[_iptvSelectedChannel!.id] ?? _iptvSelectedChannel;
