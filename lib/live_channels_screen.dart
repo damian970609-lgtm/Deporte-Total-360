@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
 import 'live_media_format.dart';
+import 'stream_diagnostics.dart';
 
 import 'sports_api_service.dart';
 
@@ -2016,7 +2017,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
       }
       setState(() {
         _loading = false;
-        _error = 'No se pudo iniciar esta señal: $error';
+        _error = explainVideoPlayerError(error);
       });
       await _disposeControllerSafely(controller);
       if (identical(_controller, controller)) _controller = null;
@@ -2258,6 +2259,11 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
                               fontWeight: FontWeight.w900,
                             ),
                           ),
+                        ),
+                        StreamDiagnosticButton(
+                          url: widget.source.url,
+                          compact: true,
+                          color: _liveCyan,
                         ),
                       ],
                     ),
