@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'live_media_format.dart';
 import 'sports_api_service.dart';
@@ -16,6 +18,8 @@ const int channelAdminCatalogPageSize = 2000;
 const String channelCatalogSnapshotCacheKey =
     'dt360_channel_catalog_snapshot_v1';
 const int maxCachedChannelCatalogEntries = 2000;
+/// La copia administrativa completa se guarda en disco, no en memoria compartida.
+const int maxAdminCachedChannelCatalogEntries = 20000;
 
 Future<List<SportsChannel>> loadCachedVisibleSportsChannels() async {
   final prefs = await SharedPreferences.getInstance();
@@ -149,12 +153,13 @@ class SportsChannel {
     final tvgId = (json['tvgId'] ?? json['tvg_id'] ?? '').toString().trim();
     final url = (json['url'] ?? '').toString().trim();
     final logoUrl = (json['logoUrl'] ?? json['logo_url'] ?? '').toString().trim();
-    final groupTitle = (json['groupTitle'] ?? json['group_title'] ?? '').toString().trim();
+    final groupTitle =
+        (json['groupTitle'] ?? json['group_title'] ?? '').toString().trim();
 
     final aliases = <String>[];
     void addAlias(dynamic value) {
       if (value is String) {
-        for (final item in value.split(RegExp(r'[|,;\\n]'))) {
+        for (final item in value.split(RegExp(r'[,;|]'))) {
           final candidate = item.trim();
           if (candidate.isNotEmpty && !aliases.contains(candidate)) {
             aliases.add(candidate);
@@ -168,13 +173,25 @@ class SportsChannel {
     }
 
     for (final key in <String>[
-      'searchAliases', 'search_aliases', 'aliases', 'alternateNames',
-      'alternate_names', 'keywords', 'searchTerms', 'search_terms',
-      'tvgName', 'tvg_name', 'channelName', 'channel_name',
-      'displayName', 'display_name', 'slug',
+      'searchAliases',
+      'search_aliases',
+      'aliases',
+      'alternateNames',
+      'alternate_names',
+      'keywords',
+      'searchTerms',
+      'search_terms',
+      'tvgName',
+      'tvg_name',
+      'channelName',
+      'channel_name',
+      'displayName',
+      'display_name',
+      'slug',
     ]) {
       addAlias(json[key]);
     }
+
     final explicitName = (json['name'] ?? '').toString().trim();
     final fallbackName = <String>[
       (json['displayName'] ?? json['display_name'] ?? '').toString().trim(),
@@ -183,17 +200,23 @@ class SportsChannel {
       if (aliases.isNotEmpty) aliases.first,
       tvgId,
     ].firstWhere((value) => value.isNotEmpty, orElse: () {
-      final segments = Uri.tryParse(url)?.pathSegments
-          .where((segment) => segment.trim().isNotEmpty)
-          .toList(growable: false);
-      final tail = segments != null && segments.isNotEmpty
-          ? segments.last
-          : identifier;
-      final slug = tail.replaceFirst(RegExp(r'\\.[a-zA-Z0-9]+
-    final rawLanguage = (json['language'] ?? 'unknown').toString().trim().toLowerCase();
+      return id.isEmpty ? 'Señal sin nombre' : 'Señal sin nombre · $id';
+    });
+    final name = explicitName.isNotEmpty ? explicitName : fallbackName;
+
+    if (name.isNotEmpty && !aliases.contains(name)) {
+      aliases.insert(0, name);
+    }
+    for (final value in <String>[id, identifier, tvgId, groupTitle]) {
+      if (value.isNotEmpty && !aliases.contains(value)) aliases.add(value);
+    }
+
+    final rawLanguage =
+        (json['language'] ?? 'unknown').toString().trim().toLowerCase();
     final language = const <String>{'es', 'en'}.contains(rawLanguage)
         ? rawLanguage
         : 'unknown';
+
     if (id.isEmpty || identifier.isEmpty || url.isEmpty) {
       throw const FormatException('El canal recibido está incompleto.');
     }
@@ -202,6 +225,7 @@ class SportsChannel {
         'El canal no contiene una señal HTTPS directa HLS, DASH, Smooth Streaming o de vídeo progresivo compatible.',
       );
     }
+
     return SportsChannel(
       id: id,
       identifier: identifier,
@@ -329,6 +353,7 @@ class ChannelAdminSnapshot {
 
 class ChannelAdminSnapshotStore {
   static const String _keyPrefix = 'dt360_admin_snapshot_v1_';
+  static const String _folderName = 'dt360_admin_snapshots';
   static final Map<String, Future<void>> _pendingWrites =
       <String, Future<void>>{};
 
@@ -339,8 +364,80 @@ class ChannelAdminSnapshotStore {
     return '$_keyPrefix$account';
   }
 
-  /// Devuelve solo la copia perteneciente a la cuenta solicitada.
-  /// Una fila dañada se omite sin invalidar el resto del snapshot.
+  static String _accountFileName(String normalizedEmail) {
+    final account = base64Url
+        .encode(utf8.encode(normalizedEmail))
+        .replaceAll('=', '');
+    return 'admin_$account.json';
+  }
+
+  static Future<File?> _fileForAccount(String normalizedEmail) async {
+    try {
+      final root = await getApplicationSupportDirectory();
+      final directory = Directory('${root.path}/$_folderName');
+      await directory.create(recursive: true);
+      return File('${directory.path}/${_accountFileName(normalizedEmail)}');
+    } catch (_) {
+      // En pruebas sin plataforma de archivos, usa SharedPreferences.
+      return null;
+    }
+  }
+
+  static Future<String?> _readRaw(String normalizedEmail) async {
+    final file = await _fileForAccount(normalizedEmail);
+    if (file != null) {
+      try {
+        if (await file.exists()) {
+          return await file.readAsString();
+        }
+      } catch (_) {
+        // Intenta la copia de migración de SharedPreferences.
+      }
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_cacheKey(normalizedEmail));
+      if (raw == null || raw.isEmpty) return null;
+      if (file != null) {
+        await _writeFile(file, raw);
+        await prefs.remove(_cacheKey(normalizedEmail));
+      }
+      return raw;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _writeFile(File file, String raw) async {
+    final temporary = File('${file.path}.tmp');
+    await temporary.writeAsString(raw, flush: true);
+    if (await file.exists()) await file.delete();
+    await temporary.rename(file.path);
+  }
+
+  static Future<void> _writeRaw(String normalizedEmail, String raw) async {
+    final file = await _fileForAccount(normalizedEmail);
+    if (file != null) {
+      try {
+        await _writeFile(file, raw);
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove(_cacheKey(normalizedEmail));
+        } catch (_) {}
+        return;
+      } catch (_) {
+        // Si el almacenamiento de archivos falla, conserva una copia compacta
+        // en SharedPreferences en lugar de perder los últimos datos.
+      }
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_cacheKey(normalizedEmail), raw);
+  }
+
+  /// Devuelve la copia local de la cuenta. Las filas dañadas se omiten sin
+  /// invalidar el resto del inventario.
   static Future<ChannelAdminSnapshot?> load({
     required String email,
   }) async {
@@ -348,10 +445,8 @@ class ChannelAdminSnapshotStore {
     if (normalizedEmail.isEmpty) return null;
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_cacheKey(normalizedEmail));
+      final raw = await _readRaw(normalizedEmail);
       if (raw == null || raw.isEmpty) return null;
-
       final decoded = jsonDecode(raw);
       if (decoded is! Map ||
           (decoded['email'] ?? '').toString().trim().toLowerCase() !=
@@ -369,7 +464,7 @@ class ChannelAdminSnapshotStore {
               SportsChannel.fromJson(Map<String, dynamic>.from(row)),
             );
           } on FormatException {
-            // La corrupción de una entrada no debe borrar las demás.
+            // Una fila dañada no debe borrar las demás.
           }
         }
       }
@@ -392,9 +487,9 @@ class ChannelAdminSnapshotStore {
       return ChannelAdminSnapshot(
         email: normalizedEmail,
         savedAt: (decoded['savedAt'] ?? '').toString(),
-        channels: channels.take(maxCachedChannelCatalogEntries).toList(
-          growable: false,
-        ),
+        channels: channels
+            .take(maxAdminCachedChannelCatalogEntries)
+            .toList(growable: false),
         sources: sources.toList(growable: false),
         hasChannels: channelRows is List,
         hasSources: sourceRows is List,
@@ -404,9 +499,8 @@ class ChannelAdminSnapshotStore {
     }
   }
 
-  /// Actualiza solo los conjuntos indicados. Las escrituras de una misma
-  /// cuenta se serializan para evitar que dos respuestas simultáneas lean
-  /// la misma versión anterior y se pisen entre sí.
+  /// Guarda el catálogo completo en almacenamiento privado de la aplicación.
+  /// Las escrituras de la misma cuenta se serializan para evitar perder cambios.
   static Future<void> save({
     required String email,
     List<SportsChannel>? channels,
@@ -421,9 +515,8 @@ class ChannelAdminSnapshotStore {
     final previousWrite = _pendingWrites[key] ?? Future<void>.value();
     final operation = previousWrite.catchError((Object _) {}).then<void>(
       (_) async {
-        final prefs = await SharedPreferences.getInstance();
         Map<String, dynamic> previous = <String, dynamic>{};
-        final raw = prefs.getString(key);
+        final raw = await _readRaw(normalizedEmail);
         if (raw != null && raw.isNotEmpty) {
           try {
             final decoded = jsonDecode(raw);
@@ -437,28 +530,26 @@ class ChannelAdminSnapshotStore {
           }
         }
 
-        await prefs.setString(
-          key,
-          jsonEncode(<String, Object>{
-            'email': normalizedEmail,
-            'savedAt': DateTime.now().toIso8601String(),
-            'channels': channels == null
-                ? (previous['channels'] is List
-                    ? previous['channels'] as List
-                    : <Object>[])
-                : channels
-                    .take(maxCachedChannelCatalogEntries)
-                    .map((channel) => channel.toJson())
-                    .toList(growable: false),
-            'sources': sources == null
-                ? (previous['sources'] is List
-                    ? previous['sources'] as List
-                    : <Object>[])
-                : sources
-                    .map((source) => source.toJson())
-                    .toList(growable: false),
-          }),
-        );
+        final updated = jsonEncode(<String, Object>{
+          'email': normalizedEmail,
+          'savedAt': DateTime.now().toIso8601String(),
+          'channels': channels == null
+              ? (previous['channels'] is List
+                  ? previous['channels'] as List
+                  : <Object>[])
+              : channels
+                  .take(maxAdminCachedChannelCatalogEntries)
+                  .map((channel) => channel.toJson())
+                  .toList(growable: false),
+          'sources': sources == null
+              ? (previous['sources'] is List
+                  ? previous['sources'] as List
+                  : <Object>[])
+              : sources
+                  .map((source) => source.toJson())
+                  .toList(growable: false),
+        });
+        await _writeRaw(normalizedEmail, updated);
       },
     );
     _pendingWrites[key] = operation;
