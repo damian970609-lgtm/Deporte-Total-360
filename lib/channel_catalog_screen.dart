@@ -3054,39 +3054,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                         ],
                       ),
                     ),
-                    _adminCard(
-                      child: Row(
-                        children: <Widget>[
-                          const Icon(Icons.live_tv_rounded, color: _channelGreen),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                const Text(
-                                  'EPG AUTOMÁTICA · 28 GUÍAS INTEGRADAS',
-                                  style: TextStyle(
-                                    color: _channelGreen,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'La APK combina las guías XMLTV regionales y deportivas en segundo plano. No necesitas añadir ni revisar direcciones aquí: si una guía falla, se omite y las demás continúan.',
-                                  style: TextStyle(
-                                    color: _channelMuted,
-                                    fontSize: 10,
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
                     _buildAdminCatalogSection(),
                     const SizedBox(height: 8),
                     _adminCard(
