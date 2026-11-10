@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:deporte_total_360/live_channels_screen.dart';
+import 'package:deporte_total_360/channel_catalog_screen.dart';
 import 'package:video_player/video_player.dart';
 
 void main() {
@@ -55,6 +56,44 @@ void main() {
     );
     expect(
       shouldAutomaticallyStartLiveSource(index: 0, isActive: false),
+      isFalse,
+    );
+  });
+
+  test('el reproductor En Vivo se libera al ocultar su pestaña y se conserva al permanecer activa', () {
+    expect(
+      shouldReleaseLiveVideoController(wasActive: true, isActive: false),
+      isTrue,
+    );
+    expect(
+      shouldReleaseLiveVideoController(wasActive: false, isActive: false),
+      isFalse,
+    );
+    expect(
+      shouldReleaseLiveVideoController(wasActive: true, isActive: true),
+      isFalse,
+    );
+  });
+
+  test('la vista previa de Canales deportivos solo inicializa en la pestaña visible', () {
+    expect(
+      shouldInitializeChannelInlinePlayer(isActive: true, hasChannel: true),
+      isTrue,
+    );
+    expect(
+      shouldInitializeChannelInlinePlayer(isActive: false, hasChannel: true),
+      isFalse,
+    );
+    expect(
+      shouldInitializeChannelInlinePlayer(isActive: true, hasChannel: false),
+      isFalse,
+    );
+    expect(
+      shouldReleaseChannelInlinePlayer(wasActive: true, isActive: false),
+      isTrue,
+    );
+    expect(
+      shouldReleaseChannelInlinePlayer(wasActive: false, isActive: true),
       isFalse,
     );
   });
