@@ -20,8 +20,8 @@ void main() {
 
     test('rejects invalid region codes', () async {
       SharedPreferences.setMockInitialValues({});
-      expect(
-        () => RegionalPlaybackPreferences.setRegionCode('Guyana'),
+      await expectLater(
+        RegionalPlaybackPreferences.setRegionCode('Guyana'),
         throwsArgumentError,
       );
     });
