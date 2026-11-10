@@ -260,6 +260,35 @@ void main() {
     expect(revoked.status, 'revoked');
   });
 
+  test('el inventario privado conserva más de 2.000 canales en la caché local', () async {
+    SharedPreferences.setMockInitialValues({});
+    final channels = List<SportsChannel>.generate(
+      2005,
+      (index) => SportsChannel(
+        id: 'cached-channel-$index',
+        identifier: 'cached-channel-$index',
+        name: 'Canal $index',
+        url: 'https://media.example/channel-$index.m3u8',
+        isSports: index.isEven,
+        visible: false,
+      ),
+      growable: false,
+    );
+
+    await ChannelAdminSnapshotStore.save(
+      email: 'admin@example.com',
+      channels: channels,
+    );
+    final restored = await ChannelAdminSnapshotStore.load(
+      email: 'admin@example.com',
+    );
+
+    expect(restored, isNotNull);
+    expect(restored!.channels, hasLength(2005));
+    expect(restored.channels.first.id, 'cached-channel-0');
+    expect(restored.channels.last.id, 'cached-channel-2004');
+  });
+
   test('las etiquetas compactas distinguen español e inglés', () {
     expect(channelLanguageDisplayLabel('es'), 'IDIOMA 🇪🇸');
     expect(channelLanguageDisplayLabel('en'), 'IDIOMA 🇺🇸');
