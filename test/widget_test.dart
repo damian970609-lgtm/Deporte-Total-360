@@ -26,8 +26,26 @@ class _AdminTestService extends ChannelCatalogService {
     int offset = 0,
   }) async {
     return const ChannelCatalogPage(
-      channels: <SportsChannel>[],
-      total: 0,
+      channels: <SportsChannel>[
+        SportsChannel(
+          id: 'sports-channel',
+          identifier: 'sports-channel',
+          name: 'ESPN Deportes',
+          url: 'https://media.example/espn.m3u8',
+          isSports: true,
+          visible: false,
+          language: 'es',
+        ),
+        SportsChannel(
+          id: 'general-channel',
+          identifier: 'general-channel',
+          name: 'Canal General',
+          url: 'https://media.example/general.m3u8',
+          isSports: false,
+          visible: false,
+        ),
+      ],
+      total: 2,
       offset: 0,
       hasMore: false,
     );
@@ -69,6 +87,16 @@ class _AdminTestService extends ChannelCatalogService {
       };
 
   @override
+  Future<Map<String, dynamic>> fetchTrialPassSummary() async =>
+      <String, dynamic>{
+        'available': 10,
+        'active': 0,
+        'expired': 0,
+        'revoked': 0,
+        'total': 10,
+      };
+
+  @override
   Future<void> deletePlaylistSource({required String id}) async {
     deletedSourceIds.add(id);
   }
@@ -106,6 +134,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('ADMINISTRACIÓN · DAMIÁN.APK'), findsOneWidget);
     expect(find.text('ENTRAR CON GOOGLE'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('el panel privado muestra canales deportivos y generales en un inventario único', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final service = _AdminTestService(autoSignIn: true);
+    await tester.pumpWidget(
+      MaterialApp(home: ChannelAdminScreen(service: service)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsOneWidget);
+    expect(find.text('Canal General'), findsOneWidget);
+    expect(find.text('ESPN Deportes'), findsOneWidget);
+    expect(find.text('GENERAL / SIN CLASIFICAR'), findsOneWidget);
+    expect(find.text('EPG AUTOMÁTICA · 28 GUÍAS INTEGRADAS'), findsOneWidget);
+    expect(find.text('2 CANALES'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

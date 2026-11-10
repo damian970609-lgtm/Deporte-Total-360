@@ -2166,7 +2166,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     try {
       await _service.refreshSources();
       await _loadAdmin(showLoading: false);
-      _message('Actualización solicitada al servidor.');
+      _message('Se solicitó reimportar todas las listas guardadas. Se conservarán los canales deportivos y generales; el inventario se actualizará por bloques.');
     } catch (error) {
       _message(error.toString());
     } finally {
@@ -2746,6 +2746,170 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     );
   }
 
+  Widget _buildAdminCatalogSection() {
+    final loadedSports = _channels.where((channel) => channel.isSports).length;
+    final loadedGeneral = _channels.length - loadedSports;
+    final totalLabel = _catalogTotalIsEstimate
+        ? 'MÁS DE ' + _catalogTotal.toString()
+        : _catalogTotal.toString() + ' CANALES';
+
+    return _adminCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              const Expanded(
+                child: Text(
+                  'INVENTARIO COMPLETO DE CANALES',
+                  style: TextStyle(
+                    color: _channelCyan,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Actualizar inventario',
+                onPressed: _loading ? null : _loadAdmin,
+                icon: const Icon(Icons.sync_rounded, color: _channelGreen),
+              ),
+            ],
+          ),
+          Text(
+            'Incluye canales deportivos y generales de todas las listas importadas. Desliza por el inventario y carga los siguientes bloques para confirmar el total exacto. Solo los deportivos pueden publicarse en Canales deportivos.',
+            style: const TextStyle(
+              color: _channelMuted,
+              fontSize: 10,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: _licenseMetric(
+                  'TOTAL EN CATÁLOGO',
+                  totalLabel,
+                  _channelCyan,
+                ),
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: _licenseMetric(
+                  'CARGADOS',
+                  _channels.length.toString(),
+                  Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: _licenseMetric(
+                  'DEPORTIVOS',
+                  loadedSports.toString(),
+                  _channelGreen,
+                ),
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: _licenseMetric(
+                  'GENERALES',
+                  loadedGeneral.toString(),
+                  _channelYellow,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _searchController,
+            onSubmitted: (_) => _searchChannels(),
+            textInputAction: TextInputAction.search,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              labelText: 'Buscar en todos los canales',
+              hintText: 'ESPN, noticias, entretenimiento...',
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                color: _channelCyan,
+              ),
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  if (_searchController.text.isNotEmpty)
+                    IconButton(
+                      tooltip: 'Limpiar búsqueda',
+                      onPressed: _loading ? null : _clearChannelSearch,
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: _channelMuted,
+                      ),
+                    ),
+                  IconButton(
+                    tooltip: 'Buscar canal',
+                    onPressed: _loading ? null : _searchChannels,
+                    icon: const Icon(
+                      Icons.search_rounded,
+                      color: _channelGreen,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 9),
+          if (_error != null)
+            Text(
+              _error!,
+              style: const TextStyle(
+                color: _channelPink,
+                fontSize: 11,
+              ),
+            ),
+          if (_loading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: CircularProgressIndicator(
+                  color: _channelCyan,
+                ),
+              ),
+            ),
+          for (var i = 0; i < _channels.length; i++)
+            _buildAdminChannel(_channels[i], i),
+          if (_hasMore)
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _loading ? null : _loadMore,
+                icon: const Icon(Icons.expand_more_rounded),
+                label: Text(
+                  'CARGAR SIGUIENTE BLOQUE · ' + _channels.length.toString() +
+                      (_catalogTotalIsEstimate ? '+' : ''),
+                ),
+              ),
+            ),
+          if (!_hasMore && _channels.isNotEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text(
+                'Inventario completo cargado. El total mostrado ya es exacto.',
+                style: TextStyle(
+                  color: _channelGreen,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final loggedIn = _email != null || _service.signedInEmail != null;
@@ -2867,6 +3031,41 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                         ],
                       ),
                     ),
+                    _adminCard(
+                      child: Row(
+                        children: <Widget>[
+                          const Icon(Icons.live_tv_rounded, color: _channelGreen),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                const Text(
+                                  'EPG AUTOMÁTICA · 28 GUÍAS INTEGRADAS',
+                                  style: TextStyle(
+                                    color: _channelGreen,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'La APK combina las guías XMLTV regionales y deportivas en segundo plano. No necesitas añadir ni revisar direcciones aquí: si una guía falla, se omite y las demás continúan.',
+                                  style: TextStyle(
+                                    color: _channelMuted,
+                                    fontSize: 10,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildAdminCatalogSection(),
+                    const SizedBox(height: 8),
                     _adminCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3011,7 +3210,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                           ),
                           const SizedBox(height: 5),
                           const Text(
-                            'Fuentes deportivas públicas y listas generales filtradas por deporte. Añade solo las que necesites; una lista eliminada no volverá a registrarse automáticamente.',
+                            'Cada lista se importa completa: canales deportivos y generales con enlaces multimedia compatibles. La clasificación deportiva solo controla qué canales pueden publicarse en la pestaña Canales deportivos.',
                             style: TextStyle(
                               color: _channelMuted,
                               fontSize: 10,
@@ -3024,7 +3223,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             isExpanded: true,
                             dropdownColor: _channelPanel2,
                             decoration: const InputDecoration(
-                              labelText: 'Elegir fuente deportiva',
+                              labelText: 'Elegir fuente de lista',
                             ),
                             items: channelSportsPlaylistPresets
                                 .map((preset) => DropdownMenuItem<String>(
@@ -3049,7 +3248,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             child: FilledButton.icon(
                               onPressed: _working ? null : _addSportsPreset,
                               icon: const Icon(Icons.add_link_rounded),
-                              label: const Text('AÑADIR FUENTE DEPORTIVA'),
+                              label: const Text('AÑADIR FUENTE DE LISTA'),
                               style: FilledButton.styleFrom(
                                 backgroundColor: _channelCyan,
                                 foregroundColor: _channelBg,
@@ -3730,92 +3929,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             ],
                           ),
                         ),
-                    Row(
-                      children: <Widget>[
-                        const Expanded(
-                          child: Text(
-                            'CATÁLOGO GENERAL',
-                            style: TextStyle(
-                              color: _channelCyan,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          (_catalogTotalIsEstimate ? 'Más de ' : '') +
-                              _catalogTotal.toString() + ' total · ' +
-                              _channels.length.toString() + ' cargados',
-                          style: const TextStyle(
-                            color: _channelMuted,
-                            fontSize: 9,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _searchController,
-                      onSubmitted: (_) => _searchChannels(),
-                      textInputAction: TextInputAction.search,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: 'Buscar canal por nombre',
-                        hintText: 'Ej. ESPN, FOX Sports, TUDN...',
-                        prefixIcon: const Icon(
-                          Icons.search_rounded,
-                          color: _channelCyan,
-                        ),
-                        suffixIcon: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            if (_searchController.text.isNotEmpty)
-                              IconButton(
-                                tooltip: 'Limpiar búsqueda',
-                                onPressed: _loading ? null : _clearChannelSearch,
-                                icon: const Icon(
-                                  Icons.close_rounded,
-                                  color: _channelMuted,
-                                ),
-                              ),
-                            IconButton(
-                              tooltip: 'Buscar canal',
-                              onPressed: _loading ? null : _searchChannels,
-                              icon: const Icon(
-                                Icons.search_rounded,
-                                color: _channelGreen,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 9),
-                    if (_error != null)
-                      Text(
-                        _error!,
-                        style: const TextStyle(
-                          color: _channelPink,
-                          fontSize: 11,
-                        ),
-                      ),
-                    if (_loading)
-                      const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(20),
-                          child: CircularProgressIndicator(
-                            color: _channelCyan,
-                          ),
-                        ),
-                      ),
-                    for (var i = 0; i < _channels.length; i++)
-                      _buildAdminChannel(_channels[i], i),
-                    if (_hasMore)
-                      OutlinedButton.icon(
-                        onPressed: _loading ? null : _loadMore,
-                        icon: const Icon(Icons.expand_more_rounded),
-                        label: const Text('CARGAR MÁS CANALES'),
-                      ),
+
                   ],
                 ),
               ),

@@ -56,10 +56,14 @@ señal; no puede crear resoluciones que el proveedor no publique.
 El acceso de diez pulsaciones sobre `DAMIÁN.APK` abre el panel privado de
 importación. Inicia sesión con Google y añade listas M3U, PLS, XSPF/XML, JSON o
 TXT mediante HTTPS; confirma que tienes autorización para distribuir las
-señales. Cloudflare descarga y procesa las listas en segundo plano; los nuevos
+señales. Cloudflare descarga y procesa las listas en segundo plano; el inventario privado conserva
+todos los canales compatibles, tanto deportivos como generales. La clasificación
+deportiva no descarta entradas: solo determina cuáles pueden publicarse en la
+pestaña pública Canales deportivos. El panel privado muestra el total y pagina
+el inventario completo; el total se confirma al cargar el último bloque. Los nuevos
 canales permanecen ocultos. Desde el catálogo privado puedes probar una señal,
-copiar su identificador o URL, asignar idioma, publicarla u ocultarla y eliminar
-un canal permanentemente. El borrado bloquea la URL para que las actualizaciones
+copiar su identificador o URL, asignar idioma, publicar u ocultar los canales
+deportivos y eliminar un canal permanentemente. El borrado bloquea la URL para que las actualizaciones
 posteriores no vuelvan a añadir esa misma señal.
 
 Configura `GOOGLE_OAUTH_CLIENT_ID` como secreto de GitHub Actions del
@@ -164,3 +168,6 @@ rechaza la autenticación antes de abrir Google cuando los dos no coinciden.
 
 Los errores de Google muestran el código y la descripción disponibles sin
 registrar contraseñas, credenciales ni tokens.
+
+
+Las 28 guías EPG/XMLTV integradas se combinan automáticamente dentro de la APK. Sus direcciones no aparecen en el panel Damián APK; si una guía no responde o contiene XML inválido, se omite esa fuente y se procesan las demás. Las guías personalizadas guardadas anteriormente se conservan junto con las fuentes automáticas.

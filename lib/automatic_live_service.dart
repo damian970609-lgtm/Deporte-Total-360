@@ -209,6 +209,15 @@ class AutoLiveSettings {
         epg.trim() == previousDefaultAutoLiveEpgUrl.trim() ||
         epg.trim() == previousDefaultAutoLiveEpgUrlV2.trim()) {
       epg = defaultAutoLiveEpgUrl;
+    }
+
+    // Las guías integradas siempre se cargan automáticamente. Las direcciones
+    // personalizadas guardadas en versiones anteriores se conservan y se
+    // combinan sin duplicados, sin exponer la lista de EPG en el panel privado.
+    final automaticEpgUrls = _splitPlaylistUrls(defaultAutoLiveEpgUrl);
+    final savedEpgUrls = _splitPlaylistUrls(epg).where(isSafeHttpUrl);
+    epg = <String>{...automaticEpgUrls, ...savedEpgUrls}.join('\\n');
+    if (prefs.getString(_epgUrlKey) != epg) {
       await prefs.setString(_epgUrlKey, epg);
     }
 

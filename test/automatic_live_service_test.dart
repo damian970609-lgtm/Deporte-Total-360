@@ -62,7 +62,9 @@ void main() {
         authorizationConfirmed: true,
       );
       final preserved = await AutoLiveSettings.load();
-      expect(preserved.epgUrl, custom);
+      expect(preserved.epgUrls, contains(custom));
+      expect(preserved.epgUrls, contains('https://iptv-epg.org/files/epg-es.xml'));
+      expect(preserved.epgUrls.toSet(), hasLength(preserved.epgUrls.length));
     });
   });
 
