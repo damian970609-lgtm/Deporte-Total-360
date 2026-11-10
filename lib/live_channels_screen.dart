@@ -2010,7 +2010,12 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
     );
     _controller = controller;
     try {
-      await controller.initialize();
+      await controller.initialize().timeout(
+        const Duration(seconds: 25),
+        onTimeout: () => throw TimeoutException(
+          'El reproductor tardó demasiado en preparar la señal.',
+        ),
+      );
       if (!mounted ||
           !widget.isActive ||
           requestId != _controllerGeneration ||
@@ -2034,7 +2039,12 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
         _videoTracks = tracks;
         _loading = false;
       });
-      await controller.play();
+      await controller.play().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw TimeoutException(
+          'La señal tardó demasiado en iniciar la reproducción.',
+        ),
+      );
       if (!mounted ||
           !widget.isActive ||
           requestId != _controllerGeneration ||
