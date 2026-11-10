@@ -8,6 +8,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import 'package:volume_controller/volume_controller.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'channel_catalog_service.dart';
 import 'channel_playlist_presets.dart';
@@ -3145,6 +3146,114 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     );
   }
 
+  Future<void> _openTvGuideReference(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasAuthority || uri.scheme != 'https') {
+      _message('La dirección de TV Guide no es válida.');
+      return;
+    }
+    try {
+      final opened = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) _message('No se pudo abrir la página de TV Guide.');
+    } catch (error) {
+      _message('No se pudo abrir TV Guide: $error');
+    }
+  }
+
+  Widget _buildTvGuideReferenceCard() => Padding(
+        padding: const EdgeInsets.fromLTRB(13, 0, 13, 8),
+        child: _adminCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  const Icon(
+                    Icons.travel_explore_rounded,
+                    color: _channelGreen,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'DÓNDE VER CADA EVENTO',
+                      style: TextStyle(
+                        color: _channelGreen,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _channelYellow.withAlpha(15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: _channelYellow.withAlpha(70)),
+                    ),
+                    child: const Text(
+                      'FUENTE EXTERNA',
+                      style: TextStyle(
+                        color: _channelYellow,
+                        fontSize: 7,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 7),
+              const Text(
+                'TV GUIDE API · programación deportiva y canales que transmiten cada partido. La app podrá comparar sus emisoras con tus canales visibles (tvg-id, tvg-name y nombre) y usar la URL IPTV original que ya seleccionaste.',
+                style: TextStyle(
+                  color: _channelMuted,
+                  fontSize: 9,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 7),
+              const Text(
+                'La consulta deportiva en directo requiere una clave Live y un endpoint seguro en Cloudflare. La clave no debe guardarse dentro de la APK. Para Guyana conviene consultar también mercados internacionales porque la cobertura local publicada es limitada.',
+                style: TextStyle(
+                  color: _channelYellow,
+                  fontSize: 8,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 7,
+                runSpacing: 6,
+                children: <Widget>[
+                  OutlinedButton.icon(
+                    key: const ValueKey<String>('tvguide-open-site'),
+                    onPressed: () => _openTvGuideReference(
+                      'https://tvguideapi.com/',
+                    ),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                    label: const Text('ABRIR TV GUIDE API'),
+                  ),
+                  OutlinedButton.icon(
+                    key: const ValueKey<String>('tvguide-open-broadcast-docs'),
+                    onPressed: () => _openTvGuideReference(
+                      'https://tvguideapi.com/documentation/events-id-broadcasts',
+                    ),
+                    icon: const Icon(Icons.menu_book_rounded, size: 14),
+                    label: const Text('DOCUMENTACIÓN DE CANALES'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+
   Widget _buildIptvScreen() {
     final query = _iptvSearchController.text.trim().toLowerCase();
     final rows = _iptvChannels.where((channel) {
@@ -3168,6 +3277,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
     return Column(
       children: <Widget>[
+        _buildTvGuideReferenceCard(),
         Padding(
           padding: const EdgeInsets.fromLTRB(13, 2, 13, 8),
           child: _adminCard(
