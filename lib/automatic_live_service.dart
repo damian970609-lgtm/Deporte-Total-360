@@ -340,7 +340,7 @@ List<String> parseBroadcastChannelNames(dynamic value) {
   void add(dynamic item) {
     if (item == null) return;
     if (item is String) {
-      for (final part in item.split(RegExp(r'[|;,\\r\\n]+'))) {
+      for (final part in item.split(RegExp(r'[|;,\r\n]+'))) {
         final name = part.trim();
         if (name.isNotEmpty) names.add(name);
       }
