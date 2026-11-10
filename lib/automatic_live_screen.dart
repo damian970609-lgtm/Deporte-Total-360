@@ -320,6 +320,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
           event.sport,
           if (event.competition.isNotEmpty) event.competition,
           teams, languageLabel, candidate.channelName,
+          candidate.programmeTitle,
           candidate.verified
               ? 'SEÑAL VERIFICADA'
               : 'SEÑAL POR COMPROBAR EN REPRODUCTOR',
