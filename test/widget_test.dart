@@ -18,6 +18,21 @@ Future<void> _pumpIptvLoading(WidgetTester tester) async {
   await tester.pump();
 }
 
+Future<void> _scrollIptvToTop(WidgetTester tester) async {
+  final listFinder = find.byKey(
+    const ValueKey<String>('channel-admin-iptv-list'),
+  );
+  final scrollableFinder = find.descendant(
+    of: listFinder,
+    matching: find.byType(Scrollable),
+  ).first;
+  final position = tester.state<ScrollableState>(scrollableFinder).position;
+  if (position.hasContentDimensions) {
+    position.jumpTo(0);
+  }
+  await tester.pump();
+}
+
 Future<void> _waitForEnabledIptvButton(
   WidgetTester tester,
   Finder buttonFinder,
@@ -263,6 +278,7 @@ void main() {
     await _pumpIptvLoading(tester);
 
     expect(service.refreshRequested, isTrue);
+    await _scrollIptvToTop(tester);
     expect(find.byKey(const ValueKey<String>('iptv-filter-hidden')), findsOneWidget);
 
     final sportsAction = find.byKey(
