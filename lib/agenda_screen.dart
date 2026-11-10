@@ -1633,9 +1633,7 @@ class _AgendaVideoPlayerScreenState extends State<AgendaVideoPlayerScreen> {
         }
         setState(() {
           _loading = false;
-          _error = index == 0
-              ? null
-              : 'Se utiliza una fuente alternativa declarada para $region: ${candidate.label.isEmpty ? candidate.url : candidate.label}.';
+          _error = null;
         });
         return;
       } catch (error) {
