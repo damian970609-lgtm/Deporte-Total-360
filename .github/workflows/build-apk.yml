@@ -29,6 +29,11 @@ on:
 permissions:
   contents: write
 
+# Evita ejecutar varias compilaciones obsoletas de la misma rama en paralelo.
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 defaults:
   run:
     shell: bash
