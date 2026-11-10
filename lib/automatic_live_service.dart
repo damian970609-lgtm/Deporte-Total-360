@@ -340,7 +340,7 @@ List<String> parseBroadcastChannelNames(dynamic value) {
   void add(dynamic item) {
     if (item == null) return;
     if (item is String) {
-      for (final part in item.split(RegExp(r'[|;,\r\n]+'))) {
+      for (final part in item.split(RegExp(r'[|;,\\r\\n]+'))) {
         final name = part.trim();
         if (name.isNotEmpty) names.add(name);
       }
@@ -354,17 +354,27 @@ List<String> parseBroadcastChannelNames(dynamic value) {
     }
     if (item is Map) {
       final row = Map<String, dynamic>.from(item);
-      final name = (row['name'] ?? row['channel'] ?? row['network'] ??
-              row['broadcaster'] ?? row['title'] ?? row['station'] ?? '')
-          .toString()
-          .trim();
-      if (name.isNotEmpty) {
-        names.add(name);
-        return;
+      const directKeys = <String>[
+        'name', 'channelName', 'channel_name', 'networkName',
+        'network_name', 'broadcasterName', 'broadcaster_name',
+        'displayName', 'display_name', 'shortName', 'short_name',
+        'title', 'stationName', 'station_name',
+      ];
+      for (final key in directKeys) {
+        final candidate = row[key];
+        if (candidate is String && candidate.trim().isNotEmpty) {
+          names.add(candidate.trim());
+          return;
+        }
       }
-      for (final key in const <String>[
-        'channels', 'networks', 'broadcasters', 'broadcasts', 'items',
-      ]) {
+
+      const nestedKeys = <String>[
+        'channels', 'channel', 'networks', 'network',
+        'broadcasters', 'broadcaster', 'broadcasts', 'broadcast',
+        'stations', 'station', 'television', 'tv', 'items',
+        'data', 'results', 'names', 'channelNames', 'channel_names',
+      ];
+      for (final key in nestedKeys) {
         if (row.containsKey(key)) add(row[key]);
       }
     }
