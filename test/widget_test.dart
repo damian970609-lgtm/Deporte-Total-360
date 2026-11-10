@@ -18,6 +18,37 @@ Future<void> _pumpIptvLoading(WidgetTester tester) async {
   await tester.pump();
 }
 
+Future<void> _scrollIptvUntilVisible(
+  WidgetTester tester,
+  Finder target,
+) async {
+  final listFinder = find.byKey(
+    const ValueKey<String>('channel-admin-iptv-list'),
+  );
+  final scrollableFinder = find.descendant(
+    of: listFinder,
+    matching: find.byType(Scrollable),
+  ).first;
+
+  for (var attempt = 0; attempt < 16; attempt++) {
+    if (target.evaluate().isNotEmpty) {
+      await tester.ensureVisible(target);
+      await tester.pump();
+      if (target.hitTestable().evaluate().isNotEmpty) return;
+    }
+
+    final position = tester.state<ScrollableState>(scrollableFinder).position;
+    if (!position.hasContentDimensions ||
+        position.pixels >= position.maxScrollExtent) {
+      break;
+    }
+    position.jumpTo(
+      (position.pixels + 480).clamp(0.0, position.maxScrollExtent),
+    );
+    await tester.pump();
+  }
+}
+
 class _AdminTestService extends ChannelCatalogService {
   _AdminTestService({this.autoSignIn = true, this.adminTotal = 2});
 
@@ -207,15 +238,27 @@ void main() {
     expect(find.textContaining('Inventario completo:'), findsOneWidget);
 
     final reimport = find.text('REIMPORTAR TODAS LAS LISTAS GUARDADAS');
-    expect(reimport, findsOneWidget);
+    await _scrollIptvUntilVisible(tester, reimport);
+    expect(reimport.hitTestable(), findsOneWidget);
     await tester.tap(reimport);
     await _pumpIptvLoading(tester);
 
     expect(service.refreshRequested, isTrue);
-    expect(find.text('Canal General'), findsOneWidget);
-    expect(find.text('ESPN Deportes'), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('iptv-filter-hidden')), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('iptv-channel-actions-sports-channel')), findsOneWidget);
+
+    final sportsAction = find.byKey(
+      const ValueKey<String>('iptv-channel-actions-sports-channel'),
+    );
+    await _scrollIptvUntilVisible(tester, sportsAction);
+    expect(sportsAction.hitTestable(), findsOneWidget);
+    expect(find.text('ESPN Deportes'), findsOneWidget);
+
+    final generalAction = find.byKey(
+      const ValueKey<String>('iptv-classify-channel-general-channel'),
+    );
+    await _scrollIptvUntilVisible(tester, generalAction);
+    expect(generalAction.hitTestable(), findsOneWidget);
+    expect(find.text('Canal General'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -323,11 +366,11 @@ void main() {
       'Canal General',
     );
     await tester.tap(find.byKey(const ValueKey<String>('iptv-search-button')));
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(find.text('Mostrando 1 de 2005 canales.'), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('iptv-search-clear')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey<String>('iptv-search-clear')));
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(find.text('Mostrando 2005 de 2005 canales.'), findsOneWidget);
 
     final iptvList = find.byKey(
@@ -336,20 +379,14 @@ void main() {
     final addSportsChannel = find.byKey(
       const ValueKey<String>('iptv-add-channel-sports-channel'),
     );
-    for (var attempt = 0; attempt < 8 && addSportsChannel.evaluate().isEmpty; attempt++) {
-      await tester.drag(iptvList, const Offset(0, -500));
-      await tester.pumpAndSettle();
-    }
-    expect(addSportsChannel, findsOneWidget);
+    await _scrollIptvUntilVisible(tester, addSportsChannel);
+    expect(addSportsChannel.hitTestable(), findsOneWidget);
 
     final classifyGeneralChannel = find.byKey(
       const ValueKey<String>('iptv-classify-channel-general-channel'),
     );
-    for (var attempt = 0; attempt < 8 && classifyGeneralChannel.evaluate().isEmpty; attempt++) {
-      await tester.drag(iptvList, const Offset(0, -500));
-      await tester.pumpAndSettle();
-    }
-    expect(classifyGeneralChannel, findsOneWidget);
+    await _scrollIptvUntilVisible(tester, classifyGeneralChannel);
+    expect(classifyGeneralChannel.hitTestable(), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
