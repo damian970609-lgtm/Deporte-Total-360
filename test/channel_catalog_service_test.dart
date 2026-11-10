@@ -643,6 +643,51 @@ void main() {
     client.close();
   });
 
+  test('el catálogo privado recupera un token nuevo tras HTTP 401', () async {
+    var token = 'google-token-expirado';
+    var attempts = 0;
+    final client = MockClient((request) async {
+      attempts++;
+      if (attempts == 1) {
+        expect(
+          request.headers['Authorization'],
+          'Bearer google-token-expirado',
+        );
+        token = 'google-token-renovado';
+        return http.Response(
+          jsonEncode(<String, Object>{
+            'error': <String, String>{'message': 'Token expirado'},
+          }),
+          401,
+        );
+      }
+      expect(
+        request.headers['Authorization'],
+        'Bearer google-token-renovado',
+      );
+      return http.Response(
+        jsonEncode(<String, Object>{
+          'channels': <Object>[],
+          'total': 0,
+          'offset': 0,
+          'hasMore': false,
+        }),
+        200,
+      );
+    });
+    final service = ChannelCatalogService(
+      client: client,
+      accessTokenProvider: () => token,
+    );
+
+    final page = await service.fetchAdminChannelPage();
+
+    expect(attempts, 2);
+    expect(page.channels, isEmpty);
+    expect(page.total, 0);
+    client.close();
+  });
+
   test('editar una lista actualiza su nombre y URL mediante PUT autenticado', () async {
     http.Request? sent;
     final client = MockClient((request) async {
