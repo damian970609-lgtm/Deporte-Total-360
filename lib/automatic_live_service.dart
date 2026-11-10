@@ -331,6 +331,49 @@ class SportsAgendaParticipant {
   }
 }
 
+
+/// Normaliza los formatos habituales de una lista de emisoras devuelta por
+/// un proveedor deportivo: strings, listas y objetos {name/channel/network}.
+List<String> parseBroadcastChannelNames(dynamic value) {
+  final names = <String>{};
+
+  void add(dynamic item) {
+    if (item == null) return;
+    if (item is String) {
+      for (final part in item.split(RegExp(r'[|;,\\n]+'))) {
+        final name = part.trim();
+        if (name.isNotEmpty) names.add(name);
+      }
+      return;
+    }
+    if (item is List) {
+      for (final child in item) {
+        add(child);
+      }
+      return;
+    }
+    if (item is Map) {
+      final row = Map<String, dynamic>.from(item);
+      final name = (row['name'] ?? row['channel'] ?? row['network'] ??
+              row['broadcaster'] ?? row['title'] ?? row['station'] ?? '')
+          .toString()
+          .trim();
+      if (name.isNotEmpty) {
+        names.add(name);
+        return;
+      }
+      for (final key in const <String>[
+        'channels', 'networks', 'broadcasters', 'broadcasts', 'items',
+      ]) {
+        if (row.containsKey(key)) add(row[key]);
+      }
+    }
+  }
+
+  add(value);
+  return names.toList(growable: false);
+}
+
 class SportsAgendaEvent {
   const SportsAgendaEvent({
     required this.id,
@@ -354,6 +397,7 @@ class SportsAgendaEvent {
     this.providerSeasonId,
     this.providerSeriesId,
     this.endsAt,
+    this.broadcastChannels = const <String>[],
   });
   final String id;
   final String title;
@@ -377,6 +421,10 @@ class SportsAgendaEvent {
   final DateTime? endsAt;
   final String detailUrl;
 
+  /// Canales de TV declarados por el proveedor del evento, si el proveedor
+  /// ofrece ese dato. No se infieren ni se inventan cuando falta.
+  final List<String> broadcastChannels;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     'id': id,
     'title': title,
@@ -399,6 +447,7 @@ class SportsAgendaEvent {
     'startsAt': startsAt.toIso8601String(),
     'endsAt': endsAt?.toIso8601String(),
     'detailUrl': detailUrl,
+    'broadcastChannels': broadcastChannels,
   };
 
   static SportsAgendaEvent? fromJson(dynamic value) {
@@ -418,6 +467,9 @@ class SportsAgendaEvent {
             .whereType<SportsAgendaParticipant>()
             .toList(growable: false)
         : <SportsAgendaParticipant>[];
+    final rawBroadcastChannels = row['broadcastChannels'] ??
+        row['tvChannels'] ?? row['broadcasters'] ??
+        row['broadcasts'] ?? row['networks'] ?? row['television'];
     final homeTeam = (row['homeTeam'] ?? '').toString();
     final awayTeam = (row['awayTeam'] ?? '').toString();
     final homeLogo = _safeAgendaImageUrl(
@@ -455,6 +507,7 @@ class SportsAgendaEvent {
       startsAt: startsAt.toLocal(),
       endsAt: end?.toLocal(),
       detailUrl: detailUrl,
+      broadcastChannels: parseBroadcastChannelNames(rawBroadcastChannels),
     );
   }
 }
