@@ -19,6 +19,7 @@ class SportsApiService {
   static const Duration _cacheDuration = Duration(minutes: 3);
   static const Duration _diskFallbackDuration = Duration(days: 7);
   static const String _diskCacheFolder = 'dt360_sports_api_cache';
+  static int _diskWritesSincePrune = 0;
 
   // Reduce las solicitudes repetidas desde este dispositivo.
   // El límite final también depende del uso de otros dispositivos.
@@ -679,6 +680,21 @@ class SportsApiService {
     }
   }
 
+  static Future<void> _pruneExpiredDiskCache(Directory directory) async {
+    try {
+      final cutoff = DateTime.now().subtract(_diskFallbackDuration);
+      await for (final entity in directory.list(followLinks: false)) {
+        if (entity is! File || !entity.path.endsWith('.json')) continue;
+        try {
+          final modified = (await entity.stat()).modified;
+          if (modified.isBefore(cutoff)) await entity.delete();
+        } catch (_) {
+          // La limpieza no debe interrumpir la consulta deportiva.
+        }
+      }
+    } catch (_) {}
+  }
+
   static Future<void> _writeDiskCache(
     String url,
     List<Map<String, dynamic>> rows,
@@ -693,8 +709,12 @@ class SportsApiService {
       try {
         final temporary = File('${file.path}.tmp');
         await temporary.writeAsString(raw, flush: true);
-        if (await file.exists()) await file.delete();
         await temporary.rename(file.path);
+        _diskWritesSincePrune++;
+        if (_diskWritesSincePrune >= 50) {
+          _diskWritesSincePrune = 0;
+          await _pruneExpiredDiskCache(file.parent);
+        }
         return;
       } catch (_) {
         // No descarta una respuesta correcta si el disco está lleno.
