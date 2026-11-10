@@ -19,6 +19,7 @@ class SportsApiService {
   static const Duration _cacheDuration = Duration(minutes: 3);
   static const Duration _diskFallbackDuration = Duration(days: 7);
   static const String _diskCacheFolder = 'dt360_sports_api_cache';
+  static const int _maxMemoryCachedResponses = 100;
   static int _diskWritesSincePrune = 0;
 
   // Reduce las solicitudes repetidas desde este dispositivo.
@@ -588,10 +589,7 @@ class SportsApiService {
     if (disk != null) {
       final age = DateTime.now().difference(disk.savedAt);
       if (!age.isNegative && age <= _cacheDuration) {
-        _cache[cacheKey] = _CachedRows(
-          disk.rows,
-          DateTime.now().add(_cacheDuration),
-        );
+        _rememberRows(cacheKey, disk.rows, lifetime: _cacheDuration);
         return disk.rows;
       }
     }
@@ -602,9 +600,10 @@ class SportsApiService {
       if (disk != null) {
         final age = DateTime.now().difference(disk.savedAt);
         if (!age.isNegative && age <= _diskFallbackDuration) {
-          _cache[cacheKey] = _CachedRows(
+          _rememberRows(
+            cacheKey,
             disk.rows,
-            DateTime.now().add(const Duration(minutes: 1)),
+            lifetime: const Duration(minutes: 1),
           );
           return disk.rows;
         }
@@ -614,6 +613,25 @@ class SportsApiService {
       }
       rethrow;
     }
+  }
+
+  static void _rememberRows(
+    String key,
+    List<Map<String, dynamic>> rows, {
+    required Duration lifetime,
+  }) {
+    if (!_cache.containsKey(key) && _cache.length >= _maxMemoryCachedResponses) {
+      String? oldestKey;
+      DateTime? oldestExpiry;
+      _cache.forEach((candidate, value) {
+        if (oldestExpiry == null || value.expiresAt.isBefore(oldestExpiry)) {
+          oldestKey = candidate;
+          oldestExpiry = value.expiresAt;
+        }
+      });
+      if (oldestKey != null) _cache.remove(oldestKey);
+    }
+    _cache[key] = _CachedRows(rows, DateTime.now().add(lifetime));
   }
 
   static String _diskCacheHash(String value) {
@@ -740,10 +758,7 @@ class SportsApiService {
       if (response.statusCode == 204) {
         const emptyRows = <Map<String, dynamic>>[];
 
-        _cache[cacheKey] = _CachedRows(
-          emptyRows,
-          DateTime.now().add(_cacheDuration),
-        );
+        _rememberRows(cacheKey, emptyRows, lifetime: _cacheDuration);
         await _writeDiskCache(cacheKey, emptyRows);
         return emptyRows;
       }
@@ -850,10 +865,7 @@ class SportsApiService {
           )
           .toList(growable: false);
 
-      _cache[cacheKey] = _CachedRows(
-        rows,
-        DateTime.now().add(_cacheDuration),
-      );
+      _rememberRows(cacheKey, rows, lifetime: _cacheDuration);
       await _writeDiskCache(cacheKey, rows);
       return rows;
     } on TimeoutException {
