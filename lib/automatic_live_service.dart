@@ -1530,11 +1530,16 @@ class AutomaticLiveService {
       report('channels_empty', 'Las guías respondieron, pero no quedó ningún canal directo válido para asociar.');
       return <ScheduledLiveEvent>[];
     }
-    if (catalog.programmes.isEmpty) {
-      report('epg_empty', 'Se encontraron canales, pero ninguna guía EPG entregó programas. No se puede asociar una señal por horario solamente.');
+    if (eligibleEvents.isEmpty) {
+      report(
+        'outside_window',
+        'EPG y canales deportivos precargados. La búsqueda comenzará diez minutos antes y se repetirá cada dos minutos hasta el final del evento.',
+      );
       return <ScheduledLiveEvent>[];
     }
 
+    // Una EPG vacía no detiene el rastreo: los broadcasters y los metadatos
+    // de los canales seleccionados pueden localizar la señal por otras vías.
     final byId = <String, List<M3uChannel>>{};
     final byName = <String, List<M3uChannel>>{};
     for (final channel in catalog.channels) {
