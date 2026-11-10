@@ -1416,6 +1416,16 @@ class SportsApiAppService {
         startsAt: start,
         detailUrl:
             'https://deporte-total-360-api.damian970609.workers.dev/api/sportsapi/races/$id',
+        broadcastChannels: parseBroadcastChannelNames(
+          session['broadcastChannels'] ??
+              session['tvChannels'] ??
+              session['broadcasters'] ??
+              session['broadcasts'] ??
+              row['broadcastChannels'] ??
+              row['tvChannels'] ??
+              row['broadcasters'] ??
+              row['broadcasts'],
+        ),
       ));
     }
 
@@ -1447,6 +1457,12 @@ class SportsApiAppService {
             startsAt: start,
             detailUrl:
                 'https://deporte-total-360-api.damian970609.workers.dev/api/sportsapi/races/$id',
+            broadcastChannels: parseBroadcastChannelNames(
+              row['broadcastChannels'] ??
+                  row['tvChannels'] ??
+                  row['broadcasters'] ??
+                  row['broadcasts'],
+            ),
           ));
         }
       }
