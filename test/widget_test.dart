@@ -59,23 +59,20 @@ Future<void> _scrollIptvUntilVisible(
     matching: find.byType(Scrollable),
   ).first;
 
-  for (var attempt = 0; attempt < 16; attempt++) {
-    if (target.evaluate().isNotEmpty) {
-      await tester.ensureVisible(target);
-      await tester.pump();
-      if (!requireHitTestable ||
-          target.hitTestable().evaluate().isNotEmpty) return;
-    }
-
-    final position = tester.state<ScrollableState>(scrollableFinder).position;
-    if (!position.hasContentDimensions ||
-        position.pixels >= position.maxScrollExtent) {
-      break;
-    }
-    position.jumpTo(
-      (position.pixels + 480).clamp(0.0, position.maxScrollExtent),
-    );
-    await tester.pump();
+  // scrollUntilVisible fuerza la construcción lazy de los elementos y evita
+  // calcular a mano maxScrollExtent mientras ListView.builder sigue creciendo.
+  await tester.scrollUntilVisible(
+    target,
+    320,
+    scrollable: scrollableFinder,
+    maxScrolls: 60,
+    duration: const Duration(milliseconds: 40),
+  );
+  await tester.pump(const Duration(milliseconds: 100));
+  if (requireHitTestable) {
+    expect(target.hitTestable(), findsOneWidget);
+  } else {
+    expect(target, findsOneWidget);
   }
 }
 
