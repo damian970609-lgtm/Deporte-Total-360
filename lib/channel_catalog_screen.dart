@@ -1035,9 +1035,7 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
         controller.addListener(_handleVideoChanged);
         setState(() {
           _loading = false;
-          _error = index == 0
-              ? null
-              : 'Se abrió una fuente alternativa para $region: ${candidate.label.isEmpty ? candidate.url : candidate.label}.';
+          _error = null;
         });
         await controller.play();
         if (mounted) setState(() {});
