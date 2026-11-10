@@ -1,9 +1,10 @@
 import 'dart:convert';
-import 'dart:io' show gzip;
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:xml/xml.dart';
 
 import 'live_media_format.dart';
@@ -652,12 +653,27 @@ class XmltvProgramme {
     required this.channelId, required this.title,
     required this.startsAt, required this.endsAt,
     this.channelName = '',
+    this.subtitle = '',
+    this.description = '',
   });
   final String channelId;
   final String channelName;
   final String title;
+  final String subtitle;
+  final String description;
   final DateTime startsAt;
   final DateTime endsAt;
+}
+
+class _EpgSourceCacheEntry {
+  const _EpgSourceCacheEntry({
+    required this.body,
+    required this.fetchedAt,
+    required this.lastAttemptAt,
+  });
+  final String? body;
+  final DateTime? fetchedAt;
+  final DateTime? lastAttemptAt;
 }
 
 class ScheduledLiveSource {
@@ -720,8 +736,157 @@ class AutoLiveProgress {
 }
 
 class AutomaticLiveService {
-  AutomaticLiveService({http.Client? client}) : _client = client ?? http.Client();
+  AutomaticLiveService({
+    http.Client? client,
+    Future<Directory> Function()? epgCacheDirectoryProvider,
+  })  : _client = client ?? http.Client(),
+        _epgCacheDirectoryProvider =
+            epgCacheDirectoryProvider ?? _defaultEpgCacheDirectory;
+
   final http.Client _client;
+  final Future<Directory> Function() _epgCacheDirectoryProvider;
+  final Map<String, Future<String?>> _epgSourceInFlight = <String, Future<String?>>{};
+
+  static const Duration _epgFreshTtl = Duration(hours: 8);
+  static const Duration _epgFailureCooldown = Duration(minutes: 30);
+  static const Duration _epgStaleMaxAge = Duration(days: 3);
+  static const int _maxEpgCacheBytes = 24 * 1024 * 1024;
+
+  static Future<Directory> _defaultEpgCacheDirectory() async {
+    final root = await getApplicationSupportDirectory();
+    final directory = Directory('${root.path}/dt360_epg_cache');
+    await directory.create(recursive: true);
+    return directory;
+  }
+
+  static String _epgCacheId(String url) {
+    var hash = 0x811c9dc5;
+    for (final unit in utf8.encode(url)) {
+      hash ^= unit;
+      hash = (hash * 0x01000193) & 0x7fffffff;
+    }
+    return hash.toRadixString(16);
+  }
+
+  Future<_EpgSourceCacheEntry?> _readEpgSourceCache(String url) async {
+    try {
+      final directory = await _epgCacheDirectoryProvider();
+      final id = _epgCacheId(url);
+      final metadataFile = File('${directory.path}/$id.json');
+      final bodyFile = File('${directory.path}/$id.xml.gz');
+      if (!await metadataFile.exists()) return null;
+      final metadata = jsonDecode(await metadataFile.readAsString());
+      if (metadata is! Map || metadata['url'] != url) return null;
+      final fetchedAt = DateTime.tryParse((metadata['fetchedAt'] ?? '').toString());
+      final lastAttemptAt = DateTime.tryParse((metadata['lastAttemptAt'] ?? '').toString());
+      String? body;
+      if (await bodyFile.exists()) {
+        final compressed = await bodyFile.readAsBytes();
+        if (compressed.length > _maxEpgCacheBytes) return null;
+        final expanded = gzip.decode(compressed);
+        if (expanded.length > _maxEpgCacheBytes) return null;
+        final decoded = utf8.decode(expanded, allowMalformed: true);
+        if (decoded.trim().isNotEmpty) body = decoded;
+      }
+      return _EpgSourceCacheEntry(
+        body: body,
+        fetchedAt: fetchedAt,
+        lastAttemptAt: lastAttemptAt,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _writeEpgSourceCache(
+    String url, {
+    required DateTime? fetchedAt,
+    required DateTime lastAttemptAt,
+    String? body,
+  }) async {
+    try {
+      final directory = await _epgCacheDirectoryProvider();
+      final id = _epgCacheId(url);
+      await directory.create(recursive: true);
+      if (body != null) {
+        final compressed = gzip.encode(utf8.encode(body));
+        if (compressed.length <= _maxEpgCacheBytes) {
+          final bodyFile = File('${directory.path}/$id.xml.gz');
+          final temporaryBody = File('${directory.path}/$id.xml.gz.tmp');
+          await temporaryBody.writeAsBytes(compressed, flush: true);
+          if (await bodyFile.exists()) await bodyFile.delete();
+          await temporaryBody.rename(bodyFile.path);
+        }
+      }
+      final metadataFile = File('${directory.path}/$id.json');
+      final temporaryMetadata = File('${directory.path}/$id.json.tmp');
+      await temporaryMetadata.writeAsString(
+        jsonEncode(<String, String>{
+          'url': url,
+          'fetchedAt': fetchedAt?.toIso8601String() ?? '',
+          'lastAttemptAt': lastAttemptAt.toIso8601String(),
+        }),
+        flush: true,
+      );
+      if (await metadataFile.exists()) await metadataFile.delete();
+      await temporaryMetadata.rename(metadataFile.path);
+    } catch (_) {
+      // Si el almacenamiento falla, las fuentes todavía pueden descargarse.
+    }
+  }
+
+  Future<String?> _loadEpgSource(String url, {required bool forceRefresh}) {
+    final pending = _epgSourceInFlight[url];
+    if (pending != null) return pending;
+    final operation = () async {
+      final now = DateTime.now();
+      final cached = await _readEpgSourceCache(url);
+      final cachedAge = cached?.fetchedAt == null ? null : now.difference(cached!.fetchedAt!);
+      if (!forceRefresh && cached?.body != null && cachedAge != null &&
+          !cachedAge.isNegative && cachedAge <= _epgFreshTtl) {
+        return cached!.body;
+      }
+      final lastAttemptAge = cached?.lastAttemptAt == null
+          ? null
+          : now.difference(cached!.lastAttemptAt!);
+      if (!forceRefresh && lastAttemptAge != null &&
+          !lastAttemptAge.isNegative && lastAttemptAge < _epgFailureCooldown) {
+        return cached?.body;
+      }
+      try {
+        final body = await _downloadText(
+          url,
+          maxBytes: _maxEpgCacheBytes,
+          timeout: const Duration(seconds: 20),
+        );
+        await _writeEpgSourceCache(
+          url,
+          fetchedAt: now,
+          lastAttemptAt: now,
+          body: body,
+        );
+        return body;
+      } catch (_) {
+        await _writeEpgSourceCache(
+          url,
+          fetchedAt: cached?.fetchedAt,
+          lastAttemptAt: now,
+        );
+        if (cached?.body != null && cachedAge != null &&
+            !cachedAge.isNegative && cachedAge <= _epgStaleMaxAge) {
+          return cached!.body;
+        }
+        return null;
+      }
+    }();
+    _epgSourceInFlight[url] = operation;
+    return operation.whenComplete(() {
+      if (identical(_epgSourceInFlight[url], operation)) {
+        _epgSourceInFlight.remove(url);
+      }
+    });
+  }
+
   AutoLiveCatalog? _cachedCatalog;
   DateTime? _cachedAt;
   String? _cachedPlaylist;
@@ -891,6 +1056,8 @@ class AutomaticLiveService {
     required String playlistUrl, required String epgUrl,
     List<M3uChannel>? availableChannels,
     bool forceRefresh = false,
+    DateTime? programmeWindowStart,
+    DateTime? programmeWindowEnd,
   }) async {
     final playlistUrls = _splitPlaylistUrls(playlistUrl);
     final epgUrls = _splitPlaylistUrls(epgUrl);
@@ -910,7 +1077,7 @@ class AutomaticLiveService {
     final cached = _cachedCatalog;
     if (!forceRefresh && cached != null &&
         _cachedPlaylist == playlistCacheKey && _cachedEpg == epgCacheKey &&
-        _cachedAt != null && now.difference(_cachedAt!) < const Duration(minutes: 5)) {
+        _cachedAt != null && now.difference(_cachedAt!) < const Duration(minutes: 15)) {
       return cached;
     }
 
@@ -974,21 +1141,18 @@ class AutomaticLiveService {
     for (var batchStart = 0; batchStart < epgUrls.length; batchStart += 3) {
       final batch = epgUrls.skip(batchStart).take(3).toList(growable: false);
       final bodies = await Future.wait<String?>(
-        batch.map((url) async {
-          try {
-            return await _downloadText(
-              url,
-              maxBytes: 24 * 1024 * 1024,
-              timeout: const Duration(seconds: 20),
-            );
-          } catch (_) {
-            return null;
-          }
-        }),
+        batch.map((url) => _loadEpgSource(
+          url,
+          forceRefresh: forceRefresh,
+        )),
       );
       for (final epgBody in bodies.whereType<String>()) {
         try {
-          for (final programme in parseXmltv(epgBody)) {
+          for (final programme in parseXmltv(
+            epgBody,
+            windowStart: programmeWindowStart,
+            windowEnd: programmeWindowEnd,
+          )) {
             final key = <String>[
               programme.channelId.toLowerCase(),
               programme.title.toLowerCase().trim(),
@@ -1118,13 +1282,21 @@ class AutomaticLiveService {
     return result;
   }
 
-  static List<XmltvProgramme> parseXmltv(String body) {
+  static List<XmltvProgramme> parseXmltv(
+    String body, {
+    DateTime? windowStart,
+    DateTime? windowEnd,
+  }) {
     final document = XmlDocument.parse(body);
     final channelNames = <String, String>{};
     for (final channel in document.findAllElements('channel')) {
       final id = (channel.getAttribute('id') ?? '').trim();
-      final displayNames = channel.findElements('display-name');
-      final display = displayNames.isEmpty ? '' : displayNames.first.innerText.trim();
+      final display = channel
+          .findElements('display-name')
+          .map((node) => node.innerText.trim())
+          .where((value) => value.isNotEmpty)
+          .toSet()
+          .join(' | ');
       if (id.isNotEmpty && display.isNotEmpty) channelNames[id] = display;
     }
     final result = <XmltvProgramme>[];
@@ -1132,14 +1304,28 @@ class AutomaticLiveService {
       final channel = (element.getAttribute('channel') ?? '').trim();
       final start = parseXmltvDate(element.getAttribute('start'));
       final stop = parseXmltvDate(element.getAttribute('stop'));
-      final nodes = element.findElements('title');
-      final title = nodes.isEmpty ? '' : nodes.first.innerText.trim();
+      final titleNodes = element.findElements('title');
+      final subtitleNodes = element.findElements('sub-title');
+      final descriptionNodes = element.findElements('desc');
+      final title = titleNodes.isEmpty ? '' : titleNodes.first.innerText.trim();
+      final subtitle = subtitleNodes.isEmpty
+          ? ''
+          : subtitleNodes.map((node) => node.innerText.trim())
+              .where((value) => value.isNotEmpty).join(' ');
+      final description = descriptionNodes.isEmpty
+          ? ''
+          : descriptionNodes.map((node) => node.innerText.trim())
+              .where((value) => value.isNotEmpty).join(' ');
       if (channel.isEmpty || title.isEmpty || start == null ||
           stop == null || !stop.isAfter(start)) continue;
+      if (windowStart != null && !stop.isAfter(windowStart)) continue;
+      if (windowEnd != null && !start.isBefore(windowEnd)) continue;
       result.add(XmltvProgramme(
         channelId: channel,
         channelName: channelNames[channel] ?? '',
         title: title,
+        subtitle: subtitle,
+        description: description,
         startsAt: start,
         endsAt: stop,
       ));
@@ -1223,12 +1409,32 @@ class AutomaticLiveService {
       }
     }
 
-    report('loading_guides', 'Canales listos. Descargando y leyendo las guías EPG.');
+    final eligibleEvents = events.where((event) {
+      final prepareAt = event.startsAt.subtract(const Duration(minutes: 10));
+      final eventLimit = event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
+      return !now.isBefore(prepareAt) && now.isBefore(eventLimit);
+    }).toList(growable: false);
+    if (eligibleEvents.isEmpty) {
+      report('outside_window', 'Hay eventos en Agenda, pero ninguno está dentro de la ventana de preparación (10 minutos antes del inicio hasta el final).');
+      return <ScheduledLiveEvent>[];
+    }
+
+    final programmeWindowStart = events
+        .map((event) => event.startsAt.subtract(const Duration(minutes: 30)))
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+    final programmeWindowEnd = events
+        .map((event) => (event.endsAt ??
+            event.startsAt.add(const Duration(hours: 3))).add(const Duration(minutes: 30)))
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+
+    report('loading_guides', 'Cargando las guías EPG guardadas o actualizadas para los horarios de hoy.');
     final catalog = await loadCatalog(
       playlistUrl: settings.playlistUrl,
       epgUrl: settings.epgUrl,
       availableChannels: directChannels,
       forceRefresh: forceRefresh,
+      programmeWindowStart: programmeWindowStart,
+      programmeWindowEnd: programmeWindowEnd,
     );
     channelCount = catalog.channels.length;
     directChannelCount = catalog.channels.where(
@@ -1248,29 +1454,17 @@ class AutomaticLiveService {
     final byName = <String, List<M3uChannel>>{};
     for (final channel in catalog.channels) {
       if (channel.tvgId.isNotEmpty) {
-        byId.putIfAbsent(channel.tvgId, () => <M3uChannel>[]).add(channel);
+        final id = normalizeText(channel.tvgId);
+        if (id.isNotEmpty) byId.putIfAbsent(id, () => <M3uChannel>[]).add(channel);
       }
-      // Los XMLTV no siempre usan el mismo tvg-id. Se crean alias por nombre
-      // de canal y por ID normalizado para mejorar el cruce entre proveedores.
       for (final rawName in <String>[channel.name, channel.tvgName, channel.tvgId]) {
-        final name = normalizeText(rawName);
-        if (name.isEmpty) continue;
-        byName.putIfAbsent(name, () => <M3uChannel>[]).add(channel);
-        final compactName = name.replaceAll(' ', '');
-        if (compactName.isNotEmpty) {
-          byName.putIfAbsent(compactName, () => <M3uChannel>[]).add(channel);
+        for (final name in <String>{normalizeText(rawName), normalizeChannelName(rawName)}) {
+          if (name.isEmpty) continue;
+          byName.putIfAbsent(name, () => <M3uChannel>[]).add(channel);
+          final compactName = name.replaceAll(' ', '');
+          if (compactName.isNotEmpty) byName.putIfAbsent(compactName, () => <M3uChannel>[]).add(channel);
         }
       }
-    }
-
-    final eligibleEvents = events.where((event) {
-      final prepareAt = event.startsAt.subtract(const Duration(minutes: 10));
-      final eventLimit = event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
-      return !now.isBefore(prepareAt) && now.isBefore(eventLimit);
-    }).toList(growable: false);
-    if (eligibleEvents.isEmpty) {
-      report('outside_window', 'Hay eventos en Agenda, pero ninguno está dentro de la ventana de preparación (10 minutos antes del inicio hasta el final).');
-      return <ScheduledLiveEvent>[];
     }
 
     report('matching_epg', 'Buscando coincidencias entre los programas EPG y los eventos de Agenda.');
@@ -1281,23 +1475,31 @@ class AutomaticLiveService {
       final programmes = catalog.programmes.where((programme) =>
         programme.startsAt.isBefore(eventLimit) &&
         programme.endsAt.isAfter(prepareAt) &&
-        programmeMatchesEvent(programme.title, event)).toList()
+        programmeMatchesEvent(
+          '${programme.title} ${programme.subtitle} ${programme.description}',
+          event,
+        )).toList()
         ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
       if (programmes.isNotEmpty) matchedEventCount++;
 
       final candidates = <ScheduledLiveSource>[];
       final used = <String>{};
       for (final programme in programmes) {
+        final channelNameAliases = programme.channelName
+            .split('|')
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toList(growable: false);
         final mapped = <M3uChannel>[
-          ...(byId[programme.channelId] ?? <M3uChannel>[]),
-          ...(programme.channelName.isEmpty
-              ? <M3uChannel>[]
-              : byName[normalizeText(programme.channelName)] ?? <M3uChannel>[]),
-          ...(programme.channelName.isEmpty
-              ? <M3uChannel>[]
-              : byName[normalizeText(programme.channelName).replaceAll(' ', '')] ?? <M3uChannel>[]),
+          ...(byId[normalizeText(programme.channelId)] ?? <M3uChannel>[]),
+          for (final channelName in channelNameAliases) ...<M3uChannel>[
+            ...(byName[normalizeText(channelName)] ?? <M3uChannel>[]),
+            ...(byName[normalizeChannelName(channelName)] ?? <M3uChannel>[]),
+            ...(byName[normalizeChannelName(channelName).replaceAll(' ', '')] ?? <M3uChannel>[]),
+          ],
           ...(byName[normalizeText(programme.channelId)] ?? <M3uChannel>[]),
-          ...(byName[normalizeText(programme.channelId).replaceAll(' ', '')] ?? <M3uChannel>[]),
+          ...(byName[normalizeChannelName(programme.channelId)] ?? <M3uChannel>[]),
+          ...(byName[normalizeChannelName(programme.channelId).replaceAll(' ', '')] ?? <M3uChannel>[]),
         ];
         for (final channel in mapped) {
           if (!isDirectPlayableStream(channel.url) || !used.add(channel.url)) continue;
@@ -1695,6 +1897,19 @@ class AutomaticLiveService {
     if (RegExp(r'720p?|hd').hasMatch(metadata) || url.contains('720')) return 300;
     if (RegExp(r'576p?|480p?|sd').hasMatch(metadata) || url.contains('480')) return 200;
     return 100;
+  }
+
+  static String normalizeChannelName(String value) {
+    var text = normalizeText(value);
+    text = text.replaceFirst(
+      RegExp(r'^(?:us|uk|gb|ca|mx|ar|co|ve|cl|pe|uy|py|bo|cr|gt|hn|ni|pa|cw|jm|do|sv|pt|br) '),
+      '',
+    );
+    text = text.replaceAll(
+      RegExp(r'\b(?:hd|sd|fhd|uhd|4k|8k|1080p|720p|576p|480p|50fps|60fps|hevc|h265)\b'),
+      ' ',
+    );
+    return text.trim().replaceAll(RegExp(r'\s+'), ' ');
   }
 
   static String normalizeText(String value) {

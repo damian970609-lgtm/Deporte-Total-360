@@ -111,10 +111,12 @@ class SportsChannel {
     this.isSports = true,
     this.visible = true,
     this.language = 'unknown',
+    this.tvgId = '',
   });
 
   final String id;
   final String identifier;
+  final String tvgId;
   final String name;
   final String url;
   final String logoUrl;
@@ -126,6 +128,7 @@ class SportsChannel {
   Map<String, Object> toJson() => <String, Object>{
         'id': id,
         'identifier': identifier,
+        'tvgId': tvgId,
         'name': name,
         'url': url,
         'logoUrl': logoUrl,
@@ -139,6 +142,7 @@ class SportsChannel {
     final id = (json['id'] ?? json['identifier'] ?? '').toString().trim();
     final identifier =
         (json['identifier'] ?? json['id'] ?? '').toString().trim();
+    final tvgId = (json['tvgId'] ?? json['tvg_id'] ?? '').toString().trim();
     final name = (json['name'] ?? '').toString().trim();
     final url = (json['url'] ?? '').toString().trim();
     final logoUrl = (json['logoUrl'] ?? '').toString().trim();
@@ -158,6 +162,7 @@ class SportsChannel {
     return SportsChannel(
       id: id,
       identifier: identifier,
+      tvgId: tvgId,
       name: name,
       url: url,
       logoUrl: logoUrl,

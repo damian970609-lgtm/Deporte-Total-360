@@ -330,6 +330,7 @@ void main() {
     final original = SportsChannel.fromJson(<String, dynamic>{
       'id': 'espn-latino-1234',
       'identifier': 'espn-latino-1234',
+      'tvgId': 'ESPN.Latino.us',
       'name': 'ESPN Latino',
       'url': 'https://media.example/live.m3u8',
       'logoUrl': 'https://media.example/logo.png',
@@ -343,6 +344,7 @@ void main() {
 
     expect(restored.id, original.id);
     expect(restored.identifier, original.identifier);
+    expect(restored.tvgId, 'ESPN.Latino.us');
     expect(restored.name, original.name);
     expect(restored.url, original.url);
     expect(restored.logoUrl, original.logoUrl);

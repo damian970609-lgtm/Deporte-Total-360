@@ -97,7 +97,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         .map((channel) => M3uChannel(
               name: channel.name,
               url: channel.url,
-              tvgId: channel.identifier,
+              tvgId: channel.tvgId.isNotEmpty ? channel.tvgId : channel.identifier,
               tvgName: channel.name,
               group: channel.groupTitle,
               language: channel.language,

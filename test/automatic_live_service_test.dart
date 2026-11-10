@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -674,6 +675,46 @@ https://media.example/sports.m3u8
       expect(catalog.programmes, isEmpty);
     });
 
+    test('la caché EPG en disco evita volver a descargar la guía al recrear el servicio', () async {
+      final directory = await Directory.systemTemp.createTemp('dt360-epg-cache-');
+      addTearDown(() => directory.delete(recursive: true));
+      var guideRequests = 0;
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('.xml')) {
+          guideRequests++;
+          return http.Response('<tv><programme channel="sports.id" '
+              'start="20261110120000 +0000" stop="20261110140000 +0000">'
+              '<title>Equipo Azul vs Equipo Rojo</title></programme></tv>', 200);
+        }
+        return http.Response('', 404);
+      });
+      final cacheProvider = () async => directory;
+      final channel = M3uChannel(
+        name: 'ESPN 2 HD',
+        tvgId: 'sports.id',
+        url: 'https://media.example/live.m3u8',
+        language: 'Spanish',
+      );
+      final first = AutomaticLiveService(client: client, epgCacheDirectoryProvider: cacheProvider);
+      final second = AutomaticLiveService(client: client, epgCacheDirectoryProvider: cacheProvider);
+
+      final firstCatalog = await first.loadCatalog(
+        playlistUrl: '',
+        epgUrl: 'https://guide.example/guide.xml',
+        availableChannels: <M3uChannel>[channel],
+      );
+      final secondCatalog = await second.loadCatalog(
+        playlistUrl: '',
+        epgUrl: 'https://guide.example/guide.xml',
+        availableChannels: <M3uChannel>[channel],
+      );
+
+      expect(firstCatalog.programmes, hasLength(1));
+      expect(secondCatalog.programmes, hasLength(1));
+      expect(guideRequests, 1);
+      client.close();
+    });
+
     test('combina programas de varias guías EPG y sigue si una falla', () async {
       final start = DateTime.now().toUtc().add(const Duration(hours: 1));
       final stop = start.add(const Duration(hours: 2));
@@ -726,6 +767,20 @@ https://media.example/backup.m3u8
       expect(rows, hasLength(1));
       expect(rows.single.channelId, 'sports.id');
       expect(rows.single.channelName, 'Sports HD');
+    });
+
+    test('parsea solo los programas XMLTV que cruzan la ventana de eventos', () {
+      final start = DateTime.utc(2026, 11, 10, 12);
+      final stop = start.add(const Duration(hours: 2));
+      final xml = '<tv>'
+          '<programme channel="sports.id" start="${_xmlTime(start.subtract(const Duration(hours: 2)))}" stop="${_xmlTime(start.subtract(const Duration(hours: 1)))}"><title>Evento anterior</title></programme>'
+          '<programme channel="sports.id" start="${_xmlTime(start)}" stop="${_xmlTime(stop)}"><title>Equipo Azul vs Equipo Rojo</title><desc>Partido de la liga</desc></programme>'
+          '<programme channel="sports.id" start="${_xmlTime(stop.add(const Duration(hours: 1)))}" stop="${_xmlTime(stop.add(const Duration(hours: 2)))}"><title>Evento posterior</title></programme>'
+          '</tv>';
+      final rows = AutomaticLiveService.parseXmltv(xml, windowStart: start, windowEnd: stop);
+      expect(rows, hasLength(1));
+      expect(rows.single.title, 'Equipo Azul vs Equipo Rojo');
+      expect(rows.single.description, 'Partido de la liga');
     });
 
     test('lee horarios XMLTV con zona UTC', () {
