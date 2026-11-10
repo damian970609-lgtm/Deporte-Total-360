@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -1767,16 +1768,29 @@ class LivePlayerGridScreen extends StatefulWidget {
   State<LivePlayerGridScreen> createState() => _LivePlayerGridScreenState();
 }
 
-class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
+class _LivePlayerGridScreenState extends State<LivePlayerGridScreen>
+    with WidgetsBindingObserver {
   late List<LivePlayerSource> _sources;
   Timer? _refreshTimer;
   bool _refreshing = false;
+  bool _appResumed = true;
 
   @override
   void initState() {
     super.initState();
+    _appResumed =
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    WidgetsBinding.instance.addObserver(this);
     _sources = List<LivePlayerSource>.of(widget.sources);
     _startRefreshTimer();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final resumed = state == AppLifecycleState.resumed;
+    if (_appResumed == resumed) return;
+    setState(() => _appResumed = resumed);
+    if (resumed) unawaited(_refreshSources());
   }
 
   @override
@@ -1794,12 +1808,14 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
 
   void _startRefreshTimer() {
     if (widget.refreshSources == null) return;
-    _refreshTimer = Timer.periodic(widget.refreshInterval, (_) => _refreshSources());
+    _refreshTimer = Timer.periodic(widget.refreshInterval, (_) {
+      if (mounted && _appResumed) _refreshSources();
+    });
   }
 
   Future<void> _refreshSources() async {
     final loader = widget.refreshSources;
-    if (loader == null || _refreshing || !mounted) return;
+    if (loader == null || _refreshing || !mounted || !_appResumed) return;
     _refreshing = true;
     try {
       final updated = await loader();
@@ -1818,6 +1834,7 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     super.dispose();
   }
@@ -1873,6 +1890,14 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
                 key: ValueKey<String>(safeSources[index].url),
                 source: safeSources[index],
                 initiallyMuted: index > 0,
+                // La multivista conserva todos los eventos, pero solo abre
+                // automáticamente el primero para evitar agotar ExoPlayer
+                // y memoria al crear hasta ocho superficies a la vez.
+                autoStart: shouldAutomaticallyStartLiveSource(
+                  index: index,
+                  isActive: _appResumed,
+                ),
+                isActive: _appResumed,
               ),
             ),
     );
@@ -1908,6 +1933,9 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
   bool _isFullscreen = false;
   bool _compactPlayback = false;
   int _controllerGeneration = 0;
+  final Set<VideoPlayerController> _disposedControllers =
+      HashSet<VideoPlayerController>.identity();
+  Future<void> _pendingControllerDisposals = Future<void>.value();
 
   @override
   void initState() {
@@ -1950,15 +1978,25 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
 
   Future<void> _disposeControllerSafely(
     VideoPlayerController? controller,
-  ) async {
-    if (controller == null) return;
-    try {
-      await controller.dispose();
-    } catch (error, stackTrace) {
-      // Un fallo al liberar el player no debe propagarse y cerrar la APK.
-      debugPrint('No se pudo liberar el reproductor de vídeo: $error');
-      debugPrintStack(stackTrace: stackTrace);
+  ) {
+    if (controller == null) return _pendingControllerDisposals;
+    // Flutter puede pedir la liberación desde el cambio de pestaña, el
+    // cierre de pantalla completa y el dispose en rápida sucesión.
+    // Cada controlador nativo se libera una sola vez y en serie.
+    if (!_disposedControllers.add(controller)) {
+      return _pendingControllerDisposals;
     }
+    final pending = _pendingControllerDisposals.then((_) async {
+      try {
+        await controller.dispose();
+      } catch (error, stackTrace) {
+        // Un fallo al liberar el player no debe propagarse y cerrar la APK.
+        debugPrint('No se pudo liberar el reproductor de vídeo: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }
+    });
+    _pendingControllerDisposals = pending;
+    return pending;
   }
 
   Future<List<VideoTrack>> _readVideoTracks(
@@ -2070,36 +2108,53 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
   }
 
   Future<void> _togglePlayback() async {
-    if (!widget.isActive) return;
+    if (!widget.isActive || !mounted) return;
     var controller = _controller;
-    if (controller == null || !controller.value.isInitialized) {
-      await _initialize();
-      controller = _controller;
-      if (controller == null || !controller.value.isInitialized) return;
-      if (controller.value.isPlaying) {
-        await _openFullscreen(controller);
+    try {
+      if (controller == null || !controller.value.isInitialized) {
+        await _initialize();
+        if (!mounted) return;
+        controller = _controller;
+        if (controller == null || !controller.value.isInitialized) return;
+        if (controller.value.isPlaying) await _openFullscreen(controller);
+        return;
       }
-      return;
-    }
 
-    if (controller.value.isPlaying) {
-      await controller.pause();
-      if (mounted) setState(() {});
-      return;
-    }
+      if (controller.value.isPlaying) {
+        await controller.pause();
+        if (mounted && identical(_controller, controller)) setState(() {});
+        return;
+      }
 
-    await controller.play();
-    if (mounted) setState(() {});
-    await _openFullscreen(controller);
+      await controller.play();
+      if (!mounted || !identical(_controller, controller)) return;
+      setState(() {});
+      await _openFullscreen(controller);
+    } catch (error) {
+      if (mounted && controller != null &&
+          identical(_controller, controller)) {
+        setState(() {
+          _error = 'No se pudo controlar esta señal: $error';
+          _loading = false;
+        });
+      }
+    }
   }
 
   Future<void> _toggleMute() async {
     if (!widget.isActive) return;
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
-    _muted = !_muted;
-    await controller.setVolume(_muted ? 0 : 1);
-    if (mounted) setState(() {});
+    try {
+      final nextMuted = !_muted;
+      await controller.setVolume(nextMuted ? 0 : 1);
+      if (!mounted || !identical(_controller, controller)) return;
+      setState(() => _muted = nextMuted);
+    } catch (error) {
+      if (mounted && identical(_controller, controller)) {
+        setState(() => _error = 'No se pudo cambiar el volumen: $error');
+      }
+    }
   }
 
   void _applyQuality(VideoTrack? track) {
@@ -2143,20 +2198,19 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
 
   Future<void> _stopCompactPlayback() async {
     final controller = _controller;
-    if (controller == null) {
-      if (mounted) setState(() => _compactPlayback = false);
-      return;
-    }
     _compactPlayback = false;
-    try {
-      if (controller.value.isInitialized) await controller.pause();
-      await controller.dispose();
-    } catch (_) {
-      // El controlador puede haberse cerrado al cambiar el evento.
+    ++_controllerGeneration;
+    _controller = null;
+    if (controller != null) {
+      try {
+        if (controller.value.isInitialized) await controller.pause();
+      } catch (_) {
+        // El controlador puede haberse cerrado al cambiar el evento.
+      }
+      await _disposeControllerSafely(controller);
     }
-    if (!mounted || !identical(_controller, controller)) return;
+    if (!mounted) return;
     setState(() {
-      _controller = null;
       _videoTracks = <VideoTrack>[];
       _manualQualityTrackId = null;
       _loading = false;
