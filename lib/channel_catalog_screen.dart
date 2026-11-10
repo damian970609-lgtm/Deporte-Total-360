@@ -1885,7 +1885,11 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     // La primera sección administra cuentas y accesos. El inventario pesado
     // de canales solo se descarga cuando se abre IPTV.
     try {
-      final sources = await _service.fetchSources();
+      // Algunos clientes/mocks devuelven listas inmutables. Se copia
+      // antes de ordenar para que la carga del panel no falle en modo admin.
+      final sources = List<ChannelPlaylistSource>.of(
+        await _service.fetchSources(),
+      );
       if (!mounted) return;
       sources.sort((a, b) {
         if (a.status == 'error' && b.status != 'error') return -1;
