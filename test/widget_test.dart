@@ -284,16 +284,11 @@ void main() {
     expect(find.byKey(const ValueKey<String>('iptv-filter-hidden')), findsOneWidget);
 
     final sportsAction = find.byKey(
-      const ValueKey<String>('iptv-channel-actions-sports-channel'),
+      const ValueKey<String>('iptv-add-channel-sports-channel'),
     );
-    // El PopupMenuButton es un contenedor de estado; la tarjeta debe
-    // permanecer en pantalla aunque el propio wrapper no sea hit-testable.
-    await _scrollIptvUntilVisible(
-      tester,
-      sportsAction,
-      requireHitTestable: false,
-    );
-    expect(sportsAction, findsOneWidget);
+    // Comprueba el control real de publicar/ocultar, no el wrapper de menú.
+    await _scrollIptvUntilVisible(tester, sportsAction);
+    expect(sportsAction.hitTestable(), findsOneWidget);
     expect(find.text('ESPN Deportes'), findsOneWidget);
 
     final generalAction = find.byKey(
