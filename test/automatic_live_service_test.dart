@@ -1406,4 +1406,202 @@ https://media.example/offline.m3u8
       expect(progress.last.eventCount, 1);
     });
   });
+
+  group('búsqueda de canales de TV para eventos', () {
+    test('crea un identificador interno desde tvg-id y compara nombres de broadcaster', () {
+      const channel = M3uChannel(
+        name: 'TyC Sports HD',
+        url: 'https://media.example/tyc.m3u8',
+        tvgId: 'tyc.sports.ar',
+      );
+
+      expect(channel.internalChannelId, 'tyc-sports-ar');
+      expect(
+        AutomaticLiveService.channelMatchesBroadcaster(channel, 'TyC Sports'),
+        isTrue,
+      );
+      expect(
+        AutomaticLiveService.channelMatchesBroadcaster(
+          const M3uChannel(
+            name: 'ESPN 2 HD',
+            url: 'https://media.example/espn.m3u8',
+          ),
+          'ESPN',
+        ),
+        isTrue,
+      );
+    });
+
+    test('lee broadcasters si el proveedor los adjunta al evento', () {
+      final event = SportsAgendaEvent.fromJson(<String, dynamic>{
+        'id': 'fixture-123',
+        'title': 'Equipo Azul vs Equipo Rojo',
+        'sport': 'Fútbol',
+        'homeTeam': 'Equipo Azul',
+        'awayTeam': 'Equipo Rojo',
+        'startsAt': DateTime.now().toIso8601String(),
+        'detailUrl': 'https://sportsapi.app/fixture/123',
+        'broadcastChannels': <Object>[
+          <String, String>{'name': 'ESPN'},
+          <String, String>{'network': 'FOX Sports'},
+          'TyC Sports',
+        ],
+      });
+
+      expect(event, isNotNull);
+      expect(event!.broadcastChannels, <String>[
+        'ESPN',
+        'FOX Sports',
+        'TyC Sports',
+      ]);
+      expect(
+        SportsAgendaEvent.fromJson(event.toJson())!.broadcastChannels,
+        event.broadcastChannels,
+      );
+    });
+
+    test('usa el broadcaster del evento para elegir solo un canal visible coincidente sin EPG', () async {
+      final now = DateTime.now();
+      final event = SportsAgendaEvent(
+        id: 'broadcaster-event',
+        title: 'Equipo Azul vs Equipo Rojo',
+        sport: 'Fútbol',
+        homeTeam: 'Equipo Azul',
+        awayTeam: 'Equipo Rojo',
+        broadcastChannels: const <String>['TyC Sports', 'ESPN'],
+        startsAt: now.subtract(const Duration(minutes: 2)),
+        endsAt: now.add(const Duration(hours: 2)),
+        detailUrl: 'https://sportsapi.app/fixture/123',
+      );
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('.xml')) return http.Response('<tv/>', 200);
+        if (request.url.path.endsWith('.ts')) return http.Response('stream bytes', 200);
+        return http.Response('', 404);
+      });
+
+      final result = await AutomaticLiveService(client: client).schedule(
+        events: <SportsAgendaEvent>[event],
+        now: now,
+        settings: const AutoLiveSettings(
+          playlistUrl: '',
+          epgUrl: 'https://guide.example/empty.xml',
+          authorizationConfirmed: true,
+        ),
+        availableChannels: const <M3uChannel>[
+          M3uChannel(
+            name: 'TyC Sports HD 1080p',
+            url: 'https://media.example/tyc.ts',
+            tvgId: 'tyc.sports.ar',
+            language: 'es',
+            group: 'Sports',
+          ),
+          M3uChannel(
+            name: 'Canal de noticias',
+            url: 'https://media.example/news.ts',
+            group: 'News',
+          ),
+        ],
+      );
+
+      expect(result, hasLength(1));
+      expect(result.single.sources, hasLength(1));
+      expect(result.single.sources.single.url, 'https://media.example/tyc.ts');
+      expect(
+        result.single.sources.single.programmeTitle,
+        'Canal indicado por SportsAPI: TyC Sports',
+      );
+      expect(result.single.sources.single.available, isTrue);
+      client.close();
+    });
+
+    test('encuentra canales deportivos por metadatos cuando no existe EPG ni broadcaster', () async {
+      final now = DateTime.now();
+      final event = SportsAgendaEvent(
+        id: 'fallback-event',
+        title: 'Equipo Azul vs Equipo Rojo',
+        sport: 'Fútbol',
+        homeTeam: 'Equipo Azul',
+        awayTeam: 'Equipo Rojo',
+        startsAt: now.subtract(const Duration(minutes: 2)),
+        endsAt: now.add(const Duration(hours: 2)),
+        detailUrl: 'https://sportsapi.app/fixture/124',
+      );
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('.xml')) return http.Response('<tv/>', 200);
+        if (request.url.path.endsWith('.ts')) return http.Response('stream bytes', 200);
+        return http.Response('', 404);
+      });
+
+      final result = await AutomaticLiveService(client: client).schedule(
+        events: <SportsAgendaEvent>[event],
+        now: now,
+        settings: const AutoLiveSettings(
+          playlistUrl: '',
+          epgUrl: 'https://guide.example/empty.xml',
+          authorizationConfirmed: true,
+        ),
+        availableChannels: const <M3uChannel>[
+          M3uChannel(
+            name: 'ESPN Deportes HD',
+            url: 'https://media.example/espn.ts',
+            group: 'Sports',
+            language: 'es',
+          ),
+        ],
+      );
+
+      expect(result, hasLength(1));
+      expect(
+        result.single.sources.single.programmeTitle,
+        contains('sin EPG'),
+      );
+      expect(result.single.sources.single.url, 'https://media.example/espn.ts');
+      client.close();
+    });
+
+    test('precarga EPG antes de que comience la ventana de búsqueda de diez minutos', () async {
+      final start = DateTime.now().add(const Duration(minutes: 30));
+      var guideRequests = 0;
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('.xml')) {
+          guideRequests++;
+          return http.Response('<tv/>', 200);
+        }
+        return http.Response('', 404);
+      });
+      final progress = <AutoLiveProgress>[];
+      final event = SportsAgendaEvent(
+        id: 'early-prefetch',
+        title: 'Equipo Azul vs Equipo Rojo',
+        sport: 'Fútbol',
+        startsAt: start,
+        detailUrl: 'https://sportsapi.app/fixture/125',
+      );
+
+      final result = await AutomaticLiveService(client: client).schedule(
+        events: <SportsAgendaEvent>[event],
+        now: DateTime.now(),
+        settings: const AutoLiveSettings(
+          playlistUrl: '',
+          epgUrl: 'https://guide.example/prefetch.xml',
+          authorizationConfirmed: true,
+        ),
+        availableChannels: const <M3uChannel>[
+          M3uChannel(
+            name: 'ESPN Deportes HD',
+            url: 'https://media.example/espn.ts',
+            group: 'Sports',
+            language: 'es',
+          ),
+        ],
+        onProgress: progress.add,
+      );
+
+      expect(result, isEmpty);
+      expect(guideRequests, 1);
+      expect(progress.last.stage, 'outside_window');
+      client.close();
+    });
+  });
+
 }
