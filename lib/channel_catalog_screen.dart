@@ -1719,6 +1719,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   SportsChannel? _previewChannel;
   List<ChannelPlaylistSource> _sources = <ChannelPlaylistSource>[];
   bool _working = false;
+  bool _adminSessionReady = false;
+  bool _reimporting = false;
   bool _rightsConfirmed = false;
   bool _diagnosingPreview = false;
   String? _diagnosticResult;
@@ -1750,7 +1752,10 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     try {
       final email = await _service.restoreSession();
       if (!mounted || email == null) return;
-      setState(() => _email = email);
+      setState(() {
+        _email = email;
+        _adminSessionReady = true;
+      });
       await _loadCachedAdminSnapshot(email);
       await _loadAdmin();
     } catch (error) {
@@ -1830,7 +1835,10 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     try {
       final email = await _service.signIn();
       if (!mounted) return;
-      setState(() => _email = email);
+      setState(() {
+        _email = email;
+        _adminSessionReady = true;
+      });
       await _loadCachedAdminSnapshot(email);
       await _loadAdmin();
     } catch (error) {
@@ -1850,6 +1858,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     if (mounted) {
       setState(() {
         _email = null;
+        _adminSessionReady = false;
+        _reimporting = false;
         _channels = <SportsChannel>[];
         _sources = <ChannelPlaylistSource>[];
         _licenseRecords = <AppLicenseRecord>[];
@@ -2165,7 +2175,11 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   }
 
   Future<void> _refreshSources() async {
-    setState(() => _working = true);
+    if (!_adminSessionReady || _reimporting) return;
+    setState(() {
+      _working = true;
+      _reimporting = true;
+    });
     try {
       await _service.refreshSources();
       await _loadAdmin(showLoading: false);
@@ -2176,7 +2190,12 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     } catch (error) {
       _message(error.toString());
     } finally {
-      if (mounted) setState(() => _working = false);
+      if (mounted) {
+        setState(() {
+          _working = false;
+          _reimporting = false;
+        });
+      }
     }
   }
 
@@ -3084,9 +3103,21 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
             width: double.infinity,
             child: OutlinedButton.icon(
               key: const ValueKey<String>('iptv-reimport-sources'),
-              onPressed: _working ? null : _refreshSources,
-              icon: const Icon(Icons.sync_rounded),
-              label: const Text('REIMPORTAR TODAS LAS LISTAS GUARDADAS'),
+              onPressed: !_adminSessionReady || _reimporting
+                  ? null
+                  : _refreshSources,
+              icon: _reimporting
+                  ? const SizedBox(
+                      width: 15,
+                      height: 15,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.sync_rounded),
+              label: Text(
+                _reimporting
+                    ? 'REIMPORTANDO LISTAS…'
+                    : 'REIMPORTAR TODAS LAS LISTAS GUARDADAS',
+              ),
             ),
           ),
         ],
