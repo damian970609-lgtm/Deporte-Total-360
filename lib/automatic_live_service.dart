@@ -688,6 +688,1567 @@ class M3uChannel {
   final String language;
   final String country;
 
+  /// Identificador local reproducible para cruzar el canal con broadcasters.
+  /// No es una URL reproducible; la reproducción usa siempre url.
+  String get internalChannelId {
+    final identity = tvgId.trim().isNotEmpty
+        ? tvgId
+        : tvgName.trim().isNotEmpty
+            ? tvgName
+            : name;
+    return AutomaticLiveService.normalizeText(identity)
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+
+  int get languagePriority {
+    final explicit = language.trim().toLowerCase();
+    if (const <String>{'es', 'spa', 'spanish', 'espanol'}.contains(explicit)) return 2;
+    if (const <String>{'en', 'eng', 'english'}.contains(explicit)) return 1;
+    final metadata = AutomaticLiveService.normalizeText(
+      '$language $country $group $name $tvgName',
+    );
+    const spanishMarkers = <String>[
+      'spanish', 'espanol', 'castellano', 'espana', 'spain',
+      'mexico', 'argentina', 'colombia', 'venezuela', 'chile',
+      'peru', 'uruguay', 'paraguay', 'bolivia', 'ecuador',
+      'costa rica', 'guatemala', 'honduras', 'nicaragua',
+      'panama', 'dominicana', 'puerto rico', 'teledeporte',
+      'esport 3', 'etb deportes', 'real madrid tv', 'betis tv',
+    ];
+    const englishMarkers = <String>[
+      'english', 'united kingdom', 'great britain',
+      'sky sports', 'bt sport', 'nbc sports', 'cbs sports network',
+      'espn uk', 'tnt sports uk',
+    ];
+    if (spanishMarkers.any(metadata.contains) ||
+        RegExp(r'(^| )(es|spa)( |$)').hasMatch(metadata)) return 2;
+    if (englishMarkers.any(metadata.contains) ||
+        RegExp(r'(^| )(en|eng)( |$)').hasMatch(metadata)) return 1;
+    return 0;
+  }
+}
+
+class XmltvProgramme {
+  const XmltvProgramme({
+    required this.channelId, required this.title,
+    required this.startsAt, required this.endsAt,
+    this.channelName = '',
+    this.subtitle = '',
+    this.description = '',
+  });
+  final String channelId;
+  final String channelName;
+  final String title;
+  final String subtitle;
+  final String description;
+  final DateTime startsAt;
+  final DateTime endsAt;
+}
+
+class _EpgSourceCacheEntry {
+  const _EpgSourceCacheEntry({
+    required this.body,
+    required this.fetchedAt,
+    required this.lastAttemptAt,
+  });
+  final String? body;
+  final DateTime? fetchedAt;
+  final DateTime? lastAttemptAt;
+}
+
+class ScheduledLiveSource {
+  const ScheduledLiveSource({
+    required this.channelName, required this.url,
+    required this.programmeTitle, required this.programmeEndsAt,
+    required this.qualityScore,
+    this.languagePriority = 0,
+    this.available = false,
+    this.verified = false,
+  });
+  final String channelName;
+  final String url;
+  final String programmeTitle;
+  final DateTime programmeEndsAt;
+  final int qualityScore;
+  final int languagePriority;
+  final bool available;
+  final bool verified;
+}
+
+class ScheduledLiveEvent {
+  const ScheduledLiveEvent({
+    required this.event, required this.sources, required this.removeAt,
+  });
+  final SportsAgendaEvent event;
+  final List<ScheduledLiveSource> sources;
+  final DateTime removeAt;
+}
+
+class AutoLiveCatalog {
+  const AutoLiveCatalog({required this.channels, required this.programmes});
+  final List<M3uChannel> channels;
+  final List<XmltvProgramme> programmes;
+}
+
+/// Diagnóstico de cada etapa del asignador automático de transmisiones.
+class AutoLiveProgress {
+  const AutoLiveProgress({
+    required this.stage,
+    required this.message,
+    this.eventCount = 0,
+    this.channelCount = 0,
+    this.directChannelCount = 0,
+    this.programmeCount = 0,
+    this.matchedEventCount = 0,
+    this.candidateCount = 0,
+    this.testedCandidateCount = 0,
+    this.availableCandidateCount = 0,
+  });
+
+  final String stage;
+  final String message;
+  final int eventCount;
+  final int channelCount;
+  final int directChannelCount;
+  final int programmeCount;
+  final int matchedEventCount;
+  final int candidateCount;
+  final int testedCandidateCount;
+  final int availableCandidateCount;
+}
+
+class AutomaticLiveService {
+  AutomaticLiveService({
+    http.Client? client,
+    Future<Directory> Function()? epgCacheDirectoryProvider,
+  })  : _client = client ?? http.Client(),
+        _epgCacheDirectoryProvider =
+            epgCacheDirectoryProvider ?? _defaultEpgCacheDirectory;
+
+  final http.Client _client;
+  final Future<Directory> Function() _epgCacheDirectoryProvider;
+  final Map<String, Future<String?>> _epgSourceInFlight = <String, Future<String?>>{};
+
+  static const Duration _epgFreshTtl = Duration(minutes: 10);
+  static const Duration _epgFailureCooldown = Duration(minutes: 5);
+  static const Duration _epgStaleMaxAge = Duration(days: 3);
+  static const int _maxEpgCacheBytes = 24 * 1024 * 1024;
+
+  static Future<Directory> _defaultEpgCacheDirectory() async {
+    final root = await getApplicationSupportDirectory();
+    final directory = Directory('${root.path}/dt360_epg_cache');
+    await directory.create(recursive: true);
+    return directory;
+  }
+
+  static String _epgCacheId(String url) {
+    var hash = 0x811c9dc5;
+    for (final unit in utf8.encode(url)) {
+      hash ^= unit;
+      hash = (hash * 0x01000193) & 0x7fffffff;
+    }
+    return hash.toRadixString(16);
+  }
+
+  Future<_EpgSourceCacheEntry?> _readEpgSourceCache(String url) async {
+    try {
+      final directory = await _epgCacheDirectoryProvider();
+      final id = _epgCacheId(url);
+      final metadataFile = File('${directory.path}/$id.json');
+      final bodyFile = File('${directory.path}/$id.xml.gz');
+      if (!await metadataFile.exists()) return null;
+      final metadata = jsonDecode(await metadataFile.readAsString());
+      if (metadata is! Map || metadata['url'] != url) return null;
+      final fetchedAt = DateTime.tryParse((metadata['fetchedAt'] ?? '').toString());
+      final lastAttemptAt = DateTime.tryParse((metadata['lastAttemptAt'] ?? '').toString());
+      String? body;
+      if (await bodyFile.exists()) {
+        final compressed = await bodyFile.readAsBytes();
+        if (compressed.length > _maxEpgCacheBytes) return null;
+        final expanded = gzip.decode(compressed);
+        if (expanded.length > _maxEpgCacheBytes) return null;
+        final decoded = utf8.decode(expanded, allowMalformed: true);
+        if (decoded.trim().isNotEmpty) body = decoded;
+      }
+      return _EpgSourceCacheEntry(
+        body: body,
+        fetchedAt: fetchedAt,
+        lastAttemptAt: lastAttemptAt,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _writeEpgSourceCache(
+    String url, {
+    required DateTime? fetchedAt,
+    required DateTime lastAttemptAt,
+    String? body,
+  }) async {
+    try {
+      final directory = await _epgCacheDirectoryProvider();
+      final id = _epgCacheId(url);
+      await directory.create(recursive: true);
+      if (body != null) {
+        final compressed = gzip.encode(utf8.encode(body));
+        if (compressed.length <= _maxEpgCacheBytes) {
+          final bodyFile = File('${directory.path}/$id.xml.gz');
+          final temporaryBody = File('${directory.path}/$id.xml.gz.tmp');
+          await temporaryBody.writeAsBytes(compressed, flush: true);
+          if (await bodyFile.exists()) await bodyFile.delete();
+          await temporaryBody.rename(bodyFile.path);
+        }
+      }
+      final metadataFile = File('${directory.path}/$id.json');
+      final temporaryMetadata = File('${directory.path}/$id.json.tmp');
+      await temporaryMetadata.writeAsString(
+        jsonEncode(<String, String>{
+          'url': url,
+          'fetchedAt': fetchedAt?.toIso8601String() ?? '',
+          'lastAttemptAt': lastAttemptAt.toIso8601String(),
+        }),
+        flush: true,
+      );
+      if (await metadataFile.exists()) await metadataFile.delete();
+      await temporaryMetadata.rename(metadataFile.path);
+    } catch (_) {
+      // Si el almacenamiento falla, las fuentes todavía pueden descargarse.
+    }
+  }
+
+  Future<String?> _loadEpgSource(String url, {required bool forceRefresh}) {
+    final pending = _epgSourceInFlight[url];
+    if (pending != null) return pending;
+    final operation = () async {
+      final now = DateTime.now();
+      final cached = await _readEpgSourceCache(url);
+      final cachedAge = cached?.fetchedAt == null ? null : now.difference(cached!.fetchedAt!);
+      if (!forceRefresh && cached?.body != null && cachedAge != null &&
+          !cachedAge.isNegative && cachedAge <= _epgFreshTtl) {
+        return cached!.body;
+      }
+      final lastAttemptAge = cached?.lastAttemptAt == null
+          ? null
+          : now.difference(cached!.lastAttemptAt!);
+      if (!forceRefresh && lastAttemptAge != null &&
+          !lastAttemptAge.isNegative && lastAttemptAge < _epgFailureCooldown) {
+        return cached?.body;
+      }
+      try {
+        final body = await _downloadText(
+          url,
+          maxBytes: _maxEpgCacheBytes,
+          timeout: const Duration(seconds: 12),
+        );
+        await _writeEpgSourceCache(
+          url,
+          fetchedAt: now,
+          lastAttemptAt: now,
+          body: body,
+        );
+        return body;
+      } catch (_) {
+        await _writeEpgSourceCache(
+          url,
+          fetchedAt: cached?.fetchedAt,
+          lastAttemptAt: now,
+        );
+        if (cached?.body != null && cachedAge != null &&
+            !cachedAge.isNegative && cachedAge <= _epgStaleMaxAge) {
+          return cached!.body;
+        }
+        return null;
+      }
+    }();
+    _epgSourceInFlight[url] = operation;
+    return operation.whenComplete(() {
+      if (identical(_epgSourceInFlight[url], operation)) {
+        _epgSourceInFlight.remove(url);
+      }
+    });
+  }
+
+  AutoLiveCatalog? _cachedCatalog;
+  DateTime? _cachedAt;
+  String? _cachedPlaylist;
+  String? _cachedEpg;
+  final Map<String, ({bool available, int quality, DateTime checkedAt})> _probeCache =
+      <String, ({bool available, int quality, DateTime checkedAt})>{};
+
+  /// Lee las asignaciones compartidas por el planificador Cloudflare.
+  /// Devuelve null solo cuando el endpoint todavía no está disponible; una
+  /// respuesta válida sin eventos devuelve una lista vacía y evita reutilizar
+  /// partidos antiguos del almacenamiento local.
+  Future<List<ScheduledLiveEvent>?> fetchPublishedSchedule() async {
+    final base = SportsApiService.normalizeBaseUrl(sportsApiBaseUrl.value);
+    if (base == null) return null;
+    final uri = Uri.parse('$base/api/live/auto/schedule');
+    try {
+      final response = await _client.get(
+        uri,
+        headers: const <String, String>{'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 12));
+      if (response.statusCode == 404 || response.statusCode == 503) {
+        return null;
+      }
+      if (response.statusCode != 200) return null;
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) return null;
+      final status = (decoded['status'] ?? '').toString();
+      // Un snapshot stale no debe imponerse al cálculo local: puede contener
+      // una URL que dejó de responder durante la caída del cron.
+      if (status != 'ok') return null;
+      final rows = decoded['events'];
+      if (rows is! List) return null;
+
+      final now = DateTime.now();
+      final result = <ScheduledLiveEvent>[];
+      for (final raw in rows) {
+        if (raw is! Map) continue;
+        final row = Map<String, dynamic>.from(raw);
+        final eventRaw = row['event'];
+        if (eventRaw is! Map) continue;
+        final eventData = Map<String, dynamic>.from(eventRaw);
+        final startsAt = DateTime.tryParse(
+          (eventData['startsAt'] ?? '').toString(),
+        );
+        final endsAt = DateTime.tryParse(
+          (eventData['endsAt'] ?? '').toString(),
+        );
+        final id = (eventData['id'] ?? '').toString().trim();
+        final title = (eventData['title'] ?? '').toString().trim();
+        if (id.isEmpty || title.isEmpty || startsAt == null) continue;
+        final detailUrl = (eventData['detailUrl'] ?? '').toString().trim();
+        final rawParticipants = eventData['participants'];
+        final participants = rawParticipants is List
+            ? rawParticipants
+                .map(SportsAgendaParticipant.fromJson)
+                .whereType<SportsAgendaParticipant>()
+                .toList(growable: false)
+            : <SportsAgendaParticipant>[];
+        String safeLogo(dynamic value) => _safeAgendaImageUrl(value);
+        final homeTeam = (eventData['homeTeam'] ?? '').toString();
+        final awayTeam = (eventData['awayTeam'] ?? '').toString();
+        String participantLogo(String name) => participants
+            .where((item) => item.name.toLowerCase() == name.toLowerCase())
+            .map((item) => item.imageUrl)
+            .firstWhere((url) => url.isNotEmpty, orElse: () => '');
+        final event = SportsAgendaEvent(
+          id: id,
+          title: title,
+          sport: (eventData['sport'] ?? 'Deporte').toString(),
+          competition: (eventData['competition'] ?? '').toString(),
+          homeTeam: homeTeam,
+          awayTeam: awayTeam,
+          homeTeamLogo: safeLogo(
+            eventData['homeTeamLogo'] ??
+            eventData['homeTeamLogoUrl'] ??
+            eventData['homeLogo'],
+          ).isNotEmpty
+              ? safeLogo(
+                  eventData['homeTeamLogo'] ??
+                  eventData['homeTeamLogoUrl'] ??
+                  eventData['homeLogo'],
+                )
+              : participantLogo(homeTeam),
+          awayTeamLogo: safeLogo(
+            eventData['awayTeamLogo'] ??
+            eventData['awayTeamLogoUrl'] ??
+            eventData['awayLogo'],
+          ).isNotEmpty
+              ? safeLogo(
+                  eventData['awayTeamLogo'] ??
+                  eventData['awayTeamLogoUrl'] ??
+                  eventData['awayLogo'],
+                )
+              : participantLogo(awayTeam),
+          participants: participants,
+          imageUrl: safeLogo(
+            eventData['imageUrl'] ??
+            eventData['image'] ??
+            eventData['thumbnailUrl'] ??
+            eventData['photo'],
+          ),
+          venue: (eventData['venue'] ?? '').toString(),
+          status: (eventData['status'] ?? 'scheduled').toString(),
+          statusLabel: (eventData['statusLabel'] ?? '').toString(),
+          homeScore: (eventData['homeScore'] ?? '').toString(),
+          awayScore: (eventData['awayScore'] ?? '').toString(),
+          providerLeagueId: int.tryParse((eventData['providerLeagueId'] ?? '').toString()),
+          providerSeasonId: int.tryParse((eventData['providerSeasonId'] ?? '').toString()),
+          providerSeriesId: int.tryParse((eventData['providerSeriesId'] ?? '').toString()),
+          startsAt: startsAt.toLocal(),
+          endsAt: endsAt?.toLocal(),
+          detailUrl: isSafeHttpUrl(detailUrl)
+              ? detailUrl
+              : '',
+        );
+
+        final removeAt = DateTime.tryParse(
+          (row['removeAt'] ?? '').toString(),
+        ) ?? endsAt ?? startsAt.add(const Duration(hours: 3));
+        if (!removeAt.isAfter(now)) continue;
+
+        final sourcesRaw = row['sources'];
+        final sources = <ScheduledLiveSource>[];
+        if (sourcesRaw is List) {
+          for (final sourceValue in sourcesRaw) {
+            if (sourceValue is! Map) continue;
+            final source = Map<String, dynamic>.from(sourceValue);
+            final url = (source['url'] ?? '').toString().trim();
+            final programmeEnd = DateTime.tryParse(
+              (source['programmeEndsAt'] ?? '').toString(),
+            ) ?? removeAt;
+            if (source['available'] != true || !isDirectPlayableStream(url)) {
+              continue;
+            }
+            sources.add(ScheduledLiveSource(
+              channelName: (source['channelName'] ?? '').toString(),
+              url: url,
+              programmeTitle: (source['programmeTitle'] ?? '').toString(),
+              programmeEndsAt: programmeEnd.toLocal(),
+              qualityScore: int.tryParse(
+                (source['qualityScore'] ?? 0).toString(),
+              ) ?? 0,
+              languagePriority: int.tryParse(
+                (source['languagePriority'] ?? 0).toString(),
+              ) ?? 0,
+              available: true,
+              verified: source['verified'] != false,
+            ));
+          }
+        }
+        result.add(ScheduledLiveEvent(
+          event: event,
+          sources: sources,
+          removeAt: removeAt.toLocal(),
+        ));
+      }
+      result.sort((a, b) => a.event.startsAt.compareTo(b.event.startsAt));
+      return result;
+    } catch (_) {
+      // El cliente puede seguir usando la búsqueda local si el Worker está
+      // temporalmente inaccesible o todavía no tiene instalado el cron nuevo.
+      return null;
+    }
+  }
+
+  Future<AutoLiveCatalog> loadCatalog({
+    required String playlistUrl, required String epgUrl,
+    List<M3uChannel>? availableChannels,
+    bool forceRefresh = false,
+    DateTime? programmeWindowStart,
+    DateTime? programmeWindowEnd,
+  }) async {
+    final playlistUrls = _splitPlaylistUrls(playlistUrl);
+    final epgUrls = _splitPlaylistUrls(epgUrl);
+    if ((availableChannels == null &&
+            (playlistUrls.isEmpty || !playlistUrls.every(isSafeHttpUrl))) ||
+        epgUrls.isEmpty ||
+        !epgUrls.every(isSafeHttpUrl)) {
+      throw const FormatException('Configura una guía XMLTV/EPG válida y canales deportivos seleccionados.');
+    }
+    final playlistCacheKey = availableChannels == null
+        ? playlistUrls.join('\n')
+        : 'selected-catalog:' + availableChannels.map((channel) =>
+            <String>[channel.tvgId, channel.name, channel.url, channel.language].join('|'),
+          ).join('\n');
+    final epgCacheKey = epgUrls.join('\n');
+    final now = DateTime.now();
+    final cached = _cachedCatalog;
+    if (!forceRefresh && cached != null &&
+        _cachedPlaylist == playlistCacheKey && _cachedEpg == epgCacheKey &&
+        _cachedAt != null && now.difference(_cachedAt!) < const Duration(minutes: 2)) {
+      return cached;
+    }
+
+    final channelsByUrl = <String, M3uChannel>{};
+    if (availableChannels != null) {
+      // Utiliza exclusivamente los canales visibles/deportivos publicados
+      // desde Ajustes > Damián APK; no consulta listas IPTV ajenas.
+      for (final channel in availableChannels) {
+        if (isDirectPlayableStream(channel.url)) {
+          channelsByUrl.putIfAbsent(channel.url, () => channel);
+        }
+      }
+    } else {
+      // Compatibilidad con el modo anterior, que todavía puede leer M3U.
+      for (var batchStart = 0; batchStart < playlistUrls.length; batchStart += 3) {
+        final batch = playlistUrls.skip(batchStart).take(3).toList(growable: false);
+        final playlistBodies = await Future.wait<String?>(
+          batch.map((url) async {
+            try {
+              return await _downloadText(url, maxBytes: 12 * 1024 * 1024,
+                timeout: const Duration(seconds: 18));
+            } catch (_) { return null; }
+          }),
+        );
+        for (var index = 0; index < playlistBodies.length; index++) {
+          final body = playlistBodies[index];
+          if (body == null) continue;
+          final baseUri = Uri.tryParse(batch[index]);
+          for (final channel in parseM3u(body, baseUri: baseUri)) {
+            channelsByUrl.putIfAbsent(channel.url, () => channel);
+          }
+        }
+      }
+    }
+    if (availableChannels == null && cached != null &&
+        _cachedPlaylist == playlistCacheKey && _cachedAt != null &&
+        now.difference(_cachedAt!) < const Duration(hours: 12)) {
+      for (final channel in cached.channels) {
+        channelsByUrl.putIfAbsent(channel.url, () => channel);
+      }
+    }
+    final channels = channelsByUrl.values.toList(growable: false);
+    if (channels.isEmpty) {
+      if (availableChannels == null) {
+        throw const FormatException('No respondió ninguna lista M3U compatible.');
+      }
+      final empty = AutoLiveCatalog(channels: const <M3uChannel>[],
+        programmes: const <XmltvProgramme>[]);
+      _cachedCatalog = empty;
+      _cachedAt = now;
+      _cachedPlaylist = playlistCacheKey;
+      _cachedEpg = epgCacheKey;
+      return empty;
+    }
+    // Descarga en lotes pequeños y analiza el XML fuera del isolate de interfaz.
+    // Cada lote se libera antes de descargar el siguiente para controlar RAM.
+    final programmesByKey = <String, XmltvProgramme>{};
+    for (var batchStart = 0; batchStart < epgUrls.length; batchStart += 3) {
+      final batch = epgUrls.skip(batchStart).take(3).toList(growable: false);
+      final bodies = await Future.wait<String?>(
+        batch.map((url) => _loadEpgSource(
+          url,
+          forceRefresh: forceRefresh,
+        )),
+      );
+      final batchBodies = bodies.whereType<String>().toList(growable: false);
+      if (batchBodies.isEmpty) continue;
+      final parsed = await Isolate.run<List<XmltvProgramme>>(() {
+        final result = <XmltvProgramme>[];
+        for (final body in batchBodies) {
+          try {
+            result.addAll(AutomaticLiveService.parseXmltv(
+              body,
+              windowStart: programmeWindowStart,
+              windowEnd: programmeWindowEnd,
+            ));
+          } catch (_) {
+            // Una guía inválida no interrumpe las demás fuentes.
+          }
+        }
+        return result;
+      });
+      for (final programme in parsed) {
+        final key = <String>[
+          programme.channelId.toLowerCase(),
+          programme.title.toLowerCase().trim(),
+          programme.startsAt.toUtc().toIso8601String(),
+          programme.endsAt.toUtc().toIso8601String(),
+        ].join('|');
+        programmesByKey.putIfAbsent(key, () => programme);
+      }
+    }
+    // La guía es complementaria: si las fuentes EPG fallan, el catálogo de
+    // canales sigue disponible y la guía se volverá a intentar en otra carga.
+    final programmes = programmesByKey.values.toList(growable: false);
+
+    final catalog = AutoLiveCatalog(channels: channels, programmes: programmes);
+    _cachedCatalog = catalog;
+    _cachedAt = now;
+    _cachedPlaylist = playlistCacheKey;
+    _cachedEpg = epgCacheKey;
+    return catalog;
+  }
+
+  Future<String> _downloadText(
+    String value, {
+    required int maxBytes,
+    Duration timeout = const Duration(seconds: 25),
+  }) async {
+    final request = http.Request('GET', Uri.parse(value.trim()))
+      ..headers['Accept'] = '*/*';
+    final response = await _client.send(request).timeout(timeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      await response.stream.drain<void>();
+      throw HttpException('La fuente respondió HTTP ' + response.statusCode.toString() + '.');
+    }
+    final declaredLength = int.tryParse(
+      response.headers['content-length'] ?? '',
+    );
+    if (declaredLength != null && declaredLength > maxBytes) {
+      await response.stream.drain<void>();
+      throw const FormatException('El archivo supera el tamaño máximo permitido.');
+    }
+
+    // Se limita el flujo mientras llega, sin descargar primero un XML gigante.
+    final compressed = BytesBuilder(copy: false);
+    var received = 0;
+    await for (final chunk in response.stream.timeout(timeout)) {
+      received += chunk.length;
+      if (received > maxBytes) {
+        throw const FormatException('La descarga supera el tamaño máximo permitido.');
+      }
+      compressed.add(chunk);
+    }
+    var bytes = compressed.takeBytes();
+    if (bytes.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b) {
+      try {
+        final expanded = BytesBuilder(copy: false);
+        var expandedLength = 0;
+        await for (final chunk in gzip.decoder
+            .bind(Stream<List<int>>.value(bytes))
+            .timeout(timeout)) {
+          expandedLength += chunk.length;
+          if (expandedLength > maxBytes) {
+            throw const FormatException('El XML descomprimido supera el límite permitido.');
+          }
+          expanded.add(chunk);
+        }
+        bytes = expanded.takeBytes();
+      } catch (error) {
+        if (error is FormatException) rethrow;
+        throw const FormatException('No se pudo descomprimir la fuente GZIP.');
+      }
+    }
+    final body = utf8.decode(bytes, allowMalformed: true);
+    if (body.trim().isEmpty) throw const FormatException('La fuente está vacía.');
+    return body;
+  }
+
+  static List<M3uChannel> parseM3u(String body, {Uri? baseUri}) {
+    final lines = body.replaceAll('\r', '').split('\n');
+    final result = <M3uChannel>[];
+    Map<String, String>? pending;
+    var pendingName = '';
+    for (final raw in lines) {
+      final line = raw.trim();
+      if (line.isEmpty) continue;
+      if (line.startsWith('#EXTINF:')) {
+        final comma = line.indexOf(',');
+        final metadata = comma >= 0 ? line.substring(0, comma) : line;
+        pendingName = comma >= 0 ? line.substring(comma + 1).trim() : '';
+        final attributes = <String, String>{};
+        for (final match in RegExp(r'([\w-]+)="([^"]*)"').allMatches(metadata)) {
+          attributes[match.group(1)!.toLowerCase()] = match.group(2)!.trim();
+        }
+        pending = attributes;
+        continue;
+      }
+      if (line.startsWith('#') || pending == null) continue;
+      final parsedUri = Uri.tryParse(line);
+      final streamUri = parsedUri == null
+          ? null
+          : parsedUri.hasScheme
+              ? parsedUri
+              : baseUri?.resolveUri(parsedUri);
+      if (streamUri == null ||
+          !isDirectPlayableStream(streamUri.toString())) {
+        pending = null;
+        pendingName = '';
+        continue;
+      }
+      final data = pending;
+      result.add(M3uChannel(
+        name: pendingName.isNotEmpty ? pendingName :
+            (data['tvg-name'] ?? data['tvg-id'] ?? 'Canal').trim(),
+        url: streamUri.toString(), tvgId: data['tvg-id'] ?? '',
+        tvgName: data['tvg-name'] ?? '',
+        group: data['group-title'] ?? '',
+        logo: data['tvg-logo'] ?? '',
+        language: data['tvg-language'] ?? data['language'] ?? '',
+        country: data['tvg-country'] ?? data['country'] ?? '',
+      ));
+      pending = null;
+      pendingName = '';
+    }
+    return result;
+  }
+
+  static List<XmltvProgramme> parseXmltv(
+    String body, {
+    DateTime? windowStart,
+    DateTime? windowEnd,
+  }) {
+    final document = XmlDocument.parse(body);
+    final channelNames = <String, String>{};
+    for (final channel in document.findAllElements('channel')) {
+      final id = (channel.getAttribute('id') ?? '').trim();
+      final display = channel
+          .findElements('display-name')
+          .map((node) => node.innerText.trim())
+          .where((value) => value.isNotEmpty)
+          .toSet()
+          .join(' | ');
+      if (id.isNotEmpty && display.isNotEmpty) channelNames[id] = display;
+    }
+    final result = <XmltvProgramme>[];
+    for (final element in document.findAllElements('programme')) {
+      final channel = (element.getAttribute('channel') ?? '').trim();
+      final start = parseXmltvDate(element.getAttribute('start'));
+      final stop = parseXmltvDate(element.getAttribute('stop'));
+      final titleNodes = element.findElements('title');
+      final subtitleNodes = element.findElements('sub-title');
+      final descriptionNodes = element.findElements('desc');
+      final title = titleNodes.isEmpty ? '' : titleNodes.first.innerText.trim();
+      final subtitle = subtitleNodes.isEmpty
+          ? ''
+          : subtitleNodes.map((node) => node.innerText.trim())
+              .where((value) => value.isNotEmpty).join(' ');
+      final description = descriptionNodes.isEmpty
+          ? ''
+          : descriptionNodes.map((node) => node.innerText.trim())
+              .where((value) => value.isNotEmpty).join(' ');
+      if (channel.isEmpty || title.isEmpty || start == null ||
+          stop == null || !stop.isAfter(start)) continue;
+      if (windowStart != null && !stop.isAfter(windowStart)) continue;
+      if (windowEnd != null && !start.isBefore(windowEnd)) continue;
+      result.add(XmltvProgramme(
+        channelId: channel,
+        channelName: channelNames[channel] ?? '',
+        title: title,
+        subtitle: subtitle,
+        description: description,
+        startsAt: start,
+        endsAt: stop,
+      ));
+    }
+    return result;
+  }
+
+  static DateTime? parseXmltvDate(String? value) {
+    if (value == null) return null;
+    final match = RegExp(r'^(\d{14})\s*([+-]\d{4})?$').firstMatch(value.trim());
+    if (match == null) return DateTime.tryParse(value.trim())?.toLocal();
+    final digits = match.group(1)!;
+    final utc = DateTime.utc(
+      int.parse(digits.substring(0, 4)), int.parse(digits.substring(4, 6)),
+      int.parse(digits.substring(6, 8)), int.parse(digits.substring(8, 10)),
+      int.parse(di  Future<List<ScheduledLiveEvent>> schedule({
+    required List<SportsAgendaEvent> events,
+    required DateTime now,
+    required AutoLiveSettings settings,
+    List<M3uChannel>? availableChannels,
+    bool forceRefresh = false,
+    void Function(AutoLiveProgress progress)? onProgress,
+  }) async {
+    var channelCount = availableChannels?.length ?? 0;
+    var directChannelCount = 0;
+    var programmeCount = 0;
+    var matchedEventCount = 0;
+    var candidateCount = 0;
+    var testedCandidateCount = 0;
+    var availableCandidateCount = 0;
+
+    void report(String stage, String message) {
+      onProgress?.call(AutoLiveProgress(
+        stage: stage,
+        message: message,
+        eventCount: events.length,
+        channelCount: channelCount,
+        directChannelCount: directChannelCount,
+        programmeCount: programmeCount,
+        matchedEventCount: matchedEventCount,
+        candidateCount: candidateCount,
+        testedCandidateCount: testedCandidateCount,
+        availableCandidateCount: availableCandidateCount,
+      ));
+    }
+
+    report('starting', 'Iniciando comprobación de eventos y canales.');
+    if (events.isEmpty) {
+      report('agenda_empty', 'La Agenda no entregó eventos para hoy. Revisa la carga de SportAPI.');
+      return <ScheduledLiveEvent>[];
+    }
+    if (settings.epgUrls.isEmpty || !settings.epgUrls.every(isSafeHttpUrl)) {
+      report('epg_config_missing', 'No hay guías EPG válidas configuradas para buscar programas.');
+      return <ScheduledLiveEvent>[];
+    }
+    if (availableChannels == null && !settings.isConfigured) {
+      report('configuration_missing', 'La configuración de canales y guías no está completa.');
+      return <ScheduledLiveEvent>[];
+    }
+
+    final directChannels = availableChannels
+        ?.where((channel) => isDirectPlayableStream(channel.url))
+        .toList(growable: false);
+    if (availableChannels != null) {
+      channelCount = availableChannels.length;
+      directChannelCount = directChannels!.length;
+      if (directChannels.isEmpty) {
+        report('channels_empty', 'No hay canales deportivos visibles con una URL directa compatible. Revisa la selección en Damián APK.');
+        return <ScheduledLiveEvent>[];
+      }
+    }
+
+    final eligibleEvents = events.where((event) {
+      final prepareAt = event.startsAt.subtract(const Duration(minutes: 10));
+      final eventLimit = event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
+      return !now.isBefore(prepareAt) && now.isBefore(eventLimit);
+    }).toList(growable: false);
+
+    // Las guías quedan precargadas aunque el siguiente evento aún esté
+    // a más de diez minutos; el rastreo de señales comienza en T-10.
+    final programmeWindowStart = events
+        .map((event) => event.startsAt.subtract(const Duration(minutes: 30)))
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+    final programmeWindowEnd = events
+        .map((event) => (event.endsAt ??
+            event.startsAt.add(const Duration(hours: 3))).add(const Duration(minutes: 30)))
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+
+    report('loading_guides', 'Cargando las guías EPG guardadas o actualizadas para los horarios de hoy.');
+    final catalog = await loadCatalog(
+      playlistUrl: settings.playlistUrl,
+      epgUrl: settings.epgUrl,
+      availableChannels: directChannels,
+      forceRefresh: forceRefresh,
+      programmeWindowStart: programmeWindowStart,
+      programmeWindowEnd: programmeWindowEnd,
+    );
+    channelCount = catalog.channels.length;
+    directChannelCount = catalog.channels.where(
+      (channel) => isDirectPlayableStream(channel.url),
+    ).length;
+    programmeCount = catalog.programmes.length;
+    if (catalog.channels.isEmpty) {
+      report('channels_empty', 'Las guías respondieron, pero no quedó ningún canal directo válido para asociar.');
+      return <ScheduledLiveEvent>[];
+    }
+    if (eligibleEvents.isEmpty) {
+      report(
+        'outside_window',
+        'EPG y canales precargados. La búsqueda comenzará diez minutos antes y se repetirá cada dos minutos hasta el final del evento.',
+      );
+      return <ScheduledLiveEvent>[];
+    }
+
+    // XMLTV puede estar vacío o no publicar el partido; se continúa buscando
+    // mediante broadcasters y metadatos de los canales deportivos seleccionados.
+    final byId = <String, List<M3uChannel>>{};
+    final byName = <String, List<M3uChannel>>{};
+    for (final channel in catalog.channels) {
+      if (channel.tvgId.isNotEmpty) {
+        final id = normalizeText(channel.tvgId);
+        if (id.isNotEmpty) byId.putIfAbsent(id, () => <M3uChannel>[]).add(channel);
+      }
+      for (final rawName in <String>[channel.name, channel.tvgName, channel.tvgId]) {
+        for (final name in <String>{normalizeText(rawName), normalizeChannelName(rawName)}) {
+          if (name.isEmpty) continue;
+          byName.putIfAbsent(name, () => <M3uChannel>[]).add(channel);
+          final compactName = name.replaceAll(' ', '');
+          if (compactName.isNotEmpty) byName.putIfAbsent(compactName, () => <M3uChannel>[]).add(channel);
+        }
+      }
+    }
+
+    report(
+      'matching_epg',
+      'Buscando broadcasters del evento, programas EPG y coincidencias por equipos, competición y canales deportivos.',
+    );
+    final output = <ScheduledLiveEvent>[];
+    for (final event in eligibleEvents) {
+      final prepareAt = event.startsAt.subtract(const Duration(minutes: 10));
+      final eventLimit = event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
+      // Prioridad 1: coincidencia estricta por equipos/participantes.
+      // Algunas EPG solo publican etiquetas genéricas aunque el programa esté
+      // asignado al canal deportivo correcto y al horario del evento.
+      final overlappingProgrammes = catalog.programmes.where((programme) =>
+        programme.startsAt.isBefore(eventLimit) &&
+        programme.endsAt.isAfter(prepareAt)).toList(growable: false);
+      final exactProgrammes = overlappingProgrammes.where((programme) =>
+        programmeMatchesEvent(
+          '${programme.title} ${programme.subtitle} ${programme.description}',
+          event,
+        )).toList(growable: false);
+      final programmes = (exactProgrammes.isNotEmpty
+          ? exactProgrammes
+          : overlappingProgrammes.where((programme) =>
+              !_isExplicitDifferentFixture(
+                '${programme.title} ${programme.subtitle} ${programme.description}',
+              )).toList(growable: false))
+        .toList()
+        ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+      if (programmes.isNotEmpty) matchedEventCount++;
+
+      final candidates = <ScheduledLiveSource>[];
+      final used = <String>{};
+
+      // Prioridad 1: emisoras que el proveedor haya adjuntado al partido,
+      // por ejemplo ESPN, FOX Sports o TyC Sports. Se cruzan con el nombre,
+      // tvg-name y tvg-id de los canales que el usuario hizo visibles.
+      for (final broadcaster in event.broadcastChannels) {
+        for (final channel in catalog.channels) {
+          if (!isDirectPlayableStream(channel.url) ||
+              !channelMatchesBroadcaster(channel, broadcaster) ||
+              !used.add(channel.url)) {
+            continue;
+          }
+          candidates.add(ScheduledLiveSource(
+            channelName: channel.name,
+            url: channel.url,
+            programmeTitle: 'Canal indicado por SportsAPI: $broadcaster',
+            programmeEndsAt: eventLimit,
+            qualityScore: _qualityScore(channel) + 600,
+            languagePriority: channel.languagePriority,
+          ));
+        }
+      }
+
+      // Prioridad 2: coincidencias de programas XMLTV/EPG.
+      for (final programme in programmes) {
+        final channelNameAliases = programme.channelName
+            .split('|')
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toList(growable: false);
+        final mapped = <M3uChannel>[
+          ...(byId[normalizeText(programme.channelId)] ?? <M3uChannel>[]),
+          for (final channelName in channelNameAliases) ...<M3uChannel>[
+            ...(byName[normalizeText(channelName)] ?? <M3uChannel>[]),
+            ...(byName[normalizeChannelName(channelName)] ?? <M3uChannel>[]),
+            ...(byName[normalizeChannelName(channelName).replaceAll(' ', '')] ?? <M3uChannel>[]),
+          ],
+          ...(byName[normalizeText(programme.channelId)] ?? <M3uChannel>[]),
+          ...(byName[normalizeChannelName(programme.channelId)] ?? <M3uChannel>[]),
+          ...(byName[normalizeChannelName(programme.channelId).replaceAll(' ', '')] ?? <M3uChannel>[]),
+        ];
+        for (final channel in mapped) {
+          if (!isDirectPlayableStream(channel.url) || !used.add(channel.url)) continue;
+          candidates.add(ScheduledLiveSource(
+            channelName: channel.name,
+            url: channel.url,
+            programmeTitle: programme.title,
+            programmeEndsAt: programme.endsAt,
+            qualityScore: _qualityScore(channel),
+            languagePriority: channel.languagePriority,
+          ));
+        }
+      }
+      // Prioridad 3: búsqueda auxiliar en metadatos de canales deportivos.
+      // Sirve cuando ni el broadcaster del proveedor ni EPG están disponibles.
+      final alternativeMatches = catalog.channels
+          .map((channel) => (
+                channel: channel,
+                score: alternativeChannelMatchScore(channel, event),
+              ))
+          .where((match) => match.score >= 60)
+          .toList()
+        ..sort((a, b) {
+          final score = b.score.compareTo(a.score);
+          if (score != 0) return score;
+          final language =
+              b.channel.languagePriority.compareTo(a.channel.languagePriority);
+          return language != 0
+              ? language
+              : _qualityScore(b.channel).compareTo(_qualityScore(a.channel));
+        });
+
+      for (final match in alternativeMatches.take(6)) {
+        final channel = match.channel;
+        if (!isDirectPlayableStream(channel.url) || !used.add(channel.url)) {
+          continue;
+        }
+        candidates.add(ScheduledLiveSource(
+          channelName: channel.name,
+          url: channel.url,
+          programmeTitle: 'Búsqueda alternativa por equipos/deporte (sin EPG)',
+          programmeEndsAt: eventLimit,
+          qualityScore: _qualityScore(channel) + match.score,
+          languagePriority: channel.languagePriority,
+        ));
+      }
+
+      if (candidates.isNotEmpty) matchedEventCount++;
+      candidateCount += candidates.length;
+      if (candidates.isEmpty) continue;
+
+      int compareCandidates(ScheduledLiveSource a, ScheduledLiveSource b) {
+        final aSportsApi =
+            a.programmeTitle.startsWith('Canal indicado por SportsAPI:');
+        final bSportsApi =
+            b.programmeTitle.startsWith('Canal indicado por SportsAPI:');
+        if (aSportsApi != bSportsApi) return aSportsApi ? -1 : 1;
+        final aAlternative =
+            a.programmeTitle.startsWith('Búsqueda alternativa');
+        final bAlternative =
+            b.programmeTitle.startsWith('Búsqueda alternativa');
+        if (aAlternative != bAlternative) return aAlternative ? 1 : -1;
+        final language = b.languagePriority.compareTo(a.languagePriority);
+        return language != 0
+            ? language
+            : b.qualityScore.compareTo(a.qualityScore);
+      }
+
+      report(
+        'checking_signals',
+        'Se encontraron ${candidates.length} señales por broadcasters, EPG o búsqueda alternativa. Comprobando disponibilidad.',
+      );
+      candidates.sort(compareCandidates);
+      final verifiedCandidates = <ScheduledLiveSource>[];
+      for (var batchStart = 0; batchStart < candidates.length; batchStart += 8) {
+        final batch = candidates.skip(batchStart).take(8).toList(growable: false);
+        testedCandidateCount += batch.length;
+        final checked = await Future.wait<ScheduledLiveSource>(
+          batch.map(_probeCandidate),
+        );
+        final available = checked.where((candidate) => candidate.available).toList(growable: false);
+        verifiedCandidates.addAll(available);
+        availableCandidateCount += available.length;
+        report('checking_signals', 'Señales comprobadas: $testedCandidateCount; reproducibles: $availableCandidateCount.');
+      }
+      verifiedCandidates.sort(compareCandidates);
+
+      // El sondeo HTTP es orientativo: algunos CDN bloquean GET/Range desde
+      // diagnóstico, aunque el reproductor nativo pueda abrir el manifiesto.
+      // Conservamos la mejor coincidencia EPG para probarla en el reproductor.
+      ScheduledLiveSource nativeFallback(ScheduledLiveSource candidate) =>
+          ScheduledLiveSource(
+            channelName: candidate.channelName,
+            url: candidate.url,
+            programmeTitle: candidate.programmeTitle,
+            programmeEndsAt: candidate.programmeEndsAt,
+            qualityScore: candidate.qualityScore,
+            languagePriority: candidate.languagePriority,
+            available: true,
+            verified: false,
+          );
+
+      final sources = <ScheduledLiveSource>[];
+      if (verifiedCandidates.isNotEmpty) {
+        final spanish = verifiedCandidates.where((item) => item.languagePriority == 2);
+        final english = verifiedCandidates.where((item) => item.languagePriority == 1);
+        if (spanish.isNotEmpty) sources.add(spanish.first);
+        if (english.isNotEmpty) sources.add(english.first);
+        // Si solo se conoce otra prioridad de idioma, conserva esa señal.
+        if (sources.isEmpty) sources.add(verifiedCandidates.first);
+      } else {
+        // Solo recurrimos a una URL no verificada si ninguna candidata supera
+        // el sondeo. Así no mostramos canales caídos cuando ya existe otro
+        // idioma con una señal confirmada.
+        sources.add(nativeFallback(candidates.first));
+      }
+      final programmeEnd = sources.map((s) => s.programmeEndsAt).reduce(
+        (a, b) => a.isAfter(b) ? a : b,
+      );
+      final removeAt = event.endsAt ?? programmeEnd;
+      if (now.isBefore(removeAt)) {
+        output.add(ScheduledLiveEvent(event: event, sources: sources, removeAt: removeAt));
+      }
+    }
+    output.sort((a, b) => a.event.startsAt.compareTo(b.event.startsAt));
+    if (output.isNotEmpty) {
+      final unverifiedCount = output
+          .expand((item) => item.sources)
+          .where((source) => !source.verified)
+          .length;
+      report(
+        'ready',
+        unverifiedCount == 0
+            ? 'Transmisiones preparadas para ${output.length} evento(s).'
+            : 'Transmisiones preparadas para ${output.length} evento(s); ${unverifiedCount} señal(es) se comprobarán al abrir el reproductor.',
+      );
+    } else if (matchedEventCount == 0) {
+      report(
+        'programme_not_matched',
+        'Todavía no apareció una señal. Se repetirá la búsqueda cada dos minutos con broadcasters, EPG, equipos, participantes, competición y canales deportivos hasta el final del evento.',
+      );
+    } else if (candidateCount == 0) {
+      report('channel_not_mapped', 'Hay programas coincidentes, pero sus identificadores/nombres no enlazan con los canales seleccionados.');
+    } else {
+      report('signals_unavailable', 'Se encontraron programas y candidatos, pero ninguna URL superó la comprobación de señal. Puede estar caída, bloqueada o no ser un manifiesto directo compatible.');
+    }
+    return output;
+  }
+
+ount == 0) {
+      report('channel_not_mapped', 'Hay programas coincidentes, pero sus identificadores/nombres no enlazan con los canales seleccionados.');
+    } else {
+      report('signals_unavailable', 'Se encontraron programas y candidatos, pero ninguna URL superó la comprobación de señal. Puede estar caída, bloqueada o no ser un manifiesto directo compatible.');
+    }
+    return output;
+  }
+
+  /// Compara el nombre del broadcaster del proveedor con el nombre,
+  /// tvg-name o tvg-id del canal visible. "ESPN" también puede coincidir con
+  /// "ESPN 2 HD"; nunca crea una URL de reproducción inventada.
+  static bool channelMatchesBroadcaster(
+    M3uChannel channel,
+    String broadcasterName,
+  ) {
+    final target =
+        normalizeChannelName(broadcasterName).replaceAll(' ', '');
+    if (target.length < 3) return false;
+    final channelNames = <String>[
+      channel.name,
+      channel.tvgName,
+      channel.tvgId,
+    ].map((value) => normalizeChannelName(value).replaceAll(' ', ''))
+        .where((value) => value.length >= 3);
+    return channelNames.any((value) =>
+        value == target ||
+        value.contains(target) ||
+        target.contains(value));
+  }
+
+  /// Búsqueda sin EPG: primero nombres de equipos/participantes y torneo;
+  /// luego cadenas de TV adecuadas al deporte del evento.
+  static int alternativeChannelMatchScore(
+    M3uChannel channel,
+    SportsAgendaEvent event,
+  ) {
+    final metadata = normalizeText(
+      '${channel.name} ${channel.tvgName} ${channel.tvgId} ${channel.group}',
+    );
+    if (metadata.isEmpty) return 0;
+
+    final home = event.homeTeam.trim();
+    final away = event.awayTeam.trim();
+    final homeMatched =
+        home.isNotEmpty && _teamMatchesProgramme(home, metadata);
+    final awayMatched =
+        away.isNotEmpty && _teamMatchesProgramme(away, metadata);
+    if (homeMatched && awayMatched) return 100;
+    if (homeMatched || awayMatched) return 78;
+
+    final participants = event.participants
+        .map((participant) => participant.name.trim())
+        .where((name) => name.isNotEmpty)
+        .toList(growable: false);
+    final sport = normalizeText(event.sport + ' ' + event.competition);
+    final individualSport = RegExp(
+      r'\b(?:mma|ufc|ciclismo|cycling|tenis|tennis|golf|boxeo|boxing|formula 1|formula uno)\b',
+    ).hasMatch(sport);
+    final participantMatches = participants
+        .where((name) => _teamMatchesProgramme(name, metadata))
+        .length;
+    if (participantMatches > 0 &&
+        (individualSport || participantMatches >= 2)) {
+      return 95;
+    }
+
+    final competition = normalizeText(event.competition);
+    if (competition.length >= 5 && metadata.contains(competition)) return 90;
+    final title = normalizeText(event.title);
+    if (title.length >= 8 && metadata.contains(title)) return 90;
+
+    final keywords = <String>[];
+    if (RegExp(r'\b(?:futbol|football|soccer|futebol)\b').hasMatch(sport)) {
+      keywords.addAll(<String>[
+        'espn', 'fox sports', 'tudn', 'bein sports', 'dazn',
+        'sky sports', 'tyc sports', 'futbol', 'football', 'soccer',
+      ]);
+    } else if (RegExp(r'\b(?:basket|basketball|baloncesto|nba)\b').hasMatch(sport)) {
+      keywords.addAll(<String>[
+        'espn', 'nba', 'tnt sports', 'basketball', 'baloncesto', 'sportv',
+      ]);
+    } else if (RegExp(r'\b(?:tenis|tennis|atp|wta)\b').hasMatch(sport)) {
+      keywords.addAll(<String>[
+        'espn', 'tennis', 'atp', 'wta', 'tennis channel', 'sportv',
+      ]);
+    } else if (RegExp(r'\bcricket\b').hasMatch(sport)) {
+      keywords.addAll(<String>[
+        'cricket', 'willow', 'sky sports', 'star sports',
+      ]);
+    } else if (RegExp(r'\b(?:baseball|beisbol|mlb)\b').hasMatch(sport)) {
+      keywords.addAll(<String>['mlb', 'baseball', 'fox sports', 'espn']);
+    } else if (RegExp(r'\brugby\b').hasMatch(sport)) {
+      keywords.addAll(<String>['rugby', 'sky sports', 'bein sports']);
+    } else if (RegExp(r'\b(?:formula 1|formula uno|motorsport|motor|moto gp)\b').hasMatch(sport)) {
+      keywords.addAll(<String>[
+        'formula 1', 'formula uno', 'f1', 'motorsport', 'moto gp',
+        'sky sports', 'espn',
+      ]);
+    } else if (RegExp(r'\b(?:mma|ufc|boxeo|boxing)\b').hasMatch(sport)) {
+      keywords.addAll(<String>[
+        'ufc', 'mma', 'boxing', 'boxeo', 'dazn', 'fight network', 'espn',
+      ]);
+    } else if (RegExp(r'\b(?:hockey|nhl)\b').hasMatch(sport)) {
+      keywords.addAll(<String>['hockey', 'nhl', 'espn']);
+    }
+
+    return keywords.any(metadata.contains) ? 65 : 0;
+  }
+
+  /// Impide usar por horario una guía que anuncia claramente otro partido.
+  static bool _isExplicitDifferentFixture(String value) {
+    final normalized = normalizeText(value);
+    return RegExp(r'\b(?:vs|versus|v)\b').hasMatch(normalized);
+  }
+
+  static const Map<String, List<String>> _teamAliases = <String, List<String>>{
+    'manchester united': <String>['man utd', 'man united', 'manchester utd'],
+    'manchester city': <String>['man city'],
+    'paris saint germain': <String>['psg', 'paris sg'],
+    'atletico madrid': <String>['atleti', 'atletico de madrid'],
+    'fc barcelona': <String>['barcelona', 'barca'],
+    'barcelona': <String>['barca'],
+    'internazionale': <String>['inter milan', 'inter'],
+    'inter milan': <String>['internazionale', 'inter'],
+    'bayern munich': <String>['bayern'],
+    'borussia dortmund': <String>['dortmund', 'bvb'],
+    'tottenham hotspur': <String>['tottenham', 'spurs'],
+    'new york knicks': <String>['ny knicks'],
+    'golden state warriors': <String>['gs warriors'],
+    'los angeles lakers': <String>['la lakers'],
+  };
+
+  static bool _teamMatchesProgramme(String team, String programme) {
+    final normalizedTeam = normalizeText(team);
+    if (normalizedTeam.isEmpty) return false;
+    if (programme.contains(normalizedTeam)) return true;
+
+    final aliases = _teamAliases.entries
+        .where((entry) =>
+            normalizedTeam == entry.key ||
+            entry.value.any((alias) => normalizeText(alias) == normalizedTeam))
+        .expand((entry) => <String>[entry.key, ...entry.value])
+        .map(normalizeText);
+    if (aliases.any((alias) => alias.isNotEmpty && programme.contains(alias))) {
+      return true;
+    }
+
+    const ignored = <String>{
+      'fc', 'cf', 'afc', 'club', 'de', 'the', 'united', 'city',
+      'team', 'basket', 'basketball', 'futbol', 'football',
+    };
+    final teamTokens = normalizedTeam
+        .split(' ')
+        .where((token) => token.length >= 3 && !ignored.contains(token))
+        .toSet();
+    if (teamTokens.isEmpty) return false;
+    final programmeTokens = programme.split(' ').toSet();
+    final matched = teamTokens.where((token) => programmeTokens.contains(token)).length;
+    final required = teamTokens.length == 1
+        ? 1
+        : (teamTokens.length * 0.67).ceil();
+    return matched >= required;
+  }
+
+  static bool programmeMatchesEvent(String programmeTitle, SportsAgendaEvent event) {
+    final programme = normalizeText(programmeTitle);
+    if (programme.isEmpty) return false;
+    final home = normalizeText(event.homeTeam);
+    final away = normalizeText(event.awayTeam);
+    final sport = normalizeText(event.sport);
+    final competition = normalizeText(event.competition);
+    final participantNames = event.participants
+        .map((participant) => participant.name.trim())
+        .where((name) => name.isNotEmpty)
+        .toList(growable: false);
+    if (participantNames.isNotEmpty) {
+      final matchedParticipants = participantNames.where(
+        (name) => _teamMatchesProgramme(name, programme),
+      ).length;
+      final individualSport = const <String>{
+        'mma', 'ufc', 'ciclismo', 'cycling', 'formula 1', 'formula uno',
+        'deportes de motor', 'motorsport', 'tenis', 'golf', 'boxeo',
+      }.contains(sport);
+      final requiredParticipants = individualSport || participantNames.length == 1
+          ? 1
+          : 2;
+      if (matchedParticipants >= requiredParticipants) return true;
+    }
+
+    // UFC suele anunciar el evento y no necesariamente ambos luchadores.
+    if (sport == 'mma' && competition.isNotEmpty &&
+        programme.contains(competition)) {
+      return true;
+    }
+
+    if (home.isNotEmpty && away.isNotEmpty &&
+        _teamMatchesProgramme(home, programme) &&
+        _teamMatchesProgramme(away, programme)) {
+      return true;
+    }
+
+    // Ciclismo y motor se publican como carreras/etapas, no como partidos.
+    const ignored = <String>{
+      'contra', 'versus', 'partido', 'futbol', 'football', 'basket',
+      'liga', 'copa', 'final', 'directo', 'vivo', 'match', 'evento',
+      'hoy', 'club', 'the', 'de', 'del', 'la', 'el', 'and',
+      'cycling', 'motorsport', 'race', 'stage', 'etapa', 'grand',
+      'prix', 'gp', 'formula', 'moto', 'tour', 'women', 'men',
+      'championship', 'series',
+    };
+    final tokens = normalizeText(event.title + ' ' + event.competition)
+        .split(' ')
+        .where((token) => token.length >= 4 &&
+            !ignored.contains(token) &&
+            int.tryParse(token) == null)
+        .toSet();
+    if (tokens.isEmpty) return false;
+    final matched = tokens.where((token) => programme.contains(token)).length;
+    final required = tokens.length == 1 ? 1 : (tokens.length * 0.5).ceil();
+    return matched >= required;
+  }
+
+  Future<bool> _probeMediaBytes(Uri uri) async {
+    try {
+      final request = http.Request('GET', uri)
+        ..headers['Range'] = 'bytes=0-2047'
+        ..headers['Accept'] = '*/*';
+      final response = await _client.send(request)
+          .timeout(const Duration(seconds: 7));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        await response.stream.drain<void>();
+        return false;
+      }
+      var received = 0;
+      await for (final chunk in response.stream.timeout(const Duration(seconds: 7))) {
+        received += chunk.length;
+        if (received >= 2048) break;
+      }
+      return received > 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<({bool available, int quality})> _probeHls(
+    Uri uri, {
+    int depth = 0,
+  }) async {
+    if (depth > 2) return (available: false, quality: 0);
+    try {
+      final response = await _client.get(
+        uri,
+        headers: const <String, String>{
+          'Accept': 'application/vnd.apple.mpegurl,*/*',
+          'Range': 'bytes=0-1048575',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200 && response.statusCode != 206) {
+        return (available: false, quality: 0);
+      }
+      final body = utf8.decode(
+        response.bodyBytes.take(1024 * 1024).toList(),
+        allowMalformed: true,
+      );
+      if (!body.trimLeft().startsWith('#EXTM3U')) {
+        return (available: false, quality: 0);
+      }
+
+      final resolutions = RegExp(r'RESOLUTION=\d+x(\d+)')
+          .allMatches(body)
+          .map((match) => int.tryParse(match.group(1) ?? '') ?? 0);
+      final maxHeight = resolutions.isEmpty ? 0 : resolutions.reduce(
+        (a, b) => a > b ? a : b,
+      );
+      final bandwidths = RegExp(r'BANDWIDTH=(\d+)')
+          .allMatches(body)
+          .map((match) => int.tryParse(match.group(1) ?? '') ?? 0);
+      final maxBandwidth = bandwidths.isEmpty ? 0 : bandwidths.reduce(
+        (a, b) => a > b ? a : b,
+      );
+      final quality = maxHeight >= 2160 || maxBandwidth >= 12000000 ? 500 :
+          maxHeight >= 1080 || maxBandwidth >= 6000000 ? 400 :
+          maxHeight >= 720 || maxBandwidth >= 3000000 ? 300 :
+          maxHeight >= 480 || maxBandwidth >= 1200000 ? 200 : 50;
+
+      final lines = body.replaceAll('\r', '').split('\n');
+      final variants = <({int bandwidth, String url})>[];
+      for (var index = 0; index < lines.length - 1; index++) {
+        final line = lines[index].trim();
+        if (!line.startsWith('#EXT-X-STREAM-INF:')) continue;
+        var next = index + 1;
+        while (next < lines.length && lines[next].trim().isEmpty) {
+          next++;
+        }
+        if (next >= lines.length || lines[next].trim().startsWith('#')) continue;
+        final match = RegExp(r'BANDWIDTH=(\d+)').firstMatch(line);
+        variants.add((
+          bandwidth: int.tryParse(match?.group(1) ?? '') ?? 0,
+          url: lines[next].trim(),
+        ));
+      }
+      if (variants.isNotEmpty) {
+        variants.sort((a, b) => b.bandwidth.compareTo(a.bandwidth));
+        for (final variant in variants.take(3)) {
+          final nested = await _probeHls(uri.resolve(variant.url), depth: depth + 1);
+          if (nested.available) {
+            return (available: true, quality: quality > nested.quality ? quality : nested.quality);
+          }
+        }
+        return (available: false, quality: quality);
+      }
+
+      String? segment;
+      for (final raw in lines) {
+        final line = raw.trim();
+        if (line.isEmpty || line.startsWith('#')) continue;
+        segment = line;
+        break;
+      }
+      segment ??= RegExp(r'URI="([^"]+)"')
+          .firstMatch(body)
+          ?.group(1);
+      if (segment == null) return (available: false, quality: quality);
+
+      final segmentAvailable = await _probeMediaBytes(uri.resolve(segment));
+      return (available: segmentAvailable, quality: quality);
+    } catch (_) {
+      return (available: false, quality: 0);
+    }
+  }
+
+
+  Future<bool> _probeDashManifest(Uri uri) async {
+    try {
+      final response = await _client.get(
+        uri,
+        headers: const <String, String>{
+          'Accept': 'application/dash+xml,application/xml,text/xml,*/*',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return false;
+      }
+      final bytes = response.bodyBytes.take(1024 * 1024).toList();
+      final body = utf8.decode(bytes, allowMalformed: true);
+      final document = XmlDocument.parse(body);
+      if (document.rootElement.name.local.toLowerCase() != 'mpd') {
+        return false;
+      }
+      return document.findAllElements('Period').any(
+        (period) => period.findElements('AdaptationSet').isNotEmpty,
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _probeSmoothStreamingManifest(Uri uri) async {
+    try {
+      final response = await _client.get(
+        uri,
+        headers: const <String, String>{
+          'Accept': 'application/vnd.ms-sstr+xml,application/xml,*/*',
+        },
+      ).timeout(const Duration(seconds: 8));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return false;
+      }
+      final body = utf8.decode(
+        response.bodyBytes.take(1024 * 1024).toList(),
+        allowMalformed: true,
+      );
+      final document = XmlDocument.parse(body);
+      return document.rootElement.name.local.toLowerCase() ==
+          'smoothstreamingmedia';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<ScheduledLiveSource> _probeCandidate(
+    ScheduledLiveSource source,
+  ) async {
+    final cached = _probeCache[source.url];
+    final now = DateTime.now();
+    if (cached != null &&
+        now.difference(cached.checkedAt) < const Duration(seconds: 75)) {
+      return ScheduledLiveSource(
+        channelName: source.channelName,
+        url: source.url,
+        programmeTitle: source.programmeTitle,
+        programmeEndsAt: source.programmeEndsAt,
+        qualityScore: source.qualityScore + cached.quality,
+        languagePriority: source.languagePriority,
+        available: cached.available,
+        verified: true,
+      );
+    }
+
+    var available = false;
+    var extraQuality = 0;
+    try {
+      final uri = Uri.parse(source.url);
+      switch (liveMediaFormatForUrl(source.url)) {
+        case LiveMediaFormat.hls:
+          final probe = await _probeHls(uri);
+          available = probe.available;
+          extraQuality = probe.quality;
+        case LiveMediaFormat.dash:
+          available = await _probeDashManifest(uri);
+        case LiveMediaFormat.smoothStreaming:
+          available = await _probeSmoothStreamingManifest(uri);
+        case LiveMediaFormat.progressive:
+          // Incluye MP4 y MPEG-TS directo. En HLS, los segmentos .ts
+          // se entregan al motor a través del manifiesto .m3u8.
+          available = await _probeMediaBytes(uri);
+        case null:
+          available = false;
+      }
+    } catch (_) {
+      available = false;
+    }
+    _probeCache[source.url] = (
+      available: available,
+      quality: extraQuality,
+      checkedAt: now,
+    );
+    return ScheduledLiveSource(
+      channelName: source.channelName,
+      url: source.url,
+      programmeTitle: source.programmeTitle,
+      programmeEndsAt: source.programmeEndsAt,
+      qualityScore: source.qualityScore + extraQuality,
+      languagePriority: source.languagePriority,
+      available: available,
+      verified: true,
+    );
+  }
+
+  static int _qualityScore(M3uChannel channel) {
+    final metadata = normalizeText(
+      '${channel.name} ${channel.tvgName} ${channel.group} ${channel.logo}',
+    );
+    final url = channel.url.toLowerCase();
+    if (RegExp(r'4k|uhd|2160p?').hasMatch(metadata) || url.contains('2160')) return 500;
+    if (RegExp(r'1080p?|full hd|fhd').hasMatch(metadata) || url.contains('1080')) return 400;
+    if (RegExp(r'720p?|hd').hasMatch(metadata) || url.contains('720')) return 300;
+    if (RegExp(r'576p?|480p?|sd').hasMatch(metadata) || url.contains('480')) return 200;
+    return 100;
+  }
+
+  static String normalizeChannelName(String value) {
+    var text = normalizeText(value);
+    text = text.replaceFirst(
+      RegExp(r'^(?:us|uk|gb|ca|mx|ar|co|ve|cl|pe|uy|py|bo|cr|gt|hn|ni|pa|cw|jm|do|sv|pt|br) '),
+      '',
+    );
+    text = text.replaceAll(
+      RegExp(r'\b(?:hd|sd|fhd|uhd|4k|8k|1080p|720p|576p|480p|50fps|60fps|hevc|h265)\b'),
+      ' ',
+    );
+    return text.trim().replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  static String normalizeText(String value) {
+    var text = value.toLowerCase();
+    const replacements = <String, String>{
+      'á':'a','é':'e','í':'i','ó':'o','ú':'u','ü':'u','ñ':'n',
+      'à':'a','è':'e','ì':'i','ò':'o','ù':'u',
+    };
+    replacements.forEach((from, to) => text = text.replaceAll(from, to));
+    return text.replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .trim().replaceAll(RegExp(r'\s+'), ' ');
+  }
+}
+
+class HttpException implements Exception {
+  const HttpException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+), '');
+  }
+
   /// 2 = español, 1 = inglés y 0 = idioma sin confirmar.
   int get languagePriority {
     final explicit = language.trim().toLowerCase();
