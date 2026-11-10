@@ -305,6 +305,19 @@ void main() {
     expect(find.text('AÑADIR CANALES Y LISTAS IPTV'), findsOneWidget);
     expect(service._adminPageCalls, greaterThanOrEqualTo(3));
 
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('iptv-search-field')),
+      'Canal General',
+    );
+    await tester.tap(find.byKey(const ValueKey<String>('iptv-search-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Mostrando 1 de 2005 canales.'), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('iptv-search-clear')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey<String>('iptv-search-clear')));
+    await tester.pumpAndSettle();
+    expect(find.text('Mostrando 2005 de 2005 canales.'), findsOneWidget);
+
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

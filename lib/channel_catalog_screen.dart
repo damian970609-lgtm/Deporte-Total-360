@@ -3102,13 +3102,41 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                       if (_iptvLoaded) const Text('Inventario completo: todas las páginas de todas las listas registradas fueron leídas.', style: TextStyle(color: _channelGreen, fontSize: 9)),
                       const SizedBox(height: 7),
                       TextField(
+                        key: const ValueKey<String>('iptv-search-field'),
                         controller: _iptvSearchController,
                         onChanged: (_) => setState(() {}),
+                        onSubmitted: (_) => setState(() {}),
+                        textInputAction: TextInputAction.search,
                         style: const TextStyle(color: Colors.white, fontSize: 11),
                         decoration: InputDecoration(
-                          labelText: 'Buscar entre todos los canales IPTV',
+                          labelText: 'Buscar canal por nombre',
+                          hintText: 'Escribe ESPN, FOX, beIN, etc.',
                           prefixIcon: const Icon(Icons.search_rounded, color: _channelCyan),
-                          suffixIcon: _iptvSearchController.text.isEmpty ? null : IconButton(onPressed: () { _iptvSearchController.clear(); setState(() {}); }, icon: const Icon(Icons.close_rounded)),
+                          suffixIcon: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              IconButton(
+                                key: const ValueKey<String>('iptv-search-button'),
+                                tooltip: 'Buscar canal por nombre',
+                                onPressed: () {
+                                  FocusScope.of(context).unfocus();
+                                  setState(() {});
+                                },
+                                icon: const Icon(Icons.search_rounded, color: _channelGreen),
+                              ),
+                              if (_iptvSearchController.text.isNotEmpty)
+                                IconButton(
+                                  key: const ValueKey<String>('iptv-search-clear'),
+                                  tooltip: 'Mostrar todos los canales',
+                                  onPressed: () {
+                                    _iptvSearchController.clear();
+                                    FocusScope.of(context).unfocus();
+                                    setState(() {});
+                                  },
+                                  icon: const Icon(Icons.close_rounded, color: _channelMuted),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 5),
