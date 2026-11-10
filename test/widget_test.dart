@@ -308,7 +308,7 @@ void main() {
     final iptvScrollable = find.descendant(
       of: find.byKey(const ValueKey<String>('channel-admin-iptv-list')),
       matching: find.byType(Scrollable),
-    );
+    ).first;
     final addSportsChannel = find.byKey(
       const ValueKey<String>('iptv-add-channel-sports-channel'),
     );

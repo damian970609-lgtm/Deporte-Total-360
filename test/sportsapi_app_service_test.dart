@@ -837,8 +837,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final previousBase = sportsApiBaseUrl.value;
     sportsApiBaseUrl.value = 'https://worker-agenda-offline.example';
-    final now = DateTime.now();
-    final start = DateTime(now.year, now.month, now.day);
+    final scheduled = DateTime.now().add(const Duration(hours: 1));
+    final start = DateTime(scheduled.year, scheduled.month, scheduled.day);
     final saved = SportsAgendaEvent(
       id: 'sportsapi-fixture-offline-202',
       title: 'Equipo Uno vs Equipo Dos',
@@ -846,7 +846,7 @@ void main() {
       competition: 'Premier League',
       homeTeam: 'Equipo Uno',
       awayTeam: 'Equipo Dos',
-      startsAt: start.add(const Duration(hours: 14)),
+      startsAt: scheduled,
       detailUrl: 'https://deporte-total-360-api.example/api/sportsapi/fixtures/202',
     );
     await SportsAgendaStore.saveWindow(
