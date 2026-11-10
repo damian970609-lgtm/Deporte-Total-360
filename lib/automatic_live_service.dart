@@ -1501,10 +1501,8 @@ class AutomaticLiveService {
       final eventLimit = event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
       return !now.isBefore(prepareAt) && now.isBefore(eventLimit);
     }).toList(growable: false);
-    if (eligibleEvents.isEmpty) {
-      report('outside_window', 'Hay eventos en Agenda, pero ninguno está dentro de la ventana de preparación (10 minutos antes del inicio hasta el final).');
-      return <ScheduledLiveEvent>[];
-    }
+    // Las guías se precargan aunque el siguiente evento todavía esté a más
+    // de diez minutos; la búsqueda de señales comienza en T-10.
 
     final programmeWindowStart = events
         .map((event) => event.startsAt.subtract(const Duration(minutes: 30)))
