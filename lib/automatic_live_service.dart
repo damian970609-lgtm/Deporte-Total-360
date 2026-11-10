@@ -1557,7 +1557,10 @@ class AutomaticLiveService {
       }
     }
 
-    report('matching_epg', 'Buscando coincidencias entre los programas EPG y los eventos de Agenda.');
+    report(
+      'matching_epg',
+      'Buscando broadcasters del evento, EPG, equipos, participantes, competición y canales deportivos seleccionados.',
+    );
     final output = <ScheduledLiveEvent>[];
     for (final event in eligibleEvents) {
       final prepareAt = event.startsAt.subtract(const Duration(minutes: 10));
@@ -1755,7 +1758,10 @@ class AutomaticLiveService {
             : 'Transmisiones preparadas para ${output.length} evento(s); ${unverifiedCount} señal(es) se comprobarán al abrir el reproductor.',
       );
     } else if (matchedEventCount == 0) {
-      report('programme_not_matched', 'La EPG contiene programas, pero sus títulos no coinciden con los equipos o participantes de los eventos actuales.');
+      report(
+        'programme_not_matched',
+        'Aún no se localizó la transmisión. La búsqueda se repetirá cada dos minutos con broadcasters, EPG, equipos, participantes, competición y canales seleccionados hasta que termine el evento.',
+      );
     } else if (candidateCount == 0) {
       report('channel_not_mapped', 'Hay programas coincidentes, pero sus identificadores/nombres no enlazan con los canales seleccionados.');
     } else {
