@@ -1556,22 +1556,6 @@ class AutomaticLiveService {
             verified: false,
           );
 
-      ScheduledLiveSource? chooseLanguage(int priority) {
-        final verified = verifiedCandidates.where(
-          (item) => item.languagePriority == priority,
-        );
-        for (final candidate in verified) {
-          return candidate;
-        }
-        final fallback = candidates.where(
-          (item) => item.languagePriority == priority,
-        );
-        for (final candidate in fallback) {
-          return nativeFallback(candidate);
-        }
-        return null;
-      }
-
       final sources = <ScheduledLiveSource>[];
       if (verifiedCandidates.isNotEmpty) {
         final spanish = verifiedCandidates.where((item) => item.languagePriority == 2);
