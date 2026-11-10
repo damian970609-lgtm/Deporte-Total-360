@@ -18,6 +18,19 @@ Future<void> _pumpIptvLoading(WidgetTester tester) async {
   await tester.pump();
 }
 
+Future<void> _waitForEnabledIptvButton(
+  WidgetTester tester,
+  Finder buttonFinder,
+) async {
+  for (var frame = 0; frame < 40; frame++) {
+    if (buttonFinder.evaluate().isNotEmpty) {
+      final button = tester.widget<OutlinedButton>(buttonFinder);
+      if (button.onPressed != null) return;
+    }
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
 Future<void> _scrollIptvUntilVisible(
   WidgetTester tester,
   Finder target,
@@ -237,9 +250,15 @@ void main() {
     await _pumpIptvLoading(tester);
     expect(find.textContaining('Inventario completo:'), findsOneWidget);
 
-    final reimport = find.text('REIMPORTAR TODAS LAS LISTAS GUARDADAS');
-    await _scrollIptvUntilVisible(tester, reimport);
-    expect(reimport.hitTestable(), findsOneWidget);
+    final reimport = find.byKey(
+      const ValueKey<String>('iptv-reimport-sources'),
+    );
+    await _scrollIptvUntilVisible(
+      tester,
+      find.text('REIMPORTAR TODAS LAS LISTAS GUARDADAS'),
+    );
+    await _waitForEnabledIptvButton(tester, reimport);
+    expect(tester.widget<OutlinedButton>(reimport).onPressed, isNotNull);
     await tester.tap(reimport);
     await _pumpIptvLoading(tester);
 
