@@ -1037,22 +1037,22 @@ class ChannelCatalogService {
   }
 
   Future<Map<String, dynamic>> fetchTrialPassSummary() async {
-    final result = await _client.get(
+    final result = await _authenticatedRequest((headers) => _client.get(
       Uri.parse(_baseUrl + '/api/channels/admin/trials'),
-      headers: _authHeaders(),
-    ).timeout(const Duration(seconds: 20));
+      headers: headers,
+    ).timeout(const Duration(seconds: 20)));
     return _decode(result);
   }
 
   Future<List<String>> generateTrialPassCodes({int count = 10}) async {
-    final result = await _client.post(
+    final result = await _authenticatedRequest((headers) => _client.post(
       Uri.parse(_baseUrl + '/api/channels/admin/trials'),
       headers: <String, String>{
-        ..._authHeaders(),
+        ...headers,
         'Content-Type': 'application/json',
       },
       body: jsonEncode(<String, int>{'count': count.clamp(1, 10).toInt()}),
-    ).timeout(const Duration(seconds: 20));
+    ).timeout(const Duration(seconds: 20)));
     final payload = _decode(result);
     final rows = payload['codes'];
     if (rows is! List) return <String>[];
@@ -1174,8 +1174,9 @@ class ChannelCatalogService {
         'limit': normalizedLimit.toString(),
       },
     );
-    final result = await _client.get(uri, headers: _authHeaders())
-        .timeout(const Duration(seconds: 25));
+    final result = await _authenticatedRequest((headers) =>
+        _client.get(uri, headers: headers)
+            .timeout(const Duration(seconds: 25)));
     final payload = _decode(result);
     final rows = payload['channels'];
     if (rows is! List) {
@@ -1267,19 +1268,19 @@ class ChannelCatalogService {
   /// Comprueba la licencia comercial o el pase gratuito de la cuenta Google
   /// actual. El servidor decide el acceso; no se confía en datos locales.
   Future<AppLicenseStatus> fetchAppLicenseStatus() async {
-    final result = await _client.get(
+    final result = await _authenticatedRequest((headers) => _client.get(
       Uri.parse(_baseUrl + '/api/license'),
-      headers: _authHeaders(),
-    ).timeout(const Duration(seconds: 15));
+      headers: headers,
+    ).timeout(const Duration(seconds: 15)));
     final payload = _decode(result);
     return AppLicenseStatus.fromJson(payload);
   }
 
   Future<List<AppLicenseRecord>> fetchAdminLicenses() async {
-    final result = await _client.get(
+    final result = await _authenticatedRequest((headers) => _client.get(
       Uri.parse(_baseUrl + '/api/channels/admin/licenses'),
-      headers: _authHeaders(),
-    ).timeout(const Duration(seconds: 20));
+      headers: headers,
+    ).timeout(const Duration(seconds: 20)));
     final rows = _decode(result)['licenses'];
     if (rows is! List) return <AppLicenseRecord>[];
     return rows
@@ -1298,10 +1299,10 @@ class ChannelCatalogService {
     if (!const <String>{'paid', 'free'}.contains(licenseType)) {
       throw ArgumentError.value(licenseType, 'licenseType');
     }
-    final result = await _client.post(
+    final result = await _authenticatedRequest((headers) => _client.post(
       Uri.parse(_baseUrl + '/api/channels/admin/licenses'),
       headers: <String, String>{
-        ..._authHeaders(),
+        ...headers,
         'Content-Type': 'application/json',
       },
       body: jsonEncode(<String, String>{
@@ -1309,29 +1310,29 @@ class ChannelCatalogService {
         'licenseType': licenseType,
         'note': note.trim(),
       }),
-    ).timeout(const Duration(seconds: 20));
+    ).timeout(const Duration(seconds: 20)));
     _decode(result);
   }
 
   Future<void> revokeAppLicense({required String email}) async {
-    final result = await _client.patch(
+    final result = await _authenticatedRequest((headers) => _client.patch(
       Uri.parse(_baseUrl + '/api/channels/admin/licenses/revoke'),
       headers: <String, String>{
-        ..._authHeaders(),
+        ...headers,
         'Content-Type': 'application/json',
       },
       body: jsonEncode(<String, String>{
         'email': email.trim().toLowerCase(),
       }),
-    ).timeout(const Duration(seconds: 20));
+    ).timeout(const Duration(seconds: 20)));
     _decode(result);
   }
 
   Future<List<ChannelPlaylistSource>> fetchSources() async {
-    final result = await _client.get(
+    final result = await _authenticatedRequest((headers) => _client.get(
       Uri.parse(_baseUrl + '/api/channels/admin/sources'),
-      headers: _authHeaders(),
-    ).timeout(const Duration(seconds: 20));
+      headers: headers,
+    ).timeout(const Duration(seconds: 20)));
     final rows = _decode(result)['sources'];
     if (rows is! List) {
       throw const ChannelCatalogException(
@@ -1350,17 +1351,17 @@ class ChannelCatalogService {
     required String url,
     required String label,
   }) async {
-    final result = await _client.post(
+    final result = await _authenticatedRequest((headers) => _client.post(
       Uri.parse(_baseUrl + '/api/channels/admin/sources'),
       headers: <String, String>{
-        ..._authHeaders(),
+        ...headers,
         'Content-Type': 'application/json',
       },
       body: jsonEncode(<String, String>{
         'url': url.trim(),
         'label': label.trim().isEmpty ? 'Lista IPTV' : label.trim(),
       }),
-    ).timeout(const Duration(seconds: 25));
+    ).timeout(const Duration(seconds: 25)));
     _decode(result);
   }
 
@@ -1389,18 +1390,18 @@ class ChannelCatalogService {
         'El nombre de la lista debe tener entre 1 y 80 caracteres.',
       );
     }
-    final result = await _client.put(
+    final result = await _authenticatedRequest((headers) => _client.put(
       Uri.parse(_baseUrl + '/api/channels/admin/sources/' +
           Uri.encodeComponent(safeId)),
       headers: <String, String>{
-        ..._authHeaders(),
+        ...headers,
         'Content-Type': 'application/json',
       },
       body: jsonEncode(<String, String>{
         'url': uri.toString(),
         'label': label.trim(),
       }),
-    ).timeout(const Duration(seconds: 20));
+    ).timeout(const Duration(seconds: 20)));
     _decode(result);
   }
 
@@ -1409,29 +1410,29 @@ class ChannelCatalogService {
   Future<Map<String, dynamic>> addPlaylistSourcesToCatalog({
     required List<Map<String, String>> sources,
   }) async {
-    final result = await _client.post(
+    final result = await _authenticatedRequest((headers) => _client.post(
       Uri.parse(_baseUrl + '/api/channels/admin/sources/bulk'),
       headers: <String, String>{
-        ..._authHeaders(),
+        ...headers,
         'Content-Type': 'application/json',
       },
       body: jsonEncode(<String, Object>{
         'sources': sources,
       }),
-    ).timeout(const Duration(seconds: 30));
+    ).timeout(const Duration(seconds: 30)));
     return _decode(result);
   }
 
   /// Pone en cola la actualización de las listas registradas.
   Future<void> refreshSources() async {
-    final result = await _client.post(
+    final result = await _authenticatedRequest((headers) => _client.post(
       Uri.parse(_baseUrl + '/api/channels/admin/refresh'),
       headers: <String, String>{
-        ..._authHeaders(),
+        ...headers,
         'Content-Type': 'application/json',
       },
       body: '{}',
-    ).timeout(const Duration(seconds: 25));
+    ).timeout(const Duration(seconds: 25)));
     _decode(result);
   }
 
@@ -1443,11 +1444,11 @@ class ChannelCatalogService {
     if (safeId.isEmpty) {
       throw const ChannelCatalogException('El identificador de la lista no es válido.');
     }
-    final result = await _client.delete(
+    final result = await _authenticatedRequest((headers) => _client.delete(
       Uri.parse(_baseUrl + '/api/channels/admin/sources/' +
           Uri.encodeComponent(safeId)),
-      headers: _authHeaders(),
-    ).timeout(const Duration(seconds: 20));
+      headers: headers,
+    ).timeout(const Duration(seconds: 20)));
     _decode(result);
   }
 
@@ -1458,11 +1459,11 @@ class ChannelCatalogService {
     if (!RegExp(r'^[a-zA-Z0-9_-]{1,100}$').hasMatch(safeId)) {
       throw const ChannelCatalogException('El identificador del canal no es válido.');
     }
-    final result = await _client.delete(
+    final result = await _authenticatedRequest((headers) => _client.delete(
       Uri.parse(_baseUrl + '/api/channels/admin/channels/' +
           Uri.encodeComponent(safeId)),
-      headers: _authHeaders(),
-    ).timeout(const Duration(seconds: 20));
+      headers: headers,
+    ).timeout(const Duration(seconds: 20)));
     _decode(result);
   }
 
@@ -1472,15 +1473,15 @@ class ChannelCatalogService {
     if (safeId.isEmpty) {
       throw const ChannelCatalogException('El identificador de la lista no es válido.');
     }
-    final result = await _client.post(
+    final result = await _authenticatedRequest((headers) => _client.post(
       Uri.parse(_baseUrl + '/api/channels/admin/sources/' +
           Uri.encodeComponent(safeId) + '/retry'),
       headers: <String, String>{
-        ..._authHeaders(),
+        ...headers,
         'Content-Type': 'application/json',
       },
       body: '{}',
-    ).timeout(const Duration(seconds: 20));
+    ).timeout(const Duration(seconds: 20)));
     _decode(result);
   }
 
@@ -1509,15 +1510,15 @@ class ChannelCatalogService {
     if (!RegExp(r'^[a-zA-Z0-9_-]{1,100}$').hasMatch(safeId)) {
       throw const ChannelCatalogException('El identificador del canal no es válido.');
     }
-    final result = await _client.patch(
+    final result = await _authenticatedRequest((headers) => _client.patch(
       Uri.parse(_baseUrl + '/api/channels/admin/channels/' +
           Uri.encodeComponent(safeId) + '/classification'),
       headers: <String, String>{
-        ..._authHeaders(),
+        ...headers,
         'Content-Type': 'application/json',
       },
       body: jsonEncode(<String, bool>{'isSports': isSports}),
-    ).timeout(const Duration(seconds: 20));
+    ).timeout(const Duration(seconds: 20)));
     _decode(result);
   }
 
@@ -1529,15 +1530,15 @@ class ChannelCatalogService {
       throw ArgumentError.value(language, 'language', 'Idioma no válido.');
     }
     final encodedId = Uri.encodeComponent(channelId);
-    final result = await _client.patch(
+    final result = await _authenticatedRequest((headers) => _client.patch(
       Uri.parse(_baseUrl + '/api/channels/admin/channels/' +
           encodedId + '/language'),
       headers: <String, String>{
-        ..._authHeaders(),
+        ...headers,
         'Content-Type': 'application/json',
       },
       body: jsonEncode(<String, String>{'language': language}),
-    ).timeout(const Duration(seconds: 20));
+    ).timeout(const Duration(seconds: 20)));
     _decode(result);
   }
 
