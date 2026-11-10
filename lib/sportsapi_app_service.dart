@@ -788,17 +788,15 @@ class SportsApiAppService {
           // Algunos deportes pueden fallar mientras otros responden. Fusiona
           // la respuesta parcial con el último snapshot válido del teléfono.
           try {
-            final utcStart = DateTime.parse(day).toUtc();
-            final utcEnd = utcStart.add(const Duration(days: 1));
-            final stored = await SportsAgendaStore.load();
+            final stored = await SportsAgendaStore.loadWindow(
+              startDate: DateTime.parse(day),
+              days: 1,
+            );
             final merged = <String, SportsAgendaEvent>{
               for (final event in result.events) event.id: event,
             };
             for (final event in stored) {
-              final start = event.startsAt.toUtc();
-              if (!start.isBefore(utcStart) && start.isBefore(utcEnd)) {
-                merged.putIfAbsent(event.id, () => event);
-              }
+              merged.putIfAbsent(event.id, () => event);
             }
             if (merged.length > result.events.length) {
               final events = merged.values.toList()
@@ -814,14 +812,10 @@ class SportsApiAppService {
         // Si todo el catálogo falla antes de producir una respuesta parcial,
         // recupera la última jornada válida guardada en el teléfono.
         try {
-          final utcStart = DateTime.parse(day).toUtc();
-          final utcEnd = utcStart.add(const Duration(days: 1));
-          final stored = await SportsAgendaStore.load();
-          final events = stored.where((event) {
-            final start = event.startsAt.toUtc();
-            return !start.isBefore(utcStart) && start.isBefore(utcEnd);
-          }).toList()
-            ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+          final events = await SportsAgendaStore.loadWindow(
+            startDate: DateTime.parse(day),
+            days: 1,
+          );
           if (events.isNotEmpty) {
             return _AgendaSportsResult(events: events, incomplete: true);
           }

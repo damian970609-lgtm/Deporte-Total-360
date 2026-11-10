@@ -854,6 +854,11 @@ void main() {
       startDate: start,
       days: 1,
     );
+    final storedWindow = await SportsAgendaStore.loadWindow(
+      startDate: start,
+      days: 1,
+    );
+    expect(storedWindow.map((event) => event.id), contains(saved.id));
     final client = MockClient((request) async {
       if (request.url.path.endsWith('/favorites')) {
         return http.Response(jsonEncode({

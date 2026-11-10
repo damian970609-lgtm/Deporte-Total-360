@@ -304,8 +304,39 @@ void main() {
     expect(find.byKey(const ValueKey<String>('channel-admin-iptv-list')), findsOneWidget);
     expect(find.text('AÑADIR CANALES Y LISTAS IPTV'), findsOneWidget);
     expect(service._adminPageCalls, greaterThanOrEqualTo(3));
-    expect(find.byKey(const ValueKey<String>('iptv-add-channel-sports-channel')), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('iptv-classify-channel-general-channel')), findsOneWidget);
+
+    final iptvScrollable = find.descendant(
+      of: find.byKey(const ValueKey<String>('channel-admin-iptv-list')),
+      matching: find.byType(Scrollable),
+    );
+    final addSportsChannel = find.byKey(
+      const ValueKey<String>('iptv-add-channel-sports-channel'),
+    );
+    await tester.scrollUntilVisible(
+      addSportsChannel,
+      250,
+      scrollable: iptvScrollable,
+    );
+    await tester.pumpAndSettle();
+    expect(addSportsChannel, findsOneWidget);
+
+    final classifyGeneralChannel = find.byKey(
+      const ValueKey<String>('iptv-classify-channel-general-channel'),
+    );
+    await tester.scrollUntilVisible(
+      classifyGeneralChannel,
+      250,
+      scrollable: iptvScrollable,
+    );
+    await tester.pumpAndSettle();
+    expect(classifyGeneralChannel, findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('iptv-search-field')),
+      250,
+      scrollable: iptvScrollable,
+    );
+    await tester.pumpAndSettle();
 
     await tester.enterText(
       find.byKey(const ValueKey<String>('iptv-search-field')),
