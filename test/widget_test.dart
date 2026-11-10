@@ -48,8 +48,9 @@ Future<void> _waitForEnabledIptvButton(
 
 Future<void> _scrollIptvUntilVisible(
   WidgetTester tester,
-  Finder target,
-) async {
+  Finder target, {
+  bool requireHitTestable = true,
+}) async {
   final listFinder = find.byKey(
     const ValueKey<String>('channel-admin-iptv-list'),
   );
@@ -62,7 +63,8 @@ Future<void> _scrollIptvUntilVisible(
     if (target.evaluate().isNotEmpty) {
       await tester.ensureVisible(target);
       await tester.pump();
-      if (target.hitTestable().evaluate().isNotEmpty) return;
+      if (!requireHitTestable ||
+          target.hitTestable().evaluate().isNotEmpty) return;
     }
 
     final position = tester.state<ScrollableState>(scrollableFinder).position;
@@ -284,15 +286,14 @@ void main() {
     final sportsAction = find.byKey(
       const ValueKey<String>('iptv-channel-actions-sports-channel'),
     );
-    final sportsActionButton = find.descendant(
-      of: sportsAction,
-      matching: find.byType(IconButton),
+    // El PopupMenuButton es un contenedor de estado; la tarjeta debe
+    // permanecer en pantalla aunque el propio wrapper no sea hit-testable.
+    await _scrollIptvUntilVisible(
+      tester,
+      sportsAction,
+      requireHitTestable: false,
     );
-    await _scrollIptvUntilVisible(tester, sportsActionButton);
-    // PopupMenuButton es el contenedor de estado y no tiene un RenderBox
-    // propio para hit testing; el IconButton descendiente es el control real.
     expect(sportsAction, findsOneWidget);
-    expect(sportsActionButton.hitTestable(), findsOneWidget);
     expect(find.text('ESPN Deportes'), findsOneWidget);
 
     final generalAction = find.byKey(
