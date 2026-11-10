@@ -83,7 +83,13 @@ void main() {
             'home': {'id': 1, 'name': 'Team One', 'image': 'https://cdn.example/home.png'},
             'away': {'id': 2, 'name': 'Team Two', 'image': 'https://cdn.example/away.png'},
             'league': {'id': 10, 'name': 'Premier League'},
-            'season': {'id': 20, 'name': '2030'}
+            'season': {'id': 20, 'name': '2030'},
+            'fixture': {
+              'broadcasts': [
+                {'channel': {'name': 'ESPN Deportes'}},
+                {'network': {'name': 'Sky Sports'}},
+              ],
+            }
           }],
           'meta': {'count': 1, 'hasNextPage': false, 'complete': true}
         }), 200);
@@ -137,6 +143,12 @@ void main() {
 
       final events = await api.fetchFavoriteAgendaEvents(date: DateTime.utc(2030, 1, 1));
       expect(events.map((event) => event.id), contains('sportsapi-fixture-101'));
+      final fixtureEvent =
+          events.firstWhere((event) => event.id == 'sportsapi-fixture-101');
+      expect(
+        fixtureEvent.broadcastChannels,
+        <String>['ESPN Deportes', 'Sky Sports'],
+      );
       expect(events.map((event) => event.id), contains('sportsapi-race-202-303'));
       expect(events.map((event) => event.id), contains('sportsapi-race-202-304'));
       expect(events.map((event) => event.id), contains('sportsapi-race-203-305'));
