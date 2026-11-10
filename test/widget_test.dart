@@ -15,6 +15,7 @@ class _AdminTestService extends ChannelCatalogService {
 
   final bool autoSignIn;
   final List<String> deletedSourceIds = <String>[];
+  bool refreshRequested = false;
 
   @override
   Future<String?> restoreSession() async =>
@@ -97,6 +98,11 @@ class _AdminTestService extends ChannelCatalogService {
       };
 
   @override
+  Future<void> refreshSources() async {
+    refreshRequested = true;
+  }
+
+  @override
   Future<void> deletePlaylistSource({required String id}) async {
     deletedSourceIds.add(id);
   }
@@ -151,6 +157,27 @@ void main() {
     expect(find.text('GENERAL / SIN CLASIFICAR'), findsOneWidget);
     expect(find.text('EPG AUTOMÁTICA · 28 GUÍAS INTEGRADAS'), findsOneWidget);
     expect(find.text('2 CANALES'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('el inventario permite reimportar todas las listas guardadas sin borrar canales', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final service = _AdminTestService(autoSignIn: true);
+    await tester.pumpWidget(
+      MaterialApp(home: ChannelAdminScreen(service: service)),
+    );
+    await tester.pumpAndSettle();
+
+    final reimport = find.text('REIMPORTAR LISTAS GUARDADAS · TODOS LOS CANALES');
+    expect(reimport, findsOneWidget);
+    await tester.tap(reimport);
+    await tester.pumpAndSettle();
+
+    expect(service.refreshRequested, isTrue);
+    expect(find.text('Canal General'), findsOneWidget);
+    expect(find.text('ESPN Deportes'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
