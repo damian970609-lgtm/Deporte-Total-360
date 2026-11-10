@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
 import 'live_media_format.dart';
+import 'regional_stream_policy.dart';
 import 'stream_diagnostics.dart';
 
 import 'sports_api_service.dart';
@@ -244,6 +245,7 @@ class LiveStreamSource {
     required this.name,
     required this.url,
     this.isRemote = false,
+    this.availableCountries = const <String>[],
   });
 
   final String id;
@@ -253,6 +255,7 @@ class LiveStreamSource {
   final String name;
   final String url;
   final bool isRemote;
+  final List<String> availableCountries;
 
   Uri? get validatedUri =>
       isSupportedAuthorizedMediaUrl(url) ? Uri.tryParse(url.trim()) : null;
@@ -264,6 +267,7 @@ class LiveStreamSource {
         'sport': sport,
         'name': name,
         'url': url,
+        'availableCountries': availableCountries,
       };
 
   static LiveStreamSource? fromJson(dynamic value) {
@@ -277,6 +281,11 @@ class LiveStreamSource {
       name: '${map['name'] ?? ''}',
       url: '${map['url'] ?? ''}',
       isRemote: map['isRemote'] == true,
+      availableCountries: parseAvailableCountryCodes(
+        map['availableCountries'] ??
+            map['available_countries'] ??
+            map['authorizedCountries'],
+      ),
     );
     if (source.id.isEmpty ||
         source.eventId.isEmpty ||
@@ -717,6 +726,15 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
           url: source.url,
           subtitle: '${fixture.sport} · ${fixture.competition} · ${source.name}',
           eventId: fixture.id,
+          availableCountries: source.availableCountries,
+          fallbackSources: streams
+              .where((alternative) => alternative.id != source.id)
+              .map((alternative) => RegionalStreamCandidate(
+                    url: alternative.url,
+                    label: alternative.name,
+                    availableCountries: alternative.availableCountries,
+                  ))
+              .toList(growable: false),
         ));
       }
       if (selected.length >= 8) break;
@@ -747,6 +765,15 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
             LivePlayerSource(
               title: '${fixture.displayTitle} · ${source.name}',
               url: source.url,
+              availableCountries: source.availableCountries,
+              fallbackSources: _sourcesFor(fixture.id)
+                  .where((alternative) => alternative.id != source.id)
+                  .map((alternative) => RegionalStreamCandidate(
+                        url: alternative.url,
+                        label: alternative.name,
+                        availableCountries: alternative.availableCountries,
+                      ))
+                  .toList(growable: false),
             ),
           ],
         ),
@@ -1335,12 +1362,16 @@ class LivePlayerSource {
     required this.url,
     this.subtitle,
     this.eventId,
+    this.availableCountries = const <String>[],
+    this.fallbackSources = const <RegionalStreamCandidate>[],
   });
 
   final String title;
   final String url;
   final String? subtitle;
   final String? eventId;
+  final List<String> availableCountries;
+  final List<RegionalStreamCandidate> fallbackSources;
 }
 
 class LivePlayerWaitingEvent {
@@ -1973,55 +2004,79 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
       _isFullscreen = false;
     });
 
-    final uri = Uri.tryParse(widget.source.url.trim());
-    if (uri == null || !isSupportedAuthorizedMediaUrl(uri.toString())) {
+    final region = await RegionalPlaybackPreferences.getRegionCode();
+    final candidates = prioritizeRegionalStreamCandidates(
+      <RegionalStreamCandidate>[
+        RegionalStreamCandidate(
+          url: widget.source.url,
+          label: widget.source.title,
+          availableCountries: widget.source.availableCountries,
+        ),
+        ...widget.source.fallbackSources,
+      ],
+      regionCode: region,
+    );
+    if (!mounted) return;
+    if (candidates.isEmpty) {
       setState(() {
         _loading = false;
-        _error = 'La URL no es una señal multimedia directa válida.';
+        _error = 'El proveedor no declara fuentes disponibles en $region.';
       });
       return;
     }
 
-    final controller = VideoPlayerController.networkUrl(
-      uri,
-      formatHint: _videoFormatHintFor(uri),
-      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-    );
-    _controller = controller;
-    try {
-      await controller.initialize();
-      await controller.setLooping(false);
-      await controller.setVolume(_muted ? 0 : 1);
-      final tracks = await _readVideoTracks(controller);
-      if (!mounted || !widget.isActive) {
+    Object? lastError;
+    for (var index = 0; index < candidates.length; index++) {
+      final candidate = candidates[index];
+      final uri = Uri.tryParse(candidate.url);
+      if (uri == null || !isSupportedAuthorizedMediaUrl(uri.toString())) {
+        continue;
+      }
+      final controller = VideoPlayerController.networkUrl(
+        uri,
+        formatHint: _videoFormatHintFor(uri),
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+      );
+      _controller = controller;
+      try {
+        await controller.initialize();
+        await controller.setLooping(false);
+        await controller.setVolume(_muted ? 0 : 1);
+        final tracks = await _readVideoTracks(controller);
+        if (!mounted || !widget.isActive) {
+          await _disposeControllerSafely(controller);
+          if (identical(_controller, controller)) _controller = null;
+          return;
+        }
+        setState(() {
+          _videoTracks = tracks;
+          _loading = false;
+          _error = index == 0
+              ? null
+              : 'Se utiliza una fuente alternativa declarada para $region: ${candidate.label.isEmpty ? candidate.url : candidate.label}.';
+        });
+        await controller.play();
+        if (!mounted) {
+          await _disposeControllerSafely(controller);
+          if (identical(_controller, controller)) _controller = null;
+          return;
+        }
+        setState(() {});
+        return;
+      } catch (error) {
+        lastError = error;
         await _disposeControllerSafely(controller);
         if (identical(_controller, controller)) _controller = null;
-        return;
       }
-      setState(() {
-        _videoTracks = tracks;
-        _loading = false;
-      });
-      await controller.play();
-      if (!mounted) {
-        await _disposeControllerSafely(controller);
-        if (identical(_controller, controller)) _controller = null;
-        return;
-      }
-      setState(() {});
-    } catch (error) {
-      if (!mounted) {
-        await _disposeControllerSafely(controller);
-        if (identical(_controller, controller)) _controller = null;
-        return;
-      }
-      setState(() {
-        _loading = false;
-        _error = explainVideoPlayerError(error);
-      });
-      await _disposeControllerSafely(controller);
-      if (identical(_controller, controller)) _controller = null;
     }
+
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _error = candidates.length == 1
+          ? explainVideoPlayerError(lastError ?? Exception('No se pudo iniciar la fuente.'))
+          : 'No se pudo reproducir ninguna de las ${candidates.length} fuentes disponibles para $region. ${explainVideoPlayerError(lastError ?? Exception('Error de reproducción'))}';
+    });
   }
 
   Future<void> _togglePlayback() async {
