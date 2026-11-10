@@ -1475,13 +1475,24 @@ class AutomaticLiveService {
     for (final event in eligibleEvents) {
       final prepareAt = event.startsAt.subtract(const Duration(minutes: 10));
       final eventLimit = event.endsAt ?? event.startsAt.add(const Duration(hours: 3));
-      final programmes = catalog.programmes.where((programme) =>
+      // Prioridad 1: coincidencia estricta por equipos/participantes.
+      // Algunas EPG solo publican etiquetas genéricas aunque el programa esté
+      // asignado al canal deportivo correcto y al horario del evento.
+      final overlappingProgrammes = catalog.programmes.where((programme) =>
         programme.startsAt.isBefore(eventLimit) &&
-        programme.endsAt.isAfter(prepareAt) &&
+        programme.endsAt.isAfter(prepareAt)).toList(growable: false);
+      final exactProgrammes = overlappingProgrammes.where((programme) =>
         programmeMatchesEvent(
           '${programme.title} ${programme.subtitle} ${programme.description}',
           event,
-        )).toList()
+        )).toList(growable: false);
+      final programmes = (exactProgrammes.isNotEmpty
+          ? exactProgrammes
+          : overlappingProgrammes.where((programme) =>
+              !_isExplicitDifferentFixture(
+                '${programme.title} ${programme.subtitle} ${programme.description}',
+              )).toList(growable: false))
+        .toList()
         ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
       if (programmes.isNotEmpty) matchedEventCount++;
 
@@ -1598,6 +1609,12 @@ class AutomaticLiveService {
       report('signals_unavailable', 'Se encontraron programas y candidatos, pero ninguna URL superó la comprobación de señal. Puede estar caída, bloqueada o no ser un manifiesto directo compatible.');
     }
     return output;
+  }
+
+  /// Impide usar por horario una guía que anuncia claramente otro partido.
+  static bool _isExplicitDifferentFixture(String value) {
+    final normalized = normalizeText(value);
+    return RegExp(r'\b(?:vs|versus|v)\b').hasMatch(normalized);
   }
 
   static const Map<String, List<String>> _teamAliases = <String, List<String>>{

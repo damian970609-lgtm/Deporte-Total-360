@@ -317,22 +317,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Mostrando 2005 de 2005 canales.'), findsOneWidget);
 
-    final iptvScrollable = find.descendant(
-      of: find.byKey(const ValueKey<String>('channel-admin-iptv-list')),
-      matching: find.byType(Scrollable),
-    ).first;
+    final iptvList = find.byKey(
+      const ValueKey<String>('channel-admin-iptv-list'),
+    );
     final addSportsChannel = find.byKey(
       const ValueKey<String>('iptv-add-channel-sports-channel'),
     );
-    await tester.scrollUntilVisible(addSportsChannel, 250, scrollable: iptvScrollable);
-    await tester.pumpAndSettle();
+    for (var attempt = 0; attempt < 8 && addSportsChannel.evaluate().isEmpty; attempt++) {
+      await tester.drag(iptvList, const Offset(0, -500));
+      await tester.pumpAndSettle();
+    }
     expect(addSportsChannel, findsOneWidget);
 
     final classifyGeneralChannel = find.byKey(
       const ValueKey<String>('iptv-classify-channel-general-channel'),
     );
-    await tester.scrollUntilVisible(classifyGeneralChannel, 250, scrollable: iptvScrollable);
-    await tester.pumpAndSettle();
+    for (var attempt = 0; attempt < 8 && classifyGeneralChannel.evaluate().isEmpty; attempt++) {
+      await tester.drag(iptvList, const Offset(0, -500));
+      await tester.pumpAndSettle();
+    }
     expect(classifyGeneralChannel, findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());

@@ -1241,6 +1241,55 @@ https://media.example/offline.m3u8
       client.close();
     });
 
+    test('usa el horario y canal EPG cuando el título de la guía es genérico', () async {
+      final start = DateTime.now().add(const Duration(minutes: 5));
+      final stop = start.add(const Duration(hours: 2));
+      final xml = '<tv>'
+          '<channel id="sports.es"><display-name>ESPN Deportes</display-name></channel>'
+          '<programme channel="sports.es" start="${_xmlTime(start)}" stop="${_xmlTime(stop)}">'
+          '<title>Fútbol en directo</title><desc>Transmisión deportiva</desc>'
+          '</programme></tv>';
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('.xml')) return http.Response(xml, 200);
+        if (request.url.path.endsWith('.m3u8')) {
+          return http.Response('#EXTM3U\n#EXTINF:6,\nsegment.ts\n', 200);
+        }
+        if (request.url.path.endsWith('.ts')) return http.Response('segment bytes', 200);
+        return http.Response('', 404);
+      });
+      final event = SportsAgendaEvent(
+        id: 'generic-epg-fallback',
+        title: 'Equipo Azul vs Equipo Rojo',
+        sport: 'Fútbol',
+        homeTeam: 'Equipo Azul',
+        awayTeam: 'Equipo Rojo',
+        startsAt: start,
+        detailUrl: 'https://sportsapi.app/',
+      );
+      final result = await AutomaticLiveService(client: client).schedule(
+        events: <SportsAgendaEvent>[event],
+        now: start.subtract(const Duration(minutes: 5)),
+        settings: const AutoLiveSettings(
+          playlistUrl: '',
+          epgUrl: 'https://guide.example/epg.xml',
+          authorizationConfirmed: true,
+        ),
+        availableChannels: const <M3uChannel>[
+          M3uChannel(
+            name: 'ESPN Deportes',
+            url: 'https://media.example/espn.m3u8',
+            tvgId: 'sports.es',
+            language: 'es',
+          ),
+        ],
+      );
+
+      expect(result, hasLength(1));
+      expect(result.single.sources.single.url, 'https://media.example/espn.m3u8');
+      expect(result.single.sources.single.available, isTrue);
+      client.close();
+    });
+
     test('no empareja un programa que pertenece a otro evento', () {
       final event = SportsAgendaEvent(
         id: 'match',
