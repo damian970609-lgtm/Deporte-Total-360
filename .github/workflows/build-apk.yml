@@ -17,6 +17,7 @@ on:
       # sin exponer secretos durante las comprobaciones pull_request.
       - codex/complete-live-schedule
       - codex/harden-offline-snapshots-ci-20261107
+      - fix/android-player-lifecycle-20261109
     paths:
       - 'lib/**'
       - 'test/**'
