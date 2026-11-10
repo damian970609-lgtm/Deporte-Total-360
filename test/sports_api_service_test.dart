@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -189,6 +191,44 @@ void main() {
         );
       });
       expect(await SportsApiService().checkFootballFixtures(), 2);
+    });
+
+    test('restaura eventos desde la caché persistente cuando la conexión falla', () async {
+      SharedPreferences.setMockInitialValues({});
+      sportsApiBaseUrl.value = 'https://cache-persistente.example';
+      var requestCount = 0;
+      SportsApiService.clientOverride = MockClient((request) async {
+        requestCount++;
+        if (requestCount == 1) {
+          return http.Response(jsonEncode({
+            'errors': <String>[],
+            'response': [
+              {'fixture': {'id': 9901}, 'league': {'name': 'Liga guardada'}},
+            ],
+          }), 200);
+        }
+        throw const http.ClientException('sin conexión');
+      });
+
+      final first = await SportsApiService().fetchEvents(
+        sport: 'Fútbol',
+        dateFilter: 'Hoy',
+      );
+      expect(first, isNotEmpty);
+
+      SportsApiService.resetForTesting();
+      SportsApiService.clientOverride = MockClient((request) async {
+        requestCount++;
+        throw const http.ClientException('sin conexión');
+      });
+
+      final restored = await SportsApiService().fetchEvents(
+        sport: 'Fútbol',
+        dateFilter: 'Hoy',
+      );
+      expect(restored, isNotEmpty);
+      expect(restored.first['fixture']['id'], 9901);
+      expect(requestCount, greaterThanOrEqualTo(2));
     });
 
     test('trata HTTP 204 como consulta correcta sin partidos', () async {
