@@ -14,6 +14,8 @@ import 'channel_playlist_presets.dart';
 import 'live_media_format.dart';
 import 'stream_diagnostics.dart';
 
+const int _adminVisibleChannelBatchSize = 40;
+
 const Color _channelBg = Color(0xFF000000);
 const Color _channelPanel = Color(0xFF07090D);
 const Color _channelPanel2 = Color(0xFF0D1118);
@@ -216,6 +218,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
       if (!mounted || requestId != _catalogRequestId) return;
       final previousId = _selectedChannel?.id;
       setState(() {
+        _visibleAdminChannelCount = _adminVisibleChannelBatchSize;
         _channels = page.channels;
         _catalogTotal = page.total;
         _catalogTotalIsEstimate = page.totalIsEstimate;
@@ -1619,6 +1622,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   List<String> _newTrialCodes = <String>[];
   String? _trialError;
   List<SportsChannel> _channels = <SportsChannel>[];
+  int _visibleAdminChannelCount = _adminVisibleChannelBatchSize;
   SportsChannel? _previewChannel;
   List<ChannelPlaylistSource> _sources = <ChannelPlaylistSource>[];
   bool _loading = false;
@@ -1671,7 +1675,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
   void _handleAdminScroll() {
     if (_showIptvSection || !_adminScrollController.hasClients ||
-        _loading || _working || !_hasMore || _error != null) {
+        _loading || _working || !_hasMore || _error != null ||
+        _visibleAdminChannelCount < _channels.length) {
       return;
     }
     if (_adminScrollController.position.extentAfter < 650) {
@@ -3246,6 +3251,13 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   Widget _buildAdminCatalogSection() {
     final loadedSports = _channels.where((channel) => channel.isSports).length;
     final loadedGeneral = _channels.length - loadedSports;
+    final visibleChannelCount = _visibleAdminChannelCount
+        .clamp(0, _channels.length)
+        .toInt();
+    final remainingVisibleChannels = _channels.length - visibleChannelCount;
+    final nextVisibleBatch = remainingVisibleChannels
+        .clamp(0, _adminVisibleChannelBatchSize)
+        .toInt();
     final totalLabel = _catalogTotalIsEstimate
         ? 'MÁS DE ' + _catalogTotal.toString()
         : _catalogTotal.toString() + ' CANALES';
@@ -3399,9 +3411,41 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                 ),
               ),
             ),
-          for (var i = 0; i < _channels.length; i++)
+          if (_channels.length > _adminVisibleChannelBatchSize)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                'MOSTRANDO $visibleChannelCount DE ${_channels.length} CANALES CARGADOS',
+                key: const ValueKey<String>('channel-admin-visible-count'),
+                style: const TextStyle(
+                  color: _channelMuted,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          for (var i = 0; i < visibleChannelCount; i++)
             _buildAdminChannel(_channels[i], i),
-          if (_hasMore)
+          if (remainingVisibleChannels > 0)
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _visibleAdminChannelCount =
+                        (_visibleAdminChannelCount + _adminVisibleChannelBatchSize)
+                            .clamp(0, _channels.length)
+                            .toInt();
+                  });
+                },
+                icon: const Icon(Icons.expand_more_rounded),
+                label: Text(
+                  'MOSTRAR SIGUIENTES $nextVisibleBatch CANALES · '
+                  '$visibleChannelCount/${_channels.length}',
+                ),
+              ),
+            )
+          else if (_hasMore)
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
@@ -3413,7 +3457,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                 ),
               ),
             ),
-          if (!_hasMore && _channels.isNotEmpty)
+          if (!_hasMore && remainingVisibleChannels == 0 && _channels.isNotEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 6),
               child: Text(
