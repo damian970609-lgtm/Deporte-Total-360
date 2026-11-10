@@ -1365,6 +1365,12 @@ bool shouldAutomaticallyStartLiveSource({
   required bool isActive,
 }) => isActive && index == 0;
 
+/// Una pestaña oculta debe liberar el controlador nativo, no solo pausarlo.
+bool shouldReleaseLiveVideoController({
+  required bool wasActive,
+  required bool isActive,
+}) => wasActive && !isActive;
+
 /// Formato de resolución legible para el selector de calidad.
 String videoTrackResolutionLabel(VideoTrack track) {
   final height = track.height;
@@ -1901,6 +1907,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
   bool _muted = false;
   bool _isFullscreen = false;
   bool _compactPlayback = false;
+  int _controllerGeneration = 0;
 
   @override
   void initState() {
@@ -1912,12 +1919,24 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
   @override
   void didUpdateWidget(covariant _LiveVideoTile oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.isActive && !widget.isActive) {
+    if (shouldReleaseLiveVideoController(
+      wasActive: oldWidget.isActive,
+      isActive: widget.isActive,
+    )) {
+      ++_controllerGeneration;
       _compactPlayback = false;
+      _isFullscreen = false;
       final controller = _controller;
-      if (controller?.value.isPlaying == true) {
-        unawaited(controller!.pause());
-      }
+      _controller = null;
+      _videoTracks = <VideoTrack>[];
+      _manualQualityTrackId = null;
+      _loading = false;
+      _error = null;
+      unawaited(_disposeControllerSafely(controller));
+      return;
+    }
+    if (!oldWidget.isActive && widget.isActive && widget.autoStart) {
+      unawaited(_initialize());
     }
   }
 
@@ -1959,10 +1978,13 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
 
   Future<void> _initialize() async {
     if (!widget.isActive) return;
+    final requestId = ++_controllerGeneration;
     final old = _controller;
     _controller = null;
     await _disposeControllerSafely(old);
-    if (!mounted) return;
+    if (!mounted || !widget.isActive || requestId != _controllerGeneration) {
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
@@ -1989,10 +2011,21 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
     _controller = controller;
     try {
       await controller.initialize();
+      if (!mounted ||
+          !widget.isActive ||
+          requestId != _controllerGeneration ||
+          !identical(_controller, controller)) {
+        await _disposeControllerSafely(controller);
+        if (identical(_controller, controller)) _controller = null;
+        return;
+      }
       await controller.setLooping(false);
       await controller.setVolume(_muted ? 0 : 1);
       final tracks = await _readVideoTracks(controller);
-      if (!mounted || !widget.isActive) {
+      if (!mounted ||
+          !widget.isActive ||
+          requestId != _controllerGeneration ||
+          !identical(_controller, controller)) {
         await _disposeControllerSafely(controller);
         if (identical(_controller, controller)) _controller = null;
         return;
@@ -2002,22 +2035,25 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
         _loading = false;
       });
       await controller.play();
-      if (!mounted) {
+      if (!mounted ||
+          !widget.isActive ||
+          requestId != _controllerGeneration ||
+          !identical(_controller, controller)) {
         await _disposeControllerSafely(controller);
         if (identical(_controller, controller)) _controller = null;
         return;
       }
       setState(() {});
     } catch (error) {
-      if (!mounted) {
-        await _disposeControllerSafely(controller);
-        if (identical(_controller, controller)) _controller = null;
-        return;
+      if (mounted &&
+          widget.isActive &&
+          requestId == _controllerGeneration &&
+          identical(_controller, controller)) {
+        setState(() {
+          _loading = false;
+          _error = 'No se pudo iniciar esta señal: $error';
+        });
       }
-      setState(() {
-        _loading = false;
-        _error = 'No se pudo iniciar esta señal: $error';
-      });
       await _disposeControllerSafely(controller);
       if (identical(_controller, controller)) _controller = null;
     }
