@@ -2051,9 +2051,7 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
         setState(() {
           _videoTracks = tracks;
           _loading = false;
-          _error = index == 0
-              ? null
-              : 'Se utiliza una fuente alternativa declarada para $region: ${candidate.label.isEmpty ? candidate.url : candidate.label}.';
+          _error = null;
         });
         await controller.play();
         if (!mounted) {
