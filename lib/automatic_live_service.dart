@@ -126,10 +126,9 @@ const String previousDefaultAutoLiveEpgUrlV2 =
     'https://raw.githubusercontent.com/teleonline/listas/main/epg.xml.gz\n'
     'https://dearbulut.github.io/iptv/epg/guide.xml.gz';
 
-// Guías regionales en español más fuentes complementarias para canales de
-// Estados Unidos, Reino Unido y programación deportiva. Las guías ligeras
-// cubren la ventana inmediata y reducen la memoria utilizada en Android.
-const String defaultAutoLiveEpgUrl =
+// La guía internacional unificada se combina con una guía deportiva y otra latina.
+// Ninguna fuente pública garantiza el 100 % de canales o regiones.
+const String previousDefaultAutoLiveEpgUrlV3 =
     'https://iptv-epg.org/files/epg-es.xml\n'
     'https://iptv-epg.org/files/epg-ar.xml\n'
     'https://iptv-epg.org/files/epg-mx.xml\n'
@@ -158,6 +157,11 @@ const String defaultAutoLiveEpgUrl =
     'https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/US_lite.xml.gz\n'
     'https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/UK_lite.xml.gz\n'
     'https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/Sports_guide.xml.gz';
+
+const String defaultAutoLiveEpgUrl =
+    'https://teleonline.github.io/epg/epg.xml.gz\n'
+    'https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/Sports_guide.xml.gz\n'
+    'https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/Latino_lite.xml.gz';
 
 List<String> _splitPlaylistUrls(String value) => value
     .split(RegExp(r'[\r\n;]+'))
@@ -208,7 +212,8 @@ class AutoLiveSettings {
     }
     if (epg.trim() == legacyDefaultAutoLiveEpgUrl.trim() ||
         epg.trim() == previousDefaultAutoLiveEpgUrl.trim() ||
-        epg.trim() == previousDefaultAutoLiveEpgUrlV2.trim()) {
+        epg.trim() == previousDefaultAutoLiveEpgUrlV2.trim() ||
+        epg.trim() == previousDefaultAutoLiveEpgUrlV3.trim()) {
       epg = defaultAutoLiveEpgUrl;
     }
 
@@ -216,7 +221,17 @@ class AutoLiveSettings {
     // personalizadas guardadas en versiones anteriores se conservan y se
     // combinan sin duplicados, sin exponer la lista de EPG en el panel privado.
     final automaticEpgUrls = _splitPlaylistUrls(defaultAutoLiveEpgUrl);
-    final savedEpgUrls = _splitPlaylistUrls(epg).where(isSafeHttpUrl);
+    // Retira antiguas guías integradas, aunque se guardara una URL propia
+    // junto a ellas; las fuentes personalizadas se conservan.
+    final retiredBuiltInEpgUrls = <String>{
+      ..._splitPlaylistUrls(legacyDefaultAutoLiveEpgUrl),
+      ..._splitPlaylistUrls(previousDefaultAutoLiveEpgUrl),
+      ..._splitPlaylistUrls(previousDefaultAutoLiveEpgUrlV2),
+      ..._splitPlaylistUrls(previousDefaultAutoLiveEpgUrlV3),
+    };
+    final savedEpgUrls = _splitPlaylistUrls(epg)
+        .where(isSafeHttpUrl)
+        .where((url) => !retiredBuiltInEpgUrls.contains(url));
     epg = <String>{...automaticEpgUrls, ...savedEpgUrls}.join('\n');
     if (prefs.getString(_epgUrlKey) != epg) {
       await prefs.setString(_epgUrlKey, epg);
