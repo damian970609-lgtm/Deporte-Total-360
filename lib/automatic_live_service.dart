@@ -1573,18 +1573,18 @@ class AutomaticLiveService {
       }
 
       final sources = <ScheduledLiveSource>[];
-      final spanish = chooseLanguage(2);
-      final english = chooseLanguage(1);
-      if (spanish != null) sources.add(spanish);
-      if (english != null) sources.add(english);
-      // Si el proveedor no declara idioma, usa la mejor señal verificada o
-      // deja que el reproductor intente la mejor URL encontrada por la EPG.
-      if (sources.isEmpty) {
-        sources.add(
-          verifiedCandidates.isNotEmpty
-              ? verifiedCandidates.first
-              : nativeFallback(candidates.first),
-        );
+      if (verifiedCandidates.isNotEmpty) {
+        final spanish = verifiedCandidates.where((item) => item.languagePriority == 2);
+        final english = verifiedCandidates.where((item) => item.languagePriority == 1);
+        if (spanish.isNotEmpty) sources.add(spanish.first);
+        if (english.isNotEmpty) sources.add(english.first);
+        // Si solo se conoce otra prioridad de idioma, conserva esa señal.
+        if (sources.isEmpty) sources.add(verifiedCandidates.first);
+      } else {
+        // Solo recurrimos a una URL no verificada si ninguna candidata supera
+        // el sondeo. Así no mostramos canales caídos cuando ya existe otro
+        // idioma con una señal confirmada.
+        sources.add(nativeFallback(candidates.first));
       }
       final programmeEnd = sources.map((s) => s.programmeEndsAt).reduce(
         (a, b) => a.isAfter(b) ? a : b,
