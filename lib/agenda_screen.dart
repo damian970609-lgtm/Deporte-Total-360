@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
+import 'stream_diagnostics.dart';
+
 import 'sports_api_service.dart';
 import 'notification_service.dart';
 import 'app_i18n.dart';
@@ -1580,7 +1582,7 @@ class _AgendaVideoPlayerScreenState extends State<AgendaVideoPlayerScreen> {
         return;
       }
       setState(() => _loading = false);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         await controller.dispose();
         if (identical(_controller, controller)) _controller = null;
@@ -1588,8 +1590,7 @@ class _AgendaVideoPlayerScreenState extends State<AgendaVideoPlayerScreen> {
       }
       setState(() {
         _loading = false;
-        _error =
-            'No se pudo cargar el vídeo. Comprueba la fuente, la conexión y los permisos de acceso.';
+        _error = explainVideoPlayerError(error);
       });
       await controller.dispose();
       if (identical(_controller, controller)) _controller = null;
@@ -1671,6 +1672,11 @@ class _AgendaVideoPlayerScreenState extends State<AgendaVideoPlayerScreen> {
                                     foregroundColor: agendaCyan,
                                     side: const BorderSide(color: agendaCyan),
                                   ),
+                                ),
+                                StreamDiagnosticButton(
+                                  url: widget.source.url,
+                                  compact: true,
+                                  color: agendaCyan,
                                 ),
                               ],
                             ),
