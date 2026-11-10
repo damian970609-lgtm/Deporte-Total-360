@@ -44,7 +44,7 @@ class StreamDiagnosticReport {
       if (contentType != null) 'TIPO DE CONTENIDO: ' + contentType!,
       if (segmentStatus != null) 'PRIMER RECURSO HLS: HTTP ' + segmentStatus.toString(),
       if (possibleGeoRestriction && !confirmedGeoRestriction)
-        'GEO: posible restricción regional, pero HTTP 403 no la confirma; puede ser autenticación, token, Referer o política del servidor.',
+        'GEO: posible restricción regional. No se puede confirmar GeoIP solo con HTTP 403; también puede ser autenticación, token, Referer o política del servidor.',
       if (confirmedGeoRestriction) 'GEO: el proveedor indicó expresamente una limitación territorial.',
       if (drmDetected) 'DRM: el manifiesto anuncia protección de contenido o licencia.',
       if (recommendation.isNotEmpty) 'SIGUIENTE PASO: ' + recommendation,
