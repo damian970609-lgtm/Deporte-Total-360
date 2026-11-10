@@ -3083,6 +3083,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
+              key: const ValueKey<String>('iptv-reimport-sources'),
               onPressed: _working ? null : _refreshSources,
               icon: const Icon(Icons.sync_rounded),
               label: const Text('REIMPORTAR TODAS LAS LISTAS GUARDADAS'),
