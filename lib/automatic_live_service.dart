@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -764,8 +765,8 @@ class AutomaticLiveService {
   final Future<Directory> Function() _epgCacheDirectoryProvider;
   final Map<String, Future<String?>> _epgSourceInFlight = <String, Future<String?>>{};
 
-  static const Duration _epgFreshTtl = Duration(hours: 8);
-  static const Duration _epgFailureCooldown = Duration(minutes: 30);
+  static const Duration _epgFreshTtl = Duration(minutes: 10);
+  static const Duration _epgFailureCooldown = Duration(minutes: 5);
   static const Duration _epgStaleMaxAge = Duration(days: 3);
   static const int _maxEpgCacheBytes = 24 * 1024 * 1024;
 
@@ -874,7 +875,7 @@ class AutomaticLiveService {
         final body = await _downloadText(
           url,
           maxBytes: _maxEpgCacheBytes,
-          timeout: const Duration(seconds: 20),
+          timeout: const Duration(seconds: 12),
         );
         await _writeEpgSourceCache(
           url,
@@ -1095,7 +1096,7 @@ class AutomaticLiveService {
     final cached = _cachedCatalog;
     if (!forceRefresh && cached != null &&
         _cachedPlaylist == playlistCacheKey && _cachedEpg == epgCacheKey &&
-        _cachedAt != null && now.difference(_cachedAt!) < const Duration(minutes: 15)) {
+        _cachedAt != null && now.difference(_cachedAt!) < const Duration(minutes: 2)) {
       return cached;
     }
 
@@ -1150,12 +1151,9 @@ class AutomaticLiveService {
       _cachedEpg = epgCacheKey;
       return empty;
     }
-    // Se fusionan varias guías. Si una EPG no responde o publica XML inválido,
-    // las demás siguen aportando programas. Las guías regionales tienen un
-    // límite menor para cuidar la memoria del teléfono.
+    // Descarga en lotes pequeños y analiza el XML fuera del isolate de interfaz.
+    // Cada lote se libera antes de descargar el siguiente para controlar RAM.
     final programmesByKey = <String, XmltvProgramme>{};
-    // Descarga por lotes pequeños: varias guías pueden responder a la vez, pero
-    // nunca se abren todas las descargas grandes simultáneamente.
     for (var batchStart = 0; batchStart < epgUrls.length; batchStart += 3) {
       final batch = epgUrls.skip(batchStart).take(3).toList(growable: false);
       final bodies = await Future.wait<String?>(
@@ -1164,24 +1162,31 @@ class AutomaticLiveService {
           forceRefresh: forceRefresh,
         )),
       );
-      for (final epgBody in bodies.whereType<String>()) {
-        try {
-          for (final programme in parseXmltv(
-            epgBody,
-            windowStart: programmeWindowStart,
-            windowEnd: programmeWindowEnd,
-          )) {
-            final key = <String>[
-              programme.channelId.toLowerCase(),
-              programme.title.toLowerCase().trim(),
-              programme.startsAt.toUtc().toIso8601String(),
-              programme.endsAt.toUtc().toIso8601String(),
-            ].join('|');
-            programmesByKey.putIfAbsent(key, () => programme);
+      final batchBodies = bodies.whereType<String>().toList(growable: false);
+      if (batchBodies.isEmpty) continue;
+      final parsed = await Isolate.run<List<XmltvProgramme>>(() {
+        final result = <XmltvProgramme>[];
+        for (final body in batchBodies) {
+          try {
+            result.addAll(AutomaticLiveService.parseXmltv(
+              body,
+              windowStart: programmeWindowStart,
+              windowEnd: programmeWindowEnd,
+            ));
+          } catch (_) {
+            // Una guía inválida no interrumpe las demás fuentes.
           }
-        } catch (_) {
-          // Una guía inválida no interrumpe las siguientes fuentes.
         }
+        return result;
+      });
+      for (final programme in parsed) {
+        final key = <String>[
+          programme.channelId.toLowerCase(),
+          programme.title.toLowerCase().trim(),
+          programme.startsAt.toUtc().toIso8601String(),
+          programme.endsAt.toUtc().toIso8601String(),
+        ].join('|');
+        programmesByKey.putIfAbsent(key, () => programme);
       }
     }
     // La guía es complementaria: si las fuentes EPG fallan, el catálogo de
