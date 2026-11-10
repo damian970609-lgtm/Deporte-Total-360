@@ -31,7 +31,7 @@ class _AdminTestService extends ChannelCatalogService {
   }) async {
     _adminPageCalls++;
     if (limit <= 200) {
-      return const ChannelCatalogPage(
+      return ChannelCatalogPage(
         channels: <SportsChannel>[
           SportsChannel(
             id: 'sports-channel',
