@@ -587,6 +587,29 @@ https://media.example/watch?id=123
       expect(channels.single.name, 'Sports HD 1080p');
     });
 
+    test('recupera emisoras de una M3U aunque el nombre visible esté vacío', () {
+      const playlist = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="espn.deportes" channel-name="ESPN Deportes HD" aliases="ESPN;ESPN Latino" group-title="Deportes",
+https://media.example/channel-27.m3u8
+''';
+      final channel = AutomaticLiveService.parseM3u(playlist).single;
+
+      expect(channel.name, 'ESPN Deportes HD');
+      expect(channel.searchAliases, containsAll(<String>[
+        'ESPN Deportes HD',
+        'ESPN',
+        'ESPN Latino',
+      ]));
+      expect(
+        AutomaticLiveService.channelMatchesBroadcaster(
+          channel,
+          'ESPN Latino',
+        ),
+        isTrue,
+      );
+    });
+
     test('lee idioma y país del canal para priorizar el español', () {
       const playlist = '''
 #EXTM3U
