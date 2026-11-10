@@ -1458,6 +1458,10 @@ https://media.example/offline.m3u8
         SportsAgendaEvent.fromJson(event.toJson())!.broadcastChannels,
         event.broadcastChannels,
       );
+      expect(
+        parseBroadcastChannelNames('ESPN, FOX Sports;TyC Sports'),
+        <String>['ESPN', 'FOX Sports', 'TyC Sports'],
+      );
     });
 
     test('usa el broadcaster del evento para elegir solo un canal visible coincidente sin EPG', () async {
