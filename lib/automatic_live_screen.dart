@@ -46,8 +46,9 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
   @override
   void initState() {
     super.initState();
-    _appResumed =
-        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    // La pestaña se crea al quedar visible. Los callbacks posteriores del
+    // SO detienen el tablero al pausar y lo reactivan al volver a primer plano.
+    _appResumed = true;
     WidgetsBinding.instance.addObserver(this);
     // La pantalla se crea al abrir la pestaña; las consultas periódicas
     // solo continúan mientras En Vivo está visible y Android está en primer plano.
