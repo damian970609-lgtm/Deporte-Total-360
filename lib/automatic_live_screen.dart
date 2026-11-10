@@ -97,7 +97,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
         .map((channel) => M3uChannel(
               name: channel.name,
               url: channel.url,
-              tvgId: channel.tvgId.isNotEmpty ? channel.tvgId : channel.identifier,
+              tvgId: channel.tvgId,
               tvgName: channel.name,
               group: channel.groupTitle,
               language: channel.language,
@@ -320,6 +320,9 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
           event.sport,
           if (event.competition.isNotEmpty) event.competition,
           teams, languageLabel, candidate.channelName,
+          candidate.verified
+              ? 'SEÑAL VERIFICADA'
+              : 'SEÑAL POR COMPROBAR EN REPRODUCTOR',
         ];
         result.add(LivePlayerSource(
           title: 'DEPORTE TOTAL 360° CANAL ${result.length + 1} · $languageLabel',

@@ -683,6 +683,7 @@ class ScheduledLiveSource {
     required this.qualityScore,
     this.languagePriority = 0,
     this.available = false,
+    this.verified = false,
   });
   final String channelName;
   final String url;
@@ -691,6 +692,7 @@ class ScheduledLiveSource {
   final int qualityScore;
   final int languagePriority;
   final bool available;
+  final bool verified;
 }
 
 class ScheduledLiveEvent {
@@ -1034,6 +1036,7 @@ class AutomaticLiveService {
                 (source['languagePriority'] ?? 0).toString(),
               ) ?? 0,
               available: true,
+              verified: source['verified'] != false,
             ));
           }
         }
@@ -1533,18 +1536,56 @@ class AutomaticLiveService {
         availableCandidateCount += available.length;
         report('checking_signals', 'Señales comprobadas: $testedCandidateCount; reproducibles: $availableCandidateCount.');
       }
-      if (verifiedCandidates.isEmpty) continue;
       verifiedCandidates.sort((a, b) {
         final language = b.languagePriority.compareTo(a.languagePriority);
         return language != 0 ? language : b.qualityScore.compareTo(a.qualityScore);
       });
+
+      // El sondeo HTTP es orientativo: algunos CDN bloquean GET/Range desde
+      // diagnóstico, aunque el reproductor nativo pueda abrir el manifiesto.
+      // Conservamos la mejor coincidencia EPG para probarla en el reproductor.
+      ScheduledLiveSource nativeFallback(ScheduledLiveSource candidate) =>
+          ScheduledLiveSource(
+            channelName: candidate.channelName,
+            url: candidate.url,
+            programmeTitle: candidate.programmeTitle,
+            programmeEndsAt: candidate.programmeEndsAt,
+            qualityScore: candidate.qualityScore,
+            languagePriority: candidate.languagePriority,
+            available: true,
+            verified: false,
+          );
+
+      ScheduledLiveSource? chooseLanguage(int priority) {
+        final verified = verifiedCandidates.where(
+          (item) => item.languagePriority == priority,
+        );
+        for (final candidate in verified) {
+          return candidate;
+        }
+        final fallback = candidates.where(
+          (item) => item.languagePriority == priority,
+        );
+        for (final candidate in fallback) {
+          return nativeFallback(candidate);
+        }
+        return null;
+      }
+
       final sources = <ScheduledLiveSource>[];
-      final spanish = verifiedCandidates.where((item) => item.languagePriority == 2);
-      final english = verifiedCandidates.where((item) => item.languagePriority == 1);
-      if (spanish.isNotEmpty) sources.add(spanish.first);
-      if (english.isNotEmpty) sources.add(english.first);
-      // Si no se identificó ningún idioma, se conserva la mejor señal válida.
-      if (sources.isEmpty) sources.add(verifiedCandidates.first);
+      final spanish = chooseLanguage(2);
+      final english = chooseLanguage(1);
+      if (spanish != null) sources.add(spanish);
+      if (english != null) sources.add(english);
+      // Si el proveedor no declara idioma, usa la mejor señal verificada o
+      // deja que el reproductor intente la mejor URL encontrada por la EPG.
+      if (sources.isEmpty) {
+        sources.add(
+          verifiedCandidates.isNotEmpty
+              ? verifiedCandidates.first
+              : nativeFallback(candidates.first),
+        );
+      }
       final programmeEnd = sources.map((s) => s.programmeEndsAt).reduce(
         (a, b) => a.isAfter(b) ? a : b,
       );
@@ -1555,7 +1596,16 @@ class AutomaticLiveService {
     }
     output.sort((a, b) => a.event.startsAt.compareTo(b.event.startsAt));
     if (output.isNotEmpty) {
-      report('ready', 'Transmisiones preparadas para ${output.length} evento(s).');
+      final unverifiedCount = output
+          .expand((item) => item.sources)
+          .where((source) => !source.verified)
+          .length;
+      report(
+        'ready',
+        unverifiedCount == 0
+            ? 'Transmisiones preparadas para ${output.length} evento(s).'
+            : 'Transmisiones preparadas para ${output.length} evento(s); ${unverifiedCount} señal(es) se comprobarán al abrir el reproductor.',
+      );
     } else if (matchedEventCount == 0) {
       report('programme_not_matched', 'La EPG contiene programas, pero sus títulos no coinciden con los equipos o participantes de los eventos actuales.');
     } else if (candidateCount == 0) {
@@ -1646,9 +1696,10 @@ class AutomaticLiveService {
       return true;
     }
 
-    if (home.isNotEmpty && away.isNotEmpty) {
-      return _teamMatchesProgramme(home, programme) &&
-          _teamMatchesProgramme(away, programme);
+    if (home.isNotEmpty && away.isNotEmpty &&
+        _teamMatchesProgramme(home, programme) &&
+        _teamMatchesProgramme(away, programme)) {
+      return true;
     }
 
     // Ciclismo y motor se publican como carreras/etapas, no como partidos.
@@ -1845,6 +1896,7 @@ class AutomaticLiveService {
         qualityScore: source.qualityScore + cached.quality,
         languagePriority: source.languagePriority,
         available: cached.available,
+        verified: true,
       );
     }
 
@@ -1884,6 +1936,7 @@ class AutomaticLiveService {
       qualityScore: source.qualityScore + extraQuality,
       languagePriority: source.languagePriority,
       available: available,
+      verified: true,
     );
   }
 

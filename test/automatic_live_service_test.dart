@@ -1146,7 +1146,7 @@ https://media.example/two.m3u8
       expect(result.every((item) => item.sources.single.available), isTrue);
     });
 
-    test('no asigna una señal cuando falla la comprobación de disponibilidad', () async {
+    test('conserva la mejor coincidencia EPG cuando el CDN bloquea el sondeo', () async {
       final start = DateTime.now().add(const Duration(minutes: 10));
       final stop = start.add(const Duration(hours: 1));
       const playlist = '''
@@ -1180,7 +1180,65 @@ https://media.example/offline.m3u8
         ),
       );
 
-      expect(result, isEmpty);
+      expect(result, hasLength(1));
+      expect(result.single.sources, hasLength(1));
+      expect(result.single.sources.single.url, 'https://media.example/offline.m3u8');
+      expect(result.single.sources.single.available, isTrue);
+      expect(result.single.sources.single.verified, isFalse);
+    });
+
+    test('cruza el tvg-id original aunque el EPG use distinta capitalización y detalle del evento', () async {
+      final start = DateTime.now().add(const Duration(minutes: 5));
+      final stop = start.add(const Duration(hours: 2));
+      final xml = '<tv>'
+          '<channel id="ESPN.DEPORTES.MX"><display-name>ESPN Deportes</display-name></channel>'
+          '<programme channel="ESPN.DEPORTES.MX" start="${_xmlTime(start)}" stop="${_xmlTime(stop)}">'
+          '<title>Fútbol en directo</title><desc>Equipo Azul vs Equipo Rojo</desc>'
+          '</programme></tv>';
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('.xml')) return http.Response(xml, 200);
+        if (request.url.path.endsWith('.m3u8')) {
+          return http.Response(<String>[
+            '#EXTM3U',
+            '#EXT-X-TARGETDURATION:6',
+            '#EXTINF:6,',
+            'segment.ts',
+          ].join(String.fromCharCode(10)), 200);
+        }
+        if (request.url.path.endsWith('.ts')) return http.Response('segment bytes', 200);
+        return http.Response('', 404);
+      });
+      final event = SportsAgendaEvent(
+        id: 'tvg-id-case-match',
+        title: 'Equipo Azul vs Equipo Rojo',
+        sport: 'Fútbol',
+        homeTeam: 'Equipo Azul',
+        awayTeam: 'Equipo Rojo',
+        startsAt: start,
+        detailUrl: 'https://sportsapi.app/',
+      );
+      final result = await AutomaticLiveService(client: client).schedule(
+        events: <SportsAgendaEvent>[event],
+        now: start.subtract(const Duration(minutes: 5)),
+        settings: const AutoLiveSettings(
+          playlistUrl: '',
+          epgUrl: 'https://guide.example/epg.xml',
+          authorizationConfirmed: true,
+        ),
+        availableChannels: const <M3uChannel>[
+          M3uChannel(
+            name: 'ESPN Deportes',
+            url: 'https://media.example/espn.m3u8',
+            tvgId: 'espn.deportes.mx',
+            language: 'es',
+          ),
+        ],
+      );
+
+      expect(result, hasLength(1));
+      expect(result.single.sources.single.url, 'https://media.example/espn.m3u8');
+      expect(result.single.sources.single.verified, isTrue);
+      client.close();
     });
 
     test('no empareja un programa que pertenece a otro evento', () {
