@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -545,20 +546,34 @@ class ChannelCatalogService {
     // La recuperación local de la cuenta no debe depender de una consulta al
     // Worker: si Cloudflare agotó la cuota, el panel todavía debe poder abrir
     // su copia privada guardada en este teléfono.
+    // Esta comprobación es informativa durante la restauración: si la red
+    // tarda, el inicio manual debe seguir disponible.
     try {
-      await validateGoogleOAuthConfiguration();
+      await validateGoogleOAuthConfiguration().timeout(
+        const Duration(seconds: 5),
+      );
     } catch (_) {
       // El backend validará el token cuando vuelva a estar disponible.
     }
-    await _initializeGoogle();
 
     try {
-      final Future<GoogleSignInAccount?>? attempt =
-          _google.attemptLightweightAuthentication();
-      if (attempt == null) return null;
-      final account = await attempt;
+      // Un único límite cubre tanto la inicialización del SDK como el intento
+      // silencioso. Así ninguna de las dos operaciones puede dejar bloqueada
+      // indefinidamente la puerta de acceso.
+      final Future<GoogleSignInAccount?> restore = () async {
+        await _initializeGoogle();
+        final Future<GoogleSignInAccount?>? attempt =
+            _google.attemptLightweightAuthentication();
+        if (attempt == null) return null;
+        return attempt;
+      }();
+      final account = await restore.timeout(const Duration(seconds: 8));
       if (account == null) return null;
       return _rememberGoogleAccount(account);
+    } on TimeoutException {
+      _idToken = null;
+      signedInEmail = null;
+      return null;
     } on GoogleSignInException {
       // La recuperación ligera nunca debe bloquear el acceso manual.
       _idToken = null;
