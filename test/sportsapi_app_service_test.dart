@@ -867,7 +867,11 @@ void main() {
     });
     try {
       final window = await SportsApiAppService(client: client)
-          .fetchFavoriteAgendaWindow(startDate: start, days: 1);
+          .fetchFavoriteAgendaWindow(
+        startDate: start,
+        days: 1,
+        forceRefresh: true,
+      );
       expect(window.events.map((event) => event.id), contains(saved.id));
       expect(window.unavailableDates, isNotEmpty);
     } finally {

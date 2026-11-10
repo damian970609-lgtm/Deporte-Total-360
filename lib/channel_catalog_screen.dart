@@ -3069,7 +3069,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           child: ListView.builder(
             key: const ValueKey<String>('channel-admin-iptv-list'),
             padding: const EdgeInsets.fromLTRB(13, 0, 13, 20),
-            itemCount: rows.length + _sources.length + 3,
+            itemCount: rows.length + _sources.length + 2,
             itemBuilder: (context, index) {
               if (index == 0) {
                 return _adminCard(
@@ -3175,7 +3175,38 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             Text((channel.groupTitle.isEmpty ? 'SIN GRUPO' : channel.groupTitle) + ' · ' + (channel.isSports ? 'DEPORTIVO' : 'GENERAL'), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _channelMuted, fontSize: 8)),
                           ])),
                           ChannelLanguageBadge(language: channel.language),
-                          Icon(selected ? Icons.equalizer_rounded : Icons.play_circle_outline_rounded, color: selected ? _channelGreen : _channelCyan, size: 20),
+                          const SizedBox(width: 5),
+                          if (channel.isSports)
+                            OutlinedButton.icon(
+                              key: ValueKey<String>('iptv-add-channel-' + channel.id),
+                              onPressed: _working ? null : () => _toggleVisibility(channel),
+                              icon: Icon(
+                                channel.visible ? Icons.visibility_off_rounded : Icons.add_circle_outline_rounded,
+                                size: 14,
+                              ),
+                              label: Text(channel.visible ? 'OCULTAR' : 'AGREGAR'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: channel.visible ? _channelPink : _channelGreen,
+                                side: BorderSide(color: channel.visible ? _channelPink : _channelGreen),
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                                textStyle: const TextStyle(fontSize: 8, fontWeight: FontWeight.w900),
+                              ),
+                            )
+                          else
+                            OutlinedButton.icon(
+                              key: ValueKey<String>('iptv-classify-channel-' + channel.id),
+                              onPressed: _working ? null : () => _setChannelSportsClassification(channel),
+                              icon: const Icon(Icons.sports_rounded, size: 14),
+                              label: const Text('CLASIFICAR'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: _channelYellow,
+                                side: const BorderSide(color: _channelYellow),
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                                textStyle: const TextStyle(fontSize: 8, fontWeight: FontWeight.w900),
+                              ),
+                            ),
                         ]),
                       ),
                     ),

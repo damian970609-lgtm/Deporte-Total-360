@@ -304,6 +304,8 @@ void main() {
     expect(find.byKey(const ValueKey<String>('channel-admin-iptv-list')), findsOneWidget);
     expect(find.text('AÑADIR CANALES Y LISTAS IPTV'), findsOneWidget);
     expect(service._adminPageCalls, greaterThanOrEqualTo(3));
+    expect(find.byKey(const ValueKey<String>('iptv-add-channel-sports-channel')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('iptv-classify-channel-general-channel')), findsOneWidget);
 
     await tester.enterText(
       find.byKey(const ValueKey<String>('iptv-search-field')),
