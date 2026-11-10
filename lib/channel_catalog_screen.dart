@@ -3277,7 +3277,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
     return Column(
       children: <Widget>[
-        _buildTvGuideReferenceCard(),
         Padding(
           padding: const EdgeInsets.fromLTRB(13, 2, 13, 8),
           child: _adminCard(
@@ -3361,7 +3360,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           child: ListView.builder(
             key: const ValueKey<String>('channel-admin-iptv-list'),
             padding: const EdgeInsets.fromLTRB(13, 0, 13, 20),
-            itemCount: rows.length + _sources.length + 2,
+            itemCount: rows.length + _sources.length + 3,
             itemBuilder: (context, index) {
               if (index == 0) {
                 return _adminCard(
@@ -3466,8 +3465,9 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                 padding: const EdgeInsets.only(bottom: 7),
                 child: _buildIptvAddListCard(),
               );
-              if (index < _sources.length + 2) {
-                final source = _sources[index - 2];
+              if (index == 2) return _buildTvGuideReferenceCard();
+              if (index < _sources.length + 3) {
+                final source = _sources[index - 3];
                 return Padding(
                   key: ValueKey<String>('iptv-source-card-' + source.id),
                   padding: const EdgeInsets.only(bottom: 6),
@@ -3542,7 +3542,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                   ),
                 );
               }
-              final channelIndex = index - _sources.length - 2;
+              final channelIndex = index - _sources.length - 3;
               final channel = rows[channelIndex];
               return _buildIptvChannel(channel, channelIndex);
 
