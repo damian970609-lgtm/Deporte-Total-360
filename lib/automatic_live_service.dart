@@ -1585,6 +1585,28 @@ class AutomaticLiveService {
 
       final candidates = <ScheduledLiveSource>[];
       final used = <String>{};
+
+      // PRIORIDAD 1: canales de TV que el proveedor declara para el evento.
+      // Se cruzan contra el nombre, tvg-name y tvg-id de tus canales visibles.
+      for (final broadcaster in event.broadcastChannels) {
+        for (final channel in catalog.channels) {
+          if (!isDirectPlayableStream(channel.url) ||
+              !channelMatchesBroadcaster(channel, broadcaster) ||
+              !used.add(channel.url)) {
+            continue;
+          }
+          candidates.add(ScheduledLiveSource(
+            channelName: channel.name,
+            url: channel.url,
+            programmeTitle: 'Canal indicado por SportsAPI: ' + broadcaster,
+            programmeEndsAt: eventLimit,
+            qualityScore: _qualityScore(channel) + 600,
+            languagePriority: channel.languagePriority,
+          ));
+        }
+      }
+
+      // PRIORIDAD 2: coincidencias del horario EPG con evento y canal.
       for (final programme in programmes) {
         final channelNameAliases = programme.channelName
             .split('|')
