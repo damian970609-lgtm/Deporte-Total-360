@@ -1636,14 +1636,61 @@ class AutomaticLiveService {
           ));
         }
       }
+      // PRIORIDAD 3: búsqueda alternativa cuando no hay EPG ni broadcaster explícito.
+      // Busca equipos, participantes, competición y perfil deportivo del canal.
+      final alternativeMatches = catalog.channels
+          .map((channel) => (
+                channel: channel,
+                score: alternativeChannelMatchScore(channel, event),
+              ))
+          .where((match) => match.score >= 60)
+          .toList()
+        ..sort((a, b) {
+          final score = b.score.compareTo(a.score);
+          if (score != 0) return score;
+          final language =
+              b.channel.languagePriority.compareTo(a.channel.languagePriority);
+          return language != 0
+              ? language
+              : _qualityScore(b.channel).compareTo(_qualityScore(a.channel));
+        });
+
+      for (final match in alternativeMatches.take(6)) {
+        final channel = match.channel;
+        if (!isDirectPlayableStream(channel.url) || !used.add(channel.url)) {
+          continue;
+        }
+        candidates.add(ScheduledLiveSource(
+          channelName: channel.name,
+          url: channel.url,
+          programmeTitle: 'Búsqueda alternativa por equipos/deporte (sin EPG)',
+          programmeEndsAt: eventLimit,
+          qualityScore: _qualityScore(channel) + match.score,
+          languagePriority: channel.languagePriority,
+        ));
+      }
+
+      if (candidates.isNotEmpty && programmes.isEmpty) matchedEventCount++;
       candidateCount += candidates.length;
       if (candidates.isEmpty) continue;
 
-      report('checking_signals', 'Coincidencias EPG encontradas. Comprobando ${candidates.length} señal(es) para este evento.');
-      candidates.sort((a, b) {
+      int compareCandidates(ScheduledLiveSource a, ScheduledLiveSource b) {
+        final aBroadcast = a.programmeTitle.startsWith('Canal indicado por SportsAPI:');
+        final bBroadcast = b.programmeTitle.startsWith('Canal indicado por SportsAPI:');
+        if (aBroadcast != bBroadcast) return aBroadcast ? -1 : 1;
+        final aAlternative = a.programmeTitle.startsWith('Búsqueda alternativa');
+        final bAlternative = b.programmeTitle.startsWith('Búsqueda alternativa');
+        if (aAlternative != bAlternative) return aAlternative ? 1 : -1;
         final language = b.languagePriority.compareTo(a.languagePriority);
         return language != 0 ? language : b.qualityScore.compareTo(a.qualityScore);
-      });
+      }
+
+      report(
+        'checking_signals',
+        'Comprobando ' + candidates.length.toString() +
+            ' señales por broadcasters, EPG o búsqueda alternativa.',
+      );
+      candidates.sort(compareCandidates);
       final verifiedCandidates = <ScheduledLiveSource>[];
       for (var batchStart = 0; batchStart < candidates.length; batchStart += 8) {
         final batch = candidates.skip(batchStart).take(8).toList(growable: false);
@@ -1656,10 +1703,7 @@ class AutomaticLiveService {
         availableCandidateCount += available.length;
         report('checking_signals', 'Señales comprobadas: $testedCandidateCount; reproducibles: $availableCandidateCount.');
       }
-      verifiedCandidates.sort((a, b) {
-        final language = b.languagePriority.compareTo(a.languagePriority);
-        return language != 0 ? language : b.qualityScore.compareTo(a.qualityScore);
-      });
+      verifiedCandidates.sort(compareCandidates);
 
       // El sondeo HTTP es orientativo: algunos CDN bloquean GET/Range desde
       // diagnóstico, aunque el reproductor nativo pueda abrir el manifiesto.
