@@ -207,7 +207,7 @@ void main() {
             ],
           }), 200);
         }
-        throw const http.ClientException('sin conexión');
+        throw http.ClientException('sin conexión');
       });
 
       final first = await SportsApiService().fetchAgendaEvents(
@@ -219,7 +219,7 @@ void main() {
       SportsApiService.resetForTesting();
       SportsApiService.clientOverride = MockClient((request) async {
         requestCount++;
-        throw const http.ClientException('sin conexión');
+        throw http.ClientException('sin conexión');
       });
 
       final restored = await SportsApiService().fetchAgendaEvents(
