@@ -110,6 +110,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
               tvgName: channel.name,
               group: channel.groupTitle,
               language: channel.language,
+              searchAliases: channel.searchAliases,
             ))
         .toList(growable: false);
 
