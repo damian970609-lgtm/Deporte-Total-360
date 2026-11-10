@@ -1778,8 +1778,10 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen>
   @override
   void initState() {
     super.initState();
-    _appResumed =
-        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    // La pantalla se abre como una ruta visible. El observador la pausa
+    // cuando Android envía inactive/paused y la reactiva al volver a resumed.
+    // Así no se bloquea el primer refresco antes del primer callback del SO.
+    _appResumed = true;
     WidgetsBinding.instance.addObserver(this);
     _sources = List<LivePlayerSource>.of(widget.sources);
     _startRefreshTimer();
