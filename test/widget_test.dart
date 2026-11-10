@@ -10,6 +10,14 @@ import 'package:deporte_total_360/sports_api_service.dart';
 void _noopHomeNavigate(int _) {}
 void _noopHomeAction() {}
 
+Future<void> _pumpIptvLoading(WidgetTester tester) async {
+  await tester.pump();
+  for (var frame = 0; frame < 12; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  await tester.pump();
+}
+
 class _AdminTestService extends ChannelCatalogService {
   _AdminTestService({this.autoSignIn = true, this.adminTotal = 2});
 
@@ -195,12 +203,13 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('IPTV'));
-    await tester.pumpAndSettle();
+    await _pumpIptvLoading(tester);
+    expect(find.textContaining('Inventario completo:'), findsOneWidget);
 
     final reimport = find.text('REIMPORTAR TODAS LAS LISTAS GUARDADAS');
     expect(reimport, findsOneWidget);
     await tester.tap(reimport);
-    await tester.pumpAndSettle();
+    await _pumpIptvLoading(tester);
 
     expect(service.refreshRequested, isTrue);
     expect(find.text('Canal General'), findsOneWidget);
@@ -300,7 +309,8 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: ChannelAdminScreen(service: service)));
     await tester.pumpAndSettle();
     await tester.tap(find.text('IPTV'));
-    await tester.pumpAndSettle();
+    await _pumpIptvLoading(tester);
+    expect(find.textContaining('Inventario completo:'), findsOneWidget);
 
     expect(tester.widget<Text>(find.byKey(const ValueKey<String>('iptv-channel-total'))).data, '2005');
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
