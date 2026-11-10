@@ -408,10 +408,11 @@ void main() {
     final channel = SportsChannel.fromJson(<String, dynamic>{
       'id': 'stream-981',
       'identifier': 'stream_981',
-      'name': '',
+      'name': 'N/A',
       'url': 'https://cdn.example/feeds/espn_2_hd/live.m3u8',
       'tvg_id': 'ESPN.2.us',
       'group_title': 'Deportes premium',
+      'source_label': 'Lista ESPN oficial',
       'aliases': <String>['ESPN 2 HD', 'ESPN Dos'],
       'isSports': true,
       'visible': false,
@@ -419,7 +420,9 @@ void main() {
 
     expect(channel.name, 'ESPN 2 HD');
     expect(channel.searchAliases, contains('ESPN Dos'));
+    expect(channel.searchAliases, contains('Lista ESPN oficial'));
     expect(matchesSportsChannelSearch(channel, 'ESPN'), isTrue);
+    expect(matchesSportsChannelSearch(channel, 'lista espn'), isTrue);
     expect(matchesSportsChannelSearch(channel, 'espn.2'), isTrue);
     expect(matchesSportsChannelSearch(channel, 'deportes premium'), isTrue);
     expect(matchesSportsChannelSearch(channel, 'stream 981'), isTrue);
