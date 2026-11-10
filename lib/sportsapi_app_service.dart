@@ -1325,6 +1325,16 @@ class SportsApiAppService {
       startsAt: start,
       venue: _text((row['venue'] is Map) ? row['venue']['name'] : row['venue']),
       detailUrl: 'https://deporte-total-360-api.damian970609.workers.dev/api/sportsapi/fixtures/$id',
+      // Solo se completa cuando el proveedor/Worker entrega explícitamente
+      // los broadcasters del partido; la API pública puede no incluirlos.
+      broadcastChannels: parseBroadcastChannelNames(
+        row['broadcastChannels'] ??
+            row['tvChannels'] ??
+            row['broadcasters'] ??
+            row['broadcasts'] ??
+            row['networks'] ??
+            row['television'],
+      ),
     );
   }
 
