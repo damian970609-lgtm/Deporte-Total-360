@@ -39,12 +39,15 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
   Timer? _refreshTimer;
   Timer? _eventBoundaryTimer;
   bool _refreshing = false;
+  bool _appResumed = true;
   AutoLiveProgress? _progress;
   String? _refreshNotice;
 
   @override
   void initState() {
     super.initState();
+    _appResumed =
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     WidgetsBinding.instance.addObserver(this);
     // La pantalla se crea al abrir la pestaña; las consultas periódicas
     // solo continúan mientras En Vivo está visible y Android está en primer plano.
@@ -63,7 +66,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
   @override
   void didUpdateWidget(covariant AutomaticLiveScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.isActive &&
+    if (widget.isActive && _appResumed &&
         (!oldWidget.isActive ||
             oldWidget.selectedEventId != widget.selectedEventId)) {
       _refresh();
@@ -72,7 +75,13 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && widget.isActive) {
+    final resumed = state == AppLifecycleState.resumed;
+    if (_appResumed != resumed && mounted) {
+      // Al salir de primer plano, LivePlayerBoard desactiva cada tile y
+      // libera el controlador nativo antes de que Android suspenda la APK.
+      setState(() => _appResumed = resumed);
+    }
+    if (resumed && widget.isActive) {
       // Solo la pestaña visible se actualiza al volver a primer plano.
       // Se respeta el snapshot local y sus tiempos de validez.
       _refresh();
@@ -171,7 +180,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
 
 
   Future<void> _refresh({bool force = false}) async {
-    if (_refreshing) return;
+    if (_refreshing || !widget.isActive || !_appResumed) return;
     _refreshing = true;
     _refreshNotice = null;
     if (mounted) {
@@ -604,7 +613,7 @@ class _AutomaticLiveScreenState extends State<AutomaticLiveScreen>
             child: LivePlayerBoard(
               sources: activeSources,
               waitingEvents: waitingEvents,
-              isActive: widget.isActive,
+              isActive: widget.isActive && _appResumed,
               prioritizedEventId: widget.selectedEventId,
             ),
           ),
