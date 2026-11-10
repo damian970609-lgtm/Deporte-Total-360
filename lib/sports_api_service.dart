@@ -624,7 +624,7 @@ class SportsApiService {
       String? oldestKey;
       DateTime? oldestExpiry;
       _cache.forEach((candidate, value) {
-        if (oldestExpiry == null || value.expiresAt.isBefore(oldestExpiry)) {
+        if (oldestExpiry == null || value.expiresAt.isBefore(oldestExpiry!)) {
           oldestKey = candidate;
           oldestExpiry = value.expiresAt;
         }
