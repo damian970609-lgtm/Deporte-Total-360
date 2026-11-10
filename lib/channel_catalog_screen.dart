@@ -1718,7 +1718,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   List<SportsChannel> _channels = <SportsChannel>[];
   SportsChannel? _previewChannel;
   List<ChannelPlaylistSource> _sources = <ChannelPlaylistSource>[];
-  bool _loading = false;
   bool _working = false;
   bool _rightsConfirmed = false;
   bool _diagnosingPreview = false;
@@ -1868,7 +1867,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     if (_email == null && _service.signedInEmail == null) return;
     if (showLoading && mounted) {
       setState(() {
-        _loading = true;
         _sourcesError = null;
       });
     }
@@ -1899,7 +1897,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
     await _loadLicenses();
     await _loadTrialSummary();
-    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _loadLicenses() async {
