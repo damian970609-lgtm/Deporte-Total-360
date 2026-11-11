@@ -1,4 +1,6 @@
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'dart:math' as math;
 
 import 'package:google_sign_in/google_sign_in.dart';
@@ -245,6 +247,66 @@ class ChannelAdminSnapshot {
   final bool hasSources;
 }
 
+ChannelAdminSnapshot? _decodeChannelAdminSnapshot(
+  Map<String, String> input,
+) {
+  final normalizedEmail = (input['email'] ?? '').trim().toLowerCase();
+  final raw = input['raw'] ?? '';
+  if (normalizedEmail.isEmpty || raw.isEmpty) return null;
+
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map ||
+        (decoded['email'] ?? '').toString().trim().toLowerCase() !=
+            normalizedEmail) {
+      return null;
+    }
+
+    final channelRows = decoded['channels'];
+    final sourceRows = decoded['sources'];
+    final channels = <SportsChannel>[];
+    if (channelRows is List) {
+      for (final row in channelRows.whereType<Map>()) {
+        try {
+          channels.add(
+            SportsChannel.fromJson(Map<String, dynamic>.from(row)),
+          );
+        } on FormatException {
+          // La corrupción de una entrada no debe borrar las demás.
+        }
+      }
+    }
+
+    final sources = <ChannelPlaylistSource>[];
+    if (sourceRows is List) {
+      for (final row in sourceRows.whereType<Map>()) {
+        try {
+          sources.add(
+            ChannelPlaylistSource.fromJson(
+              Map<String, dynamic>.from(row),
+            ),
+          );
+        } on FormatException {
+          // Conserva las fuentes válidas aunque una fila esté dañada.
+        }
+      }
+    }
+
+    return ChannelAdminSnapshot(
+      email: normalizedEmail,
+      savedAt: (decoded['savedAt'] ?? '').toString(),
+      channels: channels.take(maxCachedChannelCatalogEntries).toList(
+        growable: false,
+      ),
+      sources: sources.toList(growable: false),
+      hasChannels: channelRows is List,
+      hasSources: sourceRows is List,
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
 class ChannelAdminSnapshotStore {
   static const String _keyPrefix = 'dt360_admin_snapshot_v1_';
   static final Map<String, Future<void>> _pendingWrites =
@@ -258,7 +320,8 @@ class ChannelAdminSnapshotStore {
   }
 
   /// Devuelve solo la copia perteneciente a la cuenta solicitada.
-  /// Una fila dañada se omite sin invalidar el resto del snapshot.
+  /// El JSON y sus filas se decodifican en un isolate para no bloquear la
+  /// interfaz cuando el teléfono conserva miles de canales.
   static Future<ChannelAdminSnapshot?> load({
     required String email,
   }) async {
@@ -269,53 +332,13 @@ class ChannelAdminSnapshotStore {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_cacheKey(normalizedEmail));
       if (raw == null || raw.isEmpty) return null;
-
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map ||
-          (decoded['email'] ?? '').toString().trim().toLowerCase() !=
-              normalizedEmail) {
-        return null;
-      }
-
-      final channelRows = decoded['channels'];
-      final sourceRows = decoded['sources'];
-      final channels = <SportsChannel>[];
-      if (channelRows is List) {
-        for (final row in channelRows.whereType<Map>()) {
-          try {
-            channels.add(
-              SportsChannel.fromJson(Map<String, dynamic>.from(row)),
-            );
-          } on FormatException {
-            // La corrupción de una entrada no debe borrar las demás.
-          }
-        }
-      }
-
-      final sources = <ChannelPlaylistSource>[];
-      if (sourceRows is List) {
-        for (final row in sourceRows.whereType<Map>()) {
-          try {
-            sources.add(
-              ChannelPlaylistSource.fromJson(
-                Map<String, dynamic>.from(row),
-              ),
-            );
-          } on FormatException {
-            // Conserva las fuentes válidas aunque una fila esté dañada.
-          }
-        }
-      }
-
-      return ChannelAdminSnapshot(
-        email: normalizedEmail,
-        savedAt: (decoded['savedAt'] ?? '').toString(),
-        channels: channels.take(maxCachedChannelCatalogEntries).toList(
-          growable: false,
-        ),
-        sources: sources.toList(growable: false),
-        hasChannels: channelRows is List,
-        hasSources: sourceRows is List,
+      return compute<Map<String, String>, ChannelAdminSnapshot?>(
+        _decodeChannelAdminSnapshot,
+        <String, String>{
+          'email': normalizedEmail,
+          'raw': raw,
+        },
+        debugLabel: 'decode_channel_admin_snapshot',
       );
     } catch (_) {
       return null;
@@ -542,27 +565,23 @@ class ChannelCatalogService {
       return currentEmail;
     }
 
-    // La recuperación local de la cuenta no debe depender de una consulta al
-    // Worker: si Cloudflare agotó la cuota, el panel todavía debe poder abrir
-    // su copia privada guardada en este teléfono.
+    // Abrir el panel no debe esperar al Worker ni a una recuperación de Google
+    // indefinida. La validación OAuth completa se hace al pulsar Entrar.
     try {
-      await validateGoogleOAuthConfiguration();
-    } catch (_) {
-      // El backend validará el token cuando vuelva a estar disponible.
-    }
-    await _initializeGoogle();
-
-    try {
+      await _initializeGoogle().timeout(const Duration(seconds: 5));
       final Future<GoogleSignInAccount?>? attempt =
           _google.attemptLightweightAuthentication();
       if (attempt == null) return null;
-      final account = await attempt;
+      final account = await attempt.timeout(const Duration(seconds: 5));
       if (account == null) return null;
       return _rememberGoogleAccount(account);
     } on GoogleSignInException {
-      // La recuperación ligera nunca debe bloquear el acceso manual.
       _idToken = null;
       signedInEmail = null;
+      return null;
+    } on TimeoutException {
+      // No se deja el panel esperando Credential Manager; sigue disponible
+      // el acceso manual con Google.
       return null;
     }
   }
@@ -583,7 +602,11 @@ class ChannelCatalogService {
     // Primero intenta recuperar la sesión previa. No ejecutar signOut aquí:
     // hacerlo elimina la autorización que permitiría reutilizar la cuenta.
     final restoredEmail = await restoreSession();
-    if (restoredEmail != null) return restoredEmail;
+    if (restoredEmail != null) {
+      await validateGoogleOAuthConfiguration();
+      return restoredEmail;
+    }
+    await validateGoogleOAuthConfiguration();
 
     if (!_google.supportsAuthenticate()) {
       throw const ChannelCatalogException(
