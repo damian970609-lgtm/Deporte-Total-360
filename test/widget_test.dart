@@ -295,14 +295,20 @@ void main() {
     final showMore = find.byKey(
       const ValueKey<String>('admin-show-more-sources'),
     );
-    // El botón está al final de una lista larga y se construye de forma
-    // perezosa; desplazar hasta él antes de buscarlo evita depender del
-    // viewport inicial del runner de pruebas.
-    await tester.scrollUntilVisible(
-      showMore,
-      500,
-      scrollable: find.byType(Scrollable).last,
+    // La lista usa un único ListView con desplazamiento propio. Avanzar
+    // ese viewport hasta que el botón lazy se construya evita depender
+    // del orden de otros Scrollable que pueda añadir la pantalla.
+    final adminScroll = find.byKey(
+      const ValueKey<String>('channel-admin-scroll'),
     );
+    for (var attempt = 0; attempt < 30 && showMore.evaluate().isEmpty; attempt++) {
+      await tester.drag(
+        adminScroll,
+        const Offset(0, -700),
+        warnIfMissed: false,
+      );
+      await tester.pumpAndSettle();
+    }
     expect(showMore, findsOneWidget);
     await tester.tap(showMore);
     await tester.pumpAndSettle();
