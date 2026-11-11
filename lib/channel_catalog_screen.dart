@@ -1660,9 +1660,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   /// de acceso manual y conserva intactas las listas del servidor.
   Future<void> _restoreAdminSession() async {
     try {
-      final email = await _service
-          .restoreSession()
-          .timeout(const Duration(seconds: 6));
+      final email = await _service.restoreSession();
       if (!mounted || email == null) return;
       setState(() => _email = email);
 
