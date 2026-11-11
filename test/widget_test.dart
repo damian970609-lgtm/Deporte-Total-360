@@ -295,8 +295,15 @@ void main() {
     final showMore = find.byKey(
       const ValueKey<String>('admin-show-more-sources'),
     );
+    // El botón está al final de una lista larga y se construye de forma
+    // perezosa; desplazar hasta él antes de buscarlo evita depender del
+    // viewport inicial del runner de pruebas.
+    await tester.scrollUntilVisible(
+      showMore,
+      500,
+      scrollable: find.byType(Scrollable).last,
+    );
     expect(showMore, findsOneWidget);
-    await tester.ensureVisible(showMore);
     await tester.tap(showMore);
     await tester.pumpAndSettle();
     expect(find.text('Lista registrada 016'), findsOneWidget);
