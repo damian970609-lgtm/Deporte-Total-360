@@ -17,6 +17,7 @@ class _AdminTestService extends ChannelCatalogService {
   final bool autoSignIn;
   final int adminTotal;
   int _adminPageCalls = 0;
+  int lastAdminPageLimit = 0;
   final List<String> deletedSourceIds = <String>[];
   final List<Map<String, String>> addedPlaylistRequests =
       <Map<String, String>>[];
@@ -33,6 +34,7 @@ class _AdminTestService extends ChannelCatalogService {
     int limit = 200,
   }) async {
     _adminPageCalls++;
+    lastAdminPageLimit = limit;
     if (limit <= 200) {
       return ChannelCatalogPage(
         channels: <SportsChannel>[
@@ -213,6 +215,7 @@ void main() {
     expect(find.textContaining('EPG AUTOMÁTICA'), findsNothing);
     expect(find.textContaining('CONFIGURAR GUÍAS EPG'), findsNothing);
     expect(find.text('2 CANALES'), findsOneWidget);
+    expect(service.lastAdminPageLimit, 40);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -239,7 +242,9 @@ void main() {
       ),
       isTrue,
     );
-    expect(service.refreshRequested, isTrue);
+    // La adición de una fuente ya la pone en cola en Cloudflare.
+    // No debe reimportar las 99 fuentes que ya estaban registradas.
+    expect(service.refreshRequested, isFalse);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

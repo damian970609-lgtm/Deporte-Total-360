@@ -1809,7 +1809,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       final page = await _service.fetchAdminChannelPage(
         search: _searchController.text,
         offset: 0,
-        limit: 200,
+        // No construir 200 tarjetas editables al abrir el panel en Android.
+        limit: 40,
       );
       if (!mounted) return;
       setState(() {
@@ -2013,7 +2014,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       final page = await _service.fetchAdminChannelPage(
         search: _searchController.text,
         offset: _nextAdminOffset,
-        limit: 200,
+        limit: 40,
       );
       if (page.channels.isEmpty && page.hasMore) {
         throw const ChannelCatalogException(
@@ -2174,7 +2175,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     setState(() => _working = true);
     try {
       await _service.addPlaylist(url: preset.url, label: preset.label);
-      await _service.refreshSources();
+      // addPlaylist programa automáticamente esta fuente en el Worker.
+      // No ejecutar refreshSources: reimportaría las otras 99 listas.
       final sources = await _service.fetchSources();
       if (!mounted) return;
       setState(() {
