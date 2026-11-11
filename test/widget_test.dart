@@ -308,7 +308,12 @@ void main() {
 
   testWidgets('añadir una lista general no vuelve a importar las 99 fuentes existentes', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    final service = _AdminTestService(autoSignIn: true, sourceCount: 99);
+    final service = _AdminTestService(autoSignIn: true, sourceCount: 98);
+    // El índice global de GitHub ya forma parte de las 99 listas anteriores.
+    service.addedPlaylistRequests.add(<String, String>{
+      'url': iptvOrgGlobalIndexPlaylistUrl,
+      'label': iptvOrgGlobalIndexPlaylistLabel,
+    });
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
     );
@@ -325,7 +330,12 @@ void main() {
     await tester.tap(addGeneral);
     await tester.pumpAndSettle();
 
-    expect(service.addedPlaylistRequests, hasLength(1));
+    expect(service.addedPlaylistRequests, hasLength(2));
+    expect(
+      service.addedPlaylistRequests.any((source) =>
+          source['url'] == channelPlaylistPresets.first.url),
+      isTrue,
+    );
     expect(service.refreshRequested, isFalse);
     expect(tester.takeException(), isNull);
 
