@@ -333,7 +333,7 @@ class ChannelAdminSnapshotStore {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_cacheKey(normalizedEmail));
       if (raw == null || raw.isEmpty) return null;
-      return compute<Map<String, String>, ChannelAdminSnapshot?>(
+      return await compute<Map<String, String>, ChannelAdminSnapshot?>(
         _decodeChannelAdminSnapshot,
         <String, String>{
           'email': normalizedEmail,
