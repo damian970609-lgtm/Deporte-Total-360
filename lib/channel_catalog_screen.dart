@@ -1886,7 +1886,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       });
       setState(() {
         _sources = sources;
-        _visibleSourceCount = _visibleSourceCount.clamp(0, sources.length);
+        _visibleSourceCount = _visibleSourceCount.clamp(0, sources.length).toInt();
         _sourcesError = null;
       });
       await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
@@ -1904,7 +1904,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     if (!mounted || _visibleSourceCount >= _sources.length) return;
     setState(() {
       _visibleSourceCount = (_visibleSourceCount + _sourcePageSize)
-          .clamp(0, _sources.length);
+          .clamp(0, _sources.length)
+          .toInt();
     });
   }
 
