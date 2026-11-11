@@ -188,6 +188,29 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('el menú privado muestra la sección Proton VPN sin alterar IPTV', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final service = _AdminTestService(autoSignIn: true);
+    await tester.pumpWidget(
+      MaterialApp(home: ChannelAdminScreen(service: service)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsOneWidget);
+    await tester.tap(find.text('PROTON VPN'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('PROTON VPN · CONEXIÓN PROTEGIDA'), findsOneWidget);
+    expect(find.text('ABRIR PROTON VPN'), findsOneWidget);
+    expect(find.textContaining('tres reproductores'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('IPTV'));
+    await tester.pumpAndSettle();
+    expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('el inventario permite reimportar todas las listas guardadas sin borrar canales', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
