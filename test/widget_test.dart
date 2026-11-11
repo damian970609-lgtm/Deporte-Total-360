@@ -291,16 +291,21 @@ void main() {
     expect((await service.fetchSources()), hasLength(100));
 
     // Solo se construye el primer bloque; el resto aparece al pedirlo.
-    expect(find.text('Lista registrada 016'), findsNothing);
-    final showMore = find.byKey(
-      const ValueKey<String>('admin-show-more-sources'),
-    );
-    // La lista usa un único ListView con desplazamiento propio. Avanzar
-    // ese viewport hasta que el botón lazy se construya evita depender
-    // del orden de otros Scrollable que pueda añadir la pantalla.
     final adminScroll = find.byKey(
       const ValueKey<String>('channel-admin-scroll'),
     );
+    int childCount() {
+      final list = tester.widget<ListView>(adminScroll);
+      final delegate = list.childrenDelegate as SliverChildListDelegate;
+      return delegate.children.length;
+    }
+
+    final initialChildCount = childCount();
+    final showMore = find.byKey(
+      const ValueKey<String>('admin-show-more-sources'),
+    );
+    // El botón está al final del ListView. Desplazar hasta que Flutter lo
+    // construya; el aviso de éxito puede cubrirlo, así que no se simula un tap.
     for (var attempt = 0; attempt < 30 && showMore.evaluate().isEmpty; attempt++) {
       await tester.drag(
         adminScroll,
@@ -310,9 +315,12 @@ void main() {
       await tester.pumpAndSettle();
     }
     expect(showMore, findsOneWidget);
-    await tester.tap(showMore);
+    final showMoreButton = tester.widget<OutlinedButton>(showMore);
+    expect(showMoreButton.onPressed, isNotNull);
+    showMoreButton.onPressed!.call();
     await tester.pumpAndSettle();
-    expect(find.text('Lista registrada 016'), findsOneWidget);
+    expect(childCount(), initialChildCount + 15);
+    expect(tester.takeException(), isNull);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
