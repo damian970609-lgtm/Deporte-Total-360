@@ -306,6 +306,32 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('añadir una lista general no vuelve a importar las 99 fuentes existentes', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final service = _AdminTestService(autoSignIn: true, sourceCount: 99);
+    await tester.pumpWidget(
+      MaterialApp(home: ChannelAdminScreen(service: service)),
+    );
+    await tester.pumpAndSettle();
+
+    final addGeneral = find.text('AÑADIR LISTA GENERAL');
+    await tester.scrollUntilVisible(
+      addGeneral,
+      600,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 20,
+    );
+    await tester.ensureVisible(addGeneral);
+    await tester.tap(addGeneral);
+    await tester.pumpAndSettle();
+
+    expect(service.addedPlaylistRequests, hasLength(1));
+    expect(service.refreshRequested, isFalse);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('el menú privado muestra la sección Proton VPN sin alterar IPTV', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
