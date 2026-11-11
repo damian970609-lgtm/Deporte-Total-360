@@ -11,6 +11,7 @@ import 'package:volume_controller/volume_controller.dart';
 
 import 'channel_catalog_service.dart';
 import 'channel_playlist_presets.dart';
+import 'proton_vpn_screen.dart';
 import 'live_media_format.dart';
 import 'stream_diagnostics.dart';
 
@@ -1634,6 +1635,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   String? _error;
   String? _sourcesError;
   bool _showIptvSection = false;
+  bool _showVpnSection = false;
   bool _iptvLoading = false;
   bool _iptvLoaded = false;
   int _iptvRequestId = 0;
@@ -1670,7 +1672,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   }
 
   void _handleAdminScroll() {
-    if (_showIptvSection || !_adminScrollController.hasClients ||
+    if (_showIptvSection || _showVpnSection || !_adminScrollController.hasClients ||
         _loading || _working || !_hasMore || _error != null) {
       return;
     }
@@ -1776,6 +1778,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _licenseRecords = <AppLicenseRecord>[];
         _previewChannel = null;
         _showIptvSection = false;
+        _showVpnSection = false;
         _iptvChannels = <SportsChannel>[];
         _iptvSelectedChannel = null;
         _iptvLoaded = false;
@@ -2774,12 +2777,31 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
 
   void _openAdminSection() {
-    if (mounted) setState(() => _showIptvSection = false);
+    if (mounted) {
+      setState(() {
+        _showIptvSection = false;
+        _showVpnSection = false;
+      });
+    }
   }
 
   void _openIptvSection() {
-    if (mounted) setState(() => _showIptvSection = true);
+    if (mounted) {
+      setState(() {
+        _showIptvSection = true;
+        _showVpnSection = false;
+      });
+    }
     if (!_iptvLoaded && !_iptvLoading) unawaited(_loadAllIptvChannels());
+  }
+
+  void _openVpnSection() {
+    if (mounted) {
+      setState(() {
+        _showIptvSection = false;
+        _showVpnSection = true;
+      });
+    }
   }
 
   Future<void> _loadAllIptvChannels({bool force = false}) async {
@@ -2908,7 +2930,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           tab(
             label: 'ADMINISTRACIÓN',
             icon: Icons.admin_panel_settings_rounded,
-            selected: !_showIptvSection,
+            selected: !_showIptvSection && !_showVpnSection,
             onTap: _openAdminSection,
           ),
           const SizedBox(width: 8),
@@ -2917,6 +2939,13 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
             icon: Icons.live_tv_rounded,
             selected: _showIptvSection,
             onTap: _openIptvSection,
+          ),
+          const SizedBox(width: 8),
+          tab(
+            label: 'PROTON VPN',
+            icon: Icons.shield_rounded,
+            selected: _showVpnSection,
+            onTap: _openVpnSection,
           ),
         ],
       ),
@@ -3525,9 +3554,11 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                 children: <Widget>[
                   _buildAdminSectionSwitcher(),
                   Expanded(
-                    child: _showIptvSection
-                        ? _buildIptvScreen()
-                        : RefreshIndicator(
+                    child: _showVpnSection
+                        ? const ProtonVpnScreen()
+                        : _showIptvSection
+                            ? _buildIptvScreen()
+                            : RefreshIndicator(
                 color: _channelCyan,
                 backgroundColor: _channelPanel,
                 onRefresh: () => _loadAdmin(),
