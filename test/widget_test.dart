@@ -289,6 +289,15 @@ void main() {
     );
     expect(service.refreshRequested, isFalse);
     expect((await service.fetchSources()), hasLength(100));
+
+    // La métrica está debajo de los formularios y el inventario; desplazar
+    // el ListView hace que Flutter construya ese elemento perezoso antes
+    // de comprobar el contador visible.
+    await tester.drag(
+      find.byKey(const ValueKey<String>('channel-admin-scroll')),
+      const Offset(0, -12000),
+    );
+    await tester.pumpAndSettle();
     expect(find.text('100 / 100'), findsOneWidget);
 
     // Solo se construye el primer bloque; el resto aparece al pedirlo.
