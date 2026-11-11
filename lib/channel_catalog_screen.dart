@@ -1622,6 +1622,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   List<SportsChannel> _channels = <SportsChannel>[];
   SportsChannel? _previewChannel;
   List<ChannelPlaylistSource> _sources = <ChannelPlaylistSource>[];
+  static const int _sourcePageSize = 15;
+  int _visibleSourceCount = _sourcePageSize;
   bool _loading = false;
   bool _working = false;
   bool _rightsConfirmed = false;
@@ -1658,11 +1660,23 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   /// de acceso manual y conserva intactas las listas del servidor.
   Future<void> _restoreAdminSession() async {
     try {
-      final email = await _service.restoreSession();
+      final email = await _service
+          .restoreSession()
+          .timeout(const Duration(seconds: 6));
       if (!mounted || email == null) return;
       setState(() => _email = email);
+
+      // La copia local se muestra primero. El panel deja de bloquear sus
+      // controles mientras las consultas remotas se ejecutan en paralelo.
       await _loadCachedAdminSnapshot(email);
-      await _loadAdmin();
+      if (!mounted) return;
+      setState(() => _working = false);
+      unawaited(_loadAdmin());
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Google tardó demasiado en restaurar la sesión. Puedes entrar manualmente.';
+      });
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
@@ -1803,13 +1817,31 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       });
     }
 
-    // El catálogo, las fuentes y las licencias se consultan por separado.
-    // Un error en una ruta no impide mostrar las otras secciones del panel.
+    // Todas las consultas independientes comienzan juntas. Un servidor lento
+    // no obliga a esperar en cadena el catálogo, las listas y las licencias.
+    await Future.wait<void>(<Future<void>>[
+      _loadAdminChannels(),
+      _loadAdminSources(),
+      _loadLicenses(),
+      _loadTrialSummary(),
+    ]);
+
+    if (!mounted) return;
+
+    // Completa la plaza 100 con el índice público de GitHub únicamente cuando
+    // hay 99 fuentes y todavía no existe esa URL. No se reimportan las otras.
+    if (_sources.length == maxChannelPlaylistSources - 1 &&
+        !_hasIptvOrgGlobalIndex) {
+      await _addIptvOrgGlobalIndex(automatic: true);
+    }
+  }
+
+  Future<void> _loadAdminChannels() async {
     try {
       final page = await _service.fetchAdminChannelPage(
         search: _searchController.text,
         offset: 0,
-        // No construir 200 tarjetas editables al abrir el panel en Android.
+        // El inventario se pagina; no materializar miles de tarjetas al abrir.
         limit: 40,
       );
       if (!mounted) return;
@@ -1841,7 +1873,9 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
             : error.toString();
       });
     }
+  }
 
+  Future<void> _loadAdminSources() async {
     try {
       final sources = await _service.fetchSources();
       if (!mounted) return;
@@ -1852,6 +1886,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       });
       setState(() {
         _sources = sources;
+        _visibleSourceCount = _visibleSourceCount.clamp(0, sources.length);
         _sourcesError = null;
       });
       await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
@@ -1863,9 +1898,14 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
             : error.toString();
       });
     }
+  }
 
-    await _loadLicenses();
-    await _loadTrialSummary();
+  void _showMoreSources() {
+    if (!mounted || _visibleSourceCount >= _sources.length) return;
+    setState(() {
+      _visibleSourceCount = (_visibleSourceCount + _sourcePageSize)
+          .clamp(0, _sources.length);
+    });
   }
 
   Future<void> _loadLicenses() async {
@@ -2174,8 +2214,9 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
     setState(() => _working = true);
     try {
+      // addPlaylist ya pone esta fuente en cola en Cloudflare; no volver a
+      // procesar las otras 99 listas por añadir una sola.
       await _service.addPlaylist(url: preset.url, label: preset.label);
-      await _service.refreshSources();
       final sources = await _service.fetchSources();
       if (!mounted) return;
       setState(() {
@@ -2196,18 +2237,18 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         iptvOrgGlobalIndexPlaylistUrl,
       );
 
-  Future<void> _addIptvOrgGlobalIndex() async {
-    if (_working) return;
+  Future<void> _addIptvOrgGlobalIndex({bool automatic = false}) async {
+    if (_working && !automatic) return;
     if (_sources.length >= maxChannelPlaylistSources) {
-      _message('Ya están registradas las 100 listas.');
+      if (!automatic) _message('Ya están registradas las 100 listas.');
       return;
     }
     if (_hasIptvOrgGlobalIndex) {
-      _message('El índice global de IPTV-org ya está registrado.');
+      if (!automatic) _message('El índice global de IPTV-org ya está registrado.');
       return;
     }
 
-    setState(() => _working = true);
+    if (!automatic && mounted) setState(() => _working = true);
     try {
       await _service.addPlaylist(
         url: iptvOrgGlobalIndexPlaylistUrl,
@@ -2219,17 +2260,20 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       if (!mounted) return;
       setState(() {
         _sources = sources;
+        _visibleSourceCount = _visibleSourceCount.clamp(0, sources.length);
         _sourcesError = null;
       });
       await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
       _message(
-        'Índice global añadido: ${_sources.length}/100 listas. '
+        'Índice global de GitHub añadido: ${_sources.length}/100 listas. '
         'Los canales se importarán por lotes en segundo plano.',
       );
     } catch (error) {
-      _message('No se pudo añadir el índice global de IPTV-org: ' + error.toString());
+      if (mounted) {
+        _message('No se pudo añadir el índice global de IPTV-org: ' + error.toString());
+      }
     } finally {
-      if (mounted) setState(() => _working = false);
+      if (!automatic && mounted) setState(() => _working = false);
     }
   }
 
@@ -4432,7 +4476,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                         ),
                       )
                     else
-                      for (final source in _sources)
+                      for (final source in _sources.take(_visibleSourceCount))
                         _adminCard(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -4528,6 +4572,25 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             ],
                           ),
                         ),
+                    if (_visibleSourceCount < _sources.length)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            key: const ValueKey<String>('admin-show-more-sources'),
+                            onPressed: _showMoreSources,
+                            icon: const Icon(Icons.expand_more_rounded),
+                            label: Text(
+                              'MOSTRAR OTRAS ${(_sources.length - _visibleSourceCount).clamp(0, _sourcePageSize)} LISTAS',
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _channelCyan,
+                              side: const BorderSide(color: _channelCyan),
+                            ),
+                          ),
+                        ),
+                      ),
 
                   ],
                 ),
