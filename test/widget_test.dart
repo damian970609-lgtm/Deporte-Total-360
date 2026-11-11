@@ -230,7 +230,12 @@ void main() {
     await tester.pumpAndSettle();
 
     final addIndex = find.text('AÑADIR ÍNDICE GLOBAL IPTV-ORG');
-    await tester.ensureVisible(addIndex);
+    await tester.scrollUntilVisible(
+      addIndex,
+      600,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 20,
+    );
     await tester.tap(addIndex);
     await tester.pumpAndSettle();
 

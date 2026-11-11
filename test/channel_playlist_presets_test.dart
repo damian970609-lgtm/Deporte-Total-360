@@ -34,7 +34,7 @@ void main() {
     expect(
       channelPlaylistPresets.any(
         (preset) =>
-            preset.label == 'IPTV-org · Catálogo global completo' &&
+            preset.label == iptvOrgGlobalIndexPlaylistLabel &&
             preset.url == 'https://iptv-org.github.io/iptv/index.m3u',
       ),
       isTrue,
