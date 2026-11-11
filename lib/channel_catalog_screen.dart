@@ -2175,8 +2175,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     setState(() => _working = true);
     try {
       await _service.addPlaylist(url: preset.url, label: preset.label);
-      // addPlaylist programa automáticamente esta fuente en el Worker.
-      // No ejecutar refreshSources: reimportaría las otras 99 listas.
+      await _service.refreshSources();
       final sources = await _service.fetchSources();
       if (!mounted) return;
       setState(() {
@@ -2214,9 +2213,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         url: iptvOrgGlobalIndexPlaylistUrl,
         label: iptvOrgGlobalIndexPlaylistLabel,
       );
-      // El Worker procesa el índice en segundo plano por lotes. La APK no
-      // descarga ni construye miles de widgets en el hilo principal.
-      await _service.refreshSources();
+      // addPlaylist pone esta fuente individual en cola en el Worker.
+      // No ejecutar refreshSources: reimportaría las otras 99 listas.
       final sources = await _service.fetchSources();
       if (!mounted) return;
       setState(() {

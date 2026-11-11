@@ -236,6 +236,9 @@ void main() {
       scrollable: find.byType(Scrollable).first,
       maxScrolls: 20,
     );
+    // Tras materializarse en el ListView, alinéalo dentro del área visible.
+    await tester.ensureVisible(addIndex);
+    await tester.pumpAndSettle();
     await tester.tap(addIndex);
     await tester.pumpAndSettle();
 
