@@ -171,3 +171,28 @@ registrar contraseñas, credenciales ni tokens.
 
 
 Las 28 guías EPG/XMLTV integradas se combinan automáticamente dentro de la APK. Sus direcciones no aparecen en el panel Damián APK; si una guía no responde o contiene XML inválido, se omite esa fuente y se procesan las demás. Las guías personalizadas guardadas anteriormente se conservan junto con las fuentes automáticas.
+
+
+## Disponibilidad regional y fuentes alternativas
+
+Los tres reproductores comparten una política regional de selección. La región
+inicial es Guyana (`GY`). Si el proveedor adjunta el campo opcional
+`availableCountries` (códigos ISO 3166-1 alpha-2), se priorizan las fuentes
+declaradas disponibles en esa región y se omiten las que el proveedor declara
+no disponibles allí. `["*"]` indica disponibilidad global. El campo está
+pensado para disponibilidad/licencia confirmada por el proveedor; no debe
+rellenarse con el país de origen de la emisora (`tvg-country`).
+
+Cuando no hay metadatos regionales, la disponibilidad queda como desconocida:
+la APK conserva el orden original y puede probar otra URL que pertenezca al
+mismo canal o evento si la primera falla. No se cambia, elimina ni reescribe
+ninguna URL guardada. El catálogo puede enviar `availableCountries` en los
+objetos de canal y en las fuentes de evento; por ejemplo:
+`{"availableCountries":["GY","BB"]}`.
+
+Los reproductores usan la ruta de red predeterminada de Android, por lo que
+normalmente respetan la VPN que el usuario haya activado y permitido para la
+APK. Esta función no crea una VPN, no incluye proxies públicos, no cambia la
+dirección IP de salida y no intenta superar controles territoriales del
+proveedor. Una alternativa solo se considera regionalmente prioritaria cuando
+el proveedor declara su disponibilidad.

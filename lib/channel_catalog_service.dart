@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'live_media_format.dart';
+import 'regional_stream_policy.dart';
 import 'stream_diagnostics.dart';
 import 'sports_api_service.dart';
 
@@ -113,6 +114,7 @@ class SportsChannel {
     this.visible = true,
     this.language = 'unknown',
     this.tvgId = '',
+    this.availableCountries = const <String>[],
   });
 
   final String id;
@@ -125,6 +127,9 @@ class SportsChannel {
   final bool isSports;
   final bool visible;
   final String language;
+  /// Países donde el proveedor declara disponible esta fuente (ISO alpha-2).
+  /// Vacío significa que el proveedor no publicó metadatos regionales.
+  final List<String> availableCountries;
 
   Map<String, Object> toJson() => <String, Object>{
         'id': id,
@@ -137,6 +142,7 @@ class SportsChannel {
         'isSports': isSports,
         'visible': visible,
         'language': language,
+        'availableCountries': availableCountries,
       };
 
   factory SportsChannel.fromJson(Map<String, dynamic> json) {
@@ -171,6 +177,11 @@ class SportsChannel {
       isSports: json['isSports'] == true,
       visible: json['visible'] == true,
       language: language,
+      availableCountries: parseAvailableCountryCodes(
+        json['availableCountries'] ??
+            json['available_countries'] ??
+            json['authorizedCountries'],
+      ),
     );
   }
 }

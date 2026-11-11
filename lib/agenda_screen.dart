@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
+import 'regional_stream_policy.dart';
 import 'stream_diagnostics.dart';
 
 import 'sports_api_service.dart';
@@ -24,10 +25,27 @@ const Color agendaMuted = Color(0xFFEAF0F8);
 enum MatchStatus { live, scheduled, finished }
 
 class MatchStreamSource {
-  const MatchStreamSource({required this.name, required this.url});
+  const MatchStreamSource({
+    required this.name,
+    required this.url,
+    this.availableCountries = const <String>[],
+  });
 
   final String name;
   final String url;
+  final List<String> availableCountries;
+
+  factory MatchStreamSource.fromJson(Map<String, dynamic> json) {
+    return MatchStreamSource(
+      name: (json['name'] ?? '').toString(),
+      url: (json['url'] ?? '').toString(),
+      availableCountries: parseAvailableCountryCodes(
+        json['availableCountries'] ??
+            json['available_countries'] ??
+            json['authorizedCountries'],
+      ),
+    );
+  }
 
   Uri? get validatedUri {
     final uri = Uri.tryParse(url.trim());
@@ -1504,6 +1522,14 @@ class MatchDetailScreen extends StatelessWidget {
                           builder: (_) => AgendaVideoPlayerScreen(
                             title: '${event.homeTeam} vs ${event.awayTeam}',
                             source: source,
+                            fallbackSources: event.streamSources
+                                .where((alternative) => alternative.url != source.url)
+                                .map((alternative) => RegionalStreamCandidate(
+                                      url: alternative.url,
+                                      label: alternative.name,
+                                      availableCountries: alternative.availableCountries,
+                                    ))
+                                .toList(growable: false),
                           ),
                         ),
                       ),
@@ -1532,10 +1558,12 @@ class AgendaVideoPlayerScreen extends StatefulWidget {
     super.key,
     required this.title,
     required this.source,
+    this.fallbackSources = const <RegionalStreamCandidate>[],
   });
 
   final String title;
   final MatchStreamSource source;
+  final List<RegionalStreamCandidate> fallbackSources;
 
   @override
   State<AgendaVideoPlayerScreen> createState() =>
@@ -1554,15 +1582,6 @@ class _AgendaVideoPlayerScreenState extends State<AgendaVideoPlayerScreen> {
   }
 
   Future<void> _initialize() async {
-    final uri = widget.source.validatedUri;
-    if (uri == null) {
-      setState(() {
-        _loading = false;
-        _error = 'La dirección de vídeo no es una URL HTTP/HTTPS válida.';
-      });
-      return;
-    }
-
     setState(() {
       _loading = true;
       _error = null;
@@ -1572,29 +1591,65 @@ class _AgendaVideoPlayerScreenState extends State<AgendaVideoPlayerScreen> {
     _controller = null;
     await oldController?.dispose();
 
-    final controller = VideoPlayerController.networkUrl(uri);
-    _controller = controller;
-    try {
-      await controller.initialize();
-      await controller.setLooping(false);
-      if (!mounted) {
-        await controller.dispose();
-        return;
-      }
-      setState(() => _loading = false);
-    } catch (error) {
-      if (!mounted) {
-        await controller.dispose();
-        if (identical(_controller, controller)) _controller = null;
-        return;
-      }
+    final region = await RegionalPlaybackPreferences.getRegionCode();
+    final candidates = prioritizeRegionalStreamCandidates(
+      <RegionalStreamCandidate>[
+        RegionalStreamCandidate(
+          url: widget.source.url,
+          label: widget.source.name,
+          availableCountries: widget.source.availableCountries,
+        ),
+        ...widget.fallbackSources,
+      ],
+      regionCode: region,
+    );
+    if (!mounted) return;
+    if (candidates.isEmpty) {
       setState(() {
         _loading = false;
-        _error = explainVideoPlayerError(error);
+        _error = 'El proveedor no declara fuentes disponibles en $region.';
       });
-      await controller.dispose();
-      if (identical(_controller, controller)) _controller = null;
+      return;
     }
+
+    Object? lastError;
+    for (var index = 0; index < candidates.length; index++) {
+      final candidate = candidates[index];
+      final uri = Uri.tryParse(candidate.url);
+      if (uri == null || !uri.hasAuthority || uri.host.isEmpty ||
+          (uri.scheme != 'https' && uri.scheme != 'http') ||
+          uri.userInfo.isNotEmpty) {
+        continue;
+      }
+      final controller = VideoPlayerController.networkUrl(uri);
+      _controller = controller;
+      try {
+        await controller.initialize();
+        await controller.setLooping(false);
+        if (!mounted) {
+          await controller.dispose();
+          if (identical(_controller, controller)) _controller = null;
+          return;
+        }
+        setState(() {
+          _loading = false;
+          _error = null;
+        });
+        return;
+      } catch (error) {
+        lastError = error;
+        await controller.dispose();
+        if (identical(_controller, controller)) _controller = null;
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _error = candidates.length == 1
+          ? explainVideoPlayerError(lastError ?? Exception('No se pudo iniciar la fuente.'))
+          : 'No se pudo reproducir ninguna de las ${candidates.length} fuentes disponibles para $region. ${explainVideoPlayerError(lastError ?? Exception('Error de reproducción'))}';
+    });
   }
 
   @override
