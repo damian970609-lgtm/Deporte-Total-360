@@ -36,6 +36,7 @@ class ProtonVpnScreen extends StatelessWidget {
         // Si Proton no está instalado, se ofrece su ficha oficial de Google Play.
       }
     }
+    if (!context.mounted) return;
     await _openStore(context);
   }
 
@@ -202,7 +203,7 @@ class ProtonVpnScreen extends StatelessWidget {
                   const _ProtonStep(
                     number: '3',
                     title: 'Regresa a Deporte Total 360°',
-                    description: 'Con la VPN activa en Android, los tres reproductores utilizan esa conexión de red automáticamente.',
+                    description: 'Si Deporte Total 360° no está excluida en Proton, los tres reproductores utilizan automáticamente esa conexión de Android.',
                   ),
                   const SizedBox(height: 5),
                   Container(
@@ -235,9 +236,9 @@ class ProtonVpnScreen extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             _card(
-              child: Column(
+              child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const <Widget>[
+                children: <Widget>[
                   Text(
                     'LÍMITES IMPORTANTES DE ANDROID',
                     style: TextStyle(
