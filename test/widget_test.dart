@@ -12,10 +12,16 @@ void _noopHomeNavigate(int _) {}
 void _noopHomeAction() {}
 
 class _AdminTestService extends ChannelCatalogService {
-  _AdminTestService({this.autoSignIn = true, this.adminTotal = 2});
+  _AdminTestService({
+    this.autoSignIn = true,
+    this.adminTotal = 2,
+    this.sourceCount = 2,
+  }) : _storedSourceCount = sourceCount;
 
   final bool autoSignIn;
   final int adminTotal;
+  final int sourceCount;
+  int _storedSourceCount;
   int _adminPageCalls = 0;
   int lastAdminPageLimit = 0;
   final List<String> deletedSourceIds = <String>[];
@@ -84,22 +90,28 @@ class _AdminTestService extends ChannelCatalogService {
 
   @override
   Future<List<ChannelPlaylistSource>> fetchSources() async {
-    return const <ChannelPlaylistSource>[
-      ChannelPlaylistSource(
-        id: 'source-imported',
-        url: 'https://lists.example/imported.m3u',
-        label: 'Lista importada',
-        status: 'imported',
-        importedCount: 4,
-        lastImportedAt: '2026-11-06T12:00:00Z',
+    final existing = List<ChannelPlaylistSource>.generate(
+      _storedSourceCount,
+      (index) => ChannelPlaylistSource(
+        id: 'source-$index',
+        url: 'https://lists.example/source-$index.m3u',
+        label: sourceCount == 2
+            ? (index == 0 ? 'Lista importada' : 'Lista en cola')
+            : 'Lista registrada ${(index + 1).toString().padLeft(3, '0')}',
+        status: index == 0 ? 'imported' : 'queued',
+        importedCount: index == 0 ? 4 : 0,
       ),
-      ChannelPlaylistSource(
-        id: 'source-queued',
-        url: 'https://lists.example/queued.m3u',
-        label: 'Lista en cola',
+      growable: false,
+    );
+    final added = addedPlaylistRequests.map(
+      (source) => ChannelPlaylistSource(
+        id: 'source-added-${source['url']!.hashCode.abs()}',
+        url: source['url']!,
+        label: source['label']!,
         status: 'queued',
       ),
-    ];
+    );
+    return <ChannelPlaylistSource>[...existing, ...added];
   }
 
   @override
@@ -132,10 +144,12 @@ class _AdminTestService extends ChannelCatalogService {
     required String url,
     required String label,
   }) async {
-    addedPlaylistRequests.add(<String, String>{
-      'url': url,
-      'label': label,
-    });
+    if (!addedPlaylistRequests.any((item) => item['url'] == url)) {
+      addedPlaylistRequests.add(<String, String>{
+        'url': url,
+        'label': label,
+      });
+    }
   }
 
   @override
@@ -254,6 +268,41 @@ void main() {
     // No debe reimportar las 99 fuentes que ya estaban registradas.
     expect(service.refreshRequested, isFalse);
     expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('el panel completa automáticamente la lista 100 con el índice GitHub cuando hay 99', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final service = _AdminTestService(autoSignIn: true, sourceCount: 99);
+    await tester.pumpWidget(
+      MaterialApp(home: ChannelAdminScreen(service: service)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      service.addedPlaylistRequests.any(
+        (source) =>
+            source['url'] == iptvOrgGlobalIndexPlaylistUrl &&
+            source['label'] == iptvOrgGlobalIndexPlaylistLabel,
+      ),
+      isTrue,
+    );
+    expect(service.refreshRequested, isFalse);
+    expect((await service.fetchSources()), hasLength(100));
+    expect(find.text('100 / 100'), findsOneWidget);
+
+    // Solo se construye el primer bloque; el resto aparece al pedirlo.
+    expect(find.text('Lista registrada 016'), findsNothing);
+    final showMore = find.byKey(
+      const ValueKey<String>('admin-show-more-sources'),
+    );
+    expect(showMore, findsOneWidget);
+    await tester.ensureVisible(showMore);
+    await tester.tap(showMore);
+    await tester.pumpAndSettle();
+    expect(find.text('Lista registrada 016'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
