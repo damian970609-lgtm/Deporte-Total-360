@@ -4,6 +4,10 @@
 /// pueden contener canales también presentes en otras fuentes; el catálogo
 /// del servidor conserva el identificador de cada canal cuando está disponible.
 const int maxChannelPlaylistSources = 100;
+const String iptvOrgGlobalIndexPlaylistUrl =
+    'https://iptv-org.github.io/iptv/index.m3u';
+const String iptvOrgGlobalIndexPlaylistLabel =
+    'IPTV-org · Índice global (más de 11.000 canales)';
 
 class ChannelPlaylistPreset {
   const ChannelPlaylistPreset({
@@ -80,9 +84,9 @@ const List<ChannelPlaylistPreset> channelPlaylistPresets =
     description: 'Catálogo internacional organizado por categoría deportiva',
   ),
   ChannelPlaylistPreset(
-    label: 'IPTV-org · Catálogo global completo',
-    url: 'https://iptv-org.github.io/iptv/index.m3u',
-    description: 'Índice mundial completo del proyecto IPTV-org, con canales públicos de múltiples países',
+    label: iptvOrgGlobalIndexPlaylistLabel,
+    url: iptvOrgGlobalIndexPlaylistUrl,
+    description: 'Índice maestro global de IPTV-org con más de 11.000 canales públicos de múltiples países; el importador los procesa por lotes',
   ),
   ChannelPlaylistPreset(
     label: 'TDTChannels · TV España',

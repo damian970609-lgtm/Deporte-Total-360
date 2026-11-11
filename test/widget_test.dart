@@ -5,6 +5,7 @@ import 'package:deporte_total_360/agenda_screen.dart';
 import 'package:deporte_total_360/main.dart';
 import 'package:deporte_total_360/channel_catalog_screen.dart';
 import 'package:deporte_total_360/channel_catalog_service.dart';
+import 'package:deporte_total_360/channel_playlist_presets.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
 
 void _noopHomeNavigate(int _) {}
@@ -17,6 +18,8 @@ class _AdminTestService extends ChannelCatalogService {
   final int adminTotal;
   int _adminPageCalls = 0;
   final List<String> deletedSourceIds = <String>[];
+  final List<Map<String, String>> addedPlaylistRequests =
+      <Map<String, String>>[];
   bool refreshRequested = false;
 
   @override
@@ -123,6 +126,17 @@ class _AdminTestService extends ChannelCatalogService {
       };
 
   @override
+  Future<void> addPlaylist({
+    required String url,
+    required String label,
+  }) async {
+    addedPlaylistRequests.add(<String, String>{
+      'url': url,
+      'label': label,
+    });
+  }
+
+  @override
   Future<void> refreshSources() async {
     refreshRequested = true;
   }
@@ -145,7 +159,7 @@ void main() {
     sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
   });
 
-  testWidgets('DAMIAN.APK abre el panel secreto después de diez pulsaciones', (tester) async {
+  testWidgets('DAMIAN.APK abre un único panel tras diez pulsaciones y evita apilar rutas', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: false);
     await tester.pumpWidget(
@@ -161,10 +175,26 @@ void main() {
     }
     expect(find.text('ADMINISTRACIÓN · DAMIÁN.APK'), findsNothing);
 
-    await tester.tap(signature);
+    final tapTarget = find.ancestor(
+      of: signature,
+      matching: find.byType(GestureDetector),
+    ).first;
+    final onTap = tester.widget<GestureDetector>(tapTarget).onTap!;
+    onTap();
+    // Simula toques adicionales durante la transición de apertura.
+    for (var tap = 0; tap < 30; tap++) {
+      onTap();
+    }
     await tester.pumpAndSettle();
-    expect(find.text('ADMINISTRACIÓN · DAMIÁN.APK'), findsOneWidget);
+
+    expect(
+      find.text('ADMINISTRACIÓN · DAMIÁN.APK', skipOffstage: false),
+      findsOneWidget,
+    );
     expect(find.text('ENTRAR CON GOOGLE'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -185,6 +215,32 @@ void main() {
     expect(find.text('2 CANALES'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('el panel añade el índice global IPTV-org como fuente independiente', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final service = _AdminTestService(autoSignIn: true);
+    await tester.pumpWidget(
+      MaterialApp(home: ChannelAdminScreen(service: service)),
+    );
+    await tester.pumpAndSettle();
+
+    final addIndex = find.text('AÑADIR ÍNDICE GLOBAL IPTV-ORG');
+    await tester.ensureVisible(addIndex);
+    await tester.tap(addIndex);
+    await tester.pumpAndSettle();
+
+    expect(
+      service.addedPlaylistRequests.any(
+        (source) =>
+            source['url'] == iptvOrgGlobalIndexPlaylistUrl &&
+            source['label'] == iptvOrgGlobalIndexPlaylistLabel,
+      ),
+      isTrue,
+    );
+    expect(service.refreshRequested, isTrue);
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

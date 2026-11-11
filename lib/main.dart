@@ -1848,8 +1848,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   int _signatureTapCount = 0;
   DateTime? _lastSignatureTapAt;
+  bool _signatureAdminNavigationInProgress = false;
 
   void _handleSignatureTap() {
+    // Ignora nuevas pulsaciones mientras el panel está abriéndose o visible.
+    // Evita apilar varias rutas y recrear repetidamente el panel privado.
+    if (_signatureAdminNavigationInProgress) return;
+
     final now = DateTime.now();
     final lastTap = _lastSignatureTapAt;
     if (lastTap == null || now.difference(lastTap) > const Duration(seconds: 3)) {
@@ -1860,11 +1865,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (_signatureTapCount >= 10) {
       _signatureTapCount = 0;
-      Navigator.of(context).push<void>(
+      unawaited(_openSignatureAdminPanel());
+    }
+  }
+
+  Future<void> _openSignatureAdminPanel() async {
+    if (!mounted || _signatureAdminNavigationInProgress) return;
+    _signatureAdminNavigationInProgress = true;
+    try {
+      await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
           builder: (_) => ChannelAdminScreen(service: widget.adminService),
         ),
       );
+    } finally {
+      _signatureAdminNavigationInProgress = false;
+      _signatureTapCount = 0;
+      _lastSignatureTapAt = null;
     }
   }
 

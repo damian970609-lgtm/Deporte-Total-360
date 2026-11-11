@@ -2190,6 +2190,49 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
+  bool get _hasIptvOrgGlobalIndex => containsChannelPlaylistUrl(
+        _sources.map((source) => source.url),
+        iptvOrgGlobalIndexPlaylistUrl,
+      );
+
+  Future<void> _addIptvOrgGlobalIndex() async {
+    if (_working) return;
+    if (_sources.length >= maxChannelPlaylistSources) {
+      _message('Ya están registradas las 100 listas.');
+      return;
+    }
+    if (_hasIptvOrgGlobalIndex) {
+      _message('El índice global de IPTV-org ya está registrado.');
+      return;
+    }
+
+    setState(() => _working = true);
+    try {
+      await _service.addPlaylist(
+        url: iptvOrgGlobalIndexPlaylistUrl,
+        label: iptvOrgGlobalIndexPlaylistLabel,
+      );
+      // El Worker procesa el índice en segundo plano por lotes. La APK no
+      // descarga ni construye miles de widgets en el hilo principal.
+      await _service.refreshSources();
+      final sources = await _service.fetchSources();
+      if (!mounted) return;
+      setState(() {
+        _sources = sources;
+        _sourcesError = null;
+      });
+      await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
+      _message(
+        'Índice global añadido: ${_sources.length}/100 listas. '
+        'Los canales se importarán por lotes en segundo plano.',
+      );
+    } catch (error) {
+      _message('No se pudo añadir el índice global de IPTV-org: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   Future<void> _refreshSources() async {
     setState(() => _working = true);
     try {
@@ -3866,6 +3909,38 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: _channelGreen,
                                 side: const BorderSide(color: _channelGreen),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Índice maestro global de IPTV-org con más de 11.000 canales públicos. Se importa en segundo plano por bloques, sin cargar todo el catálogo de golpe en el teléfono.',
+                            style: TextStyle(
+                              color: _channelMuted,
+                              fontSize: 10,
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: _working ||
+                                      _sources.length >= maxChannelPlaylistSources ||
+                                      _hasIptvOrgGlobalIndex
+                                  ? null
+                                  : _addIptvOrgGlobalIndex,
+                              icon: const Icon(Icons.public_rounded),
+                              label: Text(
+                                _hasIptvOrgGlobalIndex
+                                    ? 'ÍNDICE GLOBAL YA REGISTRADO'
+                                    : _sources.length >= maxChannelPlaylistSources
+                                        ? 'LÍMITE DE 100 LISTAS COMPLETO'
+                                        : 'AÑADIR ÍNDICE GLOBAL IPTV-ORG',
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: _channelCyan,
+                                side: const BorderSide(color: _channelCyan),
                               ),
                             ),
                           ),
