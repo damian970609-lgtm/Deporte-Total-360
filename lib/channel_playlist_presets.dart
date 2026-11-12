@@ -619,9 +619,9 @@ const List<ChannelPlaylistPreset> channelPlaylistPresets =
     description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
   ),
   ChannelPlaylistPreset(
-    label: 'IPTV-org · Macao',
-    url: 'https://iptv-org.github.io/iptv/countries/mo.m3u',
-    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+    label: 'TDTChannels · TV + Radio',
+    url: 'https://www.tdtchannels.com/lists/tvradio.m3u',
+    description: 'Lista combinada de televisión y radio en abierto publicada por el proyecto oficial TDTChannels.',
   ),
 
 ];
