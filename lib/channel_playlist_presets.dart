@@ -3,11 +3,11 @@
 /// Las URLs son distintas entre sí. Algunas listas generales o regionales
 /// pueden contener canales también presentes en otras fuentes; el catálogo
 /// del servidor conserva el identificador de cada canal cuando está disponible.
-const int maxChannelPlaylistSources = 100;
-const String iptvOrgGlobalIndexPlaylistUrl =
-    'https://iptv-org.github.io/iptv/index.m3u';
-const String iptvOrgGlobalIndexPlaylistLabel =
-    'IPTV-org · Índice global (más de 11.000 canales)';
+const int maxChannelPlaylistSources = 120;
+const String dearbulutEverythingPlaylistUrl =
+    'https://dearbulut.github.io/iptv/playlists/index.m3u';
+const String dearbulutEverythingPlaylistLabel =
+    'dearbulut · Everything (índice global de canales y señales)';
 
 class ChannelPlaylistPreset {
   const ChannelPlaylistPreset({
@@ -82,11 +82,6 @@ const List<ChannelPlaylistPreset> channelPlaylistPresets =
     label: 'IPTV-org · Deportes',
     url: 'https://iptv-org.github.io/iptv/categories/sports.m3u',
     description: 'Catálogo internacional organizado por categoría deportiva',
-  ),
-  ChannelPlaylistPreset(
-    label: iptvOrgGlobalIndexPlaylistLabel,
-    url: iptvOrgGlobalIndexPlaylistUrl,
-    description: 'Índice maestro global de IPTV-org con más de 11.000 canales públicos de múltiples países; el importador los procesa por lotes',
   ),
   ChannelPlaylistPreset(
     label: 'TDTChannels · TV España',
@@ -523,6 +518,112 @@ const List<ChannelPlaylistPreset> channelPlaylistPresets =
     url: 'https://raw.githubusercontent.com/AdeelWajid/iptv_validated_list/main/playlists/countries/jp.m3u',
     description: 'Lista pública verificada de canales del país Japón; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
   ),
+  ChannelPlaylistPreset(
+    label: dearbulutEverythingPlaylistLabel,
+    url: dearbulutEverythingPlaylistUrl,
+    description: 'Índice Everything del repositorio dearbulut/iptv: incluye streams principales y alternativos; el importador conserva todos los canales multimedia compatibles y elimina duplicados por URL.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Corea del Sur',
+    url: 'https://iptv-org.github.io/iptv/countries/kr.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · China',
+    url: 'https://iptv-org.github.io/iptv/countries/cn.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Taiwán',
+    url: 'https://iptv-org.github.io/iptv/countries/tw.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Hong Kong',
+    url: 'https://iptv-org.github.io/iptv/countries/hk.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Singapur',
+    url: 'https://iptv-org.github.io/iptv/countries/sg.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Malasia',
+    url: 'https://iptv-org.github.io/iptv/countries/my.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Indonesia',
+    url: 'https://iptv-org.github.io/iptv/countries/id.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Tailandia',
+    url: 'https://iptv-org.github.io/iptv/countries/th.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Filipinas',
+    url: 'https://iptv-org.github.io/iptv/countries/ph.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Vietnam',
+    url: 'https://iptv-org.github.io/iptv/countries/vn.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Nueva Zelanda',
+    url: 'https://iptv-org.github.io/iptv/countries/nz.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Austria',
+    url: 'https://iptv-org.github.io/iptv/countries/at.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Bulgaria',
+    url: 'https://iptv-org.github.io/iptv/countries/bg.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Albania',
+    url: 'https://iptv-org.github.io/iptv/countries/al.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Macedonia del Norte',
+    url: 'https://iptv-org.github.io/iptv/countries/mk.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Chipre',
+    url: 'https://iptv-org.github.io/iptv/countries/cy.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Malta',
+    url: 'https://iptv-org.github.io/iptv/countries/mt.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Islandia',
+    url: 'https://iptv-org.github.io/iptv/countries/is.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Luxemburgo',
+    url: 'https://iptv-org.github.io/iptv/countries/lu.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+  ChannelPlaylistPreset(
+    label: 'IPTV-org · Macao',
+    url: 'https://iptv-org.github.io/iptv/countries/mo.m3u',
+    description: 'Canales públicos agrupados por país en el directorio IPTV-org; se importan todos los enlaces compatibles.',
+  ),
+
 ];
 
 /// Canonicaliza lo necesario para impedir altas repetidas de la misma URL.
