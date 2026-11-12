@@ -2158,8 +2158,54 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
 
     if (!mounted) return;
+    final importsReady = await _waitForPlaylistImports();
+    if (!mounted) return;
+    if (!importsReady) {
+      final failed = _sources.where((source) => source.status == 'error').length;
+      final pending = _sources.where(
+        (source) => source.status == 'queued' || source.status == 'importing',
+      ).length;
+      setState(() {
+        _iptvError = failed > 0
+            ? '$failed listas no pudieron importarse. El catálogo no se marcará como completo.'
+            : '$pending listas siguen importándose. La descarga continuará al volver a abrir este menú.';
+        _loading = false;
+      });
+      return;
+    }
     await _loadAllIptvChannels();
     if (mounted) setState(() => _loading = false);
+  }
+
+  Future<bool> _waitForPlaylistImports() async {
+    if (_sources.isEmpty) return false;
+
+    for (var attempt = 0; attempt < 6; attempt++) {
+      final pending = _sources.any(
+        (source) => source.status == 'queued' || source.status == 'importing',
+      );
+      if (!pending) {
+        return _sources.every((source) => source.status == 'imported');
+      }
+      if (attempt == 5) break;
+
+      await Future<void>.delayed(const Duration(seconds: 5));
+      try {
+        final latest = await _service.fetchSources();
+        if (!mounted) return false;
+        latest.sort((a, b) {
+          if (a.status == 'error' && b.status != 'error') return -1;
+          if (b.status == 'error' && a.status != 'error') return 1;
+          return a.label.toLowerCase().compareTo(b.label.toLowerCase());
+        });
+        setState(() => _sources = latest);
+        await _persistIptvSources();
+      } catch (_) {
+        return false;
+      }
+    }
+    return _sources.isNotEmpty &&
+        _sources.every((source) => source.status == 'imported');
   }
 
   Future<void> _loadAdminChannels() async {
