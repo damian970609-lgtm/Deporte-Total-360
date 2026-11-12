@@ -4,10 +4,10 @@
 /// pueden contener canales también presentes en otras fuentes; el catálogo
 /// del servidor conserva el identificador de cada canal cuando está disponible.
 const int maxChannelPlaylistSources = 120;
-const String dearbulutEverythingPlaylistUrl =
-    'https://dearbulut.github.io/iptv/playlists/index.m3u';
-const String dearbulutEverythingPlaylistLabel =
-    'dearbulut · Everything (índice global de canales y señales)';
+const String iptvOrgGlobalIndexPlaylistUrl =
+    'https://iptv-org.github.io/iptv/index.m3u';
+const String iptvOrgGlobalIndexPlaylistLabel =
+    'IPTV-org · Índice global';
 
 class ChannelPlaylistPreset {
   const ChannelPlaylistPreset({
@@ -519,8 +519,8 @@ const List<ChannelPlaylistPreset> channelPlaylistPresets =
     description: 'Lista pública verificada de canales del país Japón; se importan todos los canales multimedia compatibles y se clasifican los deportivos para publicación voluntaria',
   ),
   ChannelPlaylistPreset(
-    label: dearbulutEverythingPlaylistLabel,
-    url: dearbulutEverythingPlaylistUrl,
+    label: iptvOrgGlobalIndexPlaylistLabel,
+    url: iptvOrgGlobalIndexPlaylistUrl,
     description: 'Índice Everything del repositorio dearbulut/iptv: incluye streams principales y alternativos; el importador conserva todos los canales multimedia compatibles y elimina duplicados por URL.',
   ),
   ChannelPlaylistPreset(
