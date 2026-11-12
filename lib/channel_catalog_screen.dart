@@ -2117,11 +2117,11 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
     if (!mounted) return;
 
-    // Completa la plaza 100 con el índice Everything de dearbulut únicamente cuando
+    // Completa la plaza 100 con el índice índice global de IPTV-org únicamente cuando
     // hay 99 fuentes y todavía no existe esa URL. No se reimportan las otras.
     if (_sources.length == 99 &&
-        !_hasDearbulutEverything) {
-      await _addDearbulutEverything(automatic: true);
+        !_hasIptvOrgGlobalIndex) {
+      await _addIptvOrgGlobalIndex(automatic: true);
     }
   }
 
@@ -2484,10 +2484,10 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     setState(() => _working = true);
     try {
       if (_sources.length == 99 &&
-          !_hasDearbulutEverything) {
-        await _addDearbulutEverything(automatic: true);
+          !_hasIptvOrgGlobalIndex) {
+        await _addIptvOrgGlobalIndex(automatic: true);
       }
-      // Solo envía las 21 fuentes nuevas: el índice Everything ocupa
+      // Solo envía las 21 fuentes nuevas: el índice índice global ocupa
       // la plaza 100 y las otras veinte completan el catálogo hasta 120.
       // Así no se reenvían las 99 listas ya guardadas ni se excede el tamaño
       // del lote del Worker anterior mientras se despliega el nuevo límite.
@@ -2552,27 +2552,27 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
-  bool get _hasDearbulutEverything => containsChannelPlaylistUrl(
+  bool get _hasIptvOrgGlobalIndex => containsChannelPlaylistUrl(
         _sources.map((source) => source.url),
-        dearbulutEverythingPlaylistUrl,
+        iptvOrgGlobalIndexPlaylistUrl,
       );
 
-  Future<void> _addDearbulutEverything({bool automatic = false}) async {
+  Future<void> _addIptvOrgGlobalIndex({bool automatic = false}) async {
     if (_working && !automatic) return;
     if (_sources.length >= maxChannelPlaylistSources) {
       if (!automatic) _message('Ya están registradas las 120 listas.');
       return;
     }
-    if (_hasDearbulutEverything) {
-      if (!automatic) _message('El índice Everything de dearbulut ya está registrado.');
+    if (_hasIptvOrgGlobalIndex) {
+      if (!automatic) _message('El índice índice global de IPTV-org ya está registrado.');
       return;
     }
 
     if (!automatic && mounted) setState(() => _working = true);
     try {
       await _service.addPlaylist(
-        url: dearbulutEverythingPlaylistUrl,
-        label: dearbulutEverythingPlaylistLabel,
+        url: iptvOrgGlobalIndexPlaylistUrl,
+        label: iptvOrgGlobalIndexPlaylistLabel,
       );
       // addPlaylist pone esta fuente individual en cola en el Worker.
       // No ejecutar refreshSources: reimportaría las otras 99 listas.
@@ -2585,12 +2585,12 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       });
       await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
       _message(
-        'Índice Everything de dearbulut añadido: ${_sources.length}/120 listas. '
+        'Índice índice global de IPTV-org añadido: ${_sources.length}/120 listas. '
         'Los canales se importarán por lotes en segundo plano.',
       );
     } catch (error) {
       if (mounted) {
-        _message('No se pudo añadir el índice Everything de dearbulut: ' + error.toString());
+        _message('No se pudo añadir el índice índice global de IPTV-org: ' + error.toString());
       }
     } finally {
       if (!automatic && mounted) setState(() => _working = false);
@@ -4289,12 +4289,12 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             child: OutlinedButton.icon(
                               onPressed: _working ||
                                       _sources.length >= maxChannelPlaylistSources ||
-                                      _hasDearbulutEverything
+                                      _hasIptvOrgGlobalIndex
                                   ? null
-                                  : _addDearbulutEverything,
+                                  : _addIptvOrgGlobalIndex,
                               icon: const Icon(Icons.public_rounded),
                               label: Text(
-                                _hasDearbulutEverything
+                                _hasIptvOrgGlobalIndex
                                     ? 'ÍNDICE GLOBAL EVERYTHING YA REGISTRADO'
                                     : _sources.length >= maxChannelPlaylistSources
                                         ? 'LÍMITE DE 120 LISTAS COMPLETO'
