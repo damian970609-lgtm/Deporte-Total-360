@@ -217,6 +217,7 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
       if (!mounted || requestId != _catalogRequestId) return;
       final previousId = _selectedChannel?.id;
       setState(() {
+        _cachedAdminChannels = <SportsChannel>[];
         _channels = page.channels;
         _catalogTotal = page.total;
         _catalogTotalIsEstimate = page.totalIsEstimate;
@@ -1619,7 +1620,11 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   Map<String, dynamic> _trialSummary = <String, dynamic>{};
   List<String> _newTrialCodes = <String>[];
   String? _trialError;
+  // El panel nunca debe construir miles de tarjetas a partir de la copia local.
+  // Se muestra un bloque y el resto del snapshot se pagina bajo demanda.
+  static const int _adminPageSize = 40;
   List<SportsChannel> _channels = <SportsChannel>[];
+  List<SportsChannel> _cachedAdminChannels = <SportsChannel>[];
   SportsChannel? _previewChannel;
   List<ChannelPlaylistSource> _sources = <ChannelPlaylistSource>[];
   static const int _sourcePageSize = 15;
@@ -1720,11 +1725,19 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
       setState(() {
         if (snapshot.hasChannels) {
-          _channels = snapshot.channels;
-          _catalogTotal = snapshot.channels.length;
-          _catalogTotalIsEstimate = false;
-          _nextAdminOffset = snapshot.channels.length;
-          _hasMore = false;
+          _cachedAdminChannels = List<SportsChannel>.unmodifiable(
+            snapshot.channels.take(maxCachedChannelCatalogEntries),
+          );
+          _channels = _cachedAdminChannels
+              .take(_adminPageSize)
+              .toList(growable: true);
+          _catalogTotal = _cachedAdminChannels.length;
+          // Un snapshot puede contener solo los bloques ya descargados, o
+          // estar limitado a 2.000 filas; nunca se presenta como total final.
+          _catalogTotalIsEstimate =
+              _cachedAdminChannels.length >= _adminPageSize;
+          _nextAdminOffset = _channels.length;
+          _hasMore = _catalogTotalIsEstimate;
         }
         if (snapshot.hasSources) _sources = snapshot.sources;
         if (snapshot.hasChannels && snapshot.channels.isNotEmpty) {
@@ -2045,6 +2058,25 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
   Future<void> _loadMore() async {
     if (_loading || !_hasMore) return;
+
+    // Primero permite recorrer el snapshot local en bloques de 40. Así una
+    // cuenta con 2.000 canales guardados no crea 2.000 widgets al abrir.
+    if (_channels.length < _cachedAdminChannels.length) {
+      final next = _cachedAdminChannels
+          .skip(_channels.length)
+          .take(_adminPageSize)
+          .toList(growable: false);
+      setState(() {
+        _channels = <SportsChannel>[..._channels, ...next];
+        _nextAdminOffset = _channels.length;
+        _catalogTotal = _cachedAdminChannels.length;
+        _catalogTotalIsEstimate = true;
+        // Puede haber más registros en el servidor que los guardados en caché.
+        _hasMore = true;
+      });
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
@@ -2066,6 +2098,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _channels.addAll(
           page.channels.where((channel) => knownIds.add(channel.id)),
         );
+        _cachedAdminChannels = <SportsChannel>[];
         _catalogTotal = page.total;
         _catalogTotalIsEstimate = page.totalIsEstimate;
         _nextAdminOffset = page.offset + page.channels.length;
