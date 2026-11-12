@@ -1009,7 +1009,7 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
         if (_proxies.isEmpty) {
           await ChannelProxyPlatform.clear();
         } else {
-          await ChannelProxyPlatform.apply(_proxies[index]);
+          await ChannelProxyPlatform.apply(_proxies[index], channel.url);
         }
         controller = VideoPlayerController.networkUrl(
           uri,
