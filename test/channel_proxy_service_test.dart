@@ -48,6 +48,26 @@ void main() {
     });
   });
 
+  test('prioriza en el siguiente intento el proxy que sí funcionó', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final store = ChannelProxyStore();
+    final proxies = <ChannelProxyEndpoint>[
+      ChannelProxyEndpoint.parse('first.example:8001'),
+      ChannelProxyEndpoint.parse('second.example:8002'),
+      ChannelProxyEndpoint.parse('third.example:8003'),
+    ];
+    await store.saveForChannel('channel-a', proxies);
+
+    await store.moveToFront('channel-a', proxies[1].id);
+
+    final saved = await store.loadForChannel('channel-a');
+    expect(saved.first.id, proxies[1].id);
+    expect(saved.skip(1).map((proxy) => proxy.id), <String>[
+      proxies[0].id,
+      proxies[2].id,
+    ]);
+  });
+
   test('guarda diez proxies por canal y no mezcla canales', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final store = ChannelProxyStore();
