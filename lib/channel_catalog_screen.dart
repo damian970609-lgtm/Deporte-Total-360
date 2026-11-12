@@ -1909,6 +1909,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   SportsChannel? _iptvSelectedChannel;
   String? _iptvError;
   final TextEditingController _iptvSearchController = TextEditingController();
+  final GlobalKey<_ChannelInlinePlayerState> _iptvPlayerKey =
+      GlobalKey<_ChannelInlinePlayerState>();
 
   @override
   void initState() {
@@ -3460,7 +3462,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                 const SizedBox(height: 7),
                 if (_iptvSelectedChannel != null) Text(_iptvSelectedChannel!.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w900)),
                 ChannelInlinePlayer(
-                  key: ValueKey<String>('admin-iptv-player-' + (_iptvSelectedChannel?.id ?? 'empty')),
+                  key: _iptvPlayerKey,
                   channel: _iptvSelectedChannel,
                 ),
               ],
@@ -3576,6 +3578,24 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             Text(channel.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900)),
                             Text((channel.groupTitle.isEmpty ? 'SIN GRUPO' : channel.groupTitle) + ' · ' + (channel.isSports ? 'DEPORTIVO' : 'GENERAL'), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _channelMuted, fontSize: 8)),
                           ])),
+                          IconButton(
+                            key: ValueKey<String>('iptv-channel-proxy-' + channel.id),
+                            tooltip: 'Configurar proxies de ${channel.name}',
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(width: 29, height: 29),
+                            onPressed: () {
+                              setState(() => _iptvSelectedChannel = channel);
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                _iptvPlayerKey.currentState?._configureChannelProxies();
+                              });
+                            },
+                            icon: const Icon(
+                              Icons.settings_ethernet_rounded,
+                              color: _channelCyan,
+                              size: 17,
+                            ),
+                          ),
                           ChannelLanguageBadge(language: channel.language),
                           const SizedBox(width: 5),
                           if (channel.isSports)
