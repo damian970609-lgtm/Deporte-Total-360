@@ -78,7 +78,7 @@ jobs:
 
           gradle = Path('android/app/build.gradle.kts')
           content = gradle.read_text(encoding='utf-8')
-          match = re.search(r'namespace\\s*=\\s*["\\']([^"\\']+)["\\']', content)
+          match = re.search(r'namespace\s*=\s*"([^"]+)"', content)
           if not match:
               raise SystemExit('No se pudo determinar el namespace Android para el puente de proxy.')
           package_name = match.group(1)
@@ -163,7 +163,7 @@ jobs:
                   if (username.isNotEmpty()) {
                       Authenticator.setDefault(object : Authenticator() {
                           override fun getPasswordAuthentication(): PasswordAuthentication? {
-                              if (requestorType == RequestorType.PROXY &&
+                              if (requestorType == Authenticator.RequestorType.PROXY &&
                                   requestingHost.equals(host, ignoreCase = true) &&
                                   requestingPort == port) {
                                   return PasswordAuthentication(username, password.toCharArray())
