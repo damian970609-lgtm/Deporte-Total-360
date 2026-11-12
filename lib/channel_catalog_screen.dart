@@ -1907,6 +1907,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   int _visibleSourceCount = _sourcePageSize;
   bool _loading = false;
   bool _working = false;
+  bool _automaticCatalogCompletionAttempted = false;
   bool _rightsConfirmed = false;
   bool _hasMore = true;
   int _catalogTotal = 0;
@@ -2079,6 +2080,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _email = null;
         _channels = <SportsChannel>[];
         _sources = <ChannelPlaylistSource>[];
+        _automaticCatalogCompletionAttempted = false;
         _licenseRecords = <AppLicenseRecord>[];
         _previewChannel = null;
         _showIptvSection = false;
@@ -2117,11 +2119,14 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
     if (!mounted) return;
 
-    // Completa la plaza 100 con el índice índice global de IPTV-org únicamente cuando
-    // hay 99 fuentes y todavía no existe esa URL. No se reimportan las otras.
-    if (_sources.length == 99 &&
-        !_hasIptvOrgGlobalIndex) {
-      await _addIptvOrgGlobalIndex(automatic: true);
+    // Al iniciar sesión, completa automáticamente el catálogo hasta 120.
+    // El Worker compara las URL existentes y solo añade las que faltan.
+    // Se ejecuta una sola vez por sesión para evitar reintentos o bucles.
+    if (!_automaticCatalogCompletionAttempted &&
+        _sourcesError == null &&
+        _sources.length < maxChannelPlaylistSources) {
+      _automaticCatalogCompletionAttempted = true;
+      await _fillPlaylistCatalogTo120(automatic: true);
     }
   }
 
@@ -2475,18 +2480,14 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
-  Future<void> _fillPlaylistCatalogTo120() async {
-    if (_working) return;
+  Future<void> _fillPlaylistCatalogTo120({bool automatic = false}) async {
+    if (_working && !automatic) return;
     if (_sources.length >= maxChannelPlaylistSources) {
-      _message('El catálogo ya tiene 120 listas registradas.');
+      if (!automatic) _message('El catálogo ya tiene 120 listas registradas.');
       return;
     }
-    setState(() => _working = true);
+    if (!automatic) setState(() => _working = true);
     try {
-      if (_sources.length == 99 &&
-          !_hasIptvOrgGlobalIndex) {
-        await _addIptvOrgGlobalIndex(automatic: true);
-      }
       // Envía las 120 fuentes para que el Worker compare el catálogo
       // completo con las listas guardadas y añada solo las que falten.
       // Así se completan las 120 aunque la fuente número 100 ya exista.
@@ -2510,7 +2511,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     } catch (error) {
       _message('No se pudo completar el catálogo de 120 listas: ' + error.toString());
     } finally {
-      if (mounted) setState(() => _working = false);
+      if (!automatic && mounted) setState(() => _working = false);
     }
   }
 
