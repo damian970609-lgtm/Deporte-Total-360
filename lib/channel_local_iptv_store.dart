@@ -130,7 +130,7 @@ class ChannelLocalIptvStore {
       throw ArgumentError.value(email, 'email', 'La cuenta no puede estar vacía.');
     }
 
-    final directory = await _directoryProvider();
+    final directory = await _directory;
     await directory.create(recursive: true);
     final destination = _fileFor(directory, normalizedEmail);
     final temporary = File('${destination.path}.tmp');
