@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5,6 +7,7 @@ import 'package:deporte_total_360/agenda_screen.dart';
 import 'package:deporte_total_360/main.dart';
 import 'package:deporte_total_360/channel_catalog_screen.dart';
 import 'package:deporte_total_360/channel_catalog_service.dart';
+import 'package:deporte_total_360/channel_local_iptv_store.dart';
 import 'package:deporte_total_360/channel_playlist_presets.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
 
@@ -25,7 +28,10 @@ class _AdminTestService extends ChannelCatalogService {
   final int sourceCount;
   int _storedSourceCount;
   int _adminPageCalls = 0;
+  int sourceFetchCalls = 0;
   int lastAdminPageLimit = 0;
+  final List<Map<String, Object>> visibilityRequests = <Map<String, Object>>[];
+  final Map<String, String> languageRequests = <String, String>{};
   final List<String> deletedSourceIds = <String>[];
   final List<Map<String, String>> addedPlaylistRequests =
       <Map<String, String>>[];
@@ -97,6 +103,7 @@ class _AdminTestService extends ChannelCatalogService {
 
   @override
   Future<List<ChannelPlaylistSource>> fetchSources() async {
+    sourceFetchCalls++;
     if (offline) {
       throw const ChannelCatalogException('Servidor sin conexión en la prueba.');
     }
@@ -178,6 +185,25 @@ class _AdminTestService extends ChannelCatalogService {
   }
 
   @override
+  Future<void> setVisibility(
+    String channelId, {
+    required bool visible,
+  }) async {
+    visibilityRequests.add(<String, Object>{
+      'channelId': channelId,
+      'visible': visible,
+    });
+  }
+
+  @override
+  Future<void> setLanguage(
+    String channelId, {
+    required String language,
+  }) async {
+    languageRequests[channelId] = language;
+  }
+
+  @override
   Future<void> refreshSources() async {
     refreshRequested = true;
   }
@@ -214,7 +240,7 @@ void main() {
       await tester.tap(signature);
       await tester.pump();
     }
-    expect(find.text('ADMINISTRACIÓN · DAMIÁN.APK'), findsNothing);
+    expect(find.text('120 LISTAS IPTV'), findsNothing);
 
     final tapTarget = find.ancestor(
       of: signature,
@@ -229,7 +255,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('ADMINISTRACIÓN · DAMIÁN.APK', skipOffstage: false),
+      find.text('120 LISTAS IPTV', skipOffstage: false),
       findsOneWidget,
     );
     expect(find.text('ENTRAR CON GOOGLE'), findsOneWidget);
@@ -240,8 +266,15 @@ void main() {
   });
 
 
-  testWidgets('el panel pagina la copia local y no construye todos los canales al abrir', (tester) async {
+  testWidgets('una copia IPTV completa se abre sin consultar de nuevo al servidor', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
+    final directory = await Directory.systemTemp.createTemp('dt360-widget-cache-');
+    addTearDown(() async {
+      if (await directory.exists()) await directory.delete(recursive: true);
+    });
+    final localStore = ChannelLocalIptvStore(
+      directoryProvider: () async => directory,
+    );
     final cachedChannels = List<SportsChannel>.generate(
       85,
       (index) => SportsChannel(
@@ -250,59 +283,65 @@ void main() {
         name: 'Canal cacheado ${index.toString().padLeft(3, '0')}',
         url: 'https://media.example/cached-$index.m3u8',
         isSports: index.isEven,
-        visible: false,
+        visible: index.isOdd,
+        language: index.isEven ? 'es' : 'en',
       ),
       growable: false,
     );
     final cachedSources = List<ChannelPlaylistSource>.generate(
-      2,
+      120,
       (index) => ChannelPlaylistSource(
         id: 'cached-source-$index',
         url: 'https://lists.example/cached-$index.m3u',
         label: 'Lista guardada $index',
         status: 'imported',
+        importedCount: index,
       ),
       growable: false,
     );
+    await localStore.save(
+      email: 'admin@example.com',
+      channels: cachedChannels,
+      sources: cachedSources,
+      complete: true,
+      nextOffset: cachedChannels.length,
+    );
+
     final service = _AdminTestService(autoSignIn: true, offline: true);
     await tester.pumpWidget(
       MaterialApp(
         home: ChannelAdminScreen(
           service: service,
-          snapshotLoader: (email) async => ChannelAdminSnapshot(
-            email: email,
-            savedAt: DateTime(2026, 11, 12).toIso8601String(),
-            channels: cachedChannels,
-            sources: cachedSources,
-            hasChannels: true,
-            hasSources: true,
-          ),
+          localStore: localStore,
         ),
       ),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('Canal cacheado 000'), findsOneWidget);
-    expect(find.text('Canal cacheado 039'), findsOneWidget);
-    expect(find.text('Canal cacheado 040'), findsNothing);
-    expect(find.text('Canal cacheado 079'), findsNothing);
-    expect(find.textContaining('CARGAR SIGUIENTE BLOQUE · 40'), findsOneWidget);
+    expect(find.text('120 LISTAS IPTV · TODOS LOS CANALES'), findsOneWidget);
+    expect(service._adminPageCalls, 0);
+    expect(service.sourceFetchCalls, 0);
+    expect(find.text('ADMINISTRACIÓN'), findsNothing);
+    expect(find.text('CARGAR SIGUIENTE BLOQUE'), findsNothing);
 
-    final nextPage = find.textContaining('CARGAR SIGUIENTE BLOQUE · 40');
-    await tester.ensureVisible(nextPage);
-    await tester.pumpAndSettle();
-    await tester.tap(nextPage);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Canal cacheado 079'), findsOneWidget);
-    expect(find.text('Canal cacheado 080'), findsNothing);
-    expect(find.textContaining('CARGAR SIGUIENTE BLOQUE · 80'), findsOneWidget);
+    final lastLanguage = find.byKey(
+      const ValueKey<String>('iptv-language-cached-84'),
+    );
+    await tester.scrollUntilVisible(
+      lastLanguage,
+      500,
+      scrollable: find.byKey(
+        const ValueKey<String>('channel-admin-iptv-list'),
+      ),
+    );
+    expect(lastLanguage, findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el panel privado muestra canales deportivos y generales en un inventario único', (tester) async {
+  testWidgets('el menú privado muestra todos los canales en una sola pestaña IPTV', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
@@ -310,20 +349,19 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsOneWidget);
+    expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
+    expect(find.text('120 LISTAS IPTV · TODOS LOS CANALES'), findsOneWidget);
     expect(find.text('Canal General'), findsOneWidget);
     expect(find.text('ESPN Deportes'), findsOneWidget);
-    expect(find.text('GENERAL / SIN CLASIFICAR'), findsOneWidget);
-    expect(find.textContaining('EPG AUTOMÁTICA'), findsNothing);
-    expect(find.textContaining('CONFIGURAR GUÍAS EPG'), findsNothing);
-    expect(find.text('2 CANALES'), findsOneWidget);
-    expect(service.lastAdminPageLimit, 40);
+    expect(find.text('ADMINISTRACIÓN'), findsNothing);
+    expect(find.text('AÑADIR CANALES Y LISTAS IPTV'), findsNothing);
+    expect(service.lastAdminPageLimit, 2000);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el panel añade el índice global IPTV-org como fuente independiente', (tester) async {
+  testWidgets('la pestaña IPTV muestra las fuentes sin botones de administración', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
@@ -331,35 +369,25 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final addIndex = find.text('AÑADIR ÍNDICE GLOBAL IPTV-ORG');
+    final list = find.byKey(
+      const ValueKey<String>('channel-admin-iptv-list'),
+    );
     await tester.scrollUntilVisible(
-      addIndex,
-      600,
-      scrollable: find.byType(Scrollable).first,
-      maxScrolls: 20,
+      find.text('Lista importada'),
+      400,
+      scrollable: list,
     );
-    // Tras materializarse en el ListView, alinéalo dentro del área visible.
-    await tester.ensureVisible(addIndex);
-    await tester.pumpAndSettle();
-    await tester.tap(addIndex);
-    await tester.pumpAndSettle();
-
-    expect(
-      service.addedPlaylistRequests.any(
-        (source) =>
-            source['url'] == iptvOrgGlobalIndexPlaylistUrl &&
-            source['label'] == iptvOrgGlobalIndexPlaylistLabel,
-      ),
-      isTrue,
-    );
-    // La adición de una fuente ya la pone en cola en Cloudflare.
-    // No debe reimportar las 99 fuentes que ya estaban registradas.
-    expect(service.refreshRequested, isFalse);
+    expect(find.text('Lista importada'), findsOneWidget);
+    expect(find.text('AÑADIR ÍNDICE GLOBAL IPTV-ORG'), findsNothing);
+    expect(find.text('AÑADIR LISTA GENERAL'), findsNothing);
+    expect(find.text('EDITAR'), findsNothing);
+    expect(find.text('QUITAR LISTA'), findsNothing);
     expect(tester.takeException(), isNull);
+
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el panel completa automáticamente el catálogo hasta 120 cuando hay 99', (tester) async {
+  testWidgets('completa automáticamente las 120 fuentes registradas', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true, sourceCount: 99);
     await tester.pumpWidget(
@@ -378,81 +406,13 @@ void main() {
       isTrue,
     );
     expect(service.refreshRequested, isFalse);
-    expect((await service.fetchSources()), hasLength(120));
-
-    // Solo se construye el primer bloque; el resto aparece al pedirlo.
-    final adminScroll = find.byKey(
-      const ValueKey<String>('channel-admin-scroll'),
-    );
-    int childCount() {
-      final list = tester.widget<ListView>(adminScroll);
-      final delegate = list.childrenDelegate as SliverChildListDelegate;
-      return delegate.children.length;
-    }
-
-    final initialChildCount = childCount();
-    final showMore = find.byKey(
-      const ValueKey<String>('admin-show-more-sources'),
-    );
-    // El botón está al final del ListView. Desplazar hasta que Flutter lo
-    // construya; el aviso de éxito puede cubrirlo, así que no se simula un tap.
-    for (var attempt = 0; attempt < 30 && showMore.evaluate().isEmpty; attempt++) {
-      await tester.drag(
-        adminScroll,
-        const Offset(0, -700),
-        warnIfMissed: false,
-      );
-      await tester.pumpAndSettle();
-    }
-    expect(showMore, findsOneWidget);
-    final showMoreButton = tester.widget<OutlinedButton>(showMore);
-    expect(showMoreButton.onPressed, isNotNull);
-    showMoreButton.onPressed!.call();
-    await tester.pumpAndSettle();
-    expect(childCount(), initialChildCount + 15);
-    expect(tester.takeException(), isNull);
+    expect(find.text('120/120'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('añadir una lista general no vuelve a importar las 99 fuentes existentes', (tester) async {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
-    final service = _AdminTestService(autoSignIn: true, sourceCount: 97);
-    // El índice global está entre las listas guardadas; aún no se alcanzan 99.
-    service.addedPlaylistRequests.add(<String, String>{
-      'url': iptvOrgGlobalIndexPlaylistUrl,
-      'label': iptvOrgGlobalIndexPlaylistLabel,
-    });
-    await tester.pumpWidget(
-      MaterialApp(home: ChannelAdminScreen(service: service)),
-    );
-    await tester.pumpAndSettle();
-
-    final addGeneral = find.text('AÑADIR LISTA GENERAL');
-    await tester.scrollUntilVisible(
-      addGeneral,
-      600,
-      scrollable: find.byType(Scrollable).first,
-      maxScrolls: 20,
-    );
-    await tester.ensureVisible(addGeneral);
-    await tester.tap(addGeneral);
-    await tester.pumpAndSettle();
-
-    expect(service.addedPlaylistRequests, hasLength(2));
-    expect(
-      service.addedPlaylistRequests.any((source) =>
-          source['url'] == channelPlaylistPresets.first.url),
-      isTrue,
-    );
-    expect(service.refreshRequested, isFalse);
-    expect(tester.takeException(), isNull);
-
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('el menú privado ya no muestra controles VPN y conserva IPTV', (tester) async {
+  testWidgets('el menú no permite agregar ni borrar fuentes desde la pestaña IPTV', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
@@ -460,41 +420,51 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsOneWidget);
-    expect(find.text('PROTON VPN'), findsNothing);
-    await tester.tap(find.text('IPTV'));
+    expect(find.text('AÑADIR LISTA GENERAL'), findsNothing);
+    expect(find.text('AGREGAR CANALES DESDE ESTA LISTA'), findsNothing);
+    expect(find.text('EDITAR'), findsNothing);
+    expect(find.text('REINTENTAR'), findsNothing);
+    expect(find.text('QUITAR LISTA'), findsNothing);
+    expect(service.addedPlaylistRequests, isEmpty);
+    expect(service.deletedSourceIds, isEmpty);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('la vista IPTV no muestra pestaña administrativa ni controles de proxy', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final service = _AdminTestService(autoSignIn: true);
+    await tester.pumpWidget(
+      MaterialApp(home: ChannelAdminScreen(service: service)),
+    );
     await tester.pumpAndSettle();
 
+    expect(find.text('120 LISTAS IPTV'), findsOneWidget);
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
-    expect(find.text('TODOS LOS CANALES IMPORTADOS'), findsOneWidget);
+    expect(find.text('ADMINISTRACIÓN'), findsNothing);
+    expect(find.text('PROTON VPN'), findsNothing);
+    expect(find.text('PROXY 0/10'), findsNothing);
+    expect(find.text('AÑADIR CANALES Y LISTAS IPTV'), findsNothing);
 
-    final proxyButton = find.byTooltip('Configurar proxies de Canal General');
-    final iptvList = find.byKey(
+    final list = find.byKey(
       const ValueKey<String>('channel-admin-iptv-list'),
     );
-    for (var attempt = 0;
-        attempt < 20 && proxyButton.evaluate().isEmpty;
-        attempt++) {
-      await tester.drag(
-        iptvList,
-        const Offset(0, -450),
-        warnIfMissed: false,
-      );
-      await tester.pumpAndSettle();
-    }
-    expect(proxyButton, findsOneWidget);
-    await tester.tap(proxyButton);
-    await tester.pumpAndSettle();
-    expect(find.text('PROXIES · Canal General'), findsOneWidget);
-    expect(find.text('AÑADIR 0/10'), findsOneWidget);
-    await tester.tap(find.text('CANCELAR'));
-    await tester.pumpAndSettle();
-
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('iptv-add-channel-general-channel')),
+      300,
+      scrollable: list,
+    );
+    expect(
+      find.byTooltip('Configurar proxies de Canal General'),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
+
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el inventario permite reimportar todas las listas guardadas sin borrar canales', (tester) async {
+  testWidgets('el catálogo local no ofrece botones para volver a descargar las listas', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
@@ -502,12 +472,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final reimport = find.text('REIMPORTAR LISTAS GUARDADAS · TODOS LOS CANALES');
-    expect(reimport, findsOneWidget);
-    await tester.tap(reimport);
-    await tester.pumpAndSettle();
-
-    expect(service.refreshRequested, isTrue);
+    expect(find.textContaining('Descarga completa y guardada'), findsOneWidget);
+    expect(find.byIcon(Icons.sync_rounded), findsNothing);
+    expect(find.text('REIMPORTAR LISTAS GUARDADAS · TODOS LOS CANALES'), findsNothing);
+    expect(service.refreshRequested, isFalse);
     expect(find.text('Canal General'), findsOneWidget);
     expect(find.text('ESPN Deportes'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -515,16 +483,16 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el panel privado exige autenticación antes de mostrar las listas', (tester) async {
+  testWidgets('el panel IPTV exige autenticación antes de mostrar las listas', (tester) async {
     final service = _AdminTestService(autoSignIn: false);
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('PANEL PRIVADO DE CANALES'), findsOneWidget);
+    expect(find.text('CATÁLOGO IPTV PRIVADO'), findsOneWidget);
     expect(find.text('ENTRAR CON GOOGLE'), findsOneWidget);
-    expect(find.text('CATÁLOGO DE FUENTES · 120 LISTAS'), findsNothing);
+    expect(find.text('120 LISTAS IPTV · TODOS LOS CANALES'), findsNothing);
     expect(service.deletedSourceIds, isEmpty);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -593,56 +561,106 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('IPTV carga más de 200 canales en una sola lista y mantiene el formulario para añadir listas', (tester) async {
+  testWidgets('descarga una vez los canales, conserva idioma y visibilidad al reabrir', (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(800, 1200);
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    final service = _AdminTestService(autoSignIn: true, adminTotal: 2005);
-    await tester.pumpWidget(MaterialApp(home: ChannelAdminScreen(service: service)));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('IPTV'));
+    final directory = await Directory.systemTemp.createTemp('dt360-iptv-widget-');
+    addTearDown(() async {
+      if (await directory.exists()) await directory.delete(recursive: true);
+    });
+    final localStore = ChannelLocalIptvStore(
+      directoryProvider: () async => directory,
+    );
+    final firstService = _AdminTestService(
+      autoSignIn: true,
+      adminTotal: 2005,
+      sourceCount: 120,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChannelAdminScreen(
+          service: firstService,
+          localStore: localStore,
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
 
-    expect(tester.widget<Text>(find.byKey(const ValueKey<String>('iptv-channel-total'))).data, '2005');
-    expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('channel-admin-iptv-list')), findsOneWidget);
-    expect(find.text('AÑADIR CANALES Y LISTAS IPTV'), findsOneWidget);
-    expect(service._adminPageCalls, greaterThanOrEqualTo(3));
-
-    await tester.enterText(
-      find.byKey(const ValueKey<String>('iptv-search-field')),
-      'Canal General',
+    expect(
+      tester.widget<Text>(
+        find.byKey(const ValueKey<String>('iptv-channel-total')),
+      ).data,
+      '2005',
     );
-    await tester.tap(find.byKey(const ValueKey<String>('iptv-search-button')));
+    expect(firstService._adminPageCalls, 2);
+    expect(firstService.sourceFetchCalls, 1);
+    expect(find.text('AÑADIR CANALES Y LISTAS IPTV'), findsNothing);
+    expect(find.text('TODOS LOS CANALES IMPORTADOS'), findsNothing);
+
+    final language = find.byKey(
+      const ValueKey<String>('iptv-language-general-channel'),
+    );
+    expect(language, findsOneWidget);
+    await tester.tap(language);
     await tester.pumpAndSettle();
-    expect(find.text('Mostrando 1 de 2005 canales.'), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('iptv-search-clear')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey<String>('iptv-search-clear')));
+    await tester.tap(find.text('Inglés').last);
     await tester.pumpAndSettle();
-    expect(find.text('Mostrando 2005 de 2005 canales.'), findsOneWidget);
+    expect(firstService.languageRequests['general-channel'], 'en');
 
-    final iptvList = find.byKey(
-      const ValueKey<String>('channel-admin-iptv-list'),
+    final visibility = find.byKey(
+      const ValueKey<String>('iptv-add-channel-general-channel'),
     );
-    final addSportsChannel = find.byKey(
-      const ValueKey<String>('iptv-add-channel-sports-channel'),
-    );
-    for (var attempt = 0; attempt < 8 && addSportsChannel.evaluate().isEmpty; attempt++) {
-      await tester.drag(iptvList, const Offset(0, -500));
-      await tester.pumpAndSettle();
-    }
-    expect(addSportsChannel, findsOneWidget);
+    expect(visibility, findsOneWidget);
+    await tester.tap(visibility);
+    await tester.pumpAndSettle();
+    expect(firstService.visibilityRequests, contains(<String, Object>{
+      'channelId': 'general-channel',
+      'visible': true,
+    }));
 
-    final classifyGeneralChannel = find.byKey(
-      const ValueKey<String>('iptv-classify-channel-general-channel'),
+    final saved = await localStore.load(email: 'admin@example.com');
+    expect(saved, isNotNull);
+    expect(saved!.complete, isTrue);
+    expect(saved.channels, hasLength(2005));
+    final savedGeneral = saved.channels.firstWhere(
+      (channel) => channel.id == 'general-channel',
     );
-    for (var attempt = 0; attempt < 8 && classifyGeneralChannel.evaluate().isEmpty; attempt++) {
-      await tester.drag(iptvList, const Offset(0, -500));
-      await tester.pumpAndSettle();
-    }
-    expect(classifyGeneralChannel, findsOneWidget);
+    expect(savedGeneral.language, 'en');
+    expect(savedGeneral.visible, isTrue);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    final secondService = _AdminTestService(
+      autoSignIn: true,
+      adminTotal: 1,
+      sourceCount: 0,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChannelAdminScreen(
+          service: secondService,
+          localStore: localStore,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<Text>(
+        find.byKey(const ValueKey<String>('iptv-channel-total')),
+      ).data,
+      '2005',
+    );
+    expect(secondService._adminPageCalls, 0);
+    expect(secondService.sourceFetchCalls, 0);
+    expect(
+      tester.widget<DropdownButton<String>>(language).value,
+      'en',
+    );
+    expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
