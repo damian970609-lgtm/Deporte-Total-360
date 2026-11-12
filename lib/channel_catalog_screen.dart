@@ -1118,7 +1118,7 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
                   style: const TextStyle(color: Colors.white, fontSize: 11),
                   decoration: const InputDecoration(
                     labelText: 'Dirección del proxy',
-                    hintText: 'host:puerto o socks5://host:puerto',
+                    hintText: 'host:puerto, http://usuario:clave@host:puerto o socks5://host:puerto',
                   ),
                 ),
                 const SizedBox(height: 6),
