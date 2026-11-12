@@ -138,7 +138,7 @@ jobs:
                   val port = (args["port"] as? Number)?.toInt() ?: 0
                   val username = (args["username"] as? String).orEmpty()
                   val password = (args["password"] as? String).orEmpty()
-                  require(type in setOf("http", "https", "socks", "socks4", "socks5")) {
+                  require(type in setOf("http", "socks", "socks4", "socks5")) {
                       "Tipo de proxy no compatible."
                   }
                   require(host.isNotBlank() && port in 1..65535) {
