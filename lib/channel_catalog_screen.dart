@@ -1595,9 +1595,14 @@ class _ChannelFullscreenScreenState extends State<_ChannelFullscreenScreen> {
 }
 
 class ChannelAdminScreen extends StatefulWidget {
-  const ChannelAdminScreen({super.key, this.service});
+  const ChannelAdminScreen({
+    super.key,
+    this.service,
+    this.snapshotLoader,
+  });
 
   final ChannelCatalogService? service;
+  final Future<ChannelAdminSnapshot?> Function(String email)? snapshotLoader;
 
   @override
   State<ChannelAdminScreen> createState() => _ChannelAdminScreenState();
@@ -1719,7 +1724,9 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
   Future<void> _loadCachedAdminSnapshot(String email) async {
     try {
-      final snapshot = await ChannelAdminSnapshotStore.load(email: email);
+      final snapshot = widget.snapshotLoader == null
+          ? await ChannelAdminSnapshotStore.load(email: email)
+          : await widget.snapshotLoader!(email);
       if (!mounted || snapshot == null) return;
 
       setState(() {
