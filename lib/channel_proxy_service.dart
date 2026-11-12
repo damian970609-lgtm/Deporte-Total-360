@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 const int maxChannelProxiesPerChannel = 10;
 const String _channelProxyStorageKey = 'dt360_channel_proxy_failover_v1';
 
-/// Proxy manual asociado a un solo canal. Se admiten URI HTTP/HTTPS y SOCKS.
+/// Proxy manual por canal. Admite HTTP y SOCKS4/SOCKS5.
 class ChannelProxyEndpoint {
   const ChannelProxyEndpoint({
     required this.scheme,
