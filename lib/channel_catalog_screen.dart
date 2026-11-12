@@ -1038,7 +1038,7 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
         if (index > 0 && index < _proxies.length) {
           // Recuerda el último proxy que logró iniciar este canal para que
           // sea la primera opción en la siguiente reproducción.
-          unawaited(_proxyStore.moveToFront(channel.id, _proxies[index].id));
+          unawaited(_rememberWorkingProxy(channel.id, _proxies[index].id));
         }
         controller.addListener(_handleVideoChanged);
         setState(() {
@@ -1080,6 +1080,17 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
           ? explainVideoPlayerError(lastError ?? 'No se pudo iniciar el reproductor.')
           : 'No funcionó ninguno de los ${_proxies.length} proxies de este canal. Revisa las direcciones o prueba otros.';
     });
+  }
+
+  Future<void> _rememberWorkingProxy(
+    String channelId,
+    String proxyId,
+  ) async {
+    try {
+      await _proxyStore.moveToFront(channelId, proxyId);
+    } catch (_) {
+      // Un fallo al guardar la preferencia no debe interrumpir el vídeo.
+    }
   }
 
   Future<void> _configureChannelProxies() async {
