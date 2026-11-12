@@ -464,7 +464,7 @@ void main() {
       scrollable: find.descendant(
         of: find.byKey(const ValueKey<String>('channel-admin-iptv-list')),
         matching: find.byType(Scrollable),
-      ),
+      ).first,
     );
     await tester.pumpAndSettle();
     expect(proxyButton, findsOneWidget);
