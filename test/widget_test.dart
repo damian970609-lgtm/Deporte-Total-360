@@ -314,7 +314,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el panel añade el índice global IPTV-org como fuente independiente', (tester) async {
+  testWidgets('el panel añade el índice Everything de dearbulut como fuente independiente', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
@@ -322,7 +322,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final addIndex = find.text('AÑADIR ÍNDICE GLOBAL IPTV-ORG');
+    final addIndex = find.text('AÑADIR ÍNDICE GLOBAL EVERYTHING');
     await tester.scrollUntilVisible(
       addIndex,
       600,
@@ -350,7 +350,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el panel completa automáticamente la lista 100 con el índice GitHub cuando hay 99', (tester) async {
+  testWidgets('el panel completa automáticamente la lista 100 con dearbulut cuando hay 99', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true, sourceCount: 99);
     await tester.pumpWidget(
