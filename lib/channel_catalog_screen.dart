@@ -217,7 +217,6 @@ class _ChannelCatalogScreenState extends State<ChannelCatalogScreen> {
       if (!mounted || requestId != _catalogRequestId) return;
       final previousId = _selectedChannel?.id;
       setState(() {
-        _cachedAdminChannels = <SportsChannel>[];
         _channels = page.channels;
         _catalogTotal = page.total;
         _catalogTotalIsEstimate = page.totalIsEstimate;
@@ -1853,10 +1852,11 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         search: _searchController.text,
         offset: 0,
         // El inventario se pagina; no materializar miles de tarjetas al abrir.
-        limit: 40,
+        limit: _adminPageSize,
       );
       if (!mounted) return;
       setState(() {
+        _cachedAdminChannels = <SportsChannel>[];
         _channels = page.channels;
         _catalogTotal = page.total;
         _catalogTotalIsEstimate = page.totalIsEstimate;
