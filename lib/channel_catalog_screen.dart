@@ -1259,27 +1259,7 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
       child: Stack(
         fit: StackFit.expand,
         children: <Widget>[
-          Positioned(
-            left: 7,
-            top: 7,
-            child: Material(
-              color: Colors.black.withAlpha(190),
-              borderRadius: BorderRadius.circular(9),
-              child: IconButton(
-                key: ValueKey<String>('channel-proxy-config-${widget.channel?.id ?? 'none'}'),
-                tooltip: 'Configurar hasta 10 proxies para este canal',
-                visualDensity: VisualDensity.compact,
-                constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-                padding: EdgeInsets.zero,
-                onPressed: widget.channel == null ? null : _configureChannelProxies,
-                icon: const Icon(
-                  Icons.settings_ethernet_rounded,
-                  color: _channelCyan,
-                  size: 19,
-                ),
-              ),
-            ),
-          ),
+
           if (controller != null && controller.value.isInitialized)
             AspectRatio(
               aspectRatio: controller.value.aspectRatio > 0
@@ -1355,6 +1335,27 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
                 ),
               ),
             ),
+          Positioned(
+            left: 7,
+            top: 7,
+            child: Material(
+              color: Colors.black.withAlpha(190),
+              borderRadius: BorderRadius.circular(9),
+              child: IconButton(
+                key: ValueKey<String>('channel-proxy-config-${widget.channel?.id ?? 'none'}'),
+                tooltip: 'Configurar hasta 10 proxies para este canal',
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+                padding: EdgeInsets.zero,
+                onPressed: widget.channel == null ? null : _configureChannelProxies,
+                icon: const Icon(
+                  Icons.settings_ethernet_rounded,
+                  color: _channelCyan,
+                  size: 19,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
