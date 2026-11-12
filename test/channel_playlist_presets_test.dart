@@ -41,12 +41,12 @@ void main() {
     );
   });
 
-  test('incluye el índice Everything de dearbulut en la plaza 100 y conserva TDTChannels', () {
+  test('incluye el índice global de IPTV-org en la plaza 100 y conserva TDTChannels', () {
     expect(
       channelPlaylistPresets.any(
         (preset) =>
-            preset.label == dearbulutEverythingPlaylistLabel &&
-            preset.url == 'https://dearbulut.github.io/iptv/playlists/index.m3u',
+            preset.label == iptvOrgGlobalIndexPlaylistLabel &&
+            preset.url == 'https://iptv-org.github.io/iptv/index.m3u',
       ),
       isTrue,
     );
@@ -61,7 +61,7 @@ void main() {
   });
 
   test('incluye veinte fuentes nuevas de países sin duplicar URLs', () {
-    expect(channelPlaylistPresets[99].url, dearbulutEverythingPlaylistUrl);
+    expect(channelPlaylistPresets[99].url, iptvOrgGlobalIndexPlaylistUrl);
     expect(channelPlaylistPresets.skip(100), hasLength(20));
     expect(channelPlaylistPresets.map((preset) => normalizeChannelPlaylistUrl(preset.url)).toSet(), hasLength(120));
   });
