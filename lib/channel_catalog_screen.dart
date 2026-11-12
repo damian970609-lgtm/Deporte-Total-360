@@ -1035,6 +1035,11 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
         }
         _tracks = tracks;
         _activeProxyIndex = _proxies.isEmpty ? -1 : index;
+        if (index > 0 && index < _proxies.length) {
+          // Recuerda el último proxy que logró iniciar este canal para que
+          // sea la primera opción en la siguiente reproducción.
+          unawaited(_proxyStore.moveToFront(channel.id, _proxies[index].id));
+        }
         controller.addListener(_handleVideoChanged);
         setState(() {
           _loading = false;
