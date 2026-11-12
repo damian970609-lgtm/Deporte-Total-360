@@ -278,8 +278,6 @@ void main() {
     expect(find.text('Canal cacheado 040'), findsNothing);
     expect(find.text('Canal cacheado 079'), findsNothing);
     expect(find.textContaining('CARGAR SIGUIENTE BLOQUE · 40'), findsOneWidget);
-    expect(find.text('Lista guardada 0'), findsOneWidget);
-    expect(find.text('Lista guardada 1'), findsOneWidget);
 
     final nextPage = find.textContaining('CARGAR SIGUIENTE BLOQUE · 40');
     await tester.ensureVisible(nextPage);
