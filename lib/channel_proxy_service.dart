@@ -58,7 +58,6 @@ class ChannelProxyEndpoint {
 
   static const Set<String> _supportedProxySchemes = <String>{
     'http',
-    'https',
     'socks',
     'socks4',
     'socks5',
@@ -105,7 +104,7 @@ class ChannelProxyEndpoint {
   }
 
   Map<String, Object> toPlatformArguments() => <String, Object>{
-        'type': scheme == 'https' ? 'http' : (scheme == 'socks' ? 'socks5' : scheme),
+        'type': scheme == 'socks' ? 'socks5' : scheme,
         'host': host,
         'port': port,
         'username': username,
