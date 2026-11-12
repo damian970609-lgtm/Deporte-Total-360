@@ -4295,10 +4295,10 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                               icon: const Icon(Icons.public_rounded),
                               label: Text(
                                 _hasIptvOrgGlobalIndex
-                                    ? 'ÍNDICE GLOBAL EVERYTHING YA REGISTRADO'
+                                    ? 'ÍNDICE GLOBAL IPTV-ORG YA REGISTRADO'
                                     : _sources.length >= maxChannelPlaylistSources
                                         ? 'LÍMITE DE 120 LISTAS COMPLETO'
-                                        : 'AÑADIR ÍNDICE GLOBAL EVERYTHING',
+                                        : 'AÑADIR ÍNDICE GLOBAL IPTV-ORG',
                               ),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: _channelCyan,
