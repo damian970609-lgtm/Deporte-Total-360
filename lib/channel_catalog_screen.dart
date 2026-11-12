@@ -2270,6 +2270,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       if (email.isNotEmpty) {
         try {
           final cached = await _iptvStore.load(email: email);
+          if (!mounted) return;
           if (cached != null && cached.sources.isNotEmpty) {
             setState(() => _sources = List<ChannelPlaylistSource>.from(cached.sources));
           }
@@ -2921,6 +2922,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     bool? visible,
     String? language,
   }) async {
+    if (!mounted) return;
     final updated = channel.copyWith(visible: visible, language: language);
     final next = _iptvChannels
         .map((item) => item.id == channel.id ? updated : item)
