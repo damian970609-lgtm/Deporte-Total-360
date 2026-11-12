@@ -129,6 +129,21 @@ class SportsChannel {
   final bool visible;
   final String language;
 
+  SportsChannel copyWith({bool? visible, String? language}) {
+    return SportsChannel(
+      id: id,
+      identifier: identifier,
+      tvgId: tvgId,
+      name: name,
+      url: url,
+      logoUrl: logoUrl,
+      groupTitle: groupTitle,
+      isSports: isSports,
+      visible: visible ?? this.visible,
+      language: language ?? this.language,
+    );
+  }
+
   Map<String, Object> toJson() => <String, Object>{
         'id': id,
         'identifier': identifier,
