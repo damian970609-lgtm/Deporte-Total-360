@@ -152,7 +152,18 @@ jobs:
                   val proxyType = if (type.startsWith("socks")) Proxy.Type.SOCKS else Proxy.Type.HTTP
                   val proxy = Proxy(proxyType, InetSocketAddress(host, port))
                   ProxySelector.setDefault(object : ProxySelector() {
-                      override fun select(uri: URI): List<Proxy> = listOf(proxy)
+                      val targetHost = (args["targetHost"] as? String)
+                          ?.trim()
+                          ?.lowercase()
+                          ?: throw IllegalArgumentException("Falta el host del canal.")
+                      override fun select(uri: URI): List<Proxy> {
+                          val requestHost = uri.host?.lowercase()
+                          return if (requestHost == targetHost) {
+                              listOf(proxy)
+                          } else {
+                              listOf(Proxy.NO_PROXY)
+                          }
+                      }
                       override fun connectFailed(uri: URI, sa: SocketAddress, ioe: IOException) {
                           // El reproductor gestiona el cambio al siguiente proxy configurado.
                       }
