@@ -30,6 +30,17 @@ void main() {
     );
   });
 
+  test('incluye la lista combinada de TV y radio de TDTChannels', () {
+    expect(
+      channelPlaylistPresets.any(
+        (preset) =>
+            preset.label == 'TDTChannels · TV + Radio' &&
+            preset.url == 'https://www.tdtchannels.com/lists/tvradio.m3u',
+      ),
+      isTrue,
+    );
+  });
+
   test('incluye el índice Everything de dearbulut en la plaza 100 y conserva TDTChannels', () {
     expect(
       channelPlaylistPresets.any(
