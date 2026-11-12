@@ -2225,12 +2225,12 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       final total = result['total'] ?? _sources.length;
       final added = result['added'] ?? 0;
       _message(
-        'Catálogo actualizado: $total / 100 listas. '
+        'Catálogo actualizado: $total / 120 listas. '
         'Se añadieron $added fuentes nuevas. '
         'Todas las importaciones se procesan en segundo plano.',
       );
     } catch (error) {
-      _message('No se pudo completar el catálogo de 100 listas: ' + error.toString());
+      _message('No se pudo completar el catálogo de 120 listas: ' + error.toString());
     } finally {
       if (mounted) setState(() => _working = false);
     }
@@ -2272,18 +2272,18 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
-  bool get _hasIptvOrgGlobalIndex => containsChannelPlaylistUrl(
+  bool get _hasDearbulutEverything => containsChannelPlaylistUrl(
         _sources.map((source) => source.url),
         dearbulutEverythingPlaylistUrl,
       );
 
-  Future<void> _addIptvOrgGlobalIndex({bool automatic = false}) async {
+  Future<void> _addDearbulutEverything({bool automatic = false}) async {
     if (_working && !automatic) return;
     if (_sources.length >= maxChannelPlaylistSources) {
-      if (!automatic) _message('Ya están registradas las 100 listas.');
+      if (!automatic) _message('Ya están registradas las 120 listas.');
       return;
     }
-    if (_hasIptvOrgGlobalIndex) {
+    if (_hasDearbulutEverything) {
       if (!automatic) _message('El índice Everything de dearbulut ya está registrado.');
       return;
     }
@@ -2291,7 +2291,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     if (!automatic && mounted) setState(() => _working = true);
     try {
       await _service.addPlaylist(
-        url: iptvOrgGlobalIndexPlaylistUrl,
+        url: dearbulutEverythingPlaylistUrl,
         label: dearbulutEverythingPlaylistLabel,
       );
       // addPlaylist pone esta fuente individual en cola en el Worker.
@@ -2907,8 +2907,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     if (mounted) {
       setState(() {
         _showIptvSection = false;
-        _showVpnSection = false;
-      });
+              });
     }
   }
 
@@ -2916,8 +2915,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     if (mounted) {
       setState(() {
         _showIptvSection = true;
-        _showVpnSection = false;
-      });
+              });
     }
     if (!_iptvLoaded && !_iptvLoading) unawaited(_loadAllIptvChannels());
   }
@@ -3161,7 +3159,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: _working ? null : _fillPlaylistCatalogTo100,
+              onPressed: _working ? null : _fillPlaylistCatalogTo120,
               icon: const Icon(Icons.cloud_download_rounded),
               label: Text(_sources.length >= maxChannelPlaylistSources ? '120 LISTAS REGISTRADAS' : 'COMPLETAR CATÁLOGO HASTA 120 LISTAS'),
             ),
@@ -3952,12 +3950,12 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             child: FilledButton.icon(
                               onPressed: _working || _sources.length >= maxChannelPlaylistSources
                                   ? null
-                                  : _fillPlaylistCatalogTo100,
+                                  : _fillPlaylistCatalogTo120,
                               icon: const Icon(Icons.cloud_download_rounded),
                               label: Text(
                                 _sources.length >= maxChannelPlaylistSources
-                                    ? '100 LISTAS REGISTRADAS'
-                                    : 'COMPLETAR CATÁLOGO HASTA 100 LISTAS',
+                                    ? '120 LISTAS REGISTRADAS'
+                                    : 'COMPLETAR CATÁLOGO HASTA 120 LISTAS',
                               ),
                               style: FilledButton.styleFrom(
                                 backgroundColor: _channelGreen,
@@ -3993,12 +3991,12 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             child: OutlinedButton.icon(
                               onPressed: _working ||
                                       _sources.length >= maxChannelPlaylistSources ||
-                                      _hasIptvOrgGlobalIndex
+                                      _hasDearbulutEverything
                                   ? null
-                                  : _addIptvOrgGlobalIndex,
+                                  : _addDearbulutEverything,
                               icon: const Icon(Icons.public_rounded),
                               label: Text(
-                                _hasIptvOrgGlobalIndex
+                                _hasDearbulutEverything
                                     ? 'ÍNDICE GLOBAL EVERYTHING YA REGISTRADO'
                                     : _sources.length >= maxChannelPlaylistSources
                                         ? 'LÍMITE DE 120 LISTAS COMPLETO'
