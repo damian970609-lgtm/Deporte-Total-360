@@ -456,6 +456,22 @@ void main() {
 
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
     expect(find.text('TODOS LOS CANALES IMPORTADOS'), findsOneWidget);
+
+    final proxyButton = find.byTooltip('Configurar proxies de Canal General');
+    await tester.scrollUntilVisible(
+      proxyButton,
+      450,
+      scrollable: find.byKey(const ValueKey<String>('channel-admin-iptv-list')),
+    );
+    await tester.pumpAndSettle();
+    expect(proxyButton, findsOneWidget);
+    await tester.tap(proxyButton);
+    await tester.pumpAndSettle();
+    expect(find.text('PROXIES · Canal General'), findsOneWidget);
+    expect(find.text('AÑADIR 0/10'), findsOneWidget);
+    await tester.tap(find.text('CANCELAR'));
+    await tester.pumpAndSettle();
+
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
