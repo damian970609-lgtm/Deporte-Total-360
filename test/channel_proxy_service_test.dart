@@ -41,6 +41,10 @@ void main() {
         () => ChannelProxyEndpoint.parse('proxy.example:70000'),
         throwsFormatException,
       );
+      expect(
+        () => ChannelProxyEndpoint.parse('https://secure-proxy.example:443'),
+        throwsFormatException,
+      );
     });
   });
 
