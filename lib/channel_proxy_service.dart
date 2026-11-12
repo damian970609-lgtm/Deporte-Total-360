@@ -192,8 +192,17 @@ class ChannelProxyStore {
 class ChannelProxyPlatform {
   static const MethodChannel _channel = MethodChannel('dt360/channel_proxy');
 
-  static Future<void> apply(ChannelProxyEndpoint proxy) async {
-    await _channel.invokeMethod<void>('setProxy', proxy.toPlatformArguments());
+  static Future<void> apply(
+    ChannelProxyEndpoint proxy,
+    String streamUrl,
+  ) async {
+    final targetHost = Uri.parse(streamUrl).host.trim().toLowerCase();
+    if (targetHost.isEmpty) {
+      throw const FormatException('La URL del canal no contiene un host válido.');
+    }
+    final arguments = proxy.toPlatformArguments();
+    arguments['targetHost'] = targetHost;
+    await _channel.invokeMethod<void>('setProxy', arguments);
   }
 
   static Future<void> clear() async {
