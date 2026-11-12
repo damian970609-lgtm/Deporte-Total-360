@@ -314,7 +314,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el panel añade el índice Everything de dearbulut como fuente independiente', (tester) async {
+  testWidgets('el panel añade el índice global IPTV-org como fuente independiente', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
@@ -338,8 +338,8 @@ void main() {
     expect(
       service.addedPlaylistRequests.any(
         (source) =>
-            source['url'] == dearbulutEverythingPlaylistUrl &&
-            source['label'] == dearbulutEverythingPlaylistLabel,
+            source['url'] == iptvOrgGlobalIndexPlaylistUrl &&
+            source['label'] == iptvOrgGlobalIndexPlaylistLabel,
       ),
       isTrue,
     );
@@ -361,8 +361,8 @@ void main() {
     expect(
       service.addedPlaylistRequests.any(
         (source) =>
-            source['url'] == dearbulutEverythingPlaylistUrl &&
-            source['label'] == dearbulutEverythingPlaylistLabel,
+            source['url'] == iptvOrgGlobalIndexPlaylistUrl &&
+            source['label'] == iptvOrgGlobalIndexPlaylistLabel,
       ),
       isTrue,
     );
@@ -410,8 +410,8 @@ void main() {
     final service = _AdminTestService(autoSignIn: true, sourceCount: 98);
     // El índice global de GitHub ya forma parte de las 99 listas anteriores.
     service.addedPlaylistRequests.add(<String, String>{
-      'url': dearbulutEverythingPlaylistUrl,
-      'label': dearbulutEverythingPlaylistLabel,
+      'url': iptvOrgGlobalIndexPlaylistUrl,
+      'label': iptvOrgGlobalIndexPlaylistLabel,
     });
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
