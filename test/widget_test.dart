@@ -29,6 +29,8 @@ class _AdminTestService extends ChannelCatalogService {
   final List<String> deletedSourceIds = <String>[];
   final List<Map<String, String>> addedPlaylistRequests =
       <Map<String, String>>[];
+  final List<List<Map<String, String>>> bulkPlaylistRequests =
+      <List<Map<String, String>>>[];
   bool refreshRequested = false;
 
   @override
@@ -133,13 +135,20 @@ class _AdminTestService extends ChannelCatalogService {
   @override
   Future<Map<String, dynamic>> addPlaylistSourcesToCatalog({
     required List<Map<String, String>> sources,
-  }) async => <String, dynamic>{
-        'added': sources.length,
-        'duplicates': 0,
-        'total': 120,
-        'limit': 120,
-        'complete': true,
-      };
+  }) async {
+    bulkPlaylistRequests.add(
+      sources.map((source) => Map<String, String>.from(source)).toList(),
+    );
+    final before = _storedSourceCount;
+    _storedSourceCount = 120;
+    return <String, dynamic>{
+      'added': 120 - before,
+      'duplicates': before,
+      'total': 120,
+      'limit': 120,
+      'complete': true,
+    };
+  }
 
   @override
   Future<Map<String, dynamic>> fetchTrialPassSummary() async {
@@ -350,7 +359,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el panel completa automáticamente la lista 100 con IPTV-org cuando hay 99', (tester) async {
+  testWidgets('el panel completa automáticamente el catálogo hasta 120 cuando hay 99', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true, sourceCount: 99);
     await tester.pumpWidget(
@@ -358,8 +367,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(service.bulkPlaylistRequests, hasLength(1));
+    expect(service.bulkPlaylistRequests.single, hasLength(120));
     expect(
-      service.addedPlaylistRequests.any(
+      service.bulkPlaylistRequests.single.any(
         (source) =>
             source['url'] == iptvOrgGlobalIndexPlaylistUrl &&
             source['label'] == iptvOrgGlobalIndexPlaylistLabel,
@@ -367,7 +378,7 @@ void main() {
       isTrue,
     );
     expect(service.refreshRequested, isFalse);
-    expect((await service.fetchSources()), hasLength(100));
+    expect((await service.fetchSources()), hasLength(120));
 
     // Solo se construye el primer bloque; el resto aparece al pedirlo.
     final adminScroll = find.byKey(
@@ -407,8 +418,8 @@ void main() {
 
   testWidgets('añadir una lista general no vuelve a importar las 99 fuentes existentes', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    final service = _AdminTestService(autoSignIn: true, sourceCount: 98);
-    // El índice global de GitHub ya forma parte de las 99 listas anteriores.
+    final service = _AdminTestService(autoSignIn: true, sourceCount: 97);
+    // El índice global está entre las listas guardadas; aún no se alcanzan 99.
     service.addedPlaylistRequests.add(<String, String>{
       'url': iptvOrgGlobalIndexPlaylistUrl,
       'label': iptvOrgGlobalIndexPlaylistLabel,
