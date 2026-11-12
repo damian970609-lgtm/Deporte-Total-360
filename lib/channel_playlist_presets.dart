@@ -521,7 +521,7 @@ const List<ChannelPlaylistPreset> channelPlaylistPresets =
   ChannelPlaylistPreset(
     label: iptvOrgGlobalIndexPlaylistLabel,
     url: iptvOrgGlobalIndexPlaylistUrl,
-    description: 'Índice Everything del repositorio dearbulut/iptv: incluye streams principales y alternativos; el importador conserva todos los canales multimedia compatibles y elimina duplicados por URL.',
+    description: 'Índice global de canales y señales del repositorio IPTV-org; el importador conserva todos los canales multimedia compatibles y elimina duplicados por URL.',
   ),
   ChannelPlaylistPreset(
     label: 'IPTV-org · Corea del Sur',
