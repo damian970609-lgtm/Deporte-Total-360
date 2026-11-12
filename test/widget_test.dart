@@ -461,7 +461,10 @@ void main() {
     await tester.scrollUntilVisible(
       proxyButton,
       450,
-      scrollable: find.byKey(const ValueKey<String>('channel-admin-iptv-list')),
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey<String>('channel-admin-iptv-list')),
+        matching: find.byType(Scrollable),
+      ),
     );
     await tester.pumpAndSettle();
     expect(proxyButton, findsOneWidget);
