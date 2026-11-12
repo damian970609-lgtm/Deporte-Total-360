@@ -1875,10 +1875,12 @@ class ChannelAdminScreen extends StatefulWidget {
     super.key,
     this.service,
     this.snapshotLoader,
+    this.localStore,
   });
 
   final ChannelCatalogService? service;
   final Future<ChannelAdminSnapshot?> Function(String email)? snapshotLoader;
+  final ChannelLocalIptvStore? localStore;
 
   @override
   State<ChannelAdminScreen> createState() => _ChannelAdminScreenState();
@@ -1886,7 +1888,7 @@ class ChannelAdminScreen extends StatefulWidget {
 
 class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   late final ChannelCatalogService _service;
-  final ChannelLocalIptvStore _iptvStore = ChannelLocalIptvStore();
+  late final ChannelLocalIptvStore _iptvStore;
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _labelController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
@@ -1940,6 +1942,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   void initState() {
     super.initState();
     _service = widget.service ?? channelCatalogService;
+    _iptvStore = widget.localStore ?? ChannelLocalIptvStore();
     _adminScrollController.addListener(_handleAdminScroll);
     _working = true;
     unawaited(_restoreAdminSession());
@@ -2114,11 +2117,13 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
 
     final email = (_email ?? _service.signedInEmail ?? '').trim();
+    var hasCompleteLocalCache = false;
     if (email.isNotEmpty) {
       try {
         final cached = await _iptvStore.load(email: email);
         if (!mounted) return;
         if (cached != null) {
+          hasCompleteLocalCache = cached.complete;
           setState(() {
             _iptvChannels = List<SportsChannel>.from(cached.channels);
             _sources = cached.sources.isNotEmpty
@@ -2134,11 +2139,16 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       }
     }
 
+    // Una copia marcada como completa es autosuficiente: abrir el menú otra
+    // vez no vuelve a descargar fuentes ni páginas del catálogo.
+    if (hasCompleteLocalCache) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+
     await _loadAdminSources();
     if (!mounted) return;
 
-    // Completa el catálogo de fuentes cuando la cuenta ya tiene una base
-    // previa de listas; no vuelve a importar una copia local ya completa.
     if (!_automaticCatalogCompletionAttempted &&
         _sourcesError == null &&
         _sources.length >= 99 &&
