@@ -260,6 +260,11 @@ void main() {
       channels: cachedChannels,
       sources: cachedSources,
     );
+    final restoredSnapshot = await ChannelAdminSnapshotStore.load(
+      email: 'admin@example.com',
+    );
+    expect(restoredSnapshot, isNotNull);
+    expect(restoredSnapshot!.channels, hasLength(85));
 
     final service = _AdminTestService(autoSignIn: true, offline: true);
     await tester.pumpWidget(
