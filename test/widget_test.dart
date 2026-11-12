@@ -441,7 +441,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el menú privado muestra la sección Proton VPN sin alterar IPTV', (tester) async {
+  testWidgets('el panel privado ya no muestra opciones VPN y conserva IPTV', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
@@ -450,17 +450,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsOneWidget);
-    await tester.tap(find.text('PROTON VPN'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('PROTON VPN · CONEXIÓN PROTEGIDA'), findsOneWidget);
-    expect(find.text('ABRIR PROTON VPN'), findsOneWidget);
-    expect(find.textContaining('tres reproductores'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
+    expect(find.text('PROTON VPN'), findsNothing);
+    expect(find.textContaining('CONEXIÓN PROTEGIDA'), findsNothing);
     await tester.tap(find.text('IPTV'));
     await tester.pumpAndSettle();
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
