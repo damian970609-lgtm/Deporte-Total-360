@@ -26,8 +26,10 @@ class ChannelLocalIptvSnapshot {
 class ChannelLocalIptvStore {
   ChannelLocalIptvStore({
     Future<Directory> Function()? directoryProvider,
-  }) : _directoryProvider =
+  })  : _directoryProvider =
             directoryProvider ?? _defaultDirectoryProvider;
+
+  late final Future<Directory> _directory = _directoryProvider();
 
   static Future<Directory> _defaultDirectoryProvider() async {
     try {
@@ -55,7 +57,7 @@ class ChannelLocalIptvStore {
     if (normalizedEmail.isEmpty) return null;
 
     try {
-      final directory = await _directoryProvider();
+      final directory = await _directory;
       final file = _fileFor(directory, normalizedEmail);
       if (!await file.exists()) return null;
 
