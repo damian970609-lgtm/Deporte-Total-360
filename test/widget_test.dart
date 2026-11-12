@@ -458,15 +458,19 @@ void main() {
     expect(find.text('TODOS LOS CANALES IMPORTADOS'), findsOneWidget);
 
     final proxyButton = find.byTooltip('Configurar proxies de Canal General');
-    await tester.scrollUntilVisible(
-      proxyButton,
-      450,
-      scrollable: find.descendant(
-        of: find.byKey(const ValueKey<String>('channel-admin-iptv-list')),
-        matching: find.byType(Scrollable),
-      ).first,
+    final iptvList = find.byKey(
+      const ValueKey<String>('channel-admin-iptv-list'),
     );
-    await tester.pumpAndSettle();
+    for (var attempt = 0;
+        attempt < 20 && proxyButton.evaluate().isEmpty;
+        attempt++) {
+      await tester.drag(
+        iptvList,
+        const Offset(0, -450),
+        warnIfMissed: false,
+      );
+      await tester.pumpAndSettle();
+    }
     expect(proxyButton, findsOneWidget);
     await tester.tap(proxyButton);
     await tester.pumpAndSettle();
