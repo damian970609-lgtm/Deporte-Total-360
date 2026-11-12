@@ -16,9 +16,11 @@ class _AdminTestService extends ChannelCatalogService {
     this.autoSignIn = true,
     this.adminTotal = 2,
     this.sourceCount = 2,
+    this.offline = false,
   }) : _storedSourceCount = sourceCount;
 
   final bool autoSignIn;
+  final bool offline;
   final int adminTotal;
   final int sourceCount;
   int _storedSourceCount;
@@ -39,6 +41,9 @@ class _AdminTestService extends ChannelCatalogService {
     int offset = 0,
     int limit = 200,
   }) async {
+    if (offline) {
+      throw const ChannelCatalogException('Servidor sin conexión en la prueba.');
+    }
     _adminPageCalls++;
     lastAdminPageLimit = limit;
     if (limit <= 200) {
@@ -90,6 +95,9 @@ class _AdminTestService extends ChannelCatalogService {
 
   @override
   Future<List<ChannelPlaylistSource>> fetchSources() async {
+    if (offline) {
+      throw const ChannelCatalogException('Servidor sin conexión en la prueba.');
+    }
     final existing = List<ChannelPlaylistSource>.generate(
       _storedSourceCount,
       (index) => ChannelPlaylistSource(
@@ -115,8 +123,12 @@ class _AdminTestService extends ChannelCatalogService {
   }
 
   @override
-  Future<List<AppLicenseRecord>> fetchAdminLicenses() async =>
-      <AppLicenseRecord>[];
+  Future<List<AppLicenseRecord>> fetchAdminLicenses() async {
+    if (offline) {
+      throw const ChannelCatalogException('Servidor sin conexión en la prueba.');
+    }
+    return <AppLicenseRecord>[];
+  }
 
   @override
   Future<Map<String, dynamic>> addPlaylistSourcesToCatalog({
@@ -130,14 +142,18 @@ class _AdminTestService extends ChannelCatalogService {
       };
 
   @override
-  Future<Map<String, dynamic>> fetchTrialPassSummary() async =>
-      <String, dynamic>{
-        'available': 10,
-        'active': 0,
-        'expired': 0,
-        'revoked': 0,
-        'total': 10,
-      };
+  Future<Map<String, dynamic>> fetchTrialPassSummary() async {
+    if (offline) {
+      throw const ChannelCatalogException('Servidor sin conexión en la prueba.');
+    }
+    return <String, dynamic>{
+      'available': 10,
+      'active': 0,
+      'expired': 0,
+      'revoked': 0,
+      'total': 10,
+    };
+  }
 
   @override
   Future<void> addPlaylist({
@@ -211,6 +227,65 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pageBack();
     await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+
+  testWidgets('el panel pagina la copia local y no construye todos los canales al abrir', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final cachedChannels = List<SportsChannel>.generate(
+      85,
+      (index) => SportsChannel(
+        id: 'cached-$index',
+        identifier: 'cached-$index',
+        name: 'Canal cacheado ${index.toString().padLeft(3, '0')}',
+        url: 'https://media.example/cached-$index.m3u8',
+        isSports: index.isEven,
+        visible: false,
+      ),
+      growable: false,
+    );
+    final cachedSources = List<ChannelPlaylistSource>.generate(
+      2,
+      (index) => ChannelPlaylistSource(
+        id: 'cached-source-$index',
+        url: 'https://lists.example/cached-$index.m3u',
+        label: 'Lista guardada $index',
+        status: 'imported',
+      ),
+      growable: false,
+    );
+    await ChannelAdminSnapshotStore.save(
+      email: 'admin@example.com',
+      channels: cachedChannels,
+      sources: cachedSources,
+    );
+
+    final service = _AdminTestService(autoSignIn: true, offline: true);
+    await tester.pumpWidget(
+      MaterialApp(home: ChannelAdminScreen(service: service)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Canal cacheado 000'), findsOneWidget);
+    expect(find.text('Canal cacheado 039'), findsOneWidget);
+    expect(find.text('Canal cacheado 040'), findsNothing);
+    expect(find.text('Canal cacheado 079'), findsNothing);
+    expect(find.textContaining('CARGAR SIGUIENTE BLOQUE · 40'), findsOneWidget);
+    expect(find.text('Lista guardada 0'), findsOneWidget);
+    expect(find.text('Lista guardada 1'), findsOneWidget);
+
+    final nextPage = find.textContaining('CARGAR SIGUIENTE BLOQUE · 40');
+    await tester.ensureVisible(nextPage);
+    await tester.pumpAndSettle();
+    await tester.tap(nextPage);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Canal cacheado 079'), findsOneWidget);
+    expect(find.text('Canal cacheado 080'), findsNothing);
+    expect(find.textContaining('CARGAR SIGUIENTE BLOQUE · 80'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
