@@ -11,7 +11,6 @@ import 'package:volume_controller/volume_controller.dart';
 
 import 'channel_catalog_service.dart';
 import 'channel_playlist_presets.dart';
-import 'proton_vpn_screen.dart';
 import 'live_media_format.dart';
 import 'stream_diagnostics.dart';
 
@@ -1646,7 +1645,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   String? _error;
   String? _sourcesError;
   bool _showIptvSection = false;
-  bool _showVpnSection = false;
   bool _iptvLoading = false;
   bool _iptvLoaded = false;
   int _iptvRequestId = 0;
@@ -1693,7 +1691,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   }
 
   void _handleAdminScroll() {
-    if (_showIptvSection || _showVpnSection || !_adminScrollController.hasClients ||
+    if (_showIptvSection || !_adminScrollController.hasClients ||
         _loading || _working || !_hasMore || _error != null) {
       return;
     }
@@ -1809,7 +1807,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _licenseRecords = <AppLicenseRecord>[];
         _previewChannel = null;
         _showIptvSection = false;
-        _showVpnSection = false;
         _iptvChannels = <SportsChannel>[];
         _iptvSelectedChannel = null;
         _iptvLoaded = false;
@@ -1845,11 +1842,11 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
     if (!mounted) return;
 
-    // Completa la plaza 100 con el índice público de GitHub únicamente cuando
+    // Completa la plaza 100 con el índice Everything de dearbulut únicamente cuando
     // hay 99 fuentes y todavía no existe esa URL. No se reimportan las otras.
     if (_sources.length == maxChannelPlaylistSources - 1 &&
-        !_hasIptvOrgGlobalIndex) {
-      await _addIptvOrgGlobalIndex(automatic: true);
+        !_hasDearbulutEverything) {
+      await _addDearbulutEverything(automatic: true);
     }
   }
 
@@ -2203,14 +2200,18 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
-  Future<void> _fillPlaylistCatalogTo100() async {
+  Future<void> _fillPlaylistCatalogTo120() async {
     if (_working) return;
     if (_sources.length >= maxChannelPlaylistSources) {
-      _message('El catálogo ya tiene 100 listas registradas.');
+      _message('El catálogo ya tiene 120 listas registradas.');
       return;
     }
     setState(() => _working = true);
     try {
+      if (_sources.length == maxChannelPlaylistSources - 1 &&
+          !_hasDearbulutEverything) {
+        await _addDearbulutEverything(automatic: true);
+      }
       final result = await _service.addPlaylistSourcesToCatalog(
         sources: channelPlaylistPresets
             .map((preset) => <String, String>{
@@ -2273,7 +2274,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
   bool get _hasIptvOrgGlobalIndex => containsChannelPlaylistUrl(
         _sources.map((source) => source.url),
-        iptvOrgGlobalIndexPlaylistUrl,
+        dearbulutEverythingPlaylistUrl,
       );
 
   Future<void> _addIptvOrgGlobalIndex({bool automatic = false}) async {
@@ -2283,7 +2284,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       return;
     }
     if (_hasIptvOrgGlobalIndex) {
-      if (!automatic) _message('El índice global de IPTV-org ya está registrado.');
+      if (!automatic) _message('El índice Everything de dearbulut ya está registrado.');
       return;
     }
 
@@ -2291,7 +2292,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     try {
       await _service.addPlaylist(
         url: iptvOrgGlobalIndexPlaylistUrl,
-        label: iptvOrgGlobalIndexPlaylistLabel,
+        label: dearbulutEverythingPlaylistLabel,
       );
       // addPlaylist pone esta fuente individual en cola en el Worker.
       // No ejecutar refreshSources: reimportaría las otras 99 listas.
@@ -2304,12 +2305,12 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       });
       await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
       _message(
-        'Índice global de GitHub añadido: ${_sources.length}/100 listas. '
+        'Índice Everything de dearbulut añadido: ${_sources.length}/120 listas. '
         'Los canales se importarán por lotes en segundo plano.',
       );
     } catch (error) {
       if (mounted) {
-        _message('No se pudo añadir el índice global de IPTV-org: ' + error.toString());
+        _message('No se pudo añadir el índice Everything de dearbulut: ' + error.toString());
       }
     } finally {
       if (!automatic && mounted) setState(() => _working = false);
@@ -2921,15 +2922,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     if (!_iptvLoaded && !_iptvLoading) unawaited(_loadAllIptvChannels());
   }
 
-  void _openVpnSection() {
-    if (mounted) {
-      setState(() {
-        _showIptvSection = false;
-        _showVpnSection = true;
-      });
-    }
-  }
-
   Future<void> _loadAllIptvChannels({bool force = false}) async {
     if (_iptvLoading || (_iptvLoaded && !force)) return;
     final requestId = ++_iptvRequestId;
@@ -3056,7 +3048,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           tab(
             label: 'ADMINISTRACIÓN',
             icon: Icons.admin_panel_settings_rounded,
-            selected: !_showIptvSection && !_showVpnSection,
+            selected: !_showIptvSection,
             onTap: _openAdminSection,
           ),
           const SizedBox(width: 8),
@@ -3065,13 +3057,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
             icon: Icons.live_tv_rounded,
             selected: _showIptvSection,
             onTap: _openIptvSection,
-          ),
-          const SizedBox(width: 8),
-          tab(
-            label: 'PROTON VPN',
-            icon: Icons.shield_rounded,
-            selected: _showVpnSection,
-            onTap: _openVpnSection,
           ),
         ],
       ),
@@ -3178,7 +3163,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
             child: OutlinedButton.icon(
               onPressed: _working ? null : _fillPlaylistCatalogTo100,
               icon: const Icon(Icons.cloud_download_rounded),
-              label: Text(_sources.length >= maxChannelPlaylistSources ? '100 LISTAS REGISTRADAS' : 'COMPLETAR CATÁLOGO HASTA 100 LISTAS'),
+              label: Text(_sources.length >= maxChannelPlaylistSources ? '120 LISTAS REGISTRADAS' : 'COMPLETAR CATÁLOGO HASTA 120 LISTAS'),
             ),
           ),
           const SizedBox(height: 6),
@@ -3680,11 +3665,9 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                 children: <Widget>[
                   _buildAdminSectionSwitcher(),
                   Expanded(
-                    child: _showVpnSection
-                        ? const ProtonVpnScreen()
-                        : _showIptvSection
-                            ? _buildIptvScreen()
-                            : RefreshIndicator(
+                    child: _showIptvSection
+                        ? _buildIptvScreen()
+                        : RefreshIndicator(
                 color: _channelCyan,
                 backgroundColor: _channelPanel,
                 onRefresh: () => _loadAdmin(),
@@ -3922,7 +3905,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
                           const Text(
-                            'CATÁLOGO DE FUENTES · 100 LISTAS',
+                            'CATÁLOGO DE FUENTES · 120 LISTAS',
                             style: TextStyle(
                               color: _channelGreen,
                               fontWeight: FontWeight.w900,
@@ -3931,7 +3914,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                           ),
                           const SizedBox(height: 5),
                           const Text(
-                            'Completa hasta 100 listas públicas distintas sin borrar las fuentes que ya funcionan. Se importan todos los canales con enlaces multimedia compatibles; el sistema identifica los deportivos para que puedas decidir cuáles publicar.',
+                            'Completa hasta 120 listas públicas distintas sin borrar las fuentes que ya funcionan. Se importan todos los canales con enlaces multimedia compatibles; el sistema identifica los deportivos para que puedas decidir cuáles publicar.',
                             style: TextStyle(
                               color: _channelMuted,
                               fontSize: 10,
@@ -3944,7 +3927,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             isExpanded: true,
                             dropdownColor: _channelPanel2,
                             decoration: const InputDecoration(
-                              labelText: 'Elegir una de las 100 listas disponibles',
+                              labelText: 'Elegir una de las 120 listas disponibles',
                             ),
                             items: channelPlaylistPresets
                                 .map((preset) => DropdownMenuItem<String>(
@@ -4016,10 +3999,10 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                               icon: const Icon(Icons.public_rounded),
                               label: Text(
                                 _hasIptvOrgGlobalIndex
-                                    ? 'ÍNDICE GLOBAL YA REGISTRADO'
+                                    ? 'ÍNDICE GLOBAL EVERYTHING YA REGISTRADO'
                                     : _sources.length >= maxChannelPlaylistSources
-                                        ? 'LÍMITE DE 100 LISTAS COMPLETO'
-                                        : 'AÑADIR ÍNDICE GLOBAL IPTV-ORG',
+                                        ? 'LÍMITE DE 120 LISTAS COMPLETO'
+                                        : 'AÑADIR ÍNDICE GLOBAL EVERYTHING',
                               ),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: _channelCyan,
