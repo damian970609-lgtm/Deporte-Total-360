@@ -115,8 +115,8 @@ class _AdminTestService extends ChannelCatalogService {
         label: sourceCount == 2
             ? (index == 0 ? 'Lista importada' : 'Lista en cola')
             : 'Lista registrada ${(index + 1).toString().padLeft(3, '0')}',
-        status: index == 0 ? 'imported' : 'queued',
-        importedCount: index == 0 ? 4 : 0,
+        status: 'imported',
+        importedCount: index == 0 ? 4 : 1,
       ),
       growable: false,
     );
