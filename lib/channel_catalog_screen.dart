@@ -919,8 +919,14 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
   void dispose() {
     _controller?.removeListener(_handleVideoChanged);
     _controller?.dispose();
-    unawaited(ChannelProxyPlatform.clear());
+    unawaited(_clearNativeProxySafely());
     super.dispose();
+  }
+
+  Future<void> _clearNativeProxySafely() async {
+    try {
+      await ChannelProxyPlatform.clear();
+    } catch (_) {}
   }
 
   void _handleVideoChanged() {
@@ -935,7 +941,7 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
       final error = controller.value.errorDescription;
       _controller = null;
       unawaited(controller.dispose());
-      unawaited(ChannelProxyPlatform.clear());
+      unawaited(_clearNativeProxySafely());
       _activeProxyIndex = -1;
       if (mounted) {
         setState(() {
