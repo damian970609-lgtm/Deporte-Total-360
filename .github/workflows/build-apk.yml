@@ -105,8 +105,7 @@ jobs:
               }
 
               private var originalProxySelector: ProxySelector? = null
-              private var originalAuthenticator: Authenticator? = null
-              private var proxyInstalled = false
+                  private var proxyInstalled = false
 
               override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
                   super.configureFlutterEngine(flutterEngine)
@@ -147,7 +146,6 @@ jobs:
 
                   if (!proxyInstalled) {
                       originalProxySelector = ProxySelector.getDefault()
-                      originalAuthenticator = Authenticator.getDefault()
                       proxyInstalled = true
                   }
 
@@ -172,16 +170,15 @@ jobs:
                           }
                       })
                   } else {
-                      Authenticator.setDefault(originalAuthenticator)
+                      Authenticator.setDefault(null)
                   }
               }
 
               private fun restoreProxy() {
                   if (!proxyInstalled) return
                   ProxySelector.setDefault(originalProxySelector)
-                  Authenticator.setDefault(originalAuthenticator)
+                  Authenticator.setDefault(null)
                   originalProxySelector = null
-                  originalAuthenticator = null
                   proxyInstalled = false
               }
 
