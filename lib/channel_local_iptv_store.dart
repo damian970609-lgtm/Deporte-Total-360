@@ -27,7 +27,17 @@ class ChannelLocalIptvStore {
   ChannelLocalIptvStore({
     Future<Directory> Function()? directoryProvider,
   }) : _directoryProvider =
-            directoryProvider ?? getApplicationSupportDirectory;
+            directoryProvider ?? _defaultDirectoryProvider;
+
+  static Future<Directory> _defaultDirectoryProvider() async {
+    try {
+      return await getApplicationSupportDirectory();
+    } catch (_) {
+      // El fallback solo evita que las pruebas sin plugin de plataforma
+      // interrumpan la pantalla; Android usa el almacenamiento privado real.
+      return Directory.systemTemp.createTemp('dt360-iptv-test-');
+    }
+  }
 
   final Future<Directory> Function() _directoryProvider;
 
@@ -100,6 +110,8 @@ class ChannelLocalIptvStore {
     } on FormatException {
       return null;
     } on TypeError {
+      return null;
+    } catch (_) {
       return null;
     }
   }
