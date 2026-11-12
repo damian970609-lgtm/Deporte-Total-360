@@ -2487,13 +2487,11 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           !_hasIptvOrgGlobalIndex) {
         await _addIptvOrgGlobalIndex(automatic: true);
       }
-      // Solo envía las 21 fuentes nuevas: el índice índice global ocupa
-      // la plaza 100 y las otras veinte completan el catálogo hasta 120.
-      // Así no se reenvían las 99 listas ya guardadas ni se excede el tamaño
-      // del lote del Worker anterior mientras se despliega el nuevo límite.
+      // Envía las 120 fuentes para que el Worker compare el catálogo
+      // completo con las listas guardadas y añada solo las que falten.
+      // Así se completan las 120 aunque la fuente número 100 ya exista.
       final result = await _service.addPlaylistSourcesToCatalog(
         sources: channelPlaylistPresets
-            .skip(99)
             .map((preset) => <String, String>{
                   'label': preset.label,
                   'url': preset.url,
