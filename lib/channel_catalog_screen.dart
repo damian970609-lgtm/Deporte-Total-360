@@ -4099,7 +4099,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                           ),
                           const SizedBox(height: 5),
                           const Text(
-                            'El diagnóstico identifica enlaces caídos, errores de autorización y posibles restricciones regionales sin cambiar ni borrar las URL originales. No existe un desbloqueador universal: si el emisor autoriza el acceso desde otra región, puedes usar una VPN legítima configurada por ti en Android. La APK no elude licencias, cuentas ni DRM.',
+                            'El diagnóstico identifica enlaces caídos, errores de autorización y posibles restricciones regionales sin cambiar ni borrar las URL originales. La APK no elude licencias, cuentas ni DRM.',
                             style: TextStyle(
                               color: _channelMuted,
                               fontSize: 10,
@@ -4351,7 +4351,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             width: double.infinity,
                             child: FilledButton.icon(
                               onPressed: _working ? null : _generateTrialCodes,
-                              icon: const Icon(Icons.vpn_key_rounded),
+                              icon: const Icon(Icons.key_rounded),
                               label: const Text('GENERAR CÓDIGOS VIP DISPONIBLES'),
                               style: FilledButton.styleFrom(
                                 backgroundColor: _channelGreen,
