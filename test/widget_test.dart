@@ -338,8 +338,8 @@ void main() {
     expect(
       service.addedPlaylistRequests.any(
         (source) =>
-            source['url'] == iptvOrgGlobalIndexPlaylistUrl &&
-            source['label'] == iptvOrgGlobalIndexPlaylistLabel,
+            source['url'] == dearbulutEverythingPlaylistUrl &&
+            source['label'] == dearbulutEverythingPlaylistLabel,
       ),
       isTrue,
     );
@@ -361,8 +361,8 @@ void main() {
     expect(
       service.addedPlaylistRequests.any(
         (source) =>
-            source['url'] == iptvOrgGlobalIndexPlaylistUrl &&
-            source['label'] == iptvOrgGlobalIndexPlaylistLabel,
+            source['url'] == dearbulutEverythingPlaylistUrl &&
+            source['label'] == dearbulutEverythingPlaylistLabel,
       ),
       isTrue,
     );
@@ -410,8 +410,8 @@ void main() {
     final service = _AdminTestService(autoSignIn: true, sourceCount: 98);
     // El índice global de GitHub ya forma parte de las 99 listas anteriores.
     service.addedPlaylistRequests.add(<String, String>{
-      'url': iptvOrgGlobalIndexPlaylistUrl,
-      'label': iptvOrgGlobalIndexPlaylistLabel,
+      'url': dearbulutEverythingPlaylistUrl,
+      'label': dearbulutEverythingPlaylistLabel,
     });
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
