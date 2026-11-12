@@ -2096,7 +2096,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
     // Completa la plaza 100 con el índice Everything de dearbulut únicamente cuando
     // hay 99 fuentes y todavía no existe esa URL. No se reimportan las otras.
-    if (_sources.length == maxChannelPlaylistSources - 1 &&
+    if (_sources.length == 99 &&
         !_hasDearbulutEverything) {
       await _addDearbulutEverything(automatic: true);
     }
@@ -2460,7 +2460,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
     setState(() => _working = true);
     try {
-      if (_sources.length == maxChannelPlaylistSources - 1 &&
+      if (_sources.length == 99 &&
           !_hasDearbulutEverything) {
         await _addDearbulutEverything(automatic: true);
       }
