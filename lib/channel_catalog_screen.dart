@@ -1339,19 +1339,18 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
             left: 7,
             top: 7,
             child: Material(
-              color: Colors.black.withAlpha(190),
+              color: Colors.black.withAlpha(205),
               borderRadius: BorderRadius.circular(9),
-              child: IconButton(
+              child: TextButton.icon(
                 key: ValueKey<String>('channel-proxy-config-${widget.channel?.id ?? 'none'}'),
-                tooltip: 'Configurar hasta 10 proxies para este canal',
-                visualDensity: VisualDensity.compact,
-                constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-                padding: EdgeInsets.zero,
                 onPressed: widget.channel == null ? null : _configureChannelProxies,
-                icon: const Icon(
-                  Icons.settings_ethernet_rounded,
-                  color: _channelCyan,
-                  size: 19,
+                icon: const Icon(Icons.settings_ethernet_rounded, size: 16),
+                label: Text('PROXY ${_proxies.length}/10'),
+                style: TextButton.styleFrom(
+                  foregroundColor: _channelCyan,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: const Size(0, 32),
+                  textStyle: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900),
                 ),
               ),
             ),
