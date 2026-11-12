@@ -260,8 +260,8 @@ void main() {
       channels: cachedChannels,
       sources: cachedSources,
     );
-    final restoredSnapshot = await ChannelAdminSnapshotStore.load(
-      email: 'admin@example.com',
+    final restoredSnapshot = await tester.runAsync(
+      () => ChannelAdminSnapshotStore.load(email: 'admin@example.com'),
     );
     expect(restoredSnapshot, isNotNull);
     expect(restoredSnapshot!.channels, hasLength(85));
@@ -269,6 +269,11 @@ void main() {
     final service = _AdminTestService(autoSignIn: true, offline: true);
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
+    );
+    // La restauración lee el snapshot en un isolate; dejar que la operación
+    // real finalice antes de comprobar el primer frame del panel.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
     );
     await tester.pumpAndSettle();
 
