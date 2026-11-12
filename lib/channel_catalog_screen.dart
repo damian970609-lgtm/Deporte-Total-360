@@ -2471,8 +2471,13 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           !_hasDearbulutEverything) {
         await _addDearbulutEverything(automatic: true);
       }
+      // Solo envía las 21 fuentes nuevas: el índice Everything ocupa
+      // la plaza 100 y las otras veinte completan el catálogo hasta 120.
+      // Así no se reenvían las 99 listas ya guardadas ni se excede el tamaño
+      // del lote del Worker anterior mientras se despliega el nuevo límite.
       final result = await _service.addPlaylistSourcesToCatalog(
         sources: channelPlaylistPresets
+            .skip(99)
             .map((preset) => <String, String>{
                   'label': preset.label,
                   'url': preset.url,
