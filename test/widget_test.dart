@@ -136,8 +136,8 @@ class _AdminTestService extends ChannelCatalogService {
   }) async => <String, dynamic>{
         'added': sources.length,
         'duplicates': 0,
-        'total': 100,
-        'limit': 100,
+        'total': 120,
+        'limit': 120,
         'complete': true,
       };
 
