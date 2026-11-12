@@ -2124,6 +2124,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     // Se ejecuta una sola vez por sesión para evitar reintentos o bucles.
     if (!_automaticCatalogCompletionAttempted &&
         _sourcesError == null &&
+        _sources.length >= 99 &&
         _sources.length < maxChannelPlaylistSources) {
       _automaticCatalogCompletionAttempted = true;
       await _fillPlaylistCatalogTo120(automatic: true);
