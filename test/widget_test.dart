@@ -441,7 +441,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el menú privado muestra la sección Proton VPN sin alterar IPTV', (tester) async {
+  testWidgets('el menú privado ya no muestra controles VPN y conserva IPTV', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
@@ -450,17 +450,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsOneWidget);
-    await tester.tap(find.text('PROTON VPN'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('PROTON VPN · CONEXIÓN PROTEGIDA'), findsOneWidget);
-    expect(find.text('ABRIR PROTON VPN'), findsOneWidget);
-    expect(find.textContaining('tres reproductores'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
+    expect(find.text('PROTON VPN'), findsNothing);
     await tester.tap(find.text('IPTV'));
     await tester.pumpAndSettle();
+
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
+    expect(find.text('TODOS LOS CANALES IMPORTADOS'), findsOneWidget);
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -494,7 +490,7 @@ void main() {
 
     expect(find.text('PANEL PRIVADO DE CANALES'), findsOneWidget);
     expect(find.text('ENTRAR CON GOOGLE'), findsOneWidget);
-    expect(find.text('CATÁLOGO DE FUENTES · 100 LISTAS'), findsNothing);
+    expect(find.text('CATÁLOGO DE FUENTES · 120 LISTAS'), findsNothing);
     expect(service.deletedSourceIds, isEmpty);
 
     await tester.pumpWidget(const SizedBox.shrink());
