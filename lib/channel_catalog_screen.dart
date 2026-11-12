@@ -10,6 +10,7 @@ import 'package:video_player/video_player.dart';
 import 'package:volume_controller/volume_controller.dart';
 
 import 'channel_catalog_service.dart';
+import 'channel_proxy_service.dart';
 import 'channel_playlist_presets.dart';
 import 'live_media_format.dart';
 import 'stream_diagnostics.dart';
@@ -918,18 +919,49 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
   void dispose() {
     _controller?.removeListener(_handleVideoChanged);
     _controller?.dispose();
+    unawaited(ChannelProxyPlatform.clear());
     super.dispose();
   }
 
   void _handleVideoChanged() {
+    final controller = _controller;
+    if (controller != null && controller.value.hasError &&
+        _activeProxyIndex >= 0 && !_retryingProxy) {
+      if (_activeProxyIndex + 1 < _proxies.length) {
+        _retryingProxy = true;
+        unawaited(_initialize(startAt: _activeProxyIndex + 1));
+        return;
+      }
+      final error = controller.value.errorDescription;
+      _controller = null;
+      unawaited(controller.dispose());
+      unawaited(ChannelProxyPlatform.clear());
+      _activeProxyIndex = -1;
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'El proxy activo dejó de funcionar y no quedan proxies de reserva. ' +
+              (error ?? '');
+        });
+      }
+      return;
+    }
     if (mounted) setState(() {});
   }
 
-  Future<void> _initialize() async {
+  final ChannelProxyStore _proxyStore = ChannelProxyStore();
+  List<ChannelProxyEndpoint> _proxies = <ChannelProxyEndpoint>[];
+  int _activeProxyIndex = -1;
+  bool _retryingProxy = false;
+
+  Future<void> _initialize({int startAt = 0}) async {
     final previous = _controller;
     _controller = null;
     previous?.removeListener(_handleVideoChanged);
     await previous?.dispose();
+    try {
+      await ChannelProxyPlatform.clear();
+    } catch (_) {}
     if (!mounted) return;
 
     final channel = widget.channel;
@@ -938,6 +970,8 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
         _loading = false;
         _error = null;
         _tracks = <VideoTrack>[];
+        _proxies = <ChannelProxyEndpoint>[];
+        _activeProxyIndex = -1;
       });
       return;
     }
@@ -949,6 +983,10 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
       });
       return;
     }
+    if (startAt == 0) {
+      _proxies = await _proxyStore.loadForChannel(channel.id);
+    }
+    if (!mounted) return;
     final uri = Uri.parse(channel.url.trim());
 
     setState(() {
@@ -957,42 +995,234 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
       _tracks = <VideoTrack>[];
     });
 
-    final controller = VideoPlayerController.networkUrl(
-      uri,
-      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-    );
-    _controller = controller;
-    try {
-      await controller.initialize();
-      await controller.setLooping(false);
-      await controller.setVolume(1);
-      if (controller.isVideoTrackSupportAvailable()) {
-        try {
-          await controller.selectVideoTrack(null);
-          _tracks = (await controller.getVideoTracks()).toList()
-            ..sort((a, b) => (b.height ?? 0).compareTo(a.height ?? 0));
-        } catch (_) {
-          _tracks = <VideoTrack>[];
+    final attempts = _proxies.isEmpty ? 1 : _proxies.length;
+    Object? lastError;
+    for (var index = startAt; index < attempts; index++) {
+      VideoPlayerController? controller;
+      try {
+        if (_proxies.isEmpty) {
+          await ChannelProxyPlatform.clear();
+        } else {
+          await ChannelProxyPlatform.apply(_proxies[index]);
         }
-      }
-      if (!mounted || !identical(_controller, controller)) {
-        await controller.dispose();
-        return;
-      }
-      controller.addListener(_handleVideoChanged);
-      setState(() => _loading = false);
-      await controller.play();
-      if (mounted) setState(() {});
-    } catch (error) {
-      if (mounted) {
+        controller = VideoPlayerController.networkUrl(
+          uri,
+          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+        );
+        _controller = controller;
+        await controller.initialize().timeout(const Duration(seconds: 18));
+        await controller.setLooping(false);
+        await controller.setVolume(1);
+        var tracks = <VideoTrack>[];
+        if (controller.isVideoTrackSupportAvailable()) {
+          try {
+            await controller.selectVideoTrack(null);
+            tracks = (await controller.getVideoTracks()).toList()
+              ..sort((a, b) => (b.height ?? 0).compareTo(a.height ?? 0));
+          } catch (_) {
+            tracks = <VideoTrack>[];
+          }
+        }
+        if (!mounted || !identical(_controller, controller)) {
+          await controller.dispose();
+          return;
+        }
+        _tracks = tracks;
+        _activeProxyIndex = _proxies.isEmpty ? -1 : index;
+        controller.addListener(_handleVideoChanged);
         setState(() {
           _loading = false;
-          _error = explainVideoPlayerError(error);
+          _error = null;
+          _retryingProxy = false;
         });
+        await controller.play();
+        if (mounted) setState(() {});
+        return;
+      } catch (error) {
+        lastError = error;
+        if (controller != null) {
+          controller.removeListener(_handleVideoChanged);
+          try {
+            await controller.dispose();
+          } catch (_) {}
+          if (identical(_controller, controller)) _controller = null;
+        }
+        if (!mounted) return;
+        if (_proxies.isNotEmpty && index + 1 < _proxies.length) {
+          setState(() {
+            _loading = true;
+            _error = 'El proxy ${index + 1} no respondió. Probando automáticamente el siguiente (${index + 2}/${_proxies.length})…';
+          });
+        }
       }
-      await controller.dispose();
-      if (identical(_controller, controller)) _controller = null;
     }
+
+    try {
+      await ChannelProxyPlatform.clear();
+    } catch (_) {}
+    _activeProxyIndex = -1;
+    _retryingProxy = false;
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _error = _proxies.isEmpty
+          ? explainVideoPlayerError(lastError ?? 'No se pudo iniciar el reproductor.')
+          : 'No funcionó ninguno de los ${_proxies.length} proxies de este canal. Revisa las direcciones o prueba otros.';
+    });
+  }
+
+  Future<void> _configureChannelProxies() async {
+    final channel = widget.channel;
+    if (channel == null) return;
+    final proxies = List<ChannelProxyEndpoint>.from(
+      await _proxyStore.loadForChannel(channel.id),
+    );
+    final input = TextEditingController();
+    String? validationError;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: _channelPanel,
+          title: Text(
+            'PROXIES · ${channel.name}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _channelCyan,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const Text(
+                  'Añade hasta 10 proxies. El reproductor los probará en orden y cambiará al siguiente si falla la conexión. Solo se aplican a este canal.',
+                  style: TextStyle(color: _channelMuted, fontSize: 10),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: input,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  keyboardType: TextInputType.url,
+                  style: const TextStyle(color: Colors.white, fontSize: 11),
+                  decoration: const InputDecoration(
+                    labelText: 'Dirección del proxy',
+                    hintText: 'host:puerto o socks5://host:puerto',
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    onPressed: proxies.length >= maxChannelProxiesPerChannel
+                        ? null
+                        : () {
+                            try {
+                              final proxy = ChannelProxyEndpoint.parse(input.text);
+                              if (proxies.any((item) => item.id == proxy.id)) {
+                                throw const FormatException('Ese proxy ya está en la lista.');
+                              }
+                              setDialogState(() {
+                                proxies.add(proxy);
+                                input.clear();
+                                validationError = null;
+                              });
+                            } catch (error) {
+                              setDialogState(() => validationError = error.toString());
+                            }
+                          },
+                    icon: const Icon(Icons.add_rounded, size: 16),
+                    label: Text('AÑADIR ${proxies.length}/10'),
+                  ),
+                ),
+                if (validationError != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      validationError!,
+                      style: const TextStyle(color: _channelPink, fontSize: 9),
+                    ),
+                  ),
+                const Divider(color: _channelLine),
+                SizedBox(
+                  height: 210,
+                  child: proxies.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'Este canal funciona sin proxy.',
+                            style: TextStyle(color: _channelMuted, fontSize: 11),
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: proxies.length,
+                          itemBuilder: (context, index) {
+                            final proxy = proxies[index];
+                            return ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: CircleAvatar(
+                                radius: 12,
+                                backgroundColor: _channelCyan.withAlpha(25),
+                                child: Text(
+                                  '${index + 1}',
+                                  style: const TextStyle(
+                                    color: _channelCyan,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                              title: Text(
+                                proxy.displayAddress,
+                                style: const TextStyle(color: Colors.white, fontSize: 10),
+                              ),
+                              subtitle: Text(
+                                proxy.username.isEmpty ? 'Sin autenticación' : 'Con autenticación',
+                                style: const TextStyle(color: _channelMuted, fontSize: 8),
+                              ),
+                              trailing: IconButton(
+                                tooltip: 'Eliminar proxy',
+                                onPressed: () => setDialogState(
+                                  () => proxies.removeAt(index),
+                                ),
+                                icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  color: _channelPink,
+                                  size: 19,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('CANCELAR'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('GUARDAR'),
+            ),
+          ],
+        ),
+      ),
+    );
+    input.dispose();
+    if (saved != true) return;
+    await _proxyStore.saveForChannel(channel.id, proxies);
+    if (!mounted) return;
+    _proxies = List<ChannelProxyEndpoint>.from(proxies);
+    setState(() {});
+    await _initialize();
   }
 
   Future<void> _openFullscreen() async {
@@ -1029,6 +1259,27 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
       child: Stack(
         fit: StackFit.expand,
         children: <Widget>[
+          Positioned(
+            left: 7,
+            top: 7,
+            child: Material(
+              color: Colors.black.withAlpha(190),
+              borderRadius: BorderRadius.circular(9),
+              child: IconButton(
+                key: ValueKey<String>('channel-proxy-config-${widget.channel?.id ?? 'none'}'),
+                tooltip: 'Configurar hasta 10 proxies para este canal',
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+                padding: EdgeInsets.zero,
+                onPressed: widget.channel == null ? null : _configureChannelProxies,
+                icon: const Icon(
+                  Icons.settings_ethernet_rounded,
+                  color: _channelCyan,
+                  size: 19,
+                ),
+              ),
+            ),
+          ),
           if (controller != null && controller.value.isInitialized)
             AspectRatio(
               aspectRatio: controller.value.aspectRatio > 0
