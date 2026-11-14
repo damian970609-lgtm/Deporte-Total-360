@@ -316,7 +316,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('Canal cacheado 000'), findsOneWidget);
     expect(find.text('120 LISTAS IPTV · TODOS LOS CANALES'), findsOneWidget);
@@ -347,7 +347,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
     );
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
     expect(find.text('120 LISTAS IPTV · TODOS LOS CANALES'), findsOneWidget);
@@ -367,7 +367,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
     );
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
     final list = find.byKey(
       const ValueKey<String>('channel-admin-iptv-list'),
@@ -393,7 +393,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
     );
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(service.bulkPlaylistRequests, hasLength(1));
     expect(service.bulkPlaylistRequests.single, hasLength(120));
@@ -418,7 +418,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
     );
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('AÑADIR LISTA GENERAL'), findsNothing);
     expect(find.text('AGREGAR CANALES DESDE ESTA LISTA'), findsNothing);
@@ -438,7 +438,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
     );
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('120 LISTAS IPTV'), findsOneWidget);
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
@@ -470,7 +470,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
     );
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.textContaining('Descarga completa y guardada'), findsOneWidget);
     expect(find.byIcon(Icons.sync_rounded), findsNothing);
