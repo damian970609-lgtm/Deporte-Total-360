@@ -10,8 +10,9 @@ import 'package:video_player/video_player.dart';
 import 'package:volume_controller/volume_controller.dart';
 
 import 'channel_catalog_service.dart';
+import 'channel_local_iptv_store.dart';
+import 'channel_proxy_service.dart';
 import 'channel_playlist_presets.dart';
-import 'proton_vpn_screen.dart';
 import 'live_media_format.dart';
 import 'stream_diagnostics.dart';
 
@@ -887,9 +888,11 @@ class ChannelInlinePlayer extends StatefulWidget {
   const ChannelInlinePlayer({
     super.key,
     required this.channel,
+    this.showProxyControls = true,
   });
 
   final SportsChannel? channel;
+  final bool showProxyControls;
 
   @override
   State<ChannelInlinePlayer> createState() => _ChannelInlinePlayerState();
@@ -919,18 +922,55 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
   void dispose() {
     _controller?.removeListener(_handleVideoChanged);
     _controller?.dispose();
+    unawaited(_clearNativeProxySafely());
     super.dispose();
   }
 
+  Future<void> _clearNativeProxySafely() async {
+    try {
+      await ChannelProxyPlatform.clear();
+    } catch (_) {}
+  }
+
   void _handleVideoChanged() {
+    final controller = _controller;
+    if (controller != null && controller.value.hasError &&
+        _activeProxyIndex >= 0 && !_retryingProxy) {
+      if (_activeProxyIndex + 1 < _proxies.length) {
+        _retryingProxy = true;
+        unawaited(_initialize(startAt: _activeProxyIndex + 1));
+        return;
+      }
+      final error = controller.value.errorDescription;
+      _controller = null;
+      unawaited(controller.dispose());
+      unawaited(_clearNativeProxySafely());
+      _activeProxyIndex = -1;
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'El proxy activo dejó de funcionar y no quedan proxies de reserva. ' +
+              (error ?? '');
+        });
+      }
+      return;
+    }
     if (mounted) setState(() {});
   }
 
-  Future<void> _initialize() async {
+  final ChannelProxyStore _proxyStore = ChannelProxyStore();
+  List<ChannelProxyEndpoint> _proxies = <ChannelProxyEndpoint>[];
+  int _activeProxyIndex = -1;
+  bool _retryingProxy = false;
+
+  Future<void> _initialize({int startAt = 0}) async {
     final previous = _controller;
     _controller = null;
     previous?.removeListener(_handleVideoChanged);
     await previous?.dispose();
+    try {
+      await ChannelProxyPlatform.clear();
+    } catch (_) {}
     if (!mounted) return;
 
     final channel = widget.channel;
@@ -939,6 +979,8 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
         _loading = false;
         _error = null;
         _tracks = <VideoTrack>[];
+        _proxies = <ChannelProxyEndpoint>[];
+        _activeProxyIndex = -1;
       });
       return;
     }
@@ -950,6 +992,10 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
       });
       return;
     }
+    if (startAt == 0) {
+      _proxies = await _proxyStore.loadForChannel(channel.id);
+    }
+    if (!mounted) return;
     final uri = Uri.parse(channel.url.trim());
 
     setState(() {
@@ -958,42 +1004,250 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
       _tracks = <VideoTrack>[];
     });
 
-    final controller = VideoPlayerController.networkUrl(
-      uri,
-      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-    );
-    _controller = controller;
-    try {
-      await controller.initialize();
-      await controller.setLooping(false);
-      await controller.setVolume(1);
-      if (controller.isVideoTrackSupportAvailable()) {
-        try {
-          await controller.selectVideoTrack(null);
-          _tracks = (await controller.getVideoTracks()).toList()
-            ..sort((a, b) => (b.height ?? 0).compareTo(a.height ?? 0));
-        } catch (_) {
-          _tracks = <VideoTrack>[];
+    final attempts = _proxies.isEmpty ? 1 : _proxies.length;
+    Object? lastError;
+    for (var index = startAt; index < attempts; index++) {
+      VideoPlayerController? controller;
+      try {
+        if (_proxies.isEmpty) {
+          await ChannelProxyPlatform.clear();
+        } else {
+          await ChannelProxyPlatform.apply(_proxies[index], channel.url);
         }
-      }
-      if (!mounted || !identical(_controller, controller)) {
-        await controller.dispose();
-        return;
-      }
-      controller.addListener(_handleVideoChanged);
-      setState(() => _loading = false);
-      await controller.play();
-      if (mounted) setState(() {});
-    } catch (error) {
-      if (mounted) {
+        controller = VideoPlayerController.networkUrl(
+          uri,
+          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+        );
+        _controller = controller;
+        await controller.initialize().timeout(const Duration(seconds: 18));
+        await controller.setLooping(false);
+        await controller.setVolume(1);
+        var tracks = <VideoTrack>[];
+        if (controller.isVideoTrackSupportAvailable()) {
+          try {
+            await controller.selectVideoTrack(null);
+            tracks = (await controller.getVideoTracks()).toList()
+              ..sort((a, b) => (b.height ?? 0).compareTo(a.height ?? 0));
+          } catch (_) {
+            tracks = <VideoTrack>[];
+          }
+        }
+        if (!mounted || !identical(_controller, controller)) {
+          await controller.dispose();
+          return;
+        }
+        _tracks = tracks;
+        _activeProxyIndex = _proxies.isEmpty ? -1 : index;
+        if (index > 0 && index < _proxies.length) {
+          // Recuerda el último proxy que logró iniciar este canal para que
+          // sea la primera opción en la siguiente reproducción.
+          unawaited(_rememberWorkingProxy(channel.id, _proxies[index].id));
+        }
+        controller.addListener(_handleVideoChanged);
         setState(() {
           _loading = false;
-          _error = explainVideoPlayerError(error);
+          _error = null;
+          _retryingProxy = false;
         });
+        await controller.play();
+        if (mounted) setState(() {});
+        return;
+      } catch (error) {
+        lastError = error;
+        if (controller != null) {
+          controller.removeListener(_handleVideoChanged);
+          try {
+            await controller.dispose();
+          } catch (_) {}
+          if (identical(_controller, controller)) _controller = null;
+        }
+        if (!mounted) return;
+        if (_proxies.isNotEmpty && index + 1 < _proxies.length) {
+          setState(() {
+            _loading = true;
+            _error = 'El proxy ${index + 1} no respondió. Probando automáticamente el siguiente (${index + 2}/${_proxies.length})…';
+          });
+        }
       }
-      await controller.dispose();
-      if (identical(_controller, controller)) _controller = null;
     }
+
+    try {
+      await ChannelProxyPlatform.clear();
+    } catch (_) {}
+    _activeProxyIndex = -1;
+    _retryingProxy = false;
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _error = _proxies.isEmpty
+          ? explainVideoPlayerError(lastError ?? 'No se pudo iniciar el reproductor.')
+          : 'No funcionó ninguno de los ${_proxies.length} proxies de este canal. Revisa las direcciones o prueba otros.';
+    });
+  }
+
+  Future<void> _rememberWorkingProxy(
+    String channelId,
+    String proxyId,
+  ) async {
+    try {
+      await _proxyStore.moveToFront(channelId, proxyId);
+    } catch (_) {
+      // Un fallo al guardar la preferencia no debe interrumpir el vídeo.
+    }
+  }
+
+  Future<void> _configureChannelProxies() async {
+    final channel = widget.channel;
+    if (channel == null) return;
+    final proxies = List<ChannelProxyEndpoint>.from(
+      await _proxyStore.loadForChannel(channel.id),
+    );
+    final input = TextEditingController();
+    String? validationError;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: _channelPanel,
+          title: Text(
+            'PROXIES · ${channel.name}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _channelCyan,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const Text(
+                  'Añade hasta 10 proxies. El reproductor los probará en orden y cambiará al siguiente si falla la conexión. Solo se aplican a este canal.',
+                  style: TextStyle(color: _channelMuted, fontSize: 10),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: input,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  keyboardType: TextInputType.url,
+                  style: const TextStyle(color: Colors.white, fontSize: 11),
+                  decoration: const InputDecoration(
+                    labelText: 'Dirección del proxy',
+                    hintText: 'host:puerto, http://usuario:clave@host:puerto o socks5://host:puerto',
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    onPressed: proxies.length >= maxChannelProxiesPerChannel
+                        ? null
+                        : () {
+                            try {
+                              final proxy = ChannelProxyEndpoint.parse(input.text);
+                              if (proxies.any((item) => item.id == proxy.id)) {
+                                throw const FormatException('Ese proxy ya está en la lista.');
+                              }
+                              setDialogState(() {
+                                proxies.add(proxy);
+                                input.clear();
+                                validationError = null;
+                              });
+                            } catch (error) {
+                              setDialogState(() => validationError = error.toString());
+                            }
+                          },
+                    icon: const Icon(Icons.add_rounded, size: 16),
+                    label: Text('AÑADIR ${proxies.length}/10'),
+                  ),
+                ),
+                if (validationError != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      validationError!,
+                      style: const TextStyle(color: _channelPink, fontSize: 9),
+                    ),
+                  ),
+                const Divider(color: _channelLine),
+                SizedBox(
+                  height: 210,
+                  child: proxies.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'Este canal funciona sin proxy.',
+                            style: TextStyle(color: _channelMuted, fontSize: 11),
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: proxies.length,
+                          itemBuilder: (context, index) {
+                            final proxy = proxies[index];
+                            return ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: CircleAvatar(
+                                radius: 12,
+                                backgroundColor: _channelCyan.withAlpha(25),
+                                child: Text(
+                                  '${index + 1}',
+                                  style: const TextStyle(
+                                    color: _channelCyan,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                              title: Text(
+                                proxy.displayAddress,
+                                style: const TextStyle(color: Colors.white, fontSize: 10),
+                              ),
+                              subtitle: Text(
+                                proxy.username.isEmpty ? 'Sin autenticación' : 'Con autenticación',
+                                style: const TextStyle(color: _channelMuted, fontSize: 8),
+                              ),
+                              trailing: IconButton(
+                                tooltip: 'Eliminar proxy',
+                                onPressed: () => setDialogState(
+                                  () => proxies.removeAt(index),
+                                ),
+                                icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  color: _channelPink,
+                                  size: 19,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('CANCELAR'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('GUARDAR'),
+            ),
+          ],
+        ),
+      ),
+    );
+    input.dispose();
+    if (saved != true) return;
+    await _proxyStore.saveForChannel(channel.id, proxies);
+    if (!mounted) return;
+    _proxies = List<ChannelProxyEndpoint>.from(proxies);
+    setState(() {});
+    await _initialize();
   }
 
   Future<void> _openFullscreen() async {
@@ -1030,6 +1284,7 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
       child: Stack(
         fit: StackFit.expand,
         children: <Widget>[
+
           if (controller != null && controller.value.isInitialized)
             AspectRatio(
               aspectRatio: controller.value.aspectRatio > 0
@@ -1105,6 +1360,27 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
                 ),
               ),
             ),
+          if (widget.showProxyControls)
+            Positioned(
+            left: 7,
+            top: 7,
+            child: Material(
+              color: Colors.black.withAlpha(205),
+              borderRadius: BorderRadius.circular(9),
+              child: TextButton.icon(
+                key: ValueKey<String>('channel-proxy-config-${widget.channel?.id ?? 'none'}'),
+                onPressed: widget.channel == null ? null : _configureChannelProxies,
+                icon: const Icon(Icons.settings_ethernet_rounded, size: 16),
+                label: Text('PROXY ${_proxies.length}/10'),
+                style: TextButton.styleFrom(
+                  foregroundColor: _channelCyan,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: const Size(0, 32),
+                  textStyle: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1598,11 +1874,11 @@ class ChannelAdminScreen extends StatefulWidget {
   const ChannelAdminScreen({
     super.key,
     this.service,
-    this.snapshotLoader,
+    this.localStore,
   });
 
   final ChannelCatalogService? service;
-  final Future<ChannelAdminSnapshot?> Function(String email)? snapshotLoader;
+  final ChannelLocalIptvStore? localStore;
 
   @override
   State<ChannelAdminScreen> createState() => _ChannelAdminScreenState();
@@ -1610,73 +1886,57 @@ class ChannelAdminScreen extends StatefulWidget {
 
 class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   late final ChannelCatalogService _service;
-  final TextEditingController _urlController = TextEditingController();
-  final TextEditingController _labelController = TextEditingController();
+  late final ChannelLocalIptvStore _iptvStore;
+
   final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _licenseEmailController = TextEditingController();
-  final TextEditingController _licenseNoteController = TextEditingController();
-  final ScrollController _adminScrollController = ScrollController();
-  String _licenseType = 'free';
-  String _selectedSportsPresetUrl = channelSportsPlaylistPresets.first.url;
-  String _selectedGeneralPresetUrl = channelPlaylistPresets.first.url;
-  List<AppLicenseRecord> _licenseRecords = <AppLicenseRecord>[];
-  String? _licensesError;
-  Map<String, dynamic> _trialSummary = <String, dynamic>{};
-  List<String> _newTrialCodes = <String>[];
-  String? _trialError;
-  // El panel nunca debe construir miles de tarjetas a partir de la copia local.
-  // Se muestra un bloque y el resto del snapshot se pagina bajo demanda.
-  static const int _adminPageSize = 40;
-  List<SportsChannel> _channels = <SportsChannel>[];
-  List<SportsChannel> _cachedAdminChannels = <SportsChannel>[];
-  SportsChannel? _previewChannel;
-  List<ChannelPlaylistSource> _sources = <ChannelPlaylistSource>[];
-  static const int _sourcePageSize = 15;
-  int _visibleSourceCount = _sourcePageSize;
-  bool _loading = false;
-  bool _working = false;
-  bool _rightsConfirmed = false;
-  bool _hasMore = true;
-  int _catalogTotal = 0;
-  bool _catalogTotalIsEstimate = false;
-  int _nextAdminOffset = 0;
-  bool _diagnosingPreview = false;
-  String? _diagnosticResult;
+  final GlobalKey<_ChannelInlinePlayerState> _playerKey =
+      GlobalKey<_ChannelInlinePlayerState>();
+
   String? _email;
   String? _error;
   String? _sourcesError;
-  bool _showIptvSection = false;
-  bool _showVpnSection = false;
+  String? _iptvError;
+
+  bool _working = false;
+  bool _loading = false;
   bool _iptvLoading = false;
   bool _iptvLoaded = false;
+  bool _automaticCatalogCompletionAttempted = false;
+
   int _iptvRequestId = 0;
-  List<SportsChannel> _iptvChannels = <SportsChannel>[];
-  SportsChannel? _iptvSelectedChannel;
-  String? _iptvError;
-  final TextEditingController _iptvSearchController = TextEditingController();
+  int _nextOffset = 0;
+
+  List<SportsChannel> _channels = <SportsChannel>[];
+  List<ChannelPlaylistSource> _sources = <ChannelPlaylistSource>[];
+  SportsChannel? _selectedChannel;
 
   @override
   void initState() {
     super.initState();
     _service = widget.service ?? channelCatalogService;
-    _adminScrollController.addListener(_handleAdminScroll);
+    _iptvStore = widget.localStore ?? ChannelLocalIptvStore();
     _working = true;
     unawaited(_restoreAdminSession());
   }
 
-  /// Al abrir el menú intenta recuperar la cuenta previa de Google.
-  /// Si el SDK no puede hacerlo sin interacción, deja disponible el botón
-  /// de acceso manual y conserva intactas las listas del servidor.
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _message(String value) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(value)),
+    );
+  }
+
   Future<void> _restoreAdminSession() async {
     try {
       final email = await _service.restoreSession();
       if (!mounted || email == null) return;
       setState(() => _email = email);
-
-      // La copia local se muestra primero. El panel deja de bloquear sus
-      // controles mientras las consultas remotas se ejecutan en paralelo.
-      await _loadCachedAdminSnapshot(email);
-      if (!mounted) return;
       setState(() => _working = false);
       unawaited(_loadAdmin());
     } on TimeoutException {
@@ -1692,90 +1952,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     }
   }
 
-  void _handleAdminScroll() {
-    if (_showIptvSection || _showVpnSection || !_adminScrollController.hasClients ||
-        _loading || _working || !_hasMore || _error != null) {
-      return;
-    }
-    if (_adminScrollController.position.extentAfter < 650) {
-      unawaited(_loadMore());
-    }
-  }
-
-  @override
-  void dispose() {
-    _adminScrollController.removeListener(_handleAdminScroll);
-    _urlController.dispose();
-    _labelController.dispose();
-    _searchController.dispose();
-    _licenseEmailController.dispose();
-    _licenseNoteController.dispose();
-    _iptvSearchController.dispose();
-    _adminScrollController.dispose();
-    super.dispose();
-  }
-
-  void _message(String value) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(value)),
-    );
-  }
-
-  Future<void> _loadCachedAdminSnapshot(String email) async {
-    try {
-      final snapshot = widget.snapshotLoader == null
-          ? await ChannelAdminSnapshotStore.load(email: email)
-          : await widget.snapshotLoader!(email);
-      if (!mounted || snapshot == null) return;
-
-      setState(() {
-        if (snapshot.hasChannels) {
-          _cachedAdminChannels = List<SportsChannel>.unmodifiable(
-            snapshot.channels.take(maxCachedChannelCatalogEntries),
-          );
-          _channels = _cachedAdminChannels
-              .take(_adminPageSize)
-              .toList(growable: true);
-          _catalogTotal = _cachedAdminChannels.length;
-          // Un snapshot puede contener solo los bloques ya descargados, o
-          // estar limitado a 2.000 filas; nunca se presenta como total final.
-          _catalogTotalIsEstimate =
-              _cachedAdminChannels.length >= _adminPageSize;
-          _nextAdminOffset = _channels.length;
-          _hasMore = _catalogTotalIsEstimate;
-        }
-        if (snapshot.hasSources) _sources = snapshot.sources;
-        if (snapshot.hasChannels && snapshot.channels.isNotEmpty) {
-          _error =
-              'Copia local del catálogo. Se actualizará cuando Cloudflare responda.';
-        }
-        if (snapshot.hasSources) {
-          _sourcesError =
-              'Listas conservadas en este teléfono. El modo sin conexión es de solo lectura.';
-        }
-      });
-    } catch (_) {
-      // Una copia local dañada nunca debe impedir abrir el panel.
-    }
-  }
-
-  Future<void> _saveLocalAdminSnapshot({
-    bool saveChannels = true,
-    bool saveSources = true,
-  }) async {
-    final email = (_email ?? _service.signedInEmail ?? '').trim();
-    if (email.isEmpty || (!saveChannels && !saveSources)) return;
-
-    await ChannelAdminSnapshotStore.save(
-      email: email,
-      channels: saveChannels ? List<SportsChannel>.from(_channels) : null,
-      sources: saveSources
-          ? List<ChannelPlaylistSource>.from(_sources)
-          : null,
-    );
-  }
-
   Future<void> _signIn() async {
     setState(() {
       _working = true;
@@ -1785,7 +1961,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       final email = await _service.signIn();
       if (!mounted) return;
       setState(() => _email = email);
-      await _loadCachedAdminSnapshot(email);
       await _loadAdmin();
     } catch (error) {
       if (!mounted) return;
@@ -1801,99 +1976,87 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     try {
       await _service.signOut();
     } catch (_) {}
-    if (mounted) {
-      setState(() {
-        _email = null;
-        _channels = <SportsChannel>[];
-        _sources = <ChannelPlaylistSource>[];
-        _licenseRecords = <AppLicenseRecord>[];
-        _previewChannel = null;
-        _showIptvSection = false;
-        _showVpnSection = false;
-        _iptvChannels = <SportsChannel>[];
-        _iptvSelectedChannel = null;
-        _iptvLoaded = false;
-        _iptvError = null;
-          _catalogTotal = 0;
-          _catalogTotalIsEstimate = false;
-          _nextAdminOffset = 0;
-        _hasMore = false;
-      });
-    }
-  }
-
-  Future<void> _loadAdmin({bool showLoading = true}) async {
-    if (_email == null && _service.signedInEmail == null) return;
-    _iptvLoaded = false;
-    _iptvError = null;
-    if (showLoading && mounted) {
-      setState(() {
-        _loading = true;
-        _error = null;
-        _sourcesError = null;
-      });
-    }
-
-    // Todas las consultas independientes comienzan juntas. Un servidor lento
-    // no obliga a esperar en cadena el catálogo, las listas y las licencias.
-    await Future.wait<void>(<Future<void>>[
-      _loadAdminChannels(),
-      _loadAdminSources(),
-      _loadLicenses(),
-      _loadTrialSummary(),
-    ]);
-
     if (!mounted) return;
-
-    // Completa la plaza 100 con el índice público de GitHub únicamente cuando
-    // hay 99 fuentes y todavía no existe esa URL. No se reimportan las otras.
-    if (_sources.length == maxChannelPlaylistSources - 1 &&
-        !_hasIptvOrgGlobalIndex) {
-      await _addIptvOrgGlobalIndex(automatic: true);
-    }
+    setState(() {
+      _email = null;
+      _channels = <SportsChannel>[];
+      _sources = <ChannelPlaylistSource>[];
+      _selectedChannel = null;
+      _iptvLoaded = false;
+      _iptvLoading = false;
+      _iptvError = null;
+      _sourcesError = null;
+      _nextOffset = 0;
+      _automaticCatalogCompletionAttempted = false;
+    });
   }
 
-  Future<void> _loadAdminChannels() async {
+  Future<void> _loadAdmin() async {
+    if (_email == null && _service.signedInEmail == null) return;
+    final email = (_email ?? _service.signedInEmail ?? '').trim();
+    if (email.isEmpty) return;
+
+    setState(() {
+      _loading = true;
+      _iptvError = null;
+      _sourcesError = null;
+    });
+
     try {
-      final page = await _service.fetchAdminChannelPage(
-        search: _searchController.text,
-        offset: 0,
-        // El inventario se pagina; no materializar miles de tarjetas al abrir.
-        limit: _adminPageSize,
-      );
+      final cached = await _iptvStore.load(email: email);
       if (!mounted) return;
-      setState(() {
-        _cachedAdminChannels = <SportsChannel>[];
-        _channels = page.channels;
-        _catalogTotal = page.total;
-        _catalogTotalIsEstimate = page.totalIsEstimate;
-        _nextAdminOffset = page.offset + page.channels.length;
-        final previewId = _previewChannel?.id;
-        if (previewId != null) {
-          for (final channel in page.channels) {
-            if (channel.id == previewId) {
-              _previewChannel = channel;
-              break;
-            }
-          }
-        }
-        _hasMore = page.hasMore;
-        _loading = false;
-        _error = null;
-      });
-      await _saveLocalAdminSnapshot(saveChannels: true, saveSources: false);
+
+      if (cached != null) {
+        setState(() {
+          _channels = List<SportsChannel>.from(cached.channels);
+          _sources = List<ChannelPlaylistSource>.from(cached.sources);
+          _iptvLoaded = cached.complete;
+          _nextOffset = cached.nextOffset;
+        });
+
+        // La copia completa ya contiene las 120 fuentes y todos sus canales.
+        // Abrir el menú de nuevo no solicita una segunda descarga.
+        if (cached.complete) return;
+      }
+
+      await _loadSources();
+      if (!mounted) return;
+
+      // Completa automáticamente el conjunto que ya está cerca de las 120
+      // fuentes; conserva las fuentes existentes en el servidor.
+      if (!_automaticCatalogCompletionAttempted &&
+          _sourcesError == null &&
+          _sources.length >= 99 &&
+          _sources.length < maxChannelPlaylistSources) {
+        _automaticCatalogCompletionAttempted = true;
+        await _completeCatalogTo120();
+      }
+
+      if (!mounted) return;
+      final importsReady = await _waitForPlaylistImports();
+      if (!mounted) return;
+      if (!importsReady) {
+        final failed = _sources.where((source) => source.status == 'error').length;
+        final pending = _sources.where(
+          (source) => source.status == 'queued' || source.status == 'importing',
+        ).length;
+        setState(() {
+          _iptvError = failed > 0
+              ? '$failed listas no pudieron importarse. No se marcará el catálogo como completo.'
+              : '$pending listas siguen importándose. La descarga continuará al volver a abrir este menú.';
+        });
+        return;
+      }
+
+      await _loadAllIptvChannels();
     } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = _channels.isNotEmpty
-            ? 'Cloudflare no está disponible o alcanzó su cuota. Se conserva el catálogo guardado en este teléfono.'
-            : error.toString();
-      });
+      if (mounted) setState(() => _iptvError = error.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _loadAdminSources() async {
+  Future<void> _loadSources() async {
     try {
       final sources = await _service.fetchSources();
       if (!mounted) return;
@@ -1904,314 +2067,36 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       });
       setState(() {
         _sources = sources;
-        _visibleSourceCount = _visibleSourceCount.clamp(0, sources.length).toInt();
         _sourcesError = null;
       });
-      await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
+      await _persistLocal();
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _sourcesError = _sources.isNotEmpty
-            ? 'Cloudflare no está disponible o alcanzó su cuota. Tus listas guardadas siguen disponibles en modo de solo lectura.'
-            : error.toString();
-      });
-    }
-  }
-
-  void _showMoreSources() {
-    if (!mounted || _visibleSourceCount >= _sources.length) return;
-    setState(() {
-      _visibleSourceCount = (_visibleSourceCount + _sourcePageSize)
-          .clamp(0, _sources.length)
-          .toInt();
-    });
-  }
-
-  Future<void> _loadLicenses() async {
-    try {
-      final licenses = await _service.fetchAdminLicenses();
-      if (!mounted) return;
-      setState(() {
-        _licenseRecords = licenses;
-        _licensesError = null;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _licensesError = error.toString());
-    }
-  }
-
-  Future<void> _loadTrialSummary() async {
-    try {
-      final summary = await _service.fetchTrialPassSummary();
-      if (!mounted) return;
-      setState(() {
-        _trialSummary = summary;
-        _trialError = null;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _trialError = error.toString());
-    }
-  }
-
-  Future<void> _generateTrialCodes() async {
-    if (_working) return;
-    setState(() {
-      _working = true;
-      _trialError = null;
-      _newTrialCodes = <String>[];
-    });
-    try {
-      final codes = await _service.generateTrialPassCodes(count: 10);
-      await _loadTrialSummary();
-      if (!mounted) return;
-      setState(() => _newTrialCodes = codes);
-      _message(codes.isEmpty
-          ? 'Ya están ocupadas las diez plazas VIP. Libera una plaza antes de generar más.'
-          : 'Se generaron ${codes.length} códigos VIP de un solo uso.');
-    } catch (error) {
-      if (mounted) setState(() => _trialError = error.toString());
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
-  }
-
-  Future<void> _copyTrialCodes() async {
-    if (_newTrialCodes.isEmpty) return;
-    await Clipboard.setData(
-      ClipboardData(text: _newTrialCodes.join('\n')),
-    );
-    _message('Códigos VIP copiados. Guárdalos ahora: no se volverán a mostrar.');
-  }
-
-  Future<void> _grantLicense() async {
-    final email = _licenseEmailController.text.trim().toLowerCase();
-    if (!email.contains('@') || !email.contains('.')) {
-      _message('Introduce el correo Google de la persona.');
-      return;
-    }
-    setState(() => _working = true);
-    try {
-      await _service.grantAppLicense(
-        email: email,
-        licenseType: _licenseType,
-        note: _licenseNoteController.text,
-      );
-      _licenseEmailController.clear();
-      _licenseNoteController.clear();
-      await _loadLicenses();
-      _message(_licenseType == 'free'
-          ? 'Pase gratuito concedido a $email.'
-          : 'Licencia de pago activada para $email.');
-    } catch (error) {
-      _message('No se pudo guardar la licencia: $error');
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
-  }
-
-  Future<void> _revokeLicense(AppLicenseRecord license) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: _channelPanel,
-        title: const Text('Revocar acceso', style: TextStyle(color: _channelPink)),
-        content: Text(
-          '¿Quieres retirar la licencia de ${license.email}?',
-          style: const TextStyle(color: _channelMuted),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('CANCELAR'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: _channelPink),
-            child: const Text('REVOCAR'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    setState(() => _working = true);
-    try {
-      await _service.revokeAppLicense(email: license.email);
-      await _loadLicenses();
-      _message('Acceso revocado para ${license.email}.');
-    } catch (error) {
-      _message('No se pudo revocar la licencia: $error');
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
-  }
-
-  Future<void> _searchChannels() async {
-    if (_loading) return;
-    await _loadAdmin();
-    if (!mounted) return;
-    if (_error == null) {
-      _message(_channels.isEmpty
-          ? 'No se encontraron canales con ese nombre.'
-          : 'Canales encontrados: ' + _channels.length.toString());
-    }
-  }
-
-  Future<void> _clearChannelSearch() async {
-    _searchController.clear();
-    await _loadAdmin();
-  }
-
-  Future<void> _loadMore() async {
-    if (_loading || !_hasMore) return;
-
-    // Primero permite recorrer el snapshot local en bloques de 40. Así una
-    // cuenta con 2.000 canales guardados no crea 2.000 widgets al abrir.
-    if (_channels.length < _cachedAdminChannels.length) {
-      final next = _cachedAdminChannels
-          .skip(_channels.length)
-          .take(_adminPageSize)
-          .toList(growable: false);
-      setState(() {
-        _channels = <SportsChannel>[..._channels, ...next];
-        _nextAdminOffset = _channels.length;
-        _catalogTotal = _cachedAdminChannels.length;
-        _catalogTotalIsEstimate = true;
-        // Puede haber más registros en el servidor que los guardados en caché.
-        _hasMore = true;
-      });
-      return;
-    }
-
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final page = await _service.fetchAdminChannelPage(
-        search: _searchController.text,
-        offset: _nextAdminOffset,
-        limit: 40,
-      );
-      if (page.channels.isEmpty && page.hasMore) {
-        throw const ChannelCatalogException(
-          'El servidor no entregó la siguiente página del catálogo. Vuelve a intentarlo.',
-        );
+      final email = (_email ?? _service.signedInEmail ?? '').trim();
+      if (email.isNotEmpty) {
+        final cached = await _iptvStore.load(email: email);
+        if (!mounted) return;
+        if (cached != null) {
+          setState(() {
+            _channels = List<SportsChannel>.from(cached.channels);
+            _sources = List<ChannelPlaylistSource>.from(cached.sources);
+            _iptvLoaded = cached.complete;
+            _nextOffset = cached.nextOffset;
+          });
+        }
       }
       if (!mounted) return;
       setState(() {
-        final knownIds = _channels.map((channel) => channel.id).toSet();
-        _channels.addAll(
-          page.channels.where((channel) => knownIds.add(channel.id)),
-        );
-        _cachedAdminChannels = <SportsChannel>[];
-        _catalogTotal = page.total;
-        _catalogTotalIsEstimate = page.totalIsEstimate;
-        _nextAdminOffset = page.offset + page.channels.length;
-        _hasMore = page.hasMore;
-        _loading = false;
-        _error = null;
-      });
-      await _saveLocalAdminSnapshot(saveChannels: true, saveSources: false);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = _channels.isNotEmpty
-            ? 'Cloudflare no está disponible. Se mantiene la última copia del catálogo.'
+        _sourcesError = _sources.isNotEmpty
+            ? 'Sin conexión. Se muestran las listas guardadas en este teléfono.'
             : error.toString();
       });
     }
   }
 
-  Future<void> _addPlaylist() async {
-    if (_sources.length >= maxChannelPlaylistSources) {
-      _message('Ya tienes ' + maxChannelPlaylistSources.toString() + ' listas registradas. No se pueden agregar más.');
-      return;
-    }
-    final uri = Uri.tryParse(_urlController.text.trim());
-    if (uri == null ||
-        uri.scheme != 'https' ||
-        uri.host.isEmpty ||
-        uri.userInfo.isNotEmpty) {
-      _message('Introduce una URL HTTPS pública de una lista IPTV compatible.');
-      return;
-    }
-    final normalizedUrl = uri.toString();
-    if (containsChannelPlaylistUrl(
-      _sources.map((source) => source.url),
-      normalizedUrl,
-    )) {
-      _message('Esta lista ya está guardada en tu catálogo.');
-      return;
-    }
-    if (!_rightsConfirmed) {
-      _message('Confirma que tienes derecho a distribuir esas señales.');
-      return;
-    }
-    setState(() => _working = true);
+  Future<void> _completeCatalogTo120() async {
     try {
-      await _service.addPlaylist(
-        url: normalizedUrl,
-        label: _labelController.text.trim(),
-      );
-      if (!mounted) return;
-      _urlController.clear();
-      _labelController.clear();
-      setState(() => _rightsConfirmed = false);
-      _message('Lista guardada en Cloudflare. La importación continuará en segundo plano aunque cierres la APK.');
-      await _loadAdmin(showLoading: false);
-    } catch (error) {
-      _message(error.toString());
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
-  }
-
-  Future<void> _addSportsPreset() async {
-    if (_sources.length >= maxChannelPlaylistSources) {
-      _message('Has alcanzado el límite de $maxChannelPlaylistSources listas.');
-      return;
-    }
-    final preset = channelSportsPlaylistPresets.firstWhere(
-      (item) => item.url == _selectedSportsPresetUrl,
-      orElse: () => channelSportsPlaylistPresets.first,
-    );
-    if (containsChannelPlaylistUrl(
-      _sources.map((source) => source.url),
-      preset.url,
-    )) {
-      _message('Esta fuente deportiva ya está registrada.');
-      return;
-    }
-    setState(() => _working = true);
-    try {
-      await _service.addPlaylist(url: preset.url, label: preset.label);
-      final sources = await _service.fetchSources();
-      if (!mounted) return;
-      setState(() {
-        _sources = sources;
-        _sourcesError = null;
-      });
-      await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
-      _message('Fuente añadida: ' + preset.label + '. Se está importando.');
-    } catch (error) {
-      _message('No se pudo añadir la fuente deportiva: ' + error.toString());
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
-  }
-
-  Future<void> _fillPlaylistCatalogTo100() async {
-    if (_working) return;
-    if (_sources.length >= maxChannelPlaylistSources) {
-      _message('El catálogo ya tiene 100 listas registradas.');
-      return;
-    }
-    setState(() => _working = true);
-    try {
-      final result = await _service.addPlaylistSourcesToCatalog(
+      await _service.addPlaylistSourcesToCatalog(
         sources: channelPlaylistPresets
             .map((preset) => <String, String>{
                   'label': preset.label,
@@ -2219,304 +2104,181 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                 })
             .toList(growable: false),
       );
-      await _loadAdmin(showLoading: false);
-      if (!mounted) return;
-      final total = result['total'] ?? _sources.length;
-      final added = result['added'] ?? 0;
-      _message(
-        'Catálogo actualizado: $total / 100 listas. '
-        'Se añadieron $added fuentes nuevas. '
-        'Todas las importaciones se procesan en segundo plano.',
-      );
-    } catch (error) {
-      _message('No se pudo completar el catálogo de 100 listas: ' + error.toString());
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
-  }
-
-  Future<void> _addGeneralPreset() async {
-    if (_sources.length >= maxChannelPlaylistSources) {
-      _message('Has alcanzado el límite de $maxChannelPlaylistSources listas.');
-      return;
-    }
-    final preset = channelPlaylistPresets.firstWhere(
-      (item) => item.url == _selectedGeneralPresetUrl,
-      orElse: () => channelPlaylistPresets.first,
-    );
-    if (containsChannelPlaylistUrl(
-      _sources.map((source) => source.url),
-      preset.url,
-    )) {
-      _message('Esta lista ya está registrada en tu catálogo.');
-      return;
-    }
-    setState(() => _working = true);
-    try {
-      // addPlaylist ya pone esta fuente en cola en Cloudflare; no volver a
-      // procesar las otras 99 listas por añadir una sola.
-      await _service.addPlaylist(url: preset.url, label: preset.label);
-      final sources = await _service.fetchSources();
-      if (!mounted) return;
-      setState(() {
-        _sources = sources;
-        _sourcesError = null;
-      });
-      await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
-      _message('Lista añadida: ' + preset.label + '. Se importará en segundo plano y se publicarán solo canales deportivos compatibles.');
-    } catch (error) {
-      _message('No se pudo añadir la lista: ' + error.toString());
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
-  }
-
-  bool get _hasIptvOrgGlobalIndex => containsChannelPlaylistUrl(
-        _sources.map((source) => source.url),
-        iptvOrgGlobalIndexPlaylistUrl,
-      );
-
-  Future<void> _addIptvOrgGlobalIndex({bool automatic = false}) async {
-    if (_working && !automatic) return;
-    if (_sources.length >= maxChannelPlaylistSources) {
-      if (!automatic) _message('Ya están registradas las 100 listas.');
-      return;
-    }
-    if (_hasIptvOrgGlobalIndex) {
-      if (!automatic) _message('El índice global de IPTV-org ya está registrado.');
-      return;
-    }
-
-    if (!automatic && mounted) setState(() => _working = true);
-    try {
-      await _service.addPlaylist(
-        url: iptvOrgGlobalIndexPlaylistUrl,
-        label: iptvOrgGlobalIndexPlaylistLabel,
-      );
-      // addPlaylist pone esta fuente individual en cola en el Worker.
-      // No ejecutar refreshSources: reimportaría las otras 99 listas.
-      final sources = await _service.fetchSources();
-      if (!mounted) return;
-      setState(() {
-        _sources = sources;
-        _visibleSourceCount = _visibleSourceCount.clamp(0, sources.length);
-        _sourcesError = null;
-      });
-      await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
-      _message(
-        'Índice global de GitHub añadido: ${_sources.length}/100 listas. '
-        'Los canales se importarán por lotes en segundo plano.',
-      );
+      await _loadSources();
     } catch (error) {
       if (mounted) {
-        _message('No se pudo añadir el índice global de IPTV-org: ' + error.toString());
+        setState(() => _sourcesError = 'No se pudo completar el catálogo de 120 listas: $error');
       }
-    } finally {
-      if (!automatic && mounted) setState(() => _working = false);
     }
   }
 
-  Future<void> _refreshSources() async {
-    setState(() => _working = true);
-    try {
-      await _service.refreshSources();
-      await _loadAdmin(showLoading: false);
-      _message('Se solicitó reimportar todas las listas guardadas. Se conservarán los canales deportivos y generales; el inventario se actualizará por bloques.');
-    } catch (error) {
-      _message(error.toString());
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
-  }
+  Future<bool> _waitForPlaylistImports() async {
+    if (_sources.isEmpty) return false;
 
-  Future<void> _editPlaylistSource(ChannelPlaylistSource source) async {
-    if (_working) return;
-    final labelController = TextEditingController(text: source.label);
-    final urlController = TextEditingController(text: source.url);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: _channelPanel,
-        title: const Text(
-          'Editar lista IPTV',
-          style: TextStyle(color: _channelCyan, fontWeight: FontWeight.w900),
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              TextField(
-                controller: labelController,
-                autofocus: true,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(labelText: 'Nombre de la lista'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: urlController,
-                keyboardType: TextInputType.url,
-                autocorrect: false,
-                enableSuggestions: false,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'URL HTTPS de la lista',
-                  hintText: 'https://...',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('CANCELAR'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: _channelCyan),
-            child: const Text('GUARDAR'),
-          ),
-        ],
-      ),
-    );
-    final label = labelController.text.trim();
-    final candidateUrl = urlController.text.trim();
-    labelController.dispose();
-    urlController.dispose();
-    if (confirmed != true || !mounted) return;
-
-    final uri = Uri.tryParse(candidateUrl);
-    if (label.isEmpty || label.length > 80) {
-      _message('El nombre debe tener entre 1 y 80 caracteres.');
-      return;
-    }
-    if (uri == null ||
-        uri.scheme != 'https' ||
-        uri.host.isEmpty ||
-        uri.userInfo.isNotEmpty) {
-      _message('Introduce una URL HTTPS pública válida.');
-      return;
-    }
-    if (containsChannelPlaylistUrl(
-      _sources
-          .where((item) => item.id != source.id)
-          .map((item) => item.url),
-      uri.toString(),
-    )) {
-      _message('Otra lista ya utiliza esa URL.');
-      return;
-    }
-
-    setState(() => _working = true);
-    try {
-      await _service.updatePlaylistSource(
-        id: source.id,
-        url: uri.toString(),
-        label: label,
+    for (var attempt = 0; attempt < 6; attempt++) {
+      final pending = _sources.any(
+        (source) => source.status == 'queued' || source.status == 'importing',
       );
-      await _loadAdmin(showLoading: false);
-      if (!mounted) return;
-      _message('Lista actualizada. Se volverá a importar en segundo plano.');
-    } catch (error) {
-      _message('No se pudo actualizar la lista: ' + error.toString());
-    } finally {
-      if (mounted) setState(() => _working = false);
+      if (!pending) {
+        return _sources.every((source) => source.status == 'imported');
+      }
+      if (attempt == 5) break;
+
+      await Future<void>.delayed(const Duration(seconds: 5));
+      try {
+        final latest = await _service.fetchSources();
+        if (!mounted) return false;
+        latest.sort((a, b) {
+          if (a.status == 'error' && b.status != 'error') return -1;
+          if (b.status == 'error' && a.status != 'error') return 1;
+          return a.label.toLowerCase().compareTo(b.label.toLowerCase());
+        });
+        setState(() => _sources = latest);
+        await _persistLocal();
+      } catch (_) {
+        return false;
+      }
     }
+
+    return _sources.isNotEmpty &&
+        _sources.every((source) => source.status == 'imported');
   }
 
-  Future<void> _removePlaylistSource(ChannelPlaylistSource source) async {
-    if (_working) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: _channelPanel,
-        title: const Text(
-          'Quitar lista registrada',
-          style: TextStyle(color: _channelPink),
-        ),
-        content: Text(
-          '¿Quieres quitar "' + source.label +
-              '" y detener sus futuras actualizaciones? Los canales ya importados se conservarán y seguirán pudiendo administrarse por separado.',
-          style: const TextStyle(color: _channelMuted),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('CANCELAR'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: _channelPink),
-            child: const Text('QUITAR'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    setState(() => _working = true);
+  Future<void> _loadAllIptvChannels({bool force = false}) async {
+    if (_iptvLoading || (_iptvLoaded && !force)) return;
+    final requestId = ++_iptvRequestId;
+    final email = (_email ?? _service.signedInEmail ?? '').trim();
+    if (email.isEmpty) {
+      setState(() => _iptvError = 'Inicia sesión para descargar las listas IPTV.');
+      return;
+    }
+
+    setState(() {
+      _iptvLoading = true;
+      _iptvError = null;
+    });
+
+    var allChannels = <SportsChannel>[];
+    var offset = 0;
+
     try {
-      await _service.deletePlaylistSource(id: source.id);
-      if (!mounted) return;
+      final cached = await _iptvStore.load(email: email);
+      if (!mounted || requestId != _iptvRequestId) return;
+
+      if (!force && cached != null) {
+        allChannels = List<SportsChannel>.from(cached.channels);
+        offset = cached.nextOffset;
+        if (cached.sources.isNotEmpty) {
+          _sources = List<ChannelPlaylistSource>.from(cached.sources);
+        }
+        setState(() {
+          _channels = List<SportsChannel>.unmodifiable(allChannels);
+          _iptvLoaded = cached.complete;
+        });
+        if (cached.complete) return;
+      }
+
+      // Se guardan bloques de forma progresiva para poder reanudar una
+      // descarga interrumpida. Se conservan también filas repetidas.
+      while (true) {
+        final page = await _service.fetchAdminChannelPage(
+          offset: offset,
+          limit: channelAdminCatalogPageSize,
+        );
+        if (!mounted || requestId != _iptvRequestId) return;
+
+        if (page.channels.isEmpty && page.hasMore) {
+          throw const ChannelCatalogException(
+            'El servidor indicó que hay más canales, pero no entregó el siguiente bloque.',
+          );
+        }
+
+        allChannels.addAll(page.channels);
+        final nextOffset = page.offset + page.channels.length;
+        if (nextOffset < offset || (page.hasMore && nextOffset <= offset)) {
+          throw const ChannelCatalogException(
+            'La paginación no avanzó; el último bloque permanece guardado en el teléfono.',
+          );
+        }
+
+        _nextOffset = nextOffset;
+        setState(() => _channels = List<SportsChannel>.unmodifiable(allChannels));
+        await _iptvStore.save(
+          email: email,
+          channels: allChannels,
+          sources: _sources,
+          complete: false,
+          nextOffset: nextOffset,
+        );
+
+        if (!page.hasMore) break;
+        if (nextOffset >= channelCatalogMaxOffset) {
+          throw const ChannelCatalogException(
+            'Se alcanzó el límite técnico de páginas. El progreso permanece guardado en el teléfono.',
+          );
+        }
+        offset = nextOffset;
+      }
+
+      if (!mounted || requestId != _iptvRequestId) return;
+      await _iptvStore.save(
+        email: email,
+        channels: allChannels,
+        sources: _sources,
+        complete: true,
+        nextOffset: _nextOffset,
+      );
       setState(() {
-        _sources.removeWhere((item) => item.id == source.id);
+        _channels = List<SportsChannel>.unmodifiable(allChannels);
+        _iptvLoaded = true;
+        if (_selectedChannel != null) {
+          _selectedChannel = allChannels.cast<SportsChannel?>().firstWhere(
+                (item) => item?.id == _selectedChannel!.id,
+                orElse: () => _selectedChannel,
+              );
+        }
       });
-      await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
-      _message('Lista quitada. Los canales ya importados se conservaron.');
     } catch (error) {
-      _message('No se pudo quitar la lista: ' + error.toString());
+      if (!mounted || requestId != _iptvRequestId) return;
+      setState(() {
+        _iptvError = error.toString();
+        _iptvLoaded = false;
+        _channels = List<SportsChannel>.unmodifiable(allChannels);
+      });
     } finally {
-      if (mounted) setState(() => _working = false);
+      if (mounted && requestId == _iptvRequestId) {
+        setState(() => _iptvLoading = false);
+      }
     }
   }
 
-  Future<void> _retryPlaylistSource(ChannelPlaylistSource source) async {
-    if (_working) return;
-    setState(() => _working = true);
-    try {
-      await _service.retryPlaylistSource(id: source.id);
-      final sources = await _service.fetchSources();
-      if (!mounted) return;
-      setState(() => _sources = sources);
-      _message('Reintento solicitado para "' + source.label + '".');
-    } catch (error) {
-      _message('No se pudo reintentar la lista: ' + error.toString());
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
+  Future<void> _persistLocal() async {
+    final email = (_email ?? _service.signedInEmail ?? '').trim();
+    if (email.isEmpty) return;
+    await _iptvStore.save(
+      email: email,
+      channels: _channels,
+      sources: _sources,
+      complete: _iptvLoaded,
+      nextOffset: _nextOffset,
+    );
   }
 
-  void _previewChannelInAdmin(SportsChannel channel) {
+  Future<void> _updateLocalChannel(
+    SportsChannel channel, {
+    bool? visible,
+    String? language,
+  }) async {
+    if (!mounted) return;
+    final updated = channel.copyWith(visible: visible, language: language);
+    final next = _channels
+        .map((item) => item.id == channel.id ? updated : item)
+        .toList(growable: false);
     setState(() {
-      _previewChannel = channel;
-      _diagnosticResult = null;
+      _channels = next;
+      if (_selectedChannel?.id == channel.id) _selectedChannel = updated;
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_adminScrollController.hasClients) return;
-      _adminScrollController.animateTo(
-        0,
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
-      );
-    });
-  }
-
-  Future<void> _diagnosePreviewChannel() async {
-    final channel = _previewChannel;
-    if (channel == null || _diagnosingPreview) return;
-    setState(() {
-      _diagnosingPreview = true;
-      _diagnosticResult = null;
-    });
-    try {
-      final result = await _service.diagnoseStream(channel.url);
-      if (!mounted) return;
-      setState(() => _diagnosticResult = result);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _diagnosticResult = 'No se pudo completar el diagnóstico: ' + error.toString());
-    } finally {
-      if (mounted) setState(() => _diagnosingPreview = false);
-    }
+    await _persistLocal();
   }
 
   Future<void> _toggleVisibility(SportsChannel channel) async {
@@ -2525,86 +2287,10 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     setState(() => _working = true);
     try {
       await _service.setVisibility(channel.id, visible: next);
-      await _loadAdmin(showLoading: false);
-      _message(next
-          ? 'Canal publicado para todos los usuarios.'
-          : 'Canal ocultado para todos los usuarios.');
+      await _updateLocalChannel(channel, visible: next);
+      _message(next ? 'Canal marcado como visible.' : 'Canal ocultado.');
     } catch (error) {
-      _message(error.toString());
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
-  }
-
-  Future<void> _deleteChannel(SportsChannel channel) async {
-    if (_working) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: _channelPanel,
-        title: const Text(
-          'ELIMINAR CANAL',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
-        ),
-        content: Text(
-          'Se eliminará "${channel.name}" del catálogo y se bloqueará su URL para que las próximas importaciones no lo vuelvan a agregar. Esta acción no se puede deshacer desde la APK.',
-          style: const TextStyle(color: _channelMuted, height: 1.4),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('CANCELAR'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: _channelPink,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('ELIMINAR'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _working = true);
-    try {
-      await _service.deleteChannel(channel.id);
-      if (!mounted) return;
-      if (_previewChannel?.id == channel.id) {
-        setState(() {
-          _previewChannel = null;
-          _diagnosticResult = null;
-        });
-      }
-      await _loadAdmin(showLoading: false);
-      if (!mounted) return;
-      _message('Canal eliminado. Su URL quedó bloqueada para futuras importaciones.');
-    } catch (error) {
-      _message('No se pudo eliminar el canal: ' + error.toString());
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
-  }
-
-  Future<void> _setChannelSportsClassification(
-    SportsChannel channel,
-  ) async {
-    if (_working) return;
-    final next = !channel.isSports;
-    setState(() => _working = true);
-    try {
-      await _service.setChannelSportsClassification(
-        channel.id,
-        isSports: next,
-      );
-      await _loadAdmin(showLoading: false);
-      _message(next
-          ? 'Canal clasificado como deportivo. Ya puedes publicarlo.'
-          : 'Canal clasificado como general y ocultado de Canales deportivos.');
-    } catch (error) {
-      _message('No se pudo cambiar la clasificación: ' + error.toString());
+      _message('No se pudo cambiar la visibilidad: $error');
     } finally {
       if (mounted) setState(() => _working = false);
     }
@@ -2614,66 +2300,59 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     SportsChannel channel,
     String language,
   ) async {
+    if (_working) return;
+    setState(() => _working = true);
     try {
       await _service.setLanguage(channel.id, language: language);
-      await _loadAdmin(showLoading: false);
+      await _updateLocalChannel(channel, language: language);
       _message(language == 'es'
           ? 'Idioma guardado: Español 🇪🇸'
           : language == 'en'
               ? 'Idioma guardado: Inglés 🇺🇸'
-              : 'Idioma automático/sin definir guardado.');
+              : 'Idioma automático guardado.');
     } catch (error) {
-      _message('No se pudo guardar el idioma: ' + error.toString());
+      _message('No se pudo guardar el idioma: $error');
+    } finally {
+      if (mounted) setState(() => _working = false);
     }
-  }
-
-  Future<void> _copy(String value, String label) async {
-    await Clipboard.setData(ClipboardData(text: value));
-    _message(label + ' copiado.');
   }
 
   String _sourceStatus(ChannelPlaylistSource source) {
     switch (source.status) {
+      case 'imported':
+        return 'IMPORTADA';
       case 'queued':
         return 'EN COLA';
       case 'importing':
-        return 'IMPORTANDO…';
-      case 'imported':
-        return 'ACTUALIZADA';
+        return 'IMPORTANDO';
       case 'error':
-        return 'ERROR: ' + source.lastError;
+        return 'ERROR';
       default:
         return source.status.toUpperCase();
     }
   }
 
-  Color _sourceStatusColor(ChannelPlaylistSource source) {
-    switch (source.status) {
-      case 'error':
-        return _channelPink;
-      case 'importing':
-      case 'queued':
-        return _channelCyan;
-      default:
-        return _channelGreen;
-    }
+  Widget _panel({required Widget child}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: _channelPanel.withAlpha(245),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _channelLine),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: _channelCyan.withAlpha(16),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: child,
+    );
   }
 
-  String? _sourceLastUpdated(ChannelPlaylistSource source) {
-    if (source.lastImportedAt.isEmpty) return null;
-    final parsed = DateTime.tryParse(source.lastImportedAt);
-    if (parsed == null) return source.lastImportedAt;
-    final local = parsed.toLocal();
-    String twoDigits(int value) => value.toString().padLeft(2, '0');
-    return 'Última importación: ' +
-        twoDigits(local.day) + '/' +
-        twoDigits(local.month) + '/' +
-        local.year.toString() + ' ' +
-        twoDigits(local.hour) + ':' +
-        twoDigits(local.minute);
-  }
-
-  Widget _licenseMetric(String label, String value, Color accent) {
+  Widget _metric(String label, String value, Color accent) {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -2683,511 +2362,22 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       ),
       child: Column(
         children: <Widget>[
-          Text(value, style: TextStyle(color: accent, fontSize: 15,
-            fontWeight: FontWeight.w900)),
+          Text(
+            value,
+            style: TextStyle(
+              color: accent,
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
           const SizedBox(height: 3),
-          Text(label, textAlign: TextAlign.center,
-            style: const TextStyle(color: _channelMuted, fontSize: 7,
-              fontWeight: FontWeight.w900)),
-        ],
-      ),
-    );
-  }
-
-  Widget _adminCard({required Widget child}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _channelPanel.withAlpha(245),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: _channelLine),
-        boxShadow: <BoxShadow>[
-          BoxShadow(color: _channelCyan.withAlpha(12), blurRadius: 14),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: child,
-      ),
-    );
-  }
-
-  Widget _buildAdminChannel(SportsChannel channel, int index) {
-    final sport = channel.isSports;
-    return _adminCard(
-      child: Row(
-        children: <Widget>[
-          Container(
-            width: 27,
-            height: 27,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: _channelCyan.withAlpha(22),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              (index + 1).toString(),
-              style: const TextStyle(
-                color: _channelCyan,
-                fontWeight: FontWeight.w900,
-                fontSize: 10,
-              ),
-            ),
-          ),
-          const SizedBox(width: 9),
-          _ChannelLogo(channel: channel, size: 37),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Text(
-                        channel.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    ChannelLanguageBadge(language: channel.language),
-                  ],
-                ),
-                Text(
-                  sport ? 'DEPORTIVO' : 'GENERAL / SIN CLASIFICAR',
-                  style: TextStyle(
-                    color: sport ? _channelGreen : _channelMuted,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 8,
-                  ),
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: PopupMenuButton<String>(
-                    tooltip: 'ACCIONES DEL CANAL',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(
-                      width: 30,
-                      height: 30,
-                    ),
-                    color: _channelPanel,
-                    onSelected: (action) {
-                      if (action == 'preview') {
-                        _previewChannelInAdmin(channel);
-                      } else if (action == 'classification') {
-                        unawaited(_setChannelSportsClassification(channel));
-                      }
-                    },
-                    itemBuilder: (context) => <PopupMenuEntry<String>>[
-                      const PopupMenuItem<String>(
-                        value: 'preview',
-                        child: Text('PROBAR CANAL'),
-                      ),
-                      PopupMenuItem<String>(
-                        value: 'classification',
-                        child: Text(
-                          sport ? 'MARCAR COMO GENERAL' : 'MARCAR COMO DEPORTIVO',
-                        ),
-                      ),
-                    ],
-                    icon: const Icon(
-                      Icons.more_vert_rounded,
-                      color: _channelCyan,
-                      size: 20,
-                    ),
-                  ),
-                ),
-                DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: channel.language,
-                    isDense: true,
-                    isExpanded: true,
-                    dropdownColor: _channelPanel2,
-                    icon: const Icon(
-                      Icons.translate_rounded,
-                      color: _channelCyan,
-                      size: 15,
-                    ),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    items: const <DropdownMenuItem<String>>[
-                      DropdownMenuItem<String>(
-                        value: 'unknown',
-                        child: Text('IDIOMA: Sin definir', maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ),
-                      DropdownMenuItem<String>(
-                        value: 'es',
-                        child: Text('IDIOMA: Español 🇪🇸', maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ),
-                      DropdownMenuItem<String>(
-                        value: 'en',
-                        child: Text('IDIOMA: Inglés 🇺🇸', maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null && value != channel.language) {
-                        unawaited(_setChannelLanguage(channel, value));
-                      }
-                    },
-                  ),
-                ),
-                Text(
-                  'ID: ' + channel.identifier,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: _channelMuted,
-                    fontSize: 8,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Copiar identificador',
-            visualDensity: VisualDensity.compact,
-            onPressed: () => _copy(channel.identifier, 'Identificador'),
-            icon: const Icon(
-              Icons.tag_rounded,
-              color: _channelCyan,
-              size: 19,
-            ),
-          ),
-          IconButton(
-            tooltip: 'Copiar URL de señal',
-            visualDensity: VisualDensity.compact,
-            onPressed: () => _copy(channel.url, 'URL de señal'),
-            icon: const Icon(
-              Icons.copy_rounded,
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
               color: _channelMuted,
-              size: 17,
-            ),
-          ),
-          IconButton(
-            tooltip: channel.visible ? 'Ocultar a todos' : 'Publicar para todos',
-            visualDensity: VisualDensity.compact,
-            onPressed: sport && !_working
-                ? () => _toggleVisibility(channel)
-                : null,
-            icon: Icon(
-              channel.visible
-                  ? Icons.visibility_rounded
-                  : Icons.visibility_off_rounded,
-              color: channel.visible ? _channelGreen : _channelMuted,
-            ),
-          ),
-          IconButton(
-            tooltip: 'Eliminar permanentemente',
-            visualDensity: VisualDensity.compact,
-            onPressed: _working ? null : () => _deleteChannel(channel),
-            icon: const Icon(
-              Icons.delete_forever_rounded,
-              color: _channelPink,
-              size: 19,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-
-  void _openAdminSection() {
-    if (mounted) {
-      setState(() {
-        _showIptvSection = false;
-        _showVpnSection = false;
-      });
-    }
-  }
-
-  void _openIptvSection() {
-    if (mounted) {
-      setState(() {
-        _showIptvSection = true;
-        _showVpnSection = false;
-      });
-    }
-    if (!_iptvLoaded && !_iptvLoading) unawaited(_loadAllIptvChannels());
-  }
-
-  void _openVpnSection() {
-    if (mounted) {
-      setState(() {
-        _showIptvSection = false;
-        _showVpnSection = true;
-      });
-    }
-  }
-
-  Future<void> _loadAllIptvChannels({bool force = false}) async {
-    if (_iptvLoading || (_iptvLoaded && !force)) return;
-    final requestId = ++_iptvRequestId;
-    final cached = _iptvChannels.isNotEmpty
-        ? List<SportsChannel>.from(_iptvChannels)
-        : List<SportsChannel>.from(_channels);
-    setState(() {
-      _iptvLoading = true;
-      _iptvError = null;
-      _iptvLoaded = false;
-      if (_iptvChannels.isEmpty && cached.isNotEmpty) _iptvChannels = cached;
-    });
-
-    final allById = <String, SportsChannel>{};
-    var offset = 0;
-    try {
-      while (true) {
-        final page = await _service.fetchAdminChannelPage(
-          offset: offset,
-          limit: channelAdminCatalogPageSize,
-        );
-        if (!mounted || requestId != _iptvRequestId) return;
-        if (page.channels.isEmpty && page.hasMore) {
-          throw const ChannelCatalogException(
-            'Cloudflare indicó que existen más canales, pero no entregó el siguiente bloque.',
-          );
-        }
-        for (final channel in page.channels) {
-          allById[channel.id] = channel;
-        }
-        setState(() {
-          _iptvChannels = List<SportsChannel>.unmodifiable(allById.values);
-          final selectedId = _iptvSelectedChannel?.id;
-          if (selectedId != null && allById.containsKey(selectedId)) {
-            _iptvSelectedChannel = allById[selectedId];
-          }
-        });
-        final nextOffset = page.offset + page.channels.length;
-        if (!page.hasMore) break;
-        if (nextOffset <= offset || nextOffset >= channelCatalogMaxOffset) {
-          throw const ChannelCatalogException(
-            'Se alcanzó el límite de paginación. Los canales descargados permanecen visibles.',
-          );
-        }
-        offset = nextOffset;
-      }
-
-      if (!mounted || requestId != _iptvRequestId) return;
-      final complete = List<SportsChannel>.unmodifiable(allById.values);
-      setState(() {
-        _iptvChannels = complete;
-        _channels = List<SportsChannel>.from(complete);
-        _catalogTotal = complete.length;
-        _catalogTotalIsEstimate = false;
-        _nextAdminOffset = complete.length;
-        _hasMore = false;
-        _iptvLoaded = true;
-        if (_iptvSelectedChannel != null) {
-          _iptvSelectedChannel = allById[_iptvSelectedChannel!.id] ?? _iptvSelectedChannel;
-        }
-      });
-      await _saveLocalAdminSnapshot(saveChannels: true, saveSources: false);
-    } catch (error) {
-      if (!mounted || requestId != _iptvRequestId) return;
-      setState(() {
-        _iptvError = error.toString();
-        if (_iptvChannels.isEmpty && cached.isNotEmpty) _iptvChannels = cached;
-      });
-    } finally {
-      if (mounted && requestId == _iptvRequestId) {
-        setState(() => _iptvLoading = false);
-      }
-    }
-  }
-
-  Widget _buildAdminSectionSwitcher() {
-    Widget tab({
-      required String label,
-      required IconData icon,
-      required bool selected,
-      required VoidCallback onTap,
-    }) {
-      return Expanded(
-        child: Material(
-          color: selected ? _channelCyan.withAlpha(24) : _channelPanel,
-          borderRadius: BorderRadius.circular(11),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(11),
-            onTap: selected ? null : onTap,
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(11),
-                border: Border.all(color: selected ? _channelCyan : _channelLine.withAlpha(130)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  Icon(icon, size: 17, color: selected ? _channelCyan : _channelMuted),
-                  const SizedBox(width: 7),
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: selected ? _channelCyan : _channelMuted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(13, 10, 13, 8),
-      child: Row(
-        children: <Widget>[
-          tab(
-            label: 'ADMINISTRACIÓN',
-            icon: Icons.admin_panel_settings_rounded,
-            selected: !_showIptvSection && !_showVpnSection,
-            onTap: _openAdminSection,
-          ),
-          const SizedBox(width: 8),
-          tab(
-            label: 'IPTV',
-            icon: Icons.live_tv_rounded,
-            selected: _showIptvSection,
-            onTap: _openIptvSection,
-          ),
-          const SizedBox(width: 8),
-          tab(
-            label: 'PROTON VPN',
-            icon: Icons.shield_rounded,
-            selected: _showVpnSection,
-            onTap: _openVpnSection,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildIptvAddListCard() {
-    return _adminCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text(
-            'AÑADIR CANALES Y LISTAS IPTV',
-            style: TextStyle(color: _channelCyan, fontSize: 12, fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _labelController,
-            style: const TextStyle(color: Colors.white, fontSize: 11),
-            decoration: const InputDecoration(
-              labelText: 'Nombre de la lista',
-              hintText: 'Ej. Lista deportiva autorizada',
-            ),
-          ),
-          const SizedBox(height: 7),
-          TextField(
-            controller: _urlController,
-            keyboardType: TextInputType.url,
-            autocorrect: false,
-            enableSuggestions: false,
-            style: const TextStyle(color: Colors.white, fontSize: 11),
-            decoration: const InputDecoration(
-              labelText: 'URL HTTPS de la lista IPTV',
-              hintText: 'M3U/M3U8, PLS, XSPF, XML/ASX, JSON, CSV o TXT',
-              prefixIcon: Icon(Icons.link_rounded),
-            ),
-          ),
-          const SizedBox(height: 5),
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            value: _rightsConfirmed,
-            activeColor: _channelGreen,
-            title: const Text(
-              'Confirmo que tengo derecho a usar y distribuir estas señales.',
-              style: TextStyle(color: _channelMuted, fontSize: 9, height: 1.3),
-            ),
-            onChanged: _working ? null : (value) => setState(() => _rightsConfirmed = value ?? false),
-          ),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _working || _sources.length >= maxChannelPlaylistSources ? null : _addPlaylist,
-              icon: const Icon(Icons.playlist_add_rounded),
-              label: Text(_sources.length >= maxChannelPlaylistSources ? 'LÍMITE DE LISTAS COMPLETO' : 'AGREGAR CANALES DESDE ESTA LISTA'),
-              style: FilledButton.styleFrom(backgroundColor: _channelGreen, foregroundColor: _channelBg),
-            ),
-          ),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            initialValue: _selectedSportsPresetUrl,
-            isExpanded: true,
-            dropdownColor: _channelPanel2,
-            decoration: const InputDecoration(labelText: 'Lista deportiva predefinida'),
-            items: channelSportsPlaylistPresets.map((preset) => DropdownMenuItem<String>(
-              value: preset.url,
-              child: Text(preset.label, maxLines: 1, overflow: TextOverflow.ellipsis),
-            )).toList(growable: false),
-            onChanged: _working ? null : (value) => setState(() => _selectedSportsPresetUrl = value ?? channelSportsPlaylistPresets.first.url),
-          ),
-          const SizedBox(height: 5),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _working || _sources.length >= maxChannelPlaylistSources ? null : _addSportsPreset,
-              icon: const Icon(Icons.add_link_rounded),
-              label: const Text('AGREGAR LISTA DEPORTIVA'),
-            ),
-          ),
-          const SizedBox(height: 7),
-          DropdownButtonFormField<String>(
-            initialValue: _selectedGeneralPresetUrl,
-            isExpanded: true,
-            dropdownColor: _channelPanel2,
-            decoration: const InputDecoration(labelText: 'Lista general predefinida'),
-            items: channelPlaylistPresets.map((preset) => DropdownMenuItem<String>(
-              value: preset.url,
-              child: Text(preset.label, maxLines: 1, overflow: TextOverflow.ellipsis),
-            )).toList(growable: false),
-            onChanged: _working ? null : (value) => setState(() => _selectedGeneralPresetUrl = value ?? channelPlaylistPresets.first.url),
-          ),
-          const SizedBox(height: 5),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _working || _sources.length >= maxChannelPlaylistSources ? null : _addGeneralPreset,
-              icon: const Icon(Icons.playlist_add_rounded),
-              label: const Text('AGREGAR LISTA GENERAL'),
-            ),
-          ),
-          const SizedBox(height: 7),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _working ? null : _fillPlaylistCatalogTo100,
-              icon: const Icon(Icons.cloud_download_rounded),
-              label: Text(_sources.length >= maxChannelPlaylistSources ? '100 LISTAS REGISTRADAS' : 'COMPLETAR CATÁLOGO HASTA 100 LISTAS'),
-            ),
-          ),
-          const SizedBox(height: 6),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _working ? null : _refreshSources,
-              icon: const Icon(Icons.sync_rounded),
-              label: const Text('REIMPORTAR TODAS LAS LISTAS GUARDADAS'),
+              fontSize: 7,
+              fontWeight: FontWeight.w900,
             ),
           ),
         ],
@@ -3196,32 +2386,52 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   }
 
   Widget _buildIptvScreen() {
-    final query = _iptvSearchController.text.trim().toLowerCase();
-    final rows = _iptvChannels.where((channel) =>
-      query.isEmpty || (channel.name + ' ' + channel.groupTitle).toLowerCase().contains(query)
-    ).toList(growable: false);
-    final sports = _iptvChannels.where((channel) => channel.isSports).length;
-    final general = _iptvChannels.length - sports;
-    final totalLabel = _iptvLoaded ? _iptvChannels.length.toString() : 'CARGADOS ' + _iptvChannels.length.toString();
+    final query = _searchController.text.trim().toLowerCase();
+    final rows = _channels.where((channel) {
+      return query.isEmpty ||
+          (channel.name + ' ' + channel.groupTitle).toLowerCase().contains(query);
+    }).toList(growable: false);
+    final sports = _channels.where((channel) => channel.isSports).length;
+    final general = _channels.length - sports;
 
     return Column(
       children: <Widget>[
         Padding(
-          padding: const EdgeInsets.fromLTRB(13, 2, 13, 8),
-          child: _adminCard(
+          padding: const EdgeInsets.fromLTRB(13, 8, 13, 8),
+          child: _panel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 const Row(children: <Widget>[
                   Icon(Icons.live_tv_rounded, color: _channelCyan, size: 19),
                   SizedBox(width: 8),
-                  Expanded(child: Text('REPRODUCTOR IPTV', style: TextStyle(color: _channelCyan, fontSize: 13, fontWeight: FontWeight.w900))),
+                  Expanded(
+                    child: Text(
+                      'REPRODUCTOR IPTV',
+                      style: TextStyle(
+                        color: _channelCyan,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
                 ]),
                 const SizedBox(height: 7),
-                if (_iptvSelectedChannel != null) Text(_iptvSelectedChannel!.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w900)),
+                if (_selectedChannel != null)
+                  Text(
+                    _selectedChannel!.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                 ChannelInlinePlayer(
-                  key: ValueKey<String>('admin-iptv-player-' + (_iptvSelectedChannel?.id ?? 'empty')),
-                  channel: _iptvSelectedChannel,
+                  key: _playerKey,
+                  channel: _selectedChannel,
+                  showProxyControls: false,
                 ),
               ],
             ),
@@ -3231,163 +2441,339 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           child: ListView.builder(
             key: const ValueKey<String>('channel-admin-iptv-list'),
             padding: const EdgeInsets.fromLTRB(13, 0, 13, 20),
-            itemCount: rows.length + _sources.length + 2,
+            itemCount: rows.length + _sources.length + 1,
             itemBuilder: (context, index) {
               if (index == 0) {
-                return _adminCard(
+                final totalLabel = _iptvLoaded
+                    ? _channels.length.toString()
+                    : 'CARGADOS ' + _channels.length.toString();
+                return _panel(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Row(children: <Widget>[
-                        const Expanded(child: Text('TODOS LOS CANALES IMPORTADOS', style: TextStyle(color: _channelGreen, fontSize: 12, fontWeight: FontWeight.w900))),
-                        Text(totalLabel, key: const ValueKey<String>('iptv-channel-total'), style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
-                        IconButton(
-                          tooltip: 'Actualizar todas las listas',
-                          onPressed: _iptvLoading || _working ? null : () => _loadAllIptvChannels(force: true),
-                          icon: const Icon(Icons.sync_rounded, color: _channelCyan),
+                        const Expanded(
+                          child: Text(
+                            '120 LISTAS IPTV · TODOS LOS CANALES',
+                            style: TextStyle(
+                              color: _channelGreen,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          totalLabel,
+                          key: const ValueKey<String>('iptv-channel-total'),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
                       ]),
                       Row(children: <Widget>[
-                        Expanded(child: _licenseMetric('DEPORTIVOS', sports.toString(), _channelGreen)),
+                        Expanded(
+                          child: _metric(
+                            'DEPORTIVOS',
+                            sports.toString(),
+                            _channelGreen,
+                          ),
+                        ),
                         const SizedBox(width: 7),
-                        Expanded(child: _licenseMetric('GENERALES', general.toString(), _channelCyan)),
+                        Expanded(
+                          child: _metric(
+                            'GENERALES',
+                            general.toString(),
+                            _channelCyan,
+                          ),
+                        ),
                         const SizedBox(width: 7),
-                        Expanded(child: _licenseMetric('LISTAS', _sources.length.toString(), _channelYellow)),
+                        Expanded(
+                          child: _metric(
+                            'LISTAS',
+                            _sources.length.toString() + '/120',
+                            _channelYellow,
+                          ),
+                        ),
                       ]),
-                      if (_iptvLoading) ...<Widget>[
+                      if (_loading || _iptvLoading) ...<Widget>[
                         const SizedBox(height: 7),
-                        const LinearProgressIndicator(minHeight: 3, color: _channelCyan, backgroundColor: _channelPanel2),
+                        const LinearProgressIndicator(
+                          minHeight: 3,
+                          color: _channelCyan,
+                          backgroundColor: _channelPanel2,
+                        ),
                         const SizedBox(height: 4),
-                        Text('Cargando bloques de hasta ' + channelAdminCatalogPageSize.toString() + ' canales. Recibidos: ' + _iptvChannels.length.toString(), style: const TextStyle(color: _channelMuted, fontSize: 8)),
+                        Text(
+                          'Preparando las listas. Canales guardados: ${_channels.length}.',
+                          style: const TextStyle(
+                            color: _channelMuted,
+                            fontSize: 8,
+                          ),
+                        ),
                       ],
-                      if (_iptvError != null) Text('No se pudo completar la carga: ' + _iptvError!, style: const TextStyle(color: _channelPink, fontSize: 9)),
-                      if (_iptvLoaded) const Text('Inventario completo: todas las páginas de todas las listas registradas fueron leídas.', style: TextStyle(color: _channelGreen, fontSize: 9)),
+                      if (_iptvError != null)
+                        Text(
+                          _iptvError!,
+                          style: const TextStyle(
+                            color: _channelPink,
+                            fontSize: 9,
+                          ),
+                        ),
+                      if (_sourcesError != null)
+                        Text(
+                          _sourcesError!,
+                          style: const TextStyle(
+                            color: _channelMuted,
+                            fontSize: 8,
+                          ),
+                        ),
+                      if (_iptvLoaded)
+                        const Text(
+                          'Descarga completa y guardada en el almacenamiento del teléfono. No será necesario descargarla de nuevo.',
+                          style: TextStyle(
+                            color: _channelGreen,
+                            fontSize: 9,
+                          ),
+                        ),
                       const SizedBox(height: 7),
                       TextField(
                         key: const ValueKey<String>('iptv-search-field'),
-                        controller: _iptvSearchController,
+                        controller: _searchController,
                         onChanged: (_) => setState(() {}),
                         onSubmitted: (_) => setState(() {}),
                         textInputAction: TextInputAction.search,
-                        style: const TextStyle(color: Colors.white, fontSize: 11),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                        ),
                         decoration: InputDecoration(
                           labelText: 'Buscar canal por nombre',
-                          hintText: 'Escribe ESPN, FOX, beIN, etc.',
-                          prefixIcon: const Icon(Icons.search_rounded, color: _channelCyan),
-                          suffixIcon: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              IconButton(
-                                key: const ValueKey<String>('iptv-search-button'),
-                                tooltip: 'Buscar canal por nombre',
-                                onPressed: () {
-                                  FocusScope.of(context).unfocus();
-                                  setState(() {});
-                                },
-                                icon: const Icon(Icons.search_rounded, color: _channelGreen),
-                              ),
-                              if (_iptvSearchController.text.isNotEmpty)
-                                IconButton(
+                          hintText: 'ESPN, FOX, beIN, etc.',
+                          prefixIcon: const Icon(
+                            Icons.search_rounded,
+                            color: _channelCyan,
+                          ),
+                          suffixIcon: _searchController.text.isEmpty
+                              ? null
+                              : IconButton(
                                   key: const ValueKey<String>('iptv-search-clear'),
                                   tooltip: 'Mostrar todos los canales',
                                   onPressed: () {
-                                    _iptvSearchController.clear();
+                                    _searchController.clear();
                                     FocusScope.of(context).unfocus();
                                     setState(() {});
                                   },
-                                  icon: const Icon(Icons.close_rounded, color: _channelMuted),
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    color: _channelMuted,
+                                  ),
                                 ),
-                            ],
-                          ),
                         ),
                       ),
                       const SizedBox(height: 5),
-                      Text('Mostrando ' + rows.length.toString() + ' de ' + _iptvChannels.length.toString() + ' canales.', style: const TextStyle(color: _channelMuted, fontSize: 8)),
+                      Text(
+                        'Mostrando ${rows.length} de ${_channels.length} canales.',
+                        style: const TextStyle(
+                          color: _channelMuted,
+                          fontSize: 8,
+                        ),
+                      ),
                     ],
                   ),
                 );
               }
-              if (index == 1) return Padding(
-                padding: const EdgeInsets.only(bottom: 7),
-                child: _buildIptvAddListCard(),
-              );
-              if (index <= rows.length + 1) {
-                final channel = rows[index - 2];
-                final selected = _iptvSelectedChannel?.id == channel.id;
+
+              if (index <= rows.length) {
+                final channel = rows[index - 1];
+                final selected = _selectedChannel?.id == channel.id;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Material(
-                    color: selected ? _channelCyan.withAlpha(24) : _channelPanel,
+                    color: selected
+                        ? _channelCyan.withAlpha(24)
+                        : _channelPanel,
                     borderRadius: BorderRadius.circular(11),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(11),
-                      onTap: () => setState(() => _iptvSelectedChannel = channel),
+                      onTap: () => setState(() => _selectedChannel = channel),
                       child: Container(
                         padding: const EdgeInsets.all(9),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(11),
-                          border: Border.all(color: selected ? _channelCyan : _channelLine.withAlpha(100)),
+                          border: Border.all(
+                            color: selected
+                                ? _channelCyan
+                                : _channelLine.withAlpha(100),
+                          ),
                         ),
                         child: Row(children: <Widget>[
-                          SizedBox(width: 25, child: Text((index - 1).toString(), textAlign: TextAlign.center, style: const TextStyle(color: _channelCyan, fontSize: 9, fontWeight: FontWeight.w900))),
-                          _ChannelLogo(channel: channel, size: 34),
-                          const SizedBox(width: 8),
-                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-                            Text(channel.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900)),
-                            Text((channel.groupTitle.isEmpty ? 'SIN GRUPO' : channel.groupTitle) + ' · ' + (channel.isSports ? 'DEPORTIVO' : 'GENERAL'), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _channelMuted, fontSize: 8)),
-                          ])),
-                          ChannelLanguageBadge(language: channel.language),
-                          const SizedBox(width: 5),
-                          if (channel.isSports)
-                            OutlinedButton.icon(
-                              key: ValueKey<String>('iptv-add-channel-' + channel.id),
-                              onPressed: _working ? null : () => _toggleVisibility(channel),
-                              icon: Icon(
-                                channel.visible ? Icons.visibility_off_rounded : Icons.add_circle_outline_rounded,
-                                size: 14,
-                              ),
-                              label: Text(channel.visible ? 'OCULTAR' : 'AGREGAR'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: channel.visible ? _channelPink : _channelGreen,
-                                side: BorderSide(color: channel.visible ? _channelPink : _channelGreen),
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-                                textStyle: const TextStyle(fontSize: 8, fontWeight: FontWeight.w900),
-                              ),
-                            )
-                          else
-                            OutlinedButton.icon(
-                              key: ValueKey<String>('iptv-classify-channel-' + channel.id),
-                              onPressed: _working ? null : () => _setChannelSportsClassification(channel),
-                              icon: const Icon(Icons.sports_rounded, size: 14),
-                              label: const Text('CLASIFICAR'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: _channelYellow,
-                                side: const BorderSide(color: _channelYellow),
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-                                textStyle: const TextStyle(fontSize: 8, fontWeight: FontWeight.w900),
+                          SizedBox(
+                            width: 25,
+                            child: Text(
+                              index.toString(),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: _channelCyan,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w900,
                               ),
                             ),
+                          ),
+                          _ChannelLogo(channel: channel, size: 34),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  channel.name,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                Text(
+                                  (channel.groupTitle.isEmpty
+                                          ? 'SIN GRUPO'
+                                          : channel.groupTitle) +
+                                      (channel.isSports
+                                          ? ' · DEPORTIVO'
+                                          : ' · GENERAL'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: _channelMuted,
+                                    fontSize: 8,
+                                  ),
+                                ),
+                                ChannelLanguageBadge(language: channel.language),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          SizedBox(
+                            width: 94,
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                key: ValueKey<String>(
+                                  'iptv-language-${channel.id}',
+                                ),
+                                value: channel.language,
+                                isDense: true,
+                                isExpanded: true,
+                                dropdownColor: _channelPanel2,
+                                icon: const Icon(
+                                  Icons.translate_rounded,
+                                  color: _channelCyan,
+                                  size: 15,
+                                ),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                items: const <DropdownMenuItem<String>>[
+                                  DropdownMenuItem<String>(
+                                    value: 'unknown',
+                                    child: Text('Auto'),
+                                  ),
+                                  DropdownMenuItem<String>(
+                                    value: 'es',
+                                    child: Text('Español'),
+                                  ),
+                                  DropdownMenuItem<String>(
+                                    value: 'en',
+                                    child: Text('Inglés'),
+                                  ),
+                                ],
+                                onChanged: _working
+                                    ? null
+                                    : (value) {
+                                        if (value != null &&
+                                            value != channel.language) {
+                                          unawaited(
+                                            _setChannelLanguage(channel, value),
+                                          );
+                                        }
+                                      },
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            key: ValueKey<String>(
+                              'iptv-add-channel-${channel.id}',
+                            ),
+                            tooltip: channel.visible
+                                ? 'Ocultar canal'
+                                : 'Hacer visible el canal',
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(
+                              width: 32,
+                              height: 32,
+                            ),
+                            onPressed: _working
+                                ? null
+                                : () => _toggleVisibility(channel),
+                            icon: Icon(
+                              channel.visible
+                                  ? Icons.visibility_rounded
+                                  : Icons.visibility_off_rounded,
+                              color: channel.visible
+                                  ? _channelGreen
+                                  : _channelMuted,
+                              size: 19,
+                            ),
+                          ),
                         ]),
                       ),
                     ),
                   ),
                 );
               }
-              final source = _sources[index - rows.length - 2];
+
+              final source = _sources[index - rows.length - 1];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 6),
-                child: _adminCard(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-                    Text(source.label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 10)),
-                    const SizedBox(height: 3),
-                    Text(_sourceStatus(source) + ' · ' + source.importedCount.toString() + ' canales procesados', style: const TextStyle(color: _channelMuted, fontSize: 8)),
-                    Wrap(spacing: 6, children: <Widget>[
-                      TextButton(onPressed: _working ? null : () => _editPlaylistSource(source), child: const Text('EDITAR')),
-                      if (source.status == 'error') TextButton(onPressed: _working ? null : () => _retryPlaylistSource(source), child: const Text('REINTENTAR')),
-                      TextButton(onPressed: _working ? null : () => _removePlaylistSource(source), child: const Text('QUITAR LISTA')),
-                    ]),
+                child: _panel(
+                  child: Row(children: <Widget>[
+                    const Icon(
+                      Icons.playlist_play_rounded,
+                      color: _channelCyan,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            source.label,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 10,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            _sourceStatus(source) +
+                                ' · ' +
+                                source.importedCount.toString() +
+                                ' canales procesados',
+                            style: const TextStyle(
+                              color: _channelMuted,
+                              fontSize: 8,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ]),
                 ),
               );
@@ -3395,193 +2781,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildAdminCatalogSection() {
-    final loadedSports = _channels.where((channel) => channel.isSports).length;
-    final loadedGeneral = _channels.length - loadedSports;
-    final totalLabel = _catalogTotalIsEstimate
-        ? 'MÁS DE ' + _catalogTotal.toString()
-        : _catalogTotal.toString() + ' CANALES';
-
-    return _adminCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              const Expanded(
-                child: Text(
-                  'INVENTARIO COMPLETO DE CANALES',
-                  style: TextStyle(
-                    color: _channelCyan,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-              IconButton(
-                tooltip: 'Actualizar inventario',
-                onPressed: _loading ? null : _loadAdmin,
-                icon: const Icon(Icons.sync_rounded, color: _channelGreen),
-              ),
-            ],
-          ),
-          Text(
-            'Incluye canales deportivos y generales de todas las listas importadas. Desliza por el inventario y carga los siguientes bloques para confirmar el total exacto. Solo los deportivos pueden publicarse en Canales deportivos.',
-            style: const TextStyle(
-              color: _channelMuted,
-              fontSize: 10,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: _licenseMetric(
-                  'TOTAL EN CATÁLOGO',
-                  totalLabel,
-                  _channelCyan,
-                ),
-              ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: _licenseMetric(
-                  'CARGADOS',
-                  _channels.length.toString(),
-                  Colors.white,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 7),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: _licenseMetric(
-                  'DEPORTIVOS',
-                  loadedSports.toString(),
-                  _channelGreen,
-                ),
-              ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: _licenseMetric(
-                  'GENERALES',
-                  loadedGeneral.toString(),
-                  _channelYellow,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _working ? null : _refreshSources,
-              icon: const Icon(Icons.playlist_add_check_rounded),
-              label: const Text('REIMPORTAR LISTAS GUARDADAS · TODOS LOS CANALES'),
-              style: FilledButton.styleFrom(
-                backgroundColor: _channelGreen,
-                foregroundColor: _channelBg,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Vuelve a procesar las listas guardadas por lotes para incorporar canales generales que antes se filtraban. No elimina listas ni canales existentes.',
-            style: TextStyle(
-              color: _channelMuted,
-              fontSize: 9,
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _searchController,
-            onSubmitted: (_) => _searchChannels(),
-            textInputAction: TextInputAction.search,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              labelText: 'Buscar en todos los canales',
-              hintText: 'ESPN, noticias, entretenimiento...',
-              prefixIcon: const Icon(
-                Icons.search_rounded,
-                color: _channelCyan,
-              ),
-              suffixIcon: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  if (_searchController.text.isNotEmpty)
-                    IconButton(
-                      tooltip: 'Limpiar búsqueda',
-                      onPressed: _loading ? null : _clearChannelSearch,
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        color: _channelMuted,
-                      ),
-                    ),
-                  IconButton(
-                    tooltip: 'Buscar canal',
-                    onPressed: _loading ? null : _searchChannels,
-                    icon: const Icon(
-                      Icons.search_rounded,
-                      color: _channelGreen,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 9),
-          if (_error != null)
-            Text(
-              _error!,
-              style: const TextStyle(
-                color: _channelPink,
-                fontSize: 11,
-              ),
-            ),
-          if (_loading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: CircularProgressIndicator(
-                  color: _channelCyan,
-                ),
-              ),
-            ),
-          for (var i = 0; i < _channels.length; i++)
-            _buildAdminChannel(_channels[i], i),
-          if (_hasMore)
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _loading ? null : _loadMore,
-                icon: const Icon(Icons.expand_more_rounded),
-                label: Text(
-                  'CARGAR SIGUIENTE BLOQUE · ' + _channels.length.toString() +
-                      (_catalogTotalIsEstimate ? '+' : ''),
-                ),
-              ),
-            ),
-          if (!_hasMore && _channels.isNotEmpty)
-            const Padding(
-              padding: EdgeInsets.only(top: 6),
-              child: Text(
-                'Inventario completo cargado. El total mostrado ya es exacto.',
-                style: TextStyle(
-                  color: _channelGreen,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 
@@ -3593,1051 +2792,88 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF07090D),
         title: const AppSectionTitle(
-          icon: Icons.admin_panel_settings_rounded,
-          title: 'ADMINISTRACIÓN · DAMIÁN.APK',
-          accent: _channelPink,
-          subtitle: 'GESTIÓN DE LISTAS Y CANALES',
+          icon: Icons.live_tv_rounded,
+          title: '120 LISTAS IPTV',
+          accent: _channelCyan,
+          subtitle: 'CATÁLOGO LOCAL · DEPORTE TOTAL 360°',
         ),
         actions: <Widget>[
           if (loggedIn)
             IconButton(
-              onPressed: _signOut,
+              onPressed: _working ? null : _signOut,
               tooltip: 'Cerrar sesión',
               icon: const Icon(Icons.logout_rounded, color: _channelMuted),
             ),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(color: _channelBg),
-        child: !loggedIn
-            ? Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(22),
-                  child: _adminCard(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        const Icon(
-                          Icons.admin_panel_settings_rounded,
-                          color: _channelPink,
-                          size: 52,
+      body: !loggedIn
+          ? Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(22),
+                child: _panel(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      const Icon(
+                        Icons.live_tv_rounded,
+                        color: _channelCyan,
+                        size: 52,
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'CATÁLOGO IPTV PRIVADO',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 15,
                         ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Inicia sesión para descargar las 120 listas y conservar todos sus canales en este teléfono.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: _channelMuted,
+                          fontSize: 11,
+                          height: 1.45,
+                        ),
+                      ),
+                      if (_error != null) ...<Widget>[
                         const SizedBox(height: 12),
-                        const Text(
-                          'PANEL PRIVADO DE CANALES',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 15,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Acceso protegido por Google. Solo la cuenta autorizada en el servidor puede importar listas y publicar canales para todos.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: _channelMuted,
-                            fontSize: 11,
-                            height: 1.45,
-                          ),
-                        ),
-                        if (_error != null) ...<Widget>[
-                          const SizedBox(height: 12),
-                          Text(
-                            _error!,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: _channelPink),
-                          ),
-                        ],
-                        const SizedBox(height: 15),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: _working ? null : _signIn,
-                            icon: _working
-                                ? const SizedBox(
-                                    width: 17,
-                                    height: 17,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.login_rounded),
-                            label: const Text('ENTRAR CON GOOGLE'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: _channelCyan,
-                              foregroundColor: _channelBg,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              )
-            : Column(
-                children: <Widget>[
-                  _buildAdminSectionSwitcher(),
-                  Expanded(
-                    child: _showVpnSection
-                        ? const ProtonVpnScreen()
-                        : _showIptvSection
-                            ? _buildIptvScreen()
-                            : RefreshIndicator(
-                color: _channelCyan,
-                backgroundColor: _channelPanel,
-                onRefresh: () => _loadAdmin(),
-                child: ListView(
-                  key: const ValueKey<String>('channel-admin-scroll'),
-                  controller: _adminScrollController,
-                  padding: const EdgeInsets.fromLTRB(13, 13, 13, 26),
-                  children: <Widget>[
-                    _adminCard(
-                      child: Row(
-                        children: <Widget>[
-                          const Icon(
-                            Icons.verified_user_rounded,
-                            color: _channelGreen,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'Sesión: ' + (_email ?? _service.signedInEmail ?? ''),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    _buildAdminCatalogSection(),
-                    const SizedBox(height: 8),
-                    _adminCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Row(
-                            children: <Widget>[
-                              const Expanded(
-                                child: Text(
-                                  'REPRODUCTOR DE PRUEBA',
-                                  style: TextStyle(
-                                    color: _channelCyan,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                              if (_previewChannel != null)
-                                IconButton(
-                                  tooltip: 'Cerrar prueba',
-                                  visualDensity: VisualDensity.compact,
-                                  onPressed: () => setState(
-                                    () => _previewChannel = null,
-                                  ),
-                                  icon: const Icon(
-                                    Icons.close_rounded,
-                                    color: _channelMuted,
-                                  ),
-                                ),
-                            ],
-                          ),
-                          if (_previewChannel == null)
-                            const Text(
-                              'Elige un canal del catálogo y pulsa PROBAR CANAL. Podrás comprobar la señal aquí antes de publicarla.',
-                              style: TextStyle(
-                                color: _channelMuted,
-                                fontSize: 10,
-                                height: 1.4,
-                              ),
-                            )
-                          else ...<Widget>[
-                            Text(
-                              _previewChannel!.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 11,
-                              ),
-                            ),
-                            const SizedBox(height: 7),
-                            ChannelInlinePlayer(
-                              key: ValueKey<String>(
-                                'admin-preview-${_previewChannel!.id}',
-                              ),
-                              channel: _previewChannel,
-                            ),
-                            const SizedBox(height: 7),
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                onPressed: _diagnosingPreview
-                                    ? null
-                                    : _diagnosePreviewChannel,
-                                icon: _diagnosingPreview
-                                    ? const SizedBox(
-                                        width: 15,
-                                        height: 15,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(Icons.travel_explore_rounded),
-                                label: Text(
-                                  _diagnosingPreview
-                                      ? 'ANALIZANDO CONEXIÓN...'
-                                      : 'DIAGNOSTICAR CONEXIÓN / GEO',
-                                ),
-                              ),
-                            ),
-                            if (_diagnosticResult != null) ...<Widget>[
-                              const SizedBox(height: 6),
-                              Text(
-                                _diagnosticResult!,
-                                style: const TextStyle(
-                                  color: _channelYellow,
-                                  fontSize: 10,
-                                  height: 1.4,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 6),
-                            Text(
-                              _previewChannel!.visible
-                                  ? 'Prueba privada. Este canal ya está publicado; la prueba no cambia su estado.'
-                                  : 'Prueba privada. El canal seguirá oculto hasta que actives el icono del ojo.',
-                              style: const TextStyle(
-                                color: _channelMuted,
-                                fontSize: 9,
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    _adminCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          const Text(
-                            'PROTECCIÓN Y RESTRICCIONES REGIONALES',
-                            style: TextStyle(
-                              color: _channelGreen,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          const Text(
-                            'El diagnóstico identifica enlaces caídos, errores de autorización y posibles restricciones regionales sin cambiar ni borrar las URL originales. No existe un desbloqueador universal: si el emisor autoriza el acceso desde otra región, puedes usar una VPN legítima configurada por ti en Android. La APK no elude licencias, cuentas ni DRM.',
-                            style: TextStyle(
-                              color: _channelMuted,
-                              fontSize: 10,
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    _adminCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          const Text(
-                            'CATÁLOGO DE FUENTES DEPORTIVAS',
-                            style: TextStyle(
-                              color: _channelCyan,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          const Text(
-                            'Cada lista se importa completa: canales deportivos y generales con enlaces multimedia compatibles. La clasificación deportiva solo controla qué canales pueden publicarse en la pestaña Canales deportivos.',
-                            style: TextStyle(
-                              color: _channelMuted,
-                              fontSize: 10,
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          DropdownButtonFormField<String>(
-                            initialValue: _selectedSportsPresetUrl,
-                            isExpanded: true,
-                            dropdownColor: _channelPanel2,
-                            decoration: const InputDecoration(
-                              labelText: 'Elegir fuente de lista',
-                            ),
-                            items: channelSportsPlaylistPresets
-                                .map((preset) => DropdownMenuItem<String>(
-                                      value: preset.url,
-                                      child: Text(
-                                        preset.label,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ))
-                                .toList(growable: false),
-                            onChanged: _working
-                                ? null
-                                : (value) => setState(
-                                      () => _selectedSportsPresetUrl =
-                                          value ?? channelSportsPlaylistPresets.first.url,
-                                    ),
-                          ),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: _working ? null : _addSportsPreset,
-                              icon: const Icon(Icons.add_link_rounded),
-                              label: const Text('AÑADIR FUENTE DE LISTA'),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: _channelCyan,
-                                foregroundColor: _channelBg,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'Admite listas M3U/M3U8, PLS, XSPF, XML/ASX, JSON, CSV y TXT. Importa todos los canales que incluyan una URL directa HTTPS compatible con HLS, DASH, Smooth Streaming o vídeo progresivo. Límite técnico por fuente: 25 MB y hasta 50.000 entradas.',
-                            style: TextStyle(
-                              color: _channelMuted,
-                              fontSize: 9,
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    _adminCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          const Text(
-                            'CATÁLOGO DE FUENTES · 100 LISTAS',
-                            style: TextStyle(
-                              color: _channelGreen,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          const Text(
-                            'Completa hasta 100 listas públicas distintas sin borrar las fuentes que ya funcionan. Se importan todos los canales con enlaces multimedia compatibles; el sistema identifica los deportivos para que puedas decidir cuáles publicar.',
-                            style: TextStyle(
-                              color: _channelMuted,
-                              fontSize: 10,
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          DropdownButtonFormField<String>(
-                            initialValue: _selectedGeneralPresetUrl,
-                            isExpanded: true,
-                            dropdownColor: _channelPanel2,
-                            decoration: const InputDecoration(
-                              labelText: 'Elegir una de las 100 listas disponibles',
-                            ),
-                            items: channelPlaylistPresets
-                                .map((preset) => DropdownMenuItem<String>(
-                                      value: preset.url,
-                                      child: Text(
-                                        preset.label,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ))
-                                .toList(growable: false),
-                            onChanged: _working
-                                ? null
-                                : (value) => setState(
-                                      () => _selectedGeneralPresetUrl =
-                                          value ?? channelPlaylistPresets.first.url,
-                                    ),
-                          ),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: _working || _sources.length >= maxChannelPlaylistSources
-                                  ? null
-                                  : _fillPlaylistCatalogTo100,
-                              icon: const Icon(Icons.cloud_download_rounded),
-                              label: Text(
-                                _sources.length >= maxChannelPlaylistSources
-                                    ? '100 LISTAS REGISTRADAS'
-                                    : 'COMPLETAR CATÁLOGO HASTA 100 LISTAS',
-                              ),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: _channelGreen,
-                                foregroundColor: _channelBg,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: _working ? null : _addGeneralPreset,
-                              icon: const Icon(Icons.playlist_add_rounded),
-                              label: const Text('AÑADIR LISTA GENERAL'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: _channelGreen,
-                                side: const BorderSide(color: _channelGreen),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Índice maestro global de IPTV-org con más de 11.000 canales públicos. Se importa en segundo plano por bloques, sin cargar todo el catálogo de golpe en el teléfono.',
-                            style: TextStyle(
-                              color: _channelMuted,
-                              fontSize: 10,
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: _working ||
-                                      _sources.length >= maxChannelPlaylistSources ||
-                                      _hasIptvOrgGlobalIndex
-                                  ? null
-                                  : _addIptvOrgGlobalIndex,
-                              icon: const Icon(Icons.public_rounded),
-                              label: Text(
-                                _hasIptvOrgGlobalIndex
-                                    ? 'ÍNDICE GLOBAL YA REGISTRADO'
-                                    : _sources.length >= maxChannelPlaylistSources
-                                        ? 'LÍMITE DE 100 LISTAS COMPLETO'
-                                        : 'AÑADIR ÍNDICE GLOBAL IPTV-ORG',
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: _channelCyan,
-                                side: const BorderSide(color: _channelCyan),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    _adminCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          const Text(
-                            'DIEZ PLAZAS VIP · PRUEBAS SIN GOOGLE',
-                            style: TextStyle(
-                              color: _channelGreen,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          const Text(
-                            'Genera hasta 10 códigos individuales. Cada código se canjea una sola vez, queda vinculado al primer teléfono que lo activa y concede 30 días de acceso de prueba. No requiere Google ni pago.',
-                            style: TextStyle(
-                              color: _channelMuted,
-                              fontSize: 10,
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: <Widget>[
-                              Expanded(child: _licenseMetric(
-                                'DISPONIBLES',
-                                (_trialSummary['available'] ?? 0).toString(),
-                                _channelGreen,
-                              )),
-                              const SizedBox(width: 7),
-                              Expanded(child: _licenseMetric(
-                                'ACTIVAS',
-                                (_trialSummary['active'] ?? 0).toString(),
-                                _channelCyan,
-                              )),
-                              const SizedBox(width: 7),
-                              Expanded(child: _licenseMetric(
-                                'LÍMITE',
-                                '10',
-                                Colors.white,
-                              )),
-                            ],
-                          ),
-                          if (_trialError != null) ...<Widget>[
-                            const SizedBox(height: 7),
-                            Text(
-                              'No se pudo consultar o generar los pases: $_trialError',
-                              style: const TextStyle(
-                                color: _channelPink,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 10),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: _working ? null : _generateTrialCodes,
-                              icon: const Icon(Icons.vpn_key_rounded),
-                              label: const Text('GENERAR CÓDIGOS VIP DISPONIBLES'),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: _channelGreen,
-                                foregroundColor: _channelBg,
-                              ),
-                            ),
-                          ),
-                          if (_newTrialCodes.isNotEmpty) ...<Widget>[
-                            const SizedBox(height: 10),
-                            Row(
-                              children: <Widget>[
-                                const Expanded(
-                                  child: Text(
-                                    'CÓDIGOS NUEVOS · COPIAR Y ENTREGAR',
-                                    style: TextStyle(
-                                      color: _channelCyan,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                ),
-                                IconButton(
-                                  tooltip: 'Copiar todos los códigos',
-                                  onPressed: _copyTrialCodes,
-                                  icon: const Icon(Icons.copy_rounded,
-                                    color: _channelGreen),
-                                ),
-                              ],
-                            ),
-                            for (var index = 0; index < _newTrialCodes.length; index++)
-                              Container(
-                                margin: const EdgeInsets.only(top: 5),
-                                padding: const EdgeInsets.all(9),
-                                decoration: BoxDecoration(
-                                  color: _channelPanel2,
-                                  borderRadius: BorderRadius.circular(9),
-                                  border: Border.all(color: _channelLine),
-                                ),
-                                child: Row(
-                                  children: <Widget>[
-                                    SizedBox(
-                                      width: 22,
-                                      child: Text(
-                                        (index + 1).toString().padLeft(2, '0'),
-                                        style: const TextStyle(
-                                          color: _channelMuted,
-                                          fontWeight: FontWeight.w900,
-                                        ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: SelectableText(
-                                        _newTrialCodes[index],
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          letterSpacing: 1,
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                    ),
-                                    IconButton(
-                                      visualDensity: VisualDensity.compact,
-                                      tooltip: 'Copiar código',
-                                      onPressed: () async {
-                                        await Clipboard.setData(
-                                          ClipboardData(text: _newTrialCodes[index]),
-                                        );
-                                        _message('Código VIP copiado.');
-                                      },
-                                      icon: const Icon(Icons.content_copy_rounded,
-                                        size: 16, color: _channelCyan),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            const SizedBox(height: 7),
-                            const Text(
-                              'IMPORTANTE: copia y entrega estos códigos ahora. Por seguridad, el servidor almacena solo sus hashes.',
-                              style: TextStyle(
-                                color: _channelMuted,
-                                fontSize: 9,
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    _adminCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          const Text(
-                            'LICENCIAS · VENTAS Y REGALOS',
-                            style: TextStyle(
-                              color: _channelGreen,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          const Text(
-                            'Concede acceso de por vida a una cuenta Google. Usa PAGO después de confirmar el cobro o GRATIS para las personas que quieras invitar. La autorización no se transfiere al compartir el APK.',
-                            style: TextStyle(
-                              color: _channelMuted,
-                              fontSize: 10,
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          TextField(
-                            controller: _licenseEmailController,
-                            keyboardType: TextInputType.emailAddress,
-                            autocorrect: false,
-                            enableSuggestions: false,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: const InputDecoration(
-                              labelText: 'Correo Google del comprador o invitado',
-                              hintText: 'persona@gmail.com',
-                              prefixIcon: Icon(Icons.mail_outline_rounded),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          DropdownButtonFormField<String>(
-                            initialValue: _licenseType,
-                            dropdownColor: _channelPanel2,
-                            decoration: const InputDecoration(
-                              labelText: 'Tipo de acceso',
-                            ),
-                            items: const <DropdownMenuItem<String>>[
-                              DropdownMenuItem(
-                                value: 'paid',
-                                child: Text('LICENCIA DE PAGO · VITALICIA'),
-                              ),
-                              DropdownMenuItem(
-                                value: 'free',
-                                child: Text('PASE GRATUITO · INVITACIÓN'),
-                              ),
-                            ],
-                            onChanged: _working
-                                ? null
-                                : (value) => setState(
-                                    () => _licenseType = value ?? 'free',
-                                  ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _licenseNoteController,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: const InputDecoration(
-                              labelText: 'Nota opcional (referencia del pago, regalo, etc.)',
-                            ),
-                          ),
-                          const SizedBox(height: 9),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: _working ? null : _grantLicense,
-                              icon: const Icon(Icons.verified_user_rounded),
-                              label: const Text('CONCEDER ACCESO'),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: _channelGreen,
-                                foregroundColor: _channelBg,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: <Widget>[
-                              const Expanded(
-                                child: Text(
-                                  'LICENCIAS REGISTRADAS',
-                                  style: TextStyle(
-                                    color: _channelCyan,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                _licenseRecords.length.toString(),
-                                style: const TextStyle(
-                                  color: _channelMuted,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                              IconButton(
-                                onPressed: _working ? null : _loadLicenses,
-                                tooltip: 'Actualizar licencias',
-                                icon: const Icon(
-                                  Icons.refresh_rounded,
-                                  color: _channelCyan,
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (_licensesError != null)
-                            Text(
-                              'No se pudieron consultar las licencias: $_licensesError',
-                              style: const TextStyle(
-                                color: _channelPink,
-                                fontSize: 10,
-                              ),
-                            ),
-                          if (_licenseRecords.isEmpty)
-                            const Text(
-                              'Todavía no hay licencias concedidas.',
-                              style: TextStyle(
-                                color: _channelMuted,
-                                fontSize: 10,
-                              ),
-                            ),
-                          for (final license in _licenseRecords)
-                            Container(
-                              margin: const EdgeInsets.only(top: 7),
-                              padding: const EdgeInsets.all(9),
-                              decoration: BoxDecoration(
-                                color: _channelPanel2,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: license.status == 'active'
-                                      ? (license.licenseType == 'paid'
-                                          ? _channelCyan
-                                          : _channelGreen)
-                                      : _channelPink,
-                                ),
-                              ),
-                              child: Row(
-                                children: <Widget>[
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: <Widget>[
-                                        Text(
-                                          license.email,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 10,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 3),
-                                        Text(
-                                          (license.licenseType == 'paid'
-                                                  ? 'PAGO'
-                                                  : 'GRATIS') +
-                                              ' · ' +
-                                              (license.status == 'active'
-                                                  ? 'ACTIVA'
-                                                  : 'REVOCADA'),
-                                          style: TextStyle(
-                                            color: license.status == 'active'
-                                                ? (license.licenseType == 'paid'
-                                                    ? _channelCyan
-                                                    : _channelGreen)
-                                                : _channelPink,
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w900,
-                                          ),
-                                        ),
-                                        if (license.note.isNotEmpty)
-                                          Text(
-                                            license.note,
-                                            style: const TextStyle(
-                                              color: _channelMuted,
-                                              fontSize: 9,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (license.status == 'active')
-                                    IconButton(
-                                      onPressed: _working
-                                          ? null
-                                          : () => _revokeLicense(license),
-                                      tooltip: 'Revocar acceso',
-                                      icon: const Icon(
-                                        Icons.block_rounded,
-                                        color: _channelPink,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    _adminCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          const Text(
-                            'AÑADIR LISTA MANUALMENTE',
-                            style: TextStyle(
-                              color: _channelCyan,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 9),
-                          TextField(
-                            controller: _labelController,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: const InputDecoration(
-                              labelText: 'Nombre de la lista',
-                              hintText: 'Ej. Lista deportiva autorizada',
-                            ),
-                          ),
-                          const SizedBox(height: 9),
-                          TextField(
-                            controller: _urlController,
-                            keyboardType: TextInputType.url,
-                            autocorrect: false,
-                            enableSuggestions: false,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: const InputDecoration(
-                              labelText: 'URL HTTPS de la lista IPTV',
-                              hintText: 'M3U/M3U8, PLS, XSPF, XML/ASX, JSON, CSV o TXT',
-                              prefixIcon: Icon(Icons.link_rounded),
-                            ),
-                          ),
-                          const SizedBox(height: 7),
-                          CheckboxListTile(
-                            contentPadding: EdgeInsets.zero,
-                            dense: true,
-                            value: _rightsConfirmed,
-                            activeColor: _channelGreen,
-                            title: const Text(
-                              'Confirmo que puedo distribuir estas señales: son mías, autorizadas o gratuitas con permiso de retransmisión.',
-                              style: TextStyle(
-                                color: _channelMuted,
-                                fontSize: 10,
-                                height: 1.35,
-                              ),
-                            ),
-                            onChanged: (value) => setState(
-                              () => _rightsConfirmed = value ?? false,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: _working ||
-                                      _sources.length >= maxChannelPlaylistSources
-                                  ? null
-                                  : _addPlaylist,
-                              icon: const Icon(Icons.cloud_download_rounded),
-                              label: Text(
-                                _sources.length >= maxChannelPlaylistSources
-                                    ? 'LÍMITE DE ' + maxChannelPlaylistSources.toString() + ' LISTAS COMPLETO'
-                                    : 'GUARDAR LISTA E IMPORTAR',
-                              ),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: _channelGreen,
-                                foregroundColor: _channelBg,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'La URL queda guardada en Cloudflare y no se pierde al cerrar o reinstalar la APK. Los canales nuevos se guardan ocultos hasta que actives su icono del ojo.',
-                            style: TextStyle(
-                              color: _channelMuted,
-                              fontSize: 9,
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Row(
-                      children: <Widget>[
-                        const Expanded(
-                          child: Text(
-                            'LISTAS REGISTRADAS',
-                            style: TextStyle(
-                              color: _channelPink,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
                         Text(
-                          _sources.length.toString() +
-                              ' / ' +
-                              maxChannelPlaylistSources.toString(),
-                          style: const TextStyle(
-                            color: _channelCyan,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        IconButton(
-                          onPressed: _working ? null : _refreshSources,
-                          icon: const Icon(
-                            Icons.sync_rounded,
-                            color: _channelCyan,
-                          ),
-                          tooltip: 'Reimportar todas las listas guardadas',
+                          _error!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: _channelPink),
                         ),
                       ],
-                    ),
-                    if (_sourcesError != null)
-                      _adminCard(
-                        child: Text(
-                          'No se pudieron consultar las listas registradas: ' +
-                              _sourcesError!,
-                          style: const TextStyle(
-                            color: _channelYellow,
-                            fontSize: 11,
-                            height: 1.4,
+                      const SizedBox(height: 15),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: _working ? null : _signIn,
+                          icon: _working
+                              ? const SizedBox(
+                                  width: 17,
+                                  height: 17,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.login_rounded),
+                          label: const Text('ENTRAR CON GOOGLE'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: _channelCyan,
+                            foregroundColor: _channelBg,
                           ),
                         ),
                       ),
-                    if (_sources.isEmpty)
-                      _adminCard(
-                        child: const Text(
-                          'Todavía no hay listas registradas.',
-                          style: TextStyle(color: _channelMuted),
-                        ),
-                      )
-                    else
-                      for (final source in _sources.take(_visibleSourceCount))
-                        _adminCard(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                source.label,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                Uri.tryParse(source.url)?.host ?? 'Fuente M3U',
-                                style: const TextStyle(
-                                  color: _channelMuted,
-                                  fontSize: 9,
-                                ),
-                              ),
-                              const SizedBox(height: 5),
-                              Text(
-                                _sourceStatus(source),
-                                style: TextStyle(
-                                  color: _sourceStatusColor(source),
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              if (source.lastImportedAt.isNotEmpty)
-                                Text(
-                                  _sourceLastUpdated(source) ?? '',
-                                  style: const TextStyle(
-                                    color: _channelMuted,
-                                    fontSize: 9,
-                                  ),
-                                ),
-                              Text(
-                                source.importedCount.toString() +
-                                    ' canales procesados' +
-                                    (source.format.isEmpty
-                                        ? ''
-                                        : ' · FORMATO ' + source.format.toUpperCase()),
-                                style: const TextStyle(
-                                  color: _channelMuted,
-                                  fontSize: 9,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 6,
-                                children: <Widget>[
-                                  OutlinedButton.icon(
-                                    onPressed: _working
-                                        ? null
-                                        : () => _editPlaylistSource(source),
-                                    icon: const Icon(Icons.edit_rounded, size: 16),
-                                    label: const Text('EDITAR'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: _channelCyan,
-                                      side: const BorderSide(color: _channelCyan),
-                                      visualDensity: VisualDensity.compact,
-                                    ),
-                                  ),
-                                  if (source.status == 'error')
-                                    OutlinedButton.icon(
-                                      onPressed: _working
-                                          ? null
-                                          : () => _retryPlaylistSource(source),
-                                      icon: const Icon(Icons.refresh_rounded, size: 16),
-                                      label: const Text('REINTENTAR'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: _channelCyan,
-                                        side: const BorderSide(color: _channelCyan),
-                                        visualDensity: VisualDensity.compact,
-                                      ),
-                                    ),
-                                  OutlinedButton.icon(
-                                    key: ValueKey<String>('remove-source-' + source.id),
-                                    onPressed: _working
-                                        ? null
-                                        : () => _removePlaylistSource(source),
-                                    icon: const Icon(Icons.delete_outline_rounded, size: 16),
-                                    label: const Text('QUITAR LISTA'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: _channelPink,
-                                      side: const BorderSide(color: _channelPink),
-                                      visualDensity: VisualDensity.compact,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                    if (_visibleSourceCount < _sources.length)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            key: const ValueKey<String>('admin-show-more-sources'),
-                            onPressed: _showMoreSources,
-                            icon: const Icon(Icons.expand_more_rounded),
-                            label: Text(
-                              'MOSTRAR OTRAS ${(_sources.length - _visibleSourceCount).clamp(0, _sourcePageSize)} LISTAS',
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: _channelCyan,
-                              side: const BorderSide(color: _channelCyan),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                  ],
+                    ],
+                  ),
                 ),
               ),
-                  ),
-                ],
-              ),
-      ),
+            )
+          : SafeArea(child: _buildIptvScreen()),
     );
   }
 }

@@ -2,9 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:deporte_total_360/channel_playlist_presets.dart';
 
 void main() {
-  test('ofrece exactamente 100 listas predeterminadas con URLs HTTPS únicas', () {
-    expect(channelPlaylistPresets, hasLength(100));
-    expect(maxChannelPlaylistSources, equals(100));
+  test('ofrece exactamente 120 listas predeterminadas con URLs HTTPS únicas', () {
+    expect(channelPlaylistPresets, hasLength(120));
+    expect(maxChannelPlaylistSources, equals(120));
 
     final normalizedUrls = channelPlaylistPresets
         .map((preset) => normalizeChannelPlaylistUrl(preset.url))
@@ -30,7 +30,18 @@ void main() {
     );
   });
 
-  test('incluye el índice global completo de IPTV-org sin quitar TDTChannels', () {
+  test('incluye la lista combinada de TV y radio de TDTChannels', () {
+    expect(
+      channelPlaylistPresets.any(
+        (preset) =>
+            preset.label == 'TDTChannels · TV + Radio' &&
+            preset.url == 'https://www.tdtchannels.com/lists/tvradio.m3u',
+      ),
+      isTrue,
+    );
+  });
+
+  test('incluye el índice global de IPTV-org en la plaza 100 y conserva TDTChannels', () {
     expect(
       channelPlaylistPresets.any(
         (preset) =>
@@ -47,6 +58,12 @@ void main() {
       ),
       isTrue,
     );
+  });
+
+  test('incluye veinte fuentes nuevas de países sin duplicar URLs', () {
+    expect(channelPlaylistPresets[99].url, iptvOrgGlobalIndexPlaylistUrl);
+    expect(channelPlaylistPresets.skip(100), hasLength(20));
+    expect(channelPlaylistPresets.map((preset) => normalizeChannelPlaylistUrl(preset.url)).toSet(), hasLength(120));
   });
 
   test('incluye ocho fuentes deportivas públicas adicionales', () {
