@@ -14,6 +14,13 @@ import 'package:deporte_total_360/sports_api_service.dart';
 void _noopHomeNavigate(int _) {}
 void _noopHomeAction() {}
 
+Future<void> _pumpFrames(WidgetTester tester, {int count = 12}) async {
+  // Avanza la UI sin esperar a que terminen animaciones indeterminadas.
+  for (var frame = 0; frame < count; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
 class _AdminTestService extends ChannelCatalogService {
   _AdminTestService({
     this.autoSignIn = true,
@@ -316,7 +323,7 @@ void main() {
         ),
       ),
     );
-    await tester.pump(const Duration(milliseconds: 300));
+    await _pumpFrames(tester);
 
     expect(find.text('Canal cacheado 000'), findsOneWidget);
     expect(find.text('120 LISTAS IPTV · TODOS LOS CANALES'), findsOneWidget);
@@ -331,8 +338,11 @@ void main() {
     await tester.scrollUntilVisible(
       lastLanguage,
       500,
-      scrollable: find.byKey(
-        const ValueKey<String>('channel-admin-iptv-list'),
+      scrollable: find.descendant(
+        of: find.byKey(
+          const ValueKey<String>('channel-admin-iptv-list'),
+        ),
+        matching: find.byType(Scrollable),
       ),
     );
     expect(lastLanguage, findsOneWidget);
@@ -347,7 +357,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
     );
-    await tester.pump(const Duration(milliseconds: 300));
+    await _pumpFrames(tester);
 
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
     expect(find.text('120 LISTAS IPTV · TODOS LOS CANALES'), findsOneWidget);
@@ -367,7 +377,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
     );
-    await tester.pump(const Duration(milliseconds: 300));
+    await _pumpFrames(tester);
 
     final list = find.byKey(
       const ValueKey<String>('channel-admin-iptv-list'),
@@ -375,7 +385,10 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Lista importada'),
       400,
-      scrollable: list,
+      scrollable: find.descendant(
+        of: list,
+        matching: find.byType(Scrollable),
+      ),
     );
     expect(find.text('Lista importada'), findsOneWidget);
     expect(find.text('AÑADIR ÍNDICE GLOBAL IPTV-ORG'), findsNothing);
@@ -393,7 +406,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
     );
-    await tester.pump(const Duration(milliseconds: 300));
+    await _pumpFrames(tester);
 
     expect(service.bulkPlaylistRequests, hasLength(1));
     expect(service.bulkPlaylistRequests.single, hasLength(120));
@@ -418,7 +431,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
     );
-    await tester.pump(const Duration(milliseconds: 300));
+    await _pumpFrames(tester);
 
     expect(find.text('AÑADIR LISTA GENERAL'), findsNothing);
     expect(find.text('AGREGAR CANALES DESDE ESTA LISTA'), findsNothing);
@@ -438,7 +451,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
     );
-    await tester.pump(const Duration(milliseconds: 300));
+    await _pumpFrames(tester);
 
     expect(find.text('120 LISTAS IPTV'), findsOneWidget);
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
@@ -453,7 +466,10 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey<String>('iptv-add-channel-general-channel')),
       300,
-      scrollable: list,
+      scrollable: find.descendant(
+        of: list,
+        matching: find.byType(Scrollable),
+      ),
     );
     expect(
       find.byTooltip('Configurar proxies de Canal General'),
@@ -470,7 +486,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
     );
-    await tester.pump(const Duration(milliseconds: 300));
+    await _pumpFrames(tester);
 
     expect(find.textContaining('Descarga completa y guardada'), findsOneWidget);
     expect(find.byIcon(Icons.sync_rounded), findsNothing);
@@ -588,7 +604,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await _pumpFrames(tester, count: 30);
 
     expect(
       tester.widget<Text>(
@@ -606,9 +622,9 @@ void main() {
     );
     expect(language, findsOneWidget);
     await tester.tap(language);
-    await tester.pumpAndSettle();
+    await _pumpFrames(tester, count: 30);
     await tester.tap(find.text('Inglés').last);
-    await tester.pumpAndSettle();
+    await _pumpFrames(tester, count: 30);
     expect(firstService.languageRequests['general-channel'], 'en');
 
     final visibility = find.byKey(
@@ -616,7 +632,7 @@ void main() {
     );
     expect(visibility, findsOneWidget);
     await tester.tap(visibility);
-    await tester.pumpAndSettle();
+    await _pumpFrames(tester, count: 30);
     expect(firstService.visibilityRequests, contains(<String, Object>{
       'channelId': 'general-channel',
       'visible': true,
@@ -646,7 +662,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await _pumpFrames(tester, count: 30);
 
     expect(
       tester.widget<Text>(
