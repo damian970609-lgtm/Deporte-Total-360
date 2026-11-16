@@ -281,7 +281,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el panel privado muestra canales deportivos y generales en un inventario único', (tester) async {
+  testWidgets('el menú Damián APK abre una sola vista IPTV con canales deportivos y generales juntos', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
@@ -289,14 +289,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsOneWidget);
+    expect(find.text('IPTV · TODAS LAS LISTAS EN UNA SOLA'), findsOneWidget);
+    expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
     expect(find.text('Canal General'), findsOneWidget);
     expect(find.text('ESPN Deportes'), findsOneWidget);
-    expect(find.text('GENERAL / SIN CLASIFICAR'), findsOneWidget);
-    expect(find.textContaining('EPG AUTOMÁTICA'), findsNothing);
-    expect(find.textContaining('CONFIGURAR GUÍAS EPG'), findsNothing);
-    expect(find.text('2 CANALES'), findsOneWidget);
-    expect(service.lastAdminPageLimit, 40);
+    expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsNothing);
+    expect(find.text('PROTECCIÓN Y RESTRICCIONES REGIONALES'), findsNothing);
+    expect(find.text('PROTON VPN'), findsNothing);
+    expect(find.text('2 CANALES'), findsNothing);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -429,7 +429,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el menú privado muestra la sección Proton VPN sin alterar IPTV', (tester) async {
+  testWidgets('el menú Damián APK no muestra Proton VPN ni el inventario administrativo antiguo', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
@@ -437,18 +437,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsOneWidget);
-    await tester.tap(find.text('PROTON VPN'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('PROTON VPN · CONEXIÓN PROTEGIDA'), findsOneWidget);
-    expect(find.text('ABRIR PROTON VPN'), findsOneWidget);
-    expect(find.textContaining('tres reproductores'), findsOneWidget);
+    expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
+    expect(find.text('PROTON VPN'), findsNothing);
+    expect(find.text('PROTON VPN · CONEXIÓN PROTEGIDA'), findsNothing);
+    expect(find.text('ABRIR PROTON VPN'), findsNothing);
+    expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsNothing);
+    expect(find.text('PROTECCIÓN Y RESTRICCIONES REGIONALES'), findsNothing);
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.text('IPTV'));
-    await tester.pumpAndSettle();
-    expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -560,8 +556,6 @@ void main() {
     final service = _AdminTestService(autoSignIn: true, adminTotal: 2005);
     await tester.pumpWidget(MaterialApp(home: ChannelAdminScreen(service: service)));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('IPTV'));
-    await tester.pumpAndSettle();
 
     expect(tester.widget<Text>(find.byKey(const ValueKey<String>('iptv-channel-total'))).data, '2005');
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
@@ -584,23 +578,10 @@ void main() {
     final iptvList = find.byKey(
       const ValueKey<String>('channel-admin-iptv-list'),
     );
-    final addSportsChannel = find.byKey(
-      const ValueKey<String>('iptv-add-channel-sports-channel'),
-    );
-    for (var attempt = 0; attempt < 8 && addSportsChannel.evaluate().isEmpty; attempt++) {
-      await tester.drag(iptvList, const Offset(0, -500));
-      await tester.pumpAndSettle();
-    }
-    expect(addSportsChannel, findsOneWidget);
-
-    final classifyGeneralChannel = find.byKey(
-      const ValueKey<String>('iptv-classify-channel-general-channel'),
-    );
-    for (var attempt = 0; attempt < 8 && classifyGeneralChannel.evaluate().isEmpty; attempt++) {
-      await tester.drag(iptvList, const Offset(0, -500));
-      await tester.pumpAndSettle();
-    }
-    expect(classifyGeneralChannel, findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('iptv-visibility-general-channel')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('iptv-language-general-channel')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('iptv-visibility-sports-channel')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('iptv-language-sports-channel')), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
