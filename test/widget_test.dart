@@ -668,6 +668,11 @@ void main() {
     expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsOneWidget);
     expect(find.text('SEÑAL PENDIENTE'), findsNWidgets(8));
     expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsOneWidget);
+    await tester.tap(find.text('Canales deportivos'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ChannelCatalogScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
