@@ -216,7 +216,7 @@ class LivePlayerBoard extends StatelessWidget {
                 crossAxisCount: columns,
                 crossAxisSpacing: 8,
                 mainAxisSpacing: 8,
-                childAspectRatio: 1.08,
+                childAspectRatio: 1.40,
               ),
               itemBuilder: (context, index) {
                 final channelNumber = index + 1;
