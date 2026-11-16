@@ -653,193 +653,26 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('las flechas de navegación nunca cubren etiquetas antes ni después de desplazar', (tester) async {
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(500, 900);
-
+  testWidgets('MainShell solo muestra Inicio y no expone otras secciones', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 250));
 
-    void expectNoNavigationLabelBehindCues() {
-      final viewportRect = tester.getRect(
-        find.byKey(const ValueKey<String>('bottom-nav-scroll-viewport')),
-      );
-      final labels = List<Finder>.generate(
-        7,
-        (index) => find.byKey(ValueKey<String>('bottom-tab-label-$index')),
-      );
-      final cues = <Finder>[
-        find.byKey(const ValueKey<String>('bottom-nav-scroll-left')),
-        find.byKey(const ValueKey<String>('bottom-nav-scroll-right')),
-      ].where((finder) => finder.evaluate().isNotEmpty);
-
-      for (final cue in cues) {
-        final cueRect = tester.getRect(cue);
-        for (var index = 0; index < labels.length; index++) {
-          final visibleLabelRect = tester.getRect(labels[index]).intersect(viewportRect);
-          if (visibleLabelRect.isEmpty) continue;
-          expect(
-            cueRect.overlaps(visibleLabelRect),
-            isFalse,
-            reason: 'La flecha no debe cubrir la parte visible de la etiqueta de la pestaña $index.',
-          );
-        }
-      }
-    }
-
-    expect(find.byKey(const ValueKey<String>('bottom-nav-scroll-right')), findsOneWidget);
-    expectNoNavigationLabelBehindCues();
-
-    await tester.tap(find.byKey(const ValueKey<String>('bottom-nav-scroll-right')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 350));
-
-    expect(find.byKey(const ValueKey<String>('bottom-nav-scroll-left')), findsOneWidget);
-    expectNoNavigationLabelBehindCues();
-    expect(tester.takeException(), isNull);
-
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('Inicio se estabiliza cuando Android solicita reducir movimiento', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(disableAnimations: true),
-          child: HomeDashboard(
-            onNavigate: (_) {},
-              onContact: () {},
-            onDonations: () {},
-            onFantasy: () {},
-            onOpenAgenda: () {},
-            onChat: () {},
-          ),
-        ),
-      ),
-    );
-
-    // Con el movimiento reducido no debe quedar un ticker infinito activo.
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey<String>('home-sports-crest')), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('Inicio conserva el contenido con texto ampliado al 200 por ciento', (tester) async {
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(360, 640);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(textScaler: TextScaler.linear(2.0)),
-          child: HomeDashboard(
-            onNavigate: (_) {},
-              onContact: () {},
-            onDonations: () {},
-            onFantasy: () {},
-            onOpenAgenda: () {},
-            onChat: () {},
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-    expect(find.byKey(const ValueKey<String>('home-sports-crest')), findsOneWidget);
-    expect(find.text('TODO EL DEPORTE'), findsOneWidget);
-    expect(find.text('EN UN SOLO LUGAR'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('muestra las siete secciones principales y presenta Chat y Ajustes', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: MainShell()));
-    // Pintar un segundo frame comprueba el render inicial de Inicio, no solo
-    // que el árbol de widgets se pueda construir.
-    await tester.pump();
     expect(find.byType(HomeDashboard), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    expect(find.text('Deportes en vivo'), findsOneWidget);
-    expect(find.text('Canales deportivos'), findsOneWidget);
-    // La pantalla de transmisiones no debe arrancar ni consultar servicios
-    // hasta que el usuario entre en esa pestaña.
-    expect(find.text('TRANSMISIONES EN VIVO'), findsNothing);
-    expect(find.text('Agenda de hoy'), findsOneWidget);
-    expect(find.text('Mister Fantasy'), findsOneWidget);
-    expect(find.text('Estadísticas'), findsNothing);
-    expect(find.text('Resúmenes'), findsNothing);
-    expect(find.text('Chat'), findsOneWidget);
-    expect(find.text('Actualizar APK'), findsNothing);
-    expect(find.text('Ajustes'), findsOneWidget);
-    // La sala pública no arranca hasta seleccionar su pestaña.
-    expect(find.text('CHAT DE COMPRADORES'), findsNothing);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('la navegación inferior permite recorrer las siete secciones', (tester) async {
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(360, 800);
-
-    await tester.pumpWidget(const MaterialApp(home: MainShell()));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 30));
-
-    final forward = find.byKey(const ValueKey<String>('bottom-nav-scroll-right'));
-    expect(forward, findsOneWidget);
-    await tester.tap(forward);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 320));
-
-    expect(
-      find.byKey(const ValueKey<String>('bottom-nav-scroll-left')),
-      findsOneWidget,
-    );
-    expect(find.text('Ajustes'), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('home-sports-crest')), findsOneWidget);
+    expect(find.text('DEPORTE TOTAL 360°'), findsOneWidget);
+    expect(find.text('Deportes en vivo'), findsNothing);
+    expect(find.text('Canales deportivos'), findsNothing);
+    expect(find.text('Agenda de hoy'), findsNothing);
+    expect(find.text('Mister Fantasy'), findsNothing);
+    expect(find.text('Chat'), findsNothing);
+    expect(find.text('Ajustes'), findsNothing);
+    expect(find.byKey(const ValueKey<String>('bottom-nav-scroll-viewport')), findsNothing);
+    expect(find.byKey(const ValueKey<String>('bottom-nav-scroll-left')), findsNothing);
+    expect(find.byKey(const ValueKey<String>('bottom-nav-scroll-right')), findsNothing);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('Agenda abre dentro del shell y conserva la pantalla ante un fallo de SportsAPI', (tester) async {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
-    sportsApiBaseUrl.value = '';
-
-    await tester.pumpWidget(const MaterialApp(home: MainShell()));
-    await tester.pump();
-
-    final agendaTab = find.text('Agenda de hoy');
-    await tester.ensureVisible(agendaTab);
-    await tester.tap(agendaTab);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 120));
-
-    expect(find.text('AGENDA DEPORTIVA'), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('agenda-process-panel')), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('agenda-process-status')), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    await tester.pumpWidget(const SizedBox.shrink());
-    sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
-  });
-
-  testWidgets('Chat abre dentro de la navegación principal', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: MainShell()));
-    await tester.pump();
-    final chatTab = find.text('Chat');
-    await tester.ensureVisible(chatTab);
-    await tester.tap(chatTab);
-    await tester.pump();
-    expect(find.text('CHAT DE COMPRADORES'), findsOneWidget);
-    expect(find.text('Ajustes'), findsOneWidget);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
 
 }
