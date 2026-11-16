@@ -632,10 +632,10 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('MainShell expone Inicio, Agenda, En vivo, Canales y Ajustes', (tester) async {
+  testWidgets('MainShell deja Inicio, Agenda, En vivo y Ajustes sin catálogo público separado', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     tester.view.devicePixelRatio = 1.0;
-      tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = const Size(390, 844);
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
     await tester.pump();
 
@@ -645,8 +645,9 @@ void main() {
     expect(find.text('Inicio'), findsOneWidget);
     expect(find.text('Agenda'), findsOneWidget);
     expect(find.text('En vivo'), findsOneWidget);
-    expect(find.text('Canales'), findsOneWidget);
+    expect(find.text('Canales'), findsNothing);
     expect(find.text('Ajustes'), findsOneWidget);
+    expect(find.byType(ChannelCatalogScreen), findsNothing);
     expect(find.text('Agenda de hoy'), findsNothing);
     expect(find.text('Mister Fantasy'), findsNothing);
     expect(find.text('Chat'), findsNothing);
@@ -659,19 +660,15 @@ void main() {
     expect(find.byType(LiveChannelsScreen), findsOneWidget);
     expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsOneWidget);
     expect(find.text('SEÑAL PENDIENTE'), findsNWidgets(8));
-    await tester.tap(find.text('Canales'));
-    await tester.pump(const Duration(milliseconds: 350));
-    await tester.pump();
-    expect(find.byType(ChannelCatalogScreen), findsOneWidget);
+    expect(find.byType(ChannelCatalogScreen), findsNothing);
     expect(tester.takeException(), isNull);
 
+    // Ajustes queda inmediatamente después de En vivo y abre el menú DAMIÁN APK.
     await tester.tap(find.text('Ajustes'));
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump();
     expect(find.byType(SettingsScreen), findsOneWidget);
     expect(find.text('MENÚ DAMIÁN APK'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
