@@ -73,7 +73,6 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
     if (widget.isActive) unawaited(_refreshBoard());
     _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (mounted &&
-          widget.isActive &&
           WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
         unawaited(_refreshBoard());
       }
@@ -90,7 +89,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && widget.isActive) {
+    if (state == AppLifecycleState.resumed) {
       unawaited(_refreshBoard());
     }
   }
@@ -114,7 +113,8 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
   }
 
   Future<void> _refreshBoard() async {
-    if (_refreshing || !mounted || !widget.isActive) return;
+    if (_refreshing || !mounted ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) return;
     _refreshing = true;
     try {
       final next = await _agendaLive.buildBoardState(now: DateTime.now());
@@ -898,6 +898,8 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
       if (controller?.value.isPlaying == true) {
         unawaited(controller!.pause());
       }
+    } else if (!oldWidget.isActive && widget.isActive && widget.autoStart) {
+      unawaited(_initialize());
     }
   }
 
