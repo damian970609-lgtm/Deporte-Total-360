@@ -11,7 +11,6 @@ import 'package:volume_controller/volume_controller.dart';
 
 import 'channel_catalog_service.dart';
 import 'channel_playlist_presets.dart';
-import 'proton_vpn_screen.dart';
 import 'live_media_format.dart';
 import 'stream_diagnostics.dart';
 
@@ -1645,8 +1644,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   String? _email;
   String? _error;
   String? _sourcesError;
-  bool _showIptvSection = false;
-  bool _showVpnSection = false;
+  bool _showIptvSection = true;
   bool _iptvLoading = false;
   bool _iptvLoaded = false;
   int _iptvRequestId = 0;
@@ -1693,7 +1691,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   }
 
   void _handleAdminScroll() {
-    if (_showIptvSection || _showVpnSection || !_adminScrollController.hasClients ||
+    if (_showIptvSection || !_adminScrollController.hasClients ||
         _loading || _working || !_hasMore || _error != null) {
       return;
     }
@@ -1808,8 +1806,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _sources = <ChannelPlaylistSource>[];
         _licenseRecords = <AppLicenseRecord>[];
         _previewChannel = null;
-        _showIptvSection = false;
-        _showVpnSection = false;
+        _showIptvSection = true;
         _iptvChannels = <SportsChannel>[];
         _iptvSelectedChannel = null;
         _iptvLoaded = false;
@@ -1824,33 +1821,28 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
   Future<void> _loadAdmin({bool showLoading = true}) async {
     if (_email == null && _service.signedInEmail == null) return;
-    _iptvLoaded = false;
-    _iptvError = null;
     if (showLoading && mounted) {
       setState(() {
         _loading = true;
         _error = null;
         _sourcesError = null;
+        _iptvError = null;
       });
     }
 
-    // Todas las consultas independientes comienzan juntas. Un servidor lento
-    // no obliga a esperar en cadena el catálogo, las listas y las licencias.
+    // El panel abre directamente IPTV y evita cargar el antiguo inventario
+    // administrativo paralelo. Se leen todas las páginas de las 120 listas.
     await Future.wait<void>(<Future<void>>[
-      _loadAdminChannels(),
       _loadAdminSources(),
-      _loadLicenses(),
-      _loadTrialSummary(),
+      _loadAllIptvChannels(force: true),
     ]);
 
     if (!mounted) return;
-
-    // Completa la plaza 100 con el índice público de GitHub únicamente cuando
-    // hay 99 fuentes y todavía no existe esa URL. No se reimportan las otras.
     if (_sources.length == maxChannelPlaylistSources - 1 &&
         !_hasIptvOrgGlobalIndex) {
       await _addIptvOrgGlobalIndex(automatic: true);
     }
+    if (mounted && showLoading) setState(() => _loading = false);
   }
 
   Future<void> _loadAdminChannels() async {
@@ -2525,10 +2517,20 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     setState(() => _working = true);
     try {
       await _service.setVisibility(channel.id, visible: next);
-      await _loadAdmin(showLoading: false);
-      _message(next
-          ? 'Canal publicado para todos los usuarios.'
-          : 'Canal ocultado para todos los usuarios.');
+      if (!mounted) return;
+      final updated = channel.copyWith(visible: next);
+      setState(() {
+        _iptvChannels = List<SportsChannel>.unmodifiable(
+          _iptvChannels.map((item) => item.id == channel.id ? updated : item),
+        );
+        _channels = _channels.map((item) => item.id == channel.id ? updated : item).toList();
+        if (_iptvSelectedChannel?.id == channel.id) {
+          _iptvSelectedChannel = updated;
+        }
+        if (_previewChannel?.id == channel.id) _previewChannel = updated;
+      });
+      await _saveLocalAdminSnapshot(saveChannels: true, saveSources: false);
+      _message(next ? 'Canal visible para todos los usuarios.' : 'Canal ocultado para todos los usuarios.');
     } catch (error) {
       _message(error.toString());
     } finally {
@@ -2616,12 +2618,24 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   ) async {
     try {
       await _service.setLanguage(channel.id, language: language);
-      await _loadAdmin(showLoading: false);
+      if (!mounted) return;
+      final updated = channel.copyWith(language: language);
+      setState(() {
+        _iptvChannels = List<SportsChannel>.unmodifiable(
+          _iptvChannels.map((item) => item.id == channel.id ? updated : item),
+        );
+        _channels = _channels.map((item) => item.id == channel.id ? updated : item).toList();
+        if (_iptvSelectedChannel?.id == channel.id) {
+          _iptvSelectedChannel = updated;
+        }
+        if (_previewChannel?.id == channel.id) _previewChannel = updated;
+      });
+      await _saveLocalAdminSnapshot(saveChannels: true, saveSources: false);
       _message(language == 'es'
           ? 'Idioma guardado: Español 🇪🇸'
           : language == 'en'
               ? 'Idioma guardado: Inglés 🇺🇸'
-              : 'Idioma automático/sin definir guardado.');
+              : 'Idioma sin definir guardado.');
     } catch (error) {
       _message('No se pudo guardar el idioma: ' + error.toString());
     }
@@ -2943,7 +2957,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       if (_iptvChannels.isEmpty && cached.isNotEmpty) _iptvChannels = cached;
     });
 
-    final allById = <String, SportsChannel>{};
+    final all = <SportsChannel>[];
     var offset = 0;
     try {
       while (true) {
@@ -2957,14 +2971,19 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
             'Cloudflare indicó que existen más canales, pero no entregó el siguiente bloque.',
           );
         }
-        for (final channel in page.channels) {
-          allById[channel.id] = channel;
-        }
+        // No filtrar por clasificación/idioma/visibilidad ni deduplicar filas:
+        // la vista IPTV reúne íntegramente los registros de todas las listas.
+        all.addAll(page.channels);
         setState(() {
-          _iptvChannels = List<SportsChannel>.unmodifiable(allById.values);
+          _iptvChannels = List<SportsChannel>.unmodifiable(all);
           final selectedId = _iptvSelectedChannel?.id;
-          if (selectedId != null && allById.containsKey(selectedId)) {
-            _iptvSelectedChannel = allById[selectedId];
+          if (selectedId != null) {
+            for (final channel in all) {
+              if (channel.id == selectedId) {
+                _iptvSelectedChannel = channel;
+                break;
+              }
+            }
           }
         });
         final nextOffset = page.offset + page.channels.length;
@@ -2978,7 +2997,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       }
 
       if (!mounted || requestId != _iptvRequestId) return;
-      final complete = List<SportsChannel>.unmodifiable(allById.values);
+      final complete = List<SportsChannel>.unmodifiable(all);
       setState(() {
         _iptvChannels = complete;
         _channels = List<SportsChannel>.from(complete);
@@ -2988,7 +3007,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _hasMore = false;
         _iptvLoaded = true;
         if (_iptvSelectedChannel != null) {
-          _iptvSelectedChannel = allById[_iptvSelectedChannel!.id] ?? _iptvSelectedChannel;
+          _iptvSelectedChannel = complete.firstWhere((channel) => channel.id == _iptvSelectedChannel!.id, orElse: () => _iptvSelectedChannel!);
         }
       });
       await _saveLocalAdminSnapshot(saveChannels: true, saveSources: false);
@@ -3006,74 +3025,40 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   }
 
   Widget _buildAdminSectionSwitcher() {
-    Widget tab({
-      required String label,
-      required IconData icon,
-      required bool selected,
-      required VoidCallback onTap,
-    }) {
-      return Expanded(
-        child: Material(
-          color: selected ? _channelCyan.withAlpha(24) : _channelPanel,
-          borderRadius: BorderRadius.circular(11),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(11),
-            onTap: selected ? null : onTap,
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(11),
-                border: Border.all(color: selected ? _channelCyan : _channelLine.withAlpha(130)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  Icon(icon, size: 17, color: selected ? _channelCyan : _channelMuted),
-                  const SizedBox(width: 7),
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: selected ? _channelCyan : _channelMuted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(13, 10, 13, 8),
-      child: Row(
-        children: <Widget>[
-          tab(
-            label: 'ADMINISTRACIÓN',
-            icon: Icons.admin_panel_settings_rounded,
-            selected: !_showIptvSection && !_showVpnSection,
-            onTap: _openAdminSection,
-          ),
-          const SizedBox(width: 8),
-          tab(
-            label: 'IPTV',
-            icon: Icons.live_tv_rounded,
-            selected: _showIptvSection,
-            onTap: _openIptvSection,
-          ),
-          const SizedBox(width: 8),
-          tab(
-            label: 'PROTON VPN',
-            icon: Icons.shield_rounded,
-            selected: _showVpnSection,
-            onTap: _openVpnSection,
-          ),
-        ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+        decoration: BoxDecoration(
+          color: _channelPanel,
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(color: _channelCyan.withAlpha(130)),
+        ),
+        child: Row(
+          children: <Widget>[
+            const Icon(Icons.live_tv_rounded, color: _channelCyan, size: 19),
+            const SizedBox(width: 9),
+            const Expanded(
+              child: Text(
+                'IPTV · TODAS LAS LISTAS EN UNA SOLA',
+                style: TextStyle(
+                  color: _channelCyan,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: .35,
+                ),
+              ),
+            ),
+            Text(
+              '${maxChannelPlaylistSources} LISTAS',
+              style: const TextStyle(
+                color: _channelGreen,
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
