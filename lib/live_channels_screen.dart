@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'agenda_live_service.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -50,11 +52,54 @@ class LiveChannelsScreen extends StatefulWidget {
   State<LiveChannelsScreen> createState() => _LiveChannelsScreenState();
 }
 
-class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
+class _LiveChannelsScreenState extends State<LiveChannelsScreen>
+    with WidgetsBindingObserver {
+  final AgendaLiveService _agendaLive = AgendaLiveService();
+  Timer? _refreshTimer;
+  bool _refreshing = false;
+  bool _loading = true;
+  String? _notice;
+  AgendaLiveBoardState _board = const AgendaLiveBoardState(
+    assignments: <AgendaLiveAssignment>[],
+    pending: <AgendaLivePendingEvent>[],
+    catalogueChannelCount: 0,
+  );
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_clearLegacyTransmissionConfiguration());
+    if (widget.isActive) unawaited(_refreshBoard());
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted &&
+          widget.isActive &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        unawaited(_refreshBoard());
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant LiveChannelsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActive && widget.isActive) {
+      unawaited(_refreshBoard());
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && widget.isActive) {
+      unawaited(_refreshBoard());
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _clearLegacyTransmissionConfiguration() async {
@@ -68,8 +113,75 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
     }
   }
 
+  Future<void> _refreshBoard() async {
+    if (_refreshing || !mounted || !widget.isActive) return;
+    _refreshing = true;
+    try {
+      final next = await _agendaLive.buildBoardState(now: DateTime.now());
+      if (!mounted) return;
+      setState(() {
+        _board = next;
+        _loading = false;
+        _notice = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _notice = 'No se pudo consultar Canales deportivos. Se conservarán las referencias de Agenda y se volverá a intentar automáticamente.';
+      });
+      debugPrint('Error al preparar las transmisiones de Agenda: $error');
+    } finally {
+      _refreshing = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  List<LivePlayerSource> _playerSources() {
+    return _board.assignments.take(8).map((assignment) {
+      final event = assignment.event;
+      final channel = assignment.channel;
+      final details = <String>[
+        if (event.competition.isNotEmpty) event.competition,
+        event.title,
+        channel.name,
+      ];
+      return LivePlayerSource(
+        title: 'DEPORTE TOTAL 360° · ${channel.name}',
+        url: channel.url,
+        subtitle: details.join(' · '),
+        eventId: event.id,
+        startAt: event.startsAt,
+      );
+    }).toList(growable: false);
+  }
+
+  List<LivePlayerWaitingEvent> _waitingEvents() {
+    final now = DateTime.now();
+    return _board.pending.take(8).map((pending) {
+      final event = pending.event;
+      final start = event.startsAt.toLocal();
+      final time = '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
+      final heading = event.competition.isNotEmpty
+          ? event.competition
+          : 'AGENDA DEPORTIVA';
+      final startLabel = now.isBefore(event.startsAt)
+          ? 'Comienza a las $time'
+          : 'Evento iniciado · $time';
+      return LivePlayerWaitingEvent(
+        heading: heading,
+        match: event.title,
+        startLabel: startLabel,
+        processStatus: pending.status,
+        processDetail: pending.detail,
+      );
+    }).toList(growable: false);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final sources = _playerSources();
+    final waiting = _waitingEvents();
     return Scaffold(
       backgroundColor: _liveBg,
       appBar: AppBar(
@@ -83,49 +195,87 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen> {
             letterSpacing: .6,
           ),
         ),
+        actions: <Widget>[
+          IconButton(
+            onPressed: _refreshing ? null : _refreshBoard,
+            tooltip: 'Actualizar asignación de transmisiones',
+            icon: Icon(
+              Icons.refresh_rounded,
+              color: _refreshing ? _liveCyan.withAlpha(110) : _liveCyan,
+            ),
+          ),
+        ],
       ),
-      body: SafeArea(
-        child: Column(
-          children: <Widget>[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 11),
-              decoration: const BoxDecoration(
-                color: _livePanel,
-                border: Border(bottom: BorderSide(color: _liveLine)),
-              ),
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    '8 REPRODUCTORES DISPONIBLES',
-                    style: TextStyle(
-                      color: _livePink,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: .7,
+      body: Column(
+        children: <Widget>[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 11),
+            decoration: const BoxDecoration(
+              color: _livePanel,
+              border: Border(bottom: BorderSide(color: _liveLine)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text(
+                  'BÚSQUEDA AUTOMÁTICA · 5 MINUTOS ANTES',
+                  style: TextStyle(
+                    color: _livePink,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: .55,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                const Text(
+                  'La app toma los canales publicados en la ficha de cada evento y busca una coincidencia entre tus canales deportivos visibles. Al finalizar el evento, libera el reproductor.',
+                  style: TextStyle(
+                    color: _liveMuted,
+                    fontSize: 10,
+                    height: 1.45,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  '${sources.length}/8 reproductores asignados · ${_board.catalogueChannelCount} canales deportivos revisados',
+                  style: const TextStyle(
+                    color: _liveCyan,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                if (_loading || _refreshing)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 7),
+                    child: LinearProgressIndicator(
+                      minHeight: 2,
+                      color: _liveCyan,
+                      backgroundColor: _livePanel2,
                     ),
                   ),
-                  SizedBox(height: 5),
+                if (_notice != null) ...<Widget>[
+                  const SizedBox(height: 6),
                   Text(
-                    'Los ocho cuadros están preparados. La nueva forma de configurar y cargar transmisiones se incorporará más adelante.',
-                    style: TextStyle(
-                      color: _liveMuted,
-                      fontSize: 10,
-                      height: 1.45,
+                    _notice!,
+                    style: const TextStyle(
+                      color: Color(0xFFFFB4C0),
+                      fontSize: 9,
+                      height: 1.35,
                     ),
                   ),
                 ],
-              ),
+              ],
             ),
-            Expanded(
-              child: LivePlayerBoard(
-                sources: const <LivePlayerSource>[],
-                isActive: widget.isActive,
-              ),
+          ),
+          Expanded(
+            child: LivePlayerBoard(
+              sources: sources,
+              waitingEvents: waiting,
+              isActive: widget.isActive,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -137,12 +287,14 @@ class LivePlayerSource {
     required this.url,
     this.subtitle,
     this.eventId,
+    this.startAt,
   });
 
   final String title;
   final String url;
   final String? subtitle;
   final String? eventId;
+  final DateTime? startAt;
 }
 
 class LivePlayerWaitingEvent {
@@ -222,6 +374,21 @@ class LivePlayerBoard extends StatelessWidget {
                 final channelNumber = index + 1;
                 if (index < activeSources.length) {
                   final source = activeSources[index];
+                  if (source.startAt != null &&
+                      DateTime.now().isBefore(source.startAt!)) {
+                    final start = source.startAt!.toLocal();
+                    final startLabel = 'Comienza ${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
+                    return _WaitingLivePlayerTile(
+                      channelNumber: channelNumber,
+                      event: LivePlayerWaitingEvent(
+                        heading: 'TRANSMISIÓN PREPARADA',
+                        match: source.subtitle ?? source.title,
+                        startLabel: startLabel,
+                        processStatus: 'CANAL ASIGNADO',
+                        processDetail: 'El reproductor se activará al comenzar el evento.',
+                      ),
+                    );
+                  }
                   return Container(
                     padding: const EdgeInsets.all(5),
                     decoration: BoxDecoration(
@@ -240,7 +407,7 @@ class LivePlayerBoard extends StatelessWidget {
                               aspectRatio: 16 / 9,
                               child: _LiveVideoTile(
                                 key: ValueKey<String>(
-                                  'board-$channelNumber-${source.url}',
+                                  'board-$channelNumber-${source.eventId ?? ''}-${source.url}',
                                 ),
                                 source: source,
                                 initiallyMuted: index > 0,
