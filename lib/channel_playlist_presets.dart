@@ -3,7 +3,7 @@
 /// Las URLs son distintas entre sí. Algunas listas generales o regionales
 /// pueden contener canales también presentes en otras fuentes; el catálogo
 /// del servidor conserva el identificador de cada canal cuando está disponible.
-const int maxChannelPlaylistSources = 100;
+const int maxChannelPlaylistSources = 120;
 const String iptvOrgGlobalIndexPlaylistUrl =
     'https://iptv-org.github.io/iptv/index.m3u';
 const String iptvOrgGlobalIndexPlaylistLabel =
