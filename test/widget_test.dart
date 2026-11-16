@@ -643,6 +643,7 @@ void main() {
 
   testWidgets('MainShell expone Inicio, Agenda deportiva y Deportes en vivo', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
+    tester.view.physicalSize = const Size(390, 844);
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
     await tester.pump();
 
