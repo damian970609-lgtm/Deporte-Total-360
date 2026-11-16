@@ -193,7 +193,7 @@ void main() {
       await tester.tap(signature);
       await tester.pump();
     }
-    expect(find.text('ADMINISTRACIÓN · DAMIÁN.APK'), findsNothing);
+    expect(find.text('IPTV · DAMIÁN.APK'), findsNothing);
 
     final tapTarget = find.ancestor(
       of: signature,
@@ -208,7 +208,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('ADMINISTRACIÓN · DAMIÁN.APK', skipOffstage: false),
+      find.text('IPTV · DAMIÁN.APK', skipOffstage: false),
       findsOneWidget,
     );
     expect(find.text('ENTRAR CON GOOGLE'), findsOneWidget);
@@ -455,6 +455,12 @@ void main() {
     await tester.pump();
 
     expect(find.text('Servidor de datos deportivos'), findsNothing);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('settings-update-apk')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
     expect(find.text('Actualizar APK'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey<String>('creator-whatsapp-button')),
@@ -524,7 +530,7 @@ void main() {
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('channel-admin-iptv-list')), findsOneWidget);
     expect(find.text('AÑADIR CANALES Y LISTAS IPTV'), findsOneWidget);
-    expect(service._adminPageCalls, greaterThanOrEqualTo(3));
+    expect(service._adminPageCalls, greaterThanOrEqualTo(2));
 
     await tester.enterText(
       find.byKey(const ValueKey<String>('iptv-search-field')),

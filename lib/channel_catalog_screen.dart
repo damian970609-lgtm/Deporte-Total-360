@@ -1676,7 +1676,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       await _loadCachedAdminSnapshot(email);
       if (!mounted) return;
       setState(() => _working = false);
-      unawaited(_loadAdmin());
+      await _loadAdmin();
     } on TimeoutException {
       if (!mounted) return;
       setState(() {
@@ -3452,13 +3452,15 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                   ),
                 );
               }
-              if (index == 1) return Padding(
-                padding: const EdgeInsets.only(bottom: 7),
-                child: _buildIptvAddListCard(),
-              );
-              if (index <= rows.length + 1) {
-                final channel = rows[index - 2];
-                return _buildIptvChannelRow(channel, index - 1);
+              if (index <= rows.length) {
+                final channel = rows[index - 1];
+                return _buildIptvChannelRow(channel, index);
+              }
+              if (index == rows.length + 1) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 7),
+                  child: _buildIptvAddListCard(),
+                );
               }
               return const SizedBox.shrink();
             },

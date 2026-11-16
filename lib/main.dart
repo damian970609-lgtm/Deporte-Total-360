@@ -1633,7 +1633,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
           children: <Widget>[
             Container(
-              height: 125,
+              constraints: const BoxConstraints(minHeight: 125),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
