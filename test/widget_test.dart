@@ -641,7 +641,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('MainShell expone Inicio, Agenda, Deportes en vivo y Canales deportivos', (tester) async {
+  testWidgets('MainShell expone Inicio, Agenda, En vivo, Canales y Ajustes', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     tester.view.devicePixelRatio = 1.0;
       tester.view.physicalSize = const Size(390, 844);
@@ -652,26 +652,33 @@ void main() {
     expect(find.byKey(const ValueKey<String>('home-sports-crest')), findsOneWidget);
     expect(find.text('DEPORTE TOTAL 360°'), findsOneWidget);
     expect(find.text('Inicio'), findsOneWidget);
-    expect(find.text('Agenda deportiva'), findsOneWidget);
-    expect(find.text('Deportes en vivo'), findsOneWidget);
-    expect(find.text('Canales deportivos'), findsOneWidget);
+    expect(find.text('Agenda'), findsOneWidget);
+    expect(find.text('En vivo'), findsOneWidget);
+    expect(find.text('Canales'), findsOneWidget);
+    expect(find.text('Ajustes'), findsOneWidget);
     expect(find.text('Agenda de hoy'), findsNothing);
     expect(find.text('Mister Fantasy'), findsNothing);
     expect(find.text('Chat'), findsNothing);
-    expect(find.text('Ajustes'), findsNothing);
     expect(find.byKey(const ValueKey<String>('bottom-nav-scroll-viewport')), findsNothing);
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.text('Deportes en vivo'));
+    await tester.tap(find.text('En vivo'));
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump();
     expect(find.byType(LiveChannelsScreen), findsOneWidget);
     expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsOneWidget);
     expect(find.text('SEÑAL PENDIENTE'), findsNWidgets(8));
-    await tester.tap(find.text('Canales deportivos'));
+    await tester.tap(find.text('Canales'));
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump();
     expect(find.byType(ChannelCatalogScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Ajustes'));
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump();
+    expect(find.byType(SettingsScreen), findsOneWidget);
+    expect(find.text('MENÚ DAMIÁN APK'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     expect(tester.takeException(), isNull);
