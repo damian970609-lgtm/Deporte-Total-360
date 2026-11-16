@@ -691,6 +691,7 @@ class _MainShellState extends State<MainShell> {
   bool _agendaBuilt = false;
   bool _liveBuilt = false;
   bool _channelsBuilt = false;
+  bool _settingsBuilt = false;
 
   void _openAgenda() => _selectPage(1);
 
@@ -701,6 +702,7 @@ class _MainShellState extends State<MainShell> {
       if (index == 1) _agendaBuilt = true;
       if (index == 2) _liveBuilt = true;
       if (index == 3) _channelsBuilt = true;
+      if (index == 4) _settingsBuilt = true;
     });
   }
 
@@ -724,12 +726,13 @@ class _MainShellState extends State<MainShell> {
               ? LiveChannelsScreen(isActive: _selectedIndex == 2)
               : const SizedBox.shrink(),
           _channelsBuilt ? const ChannelCatalogScreen() : const SizedBox.shrink(),
+          _settingsBuilt ? const SettingsScreen() : const SizedBox.shrink(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: _selectPage,
-        height: 70,
+        height: 72,
         backgroundColor: appPanel,
         indicatorColor: appCyan.withAlpha(38),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
@@ -742,17 +745,22 @@ class _MainShellState extends State<MainShell> {
           NavigationDestination(
             icon: Icon(Icons.calendar_month_outlined),
             selectedIcon: Icon(Icons.calendar_month_rounded),
-            label: 'Agenda deportiva',
+            label: 'Agenda',
           ),
           NavigationDestination(
             icon: Icon(Icons.live_tv_outlined),
             selectedIcon: Icon(Icons.live_tv_rounded),
-            label: 'Deportes en vivo',
+            label: 'En vivo',
           ),
           NavigationDestination(
             icon: Icon(Icons.sports_soccer_outlined),
             selectedIcon: Icon(Icons.sports_soccer_rounded),
-            label: 'Canales deportivos',
+            label: 'Canales',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings_rounded),
+            label: 'Ajustes',
           ),
         ],
       ),
@@ -1810,6 +1818,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 12),
 
+            _settingsCard(
+              border: appPink,
+              child: Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  key: const ValueKey<String>('settings-damian-apk-menu'),
+                  contentPadding: EdgeInsets.zero,
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0x33FF1744),
+                    child: Icon(Icons.live_tv_rounded, color: appPink),
+                  ),
+                  title: const Text(
+                    'MENÚ DAMIÁN APK',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Administrar tus listas IPTV, canales, visibilidad e idioma.',
+                    style: TextStyle(color: appMuted, fontSize: 11, height: 1.4),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded, color: appPink),
+                  onTap: _openSignatureAdminPanel,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             _settingsCard(
               border: appBlue,
               child: Material(
