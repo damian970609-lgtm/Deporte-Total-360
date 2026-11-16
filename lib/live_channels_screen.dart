@@ -12,7 +12,6 @@ import 'stream_diagnostics.dart';
 
 const Color _liveBg = Color(0xFF000000);
 const Color _livePanel = Color(0xFF07090D);
-const Color _livePanel2 = Color(0xFF0D1118);
 const Color _liveLine = Color(0xFF0047FF);
 const Color _liveCyan = Color(0xFF00A3FF);
 const Color _livePink = Color(0xFFFF1744);
@@ -20,8 +19,6 @@ const Color _liveGreen = Color(0xFF39FF14);
 const Color _liveRed = Color(0xFFFF1744);
 const Color _liveMuted = Color(0xFFEAF0F8);
 
-const String _savedStreamsKey = 'deporte_total_authorized_live_sources_v1';
-const String _savedFavoritesKey = 'deporte_total_live_favorites_v1';
 
 bool isSupportedAuthorizedMediaUrl(String value) =>
     liveMediaFormatForUrl(value) != null;
