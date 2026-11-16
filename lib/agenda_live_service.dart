@@ -170,6 +170,11 @@ String normalizeAgendaChannelReference(String value) {
     RegExp(r'\b(?:hd|sd|fhd|uhd|4k|8k|1080p|720p|576p|480p|50fps|60fps)\b'),
     ' ',
   );
+  text = text.replaceAllMapped(
+    RegExp(r'([a-z])([0-9])'),
+    (match) => '${match.group(1)} ${match.group(2)}',
+  );
+  text = text.replaceAll(RegExp(r'\b(?:us|uk|gb|ca|mx|ar|co|ve|cl|pe|uy|py|bo|cr|gt|hn|ni|pa|cw|jm|do|sv)\b'), ' ');
   text = text.replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
   return text.trim().replaceAll(RegExp(r'\s+'), ' ');
 }
