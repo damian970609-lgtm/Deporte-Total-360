@@ -2,10 +2,10 @@
 
 Aplicación Android en Flutter. El APK se compila en GitHub Actions; la carpeta Android se genera en el runner.
 
-Interfaz visible de esta edición: Inicio, Agenda deportiva, Deportes en vivo y Canales deportivos. Agenda deportiva integra https://futbol-libre.cam/ y muestra únicamente la programación bajo un encabezado propio de Deporte Total 360° con la fecha local del teléfono. Al abrir la ficha de un evento, la app captura los nombres de los canales de referencia publicados por la Agenda. Cinco minutos antes del inicio, busca una coincidencia exacta entre esos nombres y las señales deportivas visibles del catálogo central de Canales deportivos. La URL directa se toma exclusivamente del catálogo del usuario y se asigna a uno de los ocho reproductores. La asignación se libera cuando la Agenda marca el evento como finalizado o llega su hora de cierre; si la ficha no publica una hora de fin, se usa un límite de seguridad de tres horas desde el comienzo. No se borran listas IPTV, canales, favoritos ni cuentas.
+Interfaz visible de esta edición: Inicio, Agenda, En vivo, Canales, y Ajustes. Agenda deportiva integra https://futbol-libre.cam/ y muestra únicamente la programación bajo un encabezado propio de Deporte Total 360° con la fecha local del teléfono. Al abrir la ficha de un evento, la app captura los nombres de los canales de referencia publicados por la Agenda. Cinco minutos antes del inicio, busca una coincidencia exacta entre esos nombres y las señales deportivas visibles del catálogo central de Canales deportivos. La URL directa se toma exclusivamente del catálogo del usuario y se asigna a uno de los ocho reproductores. La asignación se libera cuando la Agenda marca el evento como finalizado o llega su hora de cierre; si la ficha no publica una hora de fin, se usa un límite de seguridad de tres horas desde el comienzo. No se borran listas IPTV, canales, favoritos ni cuentas.
 
 Archivos principales:
-- lib/main.dart: control de acceso y navegación visible de Inicio, Agenda deportiva, Deportes en vivo y Canales deportivos.
+- lib/main.dart: control de acceso y navegación visible de Inicio, Agenda, En vivo, Canales y Ajustes.
 - lib/agenda_live_service.dart: guarda eventos y canales de referencia capturados en Agenda, cruza nombres con señales deportivas visibles del catálogo, abre la ventana de preparación cinco minutos antes y libera las asignaciones al finalizar el evento.
 - lib/live_channels_screen.dart: tablero de ocho reproductores, actualiza las asignaciones mientras la app está en primer plano y detiene/reemplaza las tarjetas cuando los eventos terminan.
 - lib/live_media_format.dart y el motor de reproducción: compatibilidad con HLS, DASH, Smooth Streaming y vídeo progresivo directo; las URLs proceden de los canales visibles y se cargan en el reproductor asignado.
@@ -43,7 +43,7 @@ La pestaña Agenda deportiva integra futbol-libre.cam y deja únicamente la prog
 En Firebase crea una aplicación Android para el paquete de esta APK y copia los valores de configuración. Añade estos cuatro GitHub Actions Secrets en el repositorio de la APK: `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, `FIREBASE_MESSAGING_SENDER_ID` y `FIREBASE_PROJECT_ID`. En el Worker configura el secreto `FCM_SERVICE_ACCOUNT_JSON` con el JSON de una cuenta de servicio de Firebase que tenga permiso para enviar mensajes FCM. La APK suscribe los dispositivos que activan los avisos al tema `deporte_total_360_live`; el Worker envía una sola notificación al tema, sin almacenar tokens personales. El secreto se guarda en Cloudflare, nunca en GitHub ni en el APK. Después de compilar e instalar la APK, cada usuario debe activar Notificaciones en Ajustes y conceder el permiso Android. El Worker registra el token del dispositivo y envía un aviso cuando una señal directa queda verificada. Tocar el aviso abre la aplicación en Inicio; la pantalla de reproducción permanece fuera de la navegación Inicio / Agenda deportiva. Sin los secretos Firebase y Cloudflare, las notificaciones locales existentes siguen funcionando, pero no se envían avisos push.
 
  
-## Canales deportivos (sección visible)
+## IPTV y Canales deportivos
 
 El módulo **Canales deportivos** muestra únicamente señales aprobadas y publicadas desde el catálogo central de Cloudflare. El reproductor se desplaza
 con la lista y admite HLS, DASH, Smooth Streaming y los formatos progresivos
@@ -53,7 +53,7 @@ volumen multimedia, además de calidad automática y pistas publicadas por el
 proveedor. La calidad automática depende de las variantes disponibles en la
 señal; no puede crear resoluciones que el proveedor no publique.
 
-El panel privado de importación y sus funciones se conservan en el código; no se exponen desde la navegación principal y se mantienen dentro de la administración protegida. No se eliminan ni se reinicializan las listas o los
+El menú Damián APK es accesible desde Ajustes y mantiene el acceso administrativo protegido por Google. El panel abre directamente la vista IPTV unificada; Proton VPN y la pantalla administrativa principal anterior ya no aparecen. No se eliminan ni se reinicializan las listas o los
 datos existentes. En la versión completa, el panel permite iniciar sesión con
 Google y añadir listas M3U, PLS, XSPF/XML, JSON o TXT mediante HTTPS; confirma
 que tienes autorización para distribuir las señales. Cloudflare descarga y procesa las listas en segundo plano; el inventario privado conserva
