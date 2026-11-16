@@ -14,8 +14,8 @@ String formatAgendaDate(DateTime date) {
     'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
     'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
   ];
-  return weekdays[date.weekday - 1] + ', ' + date.day.toString() + ' de ' +
-      months[date.month - 1] + ' de ' + date.year.toString();
+  return '${weekdays[date.weekday - 1]}, ${date.day} de '
+      '${months[date.month - 1]} de ${date.year}';
 }
 
 class AgendaBrandBanner extends StatelessWidget {
