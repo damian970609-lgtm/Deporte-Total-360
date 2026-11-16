@@ -690,7 +690,6 @@ class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
   bool _agendaBuilt = false;
   bool _liveBuilt = false;
-  bool _channelsBuilt = false;
   bool _settingsBuilt = false;
 
   void _openAgenda() => _selectPage(1);
@@ -701,8 +700,7 @@ class _MainShellState extends State<MainShell> {
       _selectedIndex = index;
       if (index == 1) _agendaBuilt = true;
       if (index == 2) _liveBuilt = true;
-      if (index == 3) _channelsBuilt = true;
-      if (index == 4) _settingsBuilt = true;
+      if (index == 3) _settingsBuilt = true;
     });
   }
 
@@ -725,7 +723,6 @@ class _MainShellState extends State<MainShell> {
           _liveBuilt
               ? LiveChannelsScreen(isActive: _selectedIndex == 2)
               : const SizedBox.shrink(),
-          _channelsBuilt ? const ChannelCatalogScreen() : const SizedBox.shrink(),
           _settingsBuilt ? const SettingsScreen() : const SizedBox.shrink(),
         ],
       ),
@@ -751,11 +748,6 @@ class _MainShellState extends State<MainShell> {
             icon: Icon(Icons.live_tv_outlined),
             selectedIcon: Icon(Icons.live_tv_rounded),
             label: 'En vivo',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.sports_soccer_outlined),
-            selectedIcon: Icon(Icons.sports_soccer_rounded),
-            label: 'Canales',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
