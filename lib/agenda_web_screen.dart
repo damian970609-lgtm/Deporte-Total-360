@@ -472,28 +472,28 @@ const String _agendaLiveCaptureScript = r'''
 
   const normalize = (value) => String(value || '')
     .normalize('NFD')
-    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/\\s+/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
-  const timePattern = /\\b([01]?\\d|2[0-3]):([0-5]\\d)\\b/;
-  const timeGlobalPattern = /\\b(?:[01]?\\d|2[0-3]):[0-5]\\d\\b/g;
-  const referencePattern = /(?:fuente|canal|señal|senal|opción|opcion)\\s*\\d+\\s*[:\\-]?\\s*(.*?)(?=(?:fuente|canal|señal|senal|opción|opcion)\\s*\\d+|[\\n|•]|$)/gi;
+  const timePattern = /\b([01]?\d|2[0-3]):([0-5]\d)\b/;
+  const timeGlobalPattern = /\b(?:[01]?\d|2[0-3]):[0-5]\d\b/g;
+  const referencePattern = /(?:fuente|canal|señal|senal|opción|opcion)\s*\d+\s*[:\-]?\s*(.*?)(?=(?:fuente|canal|señal|senal|opción|opcion)\s*\d+|[\n|•]|$)/gi;
 
   function visibleText(element) {
     return String(element && (element.innerText || element.textContent) || '')
-      .replace(/\\u00a0/g, ' ')
-      .replace(/[\\t ]+/g, ' ')
+      .replace(/\u00a0/g, ' ')
+      .replace(/[\t ]+/g, ' ')
       .trim();
   }
 
   function cleanReference(value) {
     return String(value || '')
-      .replace(/\\b(?:abrir partido|abrir canal|ver partido|reproducir)\\b/gi, '')
-      .replace(/\\b(?:español|espanol|english|inglés|ingles|portugués|portugues|brasil|latino)\\b/gi, '')
+      .replace(/\b(?:abrir partido|abrir canal|ver partido|reproducir)\b/gi, '')
+      .replace(/\b(?:español|espanol|english|inglés|ingles|portugués|portugues|brasil|latino)\b/gi, '')
       .replace(/[·•|].*$/, '')
-      .replace(/^\\s*(?:fuente|canal|señal|senal|opción|opcion)\\s*\\d+\\s*[:\\-]?/i, '')
-      .replace(/\\s+/g, ' ')
+      .replace(/^\s*(?:fuente|canal|señal|senal|opción|opcion)\s*\d+\s*[:\-]?/i, '')
+      .replace(/\s+/g, ' ')
       .trim();
   }
 
@@ -599,18 +599,18 @@ const String _agendaLiveCaptureScript = r'''
     const text = visibleText(card);
     const startAt = readStartAt(card, text);
     if (!startAt) return null;
-    const lines = text.split(/\\n+/).map((line) => line.trim()).filter(Boolean);
+    const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
     const titleNode = card.querySelector(
       '[data-event-title], [class*="event-title"], [class*="match-title"], h2, h3, h4, strong'
     );
     const titleFromNode = visibleText(titleNode);
     const matchup = lines.find((line) =>
-      /\\b(?:vs?\\.?|versus)\\b/i.test(line)
+      /\b(?:vs?\.?|versus)\b/i.test(line)
     ) || '';
     const title = (matchup || titleFromNode ||
       lines.find((line) => line.length > 5 && !timePattern.test(line)) || '')
       .replace(timeGlobalPattern, '')
-      .replace(/\\s+/g, ' ')
+      .replace(/\s+/g, ' ')
       .trim();
     if (!title || title.length > 160) return null;
 
@@ -620,11 +620,11 @@ const String _agendaLiveCaptureScript = r'''
     ) || '';
     const lower = normalize(text);
     let status = 'unknown';
-    if (/\\b(finalizado|finalizada|terminado|terminada|finished|completed|full time|cancelado|cancelada|suspended)\\b/.test(lower)) {
+    if (/\b(finalizado|finalizada|terminado|terminada|finished|completed|full time|cancelado|cancelada|suspended)\b/.test(lower)) {
       status = 'finished';
-    } else if (/\\b(en vivo|live|1st half|2nd half|primer tiempo|segundo tiempo|entretiempo|halftime)\\b/.test(lower)) {
+    } else if (/\b(en vivo|live|1st half|2nd half|primer tiempo|segundo tiempo|entretiempo|halftime)\b/.test(lower)) {
       status = 'live';
-    } else if (/\\b(proximo|proxima|scheduled|por comenzar)\\b/.test(lower)) {
+    } else if (/\b(proximo|proxima|scheduled|por comenzar)\b/.test(lower)) {
       status = 'scheduled';
     }
 
