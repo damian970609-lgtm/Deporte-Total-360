@@ -2198,7 +2198,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   Future<void> _fillPlaylistCatalogTo100() async {
     if (_working) return;
     if (_sources.length >= maxChannelPlaylistSources) {
-      _message('El catálogo ya tiene 100 listas registradas.');
+      _message('El catálogo ya tiene 120 listas registradas.');
       return;
     }
     setState(() => _working = true);
@@ -2216,12 +2216,12 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       final total = result['total'] ?? _sources.length;
       final added = result['added'] ?? 0;
       _message(
-        'Catálogo actualizado: $total / 100 listas. '
+        'Catálogo actualizado: $total / 120 listas máximas. '
         'Se añadieron $added fuentes nuevas. '
         'Todas las importaciones se procesan en segundo plano.',
       );
     } catch (error) {
-      _message('No se pudo completar el catálogo de 100 listas: ' + error.toString());
+      _message('No se pudo actualizar el catálogo IPTV: ' + error.toString());
     } finally {
       if (mounted) setState(() => _working = false);
     }
@@ -3149,7 +3149,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
             child: OutlinedButton.icon(
               onPressed: _working ? null : _fillPlaylistCatalogTo100,
               icon: const Icon(Icons.cloud_download_rounded),
-              label: Text(_sources.length >= maxChannelPlaylistSources ? '100 LISTAS REGISTRADAS' : 'COMPLETAR CATÁLOGO HASTA 100 LISTAS'),
+              label: Text(_sources.length >= maxChannelPlaylistSources ? '120 LISTAS REGISTRADAS' : 'AGREGAR PREAJUSTES DISPONIBLES (LÍMITE 120)'),
             ),
           ),
           const SizedBox(height: 6),
@@ -3671,9 +3671,9 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         backgroundColor: const Color(0xFF07090D),
         title: const AppSectionTitle(
           icon: Icons.admin_panel_settings_rounded,
-          title: 'ADMINISTRACIÓN · DAMIÁN.APK',
+          title: 'IPTV · DAMIÁN.APK',
           accent: _channelPink,
-          subtitle: 'GESTIÓN DE LISTAS Y CANALES',
+          subtitle: '120 LISTAS · CANALES EN UN SOLO CATÁLOGO',
         ),
         actions: <Widget>[
           if (loggedIn)
@@ -3997,7 +3997,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
                           const Text(
-                            'CATÁLOGO DE FUENTES · 100 LISTAS',
+                            'CATÁLOGO DE FUENTES · HASTA 120 LISTAS',
                             style: TextStyle(
                               color: _channelGreen,
                               fontWeight: FontWeight.w900,
@@ -4019,7 +4019,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                             isExpanded: true,
                             dropdownColor: _channelPanel2,
                             decoration: const InputDecoration(
-                              labelText: 'Elegir una de las 100 listas disponibles',
+                              labelText: 'Elegir una lista predefinida (100 opciones)',
                             ),
                             items: channelPlaylistPresets
                                 .map((preset) => DropdownMenuItem<String>(
@@ -4048,8 +4048,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                               icon: const Icon(Icons.cloud_download_rounded),
                               label: Text(
                                 _sources.length >= maxChannelPlaylistSources
-                                    ? '100 LISTAS REGISTRADAS'
-                                    : 'COMPLETAR CATÁLOGO HASTA 100 LISTAS',
+                                    ? '120 LISTAS REGISTRADAS'
+                                    : 'AGREGAR PREAJUSTES DISPONIBLES (LÍMITE 120)',
                               ),
                               style: FilledButton.styleFrom(
                                 backgroundColor: _channelGreen,
