@@ -39,12 +39,12 @@ SportsAPI.app es la fuente principal de Agenda de hoy para Fútbol, Baloncesto, 
 
 ## Activar notificaciones push
 
-En Firebase crea una aplicación Android para el paquete de esta APK y copia los valores de configuración. Añade estos cuatro GitHub Actions Secrets en el repositorio de la APK: `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, `FIREBASE_MESSAGING_SENDER_ID` y `FIREBASE_PROJECT_ID`. En el Worker configura el secreto `FCM_SERVICE_ACCOUNT_JSON` con el JSON de una cuenta de servicio de Firebase que tenga permiso para enviar mensajes FCM. La APK suscribe los dispositivos que activan los avisos al tema `deporte_total_360_live`; el Worker envía una sola notificación al tema, sin almacenar tokens personales. El secreto se guarda en Cloudflare, nunca en GitHub ni en el APK. Después de compilar e instalar la APK, cada usuario debe activar Notificaciones en Ajustes y conceder el permiso Android. El Worker registra el token del dispositivo y envía un aviso cuando una señal directa queda verificada. Tocar el aviso abre Deportes en vivo; el usuario inicia el vídeo con Play. Sin los secretos Firebase y Cloudflare, las notificaciones locales existentes siguen funcionando, pero no se envían avisos push.
+En Firebase crea una aplicación Android para el paquete de esta APK y copia los valores de configuración. Añade estos cuatro GitHub Actions Secrets en el repositorio de la APK: `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, `FIREBASE_MESSAGING_SENDER_ID` y `FIREBASE_PROJECT_ID`. En el Worker configura el secreto `FCM_SERVICE_ACCOUNT_JSON` con el JSON de una cuenta de servicio de Firebase que tenga permiso para enviar mensajes FCM. La APK suscribe los dispositivos que activan los avisos al tema `deporte_total_360_live`; el Worker envía una sola notificación al tema, sin almacenar tokens personales. El secreto se guarda en Cloudflare, nunca en GitHub ni en el APK. Después de compilar e instalar la APK, cada usuario debe activar Notificaciones en Ajustes y conceder el permiso Android. El Worker registra el token del dispositivo y envía un aviso cuando una señal directa queda verificada. Tocar el aviso abre la aplicación en Inicio; la pantalla de reproducción no está expuesta en esta edición de pantalla única. Sin los secretos Firebase y Cloudflare, las notificaciones locales existentes siguen funcionando, pero no se envían avisos push.
 
  
-## Catálogo de Canales deportivos
+## Módulo conservado de Canales deportivos (no visible en esta edición)
 
-La nueva pestaña **Canales deportivos** muestra únicamente señales aprobadas y
+El módulo **Canales deportivos** conserva la lógica para mostrar únicamente señales aprobadas y
 publicadas desde el catálogo central de Cloudflare. El reproductor se desplaza
 con la lista y admite HLS, DASH, Smooth Streaming y los formatos progresivos
 que clasifica el proyecto, con controles ocultables a los cinco segundos,
@@ -53,10 +53,12 @@ volumen multimedia, además de calidad automática y pistas publicadas por el
 proveedor. La calidad automática depende de las variantes disponibles en la
 señal; no puede crear resoluciones que el proveedor no publique.
 
-El acceso de diez pulsaciones sobre `DAMIÁN.APK` abre el panel privado de
-importación. Inicia sesión con Google y añade listas M3U, PLS, XSPF/XML, JSON o
-TXT mediante HTTPS; confirma que tienes autorización para distribuir las
-señales. Cloudflare descarga y procesa las listas en segundo plano; el inventario privado conserva
+El panel privado de importación y sus funciones se conservan en el código, pero
+no están accesibles desde la interfaz de Inicio único porque Ajustes permanece
+oculto en esta edición. No se eliminan ni se reinicializan las listas o los
+datos existentes. En la versión completa, el panel permite iniciar sesión con
+Google y añadir listas M3U, PLS, XSPF/XML, JSON o TXT mediante HTTPS; confirma
+que tienes autorización para distribuir las señales. Cloudflare descarga y procesa las listas en segundo plano; el inventario privado conserva
 todos los canales compatibles, tanto deportivos como generales. La clasificación
 deportiva no descarta entradas: solo determina cuáles pueden publicarse en la
 pestaña pública Canales deportivos. El panel privado muestra el total y pagina
@@ -97,8 +99,8 @@ No extrae páginas de reproducción ni evade DRM, cuentas o restricciones region
 
 ### Idioma de los canales
 
-En el panel privado de canales (diez pulsaciones en DAMIÁN.APK dentro de
-Ajustes), cada señal tiene un selector de idioma: Español 🇪🇸, Inglés 🇺🇸 o
+En la configuración conservada del panel privado de canales, cada señal tiene
+un selector de idioma: Español 🇪🇸, Inglés 🇺🇸 o
 Sin definir. Al publicarse, la tarjeta de Canales deportivos muestra el
 indicativo de idioma en su esquina superior. El idioma se guarda en Cloudflare
 para que todos los usuarios vean la misma etiqueta.
