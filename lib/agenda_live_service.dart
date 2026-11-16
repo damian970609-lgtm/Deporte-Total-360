@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'channel_catalog_service.dart';
+import 'live_media_format.dart';
 
 const String _agendaLiveEventsKey = 'dt360_agenda_live_references_v1';
 const Duration agendaLivePreparationWindow = Duration(minutes: 5);
