@@ -142,6 +142,32 @@ class SportsChannel {
         'language': language,
       };
 
+  SportsChannel copyWith({
+    String? id,
+    String? identifier,
+    String? tvgId,
+    String? name,
+    String? url,
+    String? logoUrl,
+    String? groupTitle,
+    bool? isSports,
+    bool? visible,
+    String? language,
+  }) {
+    return SportsChannel(
+      id: id ?? this.id,
+      identifier: identifier ?? this.identifier,
+      tvgId: tvgId ?? this.tvgId,
+      name: name ?? this.name,
+      url: url ?? this.url,
+      logoUrl: logoUrl ?? this.logoUrl,
+      groupTitle: groupTitle ?? this.groupTitle,
+      isSports: isSports ?? this.isSports,
+      visible: visible ?? this.visible,
+      language: language ?? this.language,
+    );
+  }
+
   factory SportsChannel.fromJson(Map<String, dynamic> json) {
     final id = (json['id'] ?? json['identifier'] ?? '').toString().trim();
     final identifier =
@@ -155,14 +181,12 @@ class SportsChannel {
     final language = const <String>{'es', 'en'}.contains(rawLanguage)
         ? rawLanguage
         : 'unknown';
-    if (id.isEmpty || identifier.isEmpty || name.isEmpty || url.isEmpty) {
-      throw const FormatException('El canal recibido está incompleto.');
+    if (id.isEmpty || identifier.isEmpty || name.isEmpty) {
+      throw const FormatException('El canal recibido no tiene identificador o nombre.');
     }
-    if (!isSupportedChannelPlaybackUrl(url)) {
-      throw const FormatException(
-        'El canal no contiene una señal HTTPS directa HLS, DASH, Smooth Streaming o de vídeo progresivo compatible.',
-      );
-    }
+    // El catálogo IPTV conserva también filas con URL ausente o un formato
+    // que este reproductor no pueda abrir. La compatibilidad se valida justo
+    // antes de reproducir, no durante la descarga de todas las listas.
     return SportsChannel(
       id: id,
       identifier: identifier,
