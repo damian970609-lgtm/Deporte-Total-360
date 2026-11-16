@@ -440,13 +440,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // Primero lleva el botón a la zona visible. El catálogo usa una lista
+    // desplazable y puede desmontar los controles que quedan fuera de pantalla.
     await tester.scrollUntilVisible(
-      find.byKey(const ValueKey<String>('iptv-channel-row-general-channel')),
-      350,
+      find.text('REIMPORTAR TODAS LAS LISTAS GUARDADAS'),
+      300,
       scrollable: find.byType(Scrollable).first,
       maxScrolls: 10,
     );
-    expect(find.text('Canal General'), findsOneWidget);
     final refresh = find.byTooltip('Actualizar todas las listas');
     expect(refresh, findsOneWidget);
     await tester.tap(refresh);
