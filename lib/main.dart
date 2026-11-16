@@ -1,3 +1,4 @@
+import 'agenda_web_screen.dart';
 import 'app_section_design.dart';
 import 'automatic_live_service.dart';
 import 'dart:async';
@@ -678,21 +679,56 @@ class _AppAccessGateState extends State<AppAccessGate> {
 }
 
 
-class MainShell extends StatelessWidget {
+class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
   @override
+  State<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends State<MainShell> {
+  int _selectedIndex = 0;
+
+  void _openAgenda() {
+    if (mounted) setState(() => _selectedIndex = 1);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Esta edición deja Inicio como única pantalla visible. Los módulos
-    // secundarios, servicios, almacenamiento local y conexiones remotas se
-    // conservan en sus archivos y no se borran de los datos de la aplicación.
-    return HomeDashboard(
-      onNavigate: (_) {},
-      onContact: () {},
-      onDonations: () {},
-      onFantasy: () {},
-      onOpenAgenda: () {},
-      onChat: () {},
+    return Scaffold(
+      backgroundColor: appBg,
+      body: _selectedIndex == 0
+          ? HomeDashboard(
+              onNavigate: (_) {},
+              onContact: () {},
+              onDonations: () {},
+              onFantasy: () {},
+              onOpenAgenda: _openAgenda,
+              onChat: () {},
+            )
+          : const AgendaWebScreen(),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (index) {
+          if (index != _selectedIndex) setState(() => _selectedIndex = index);
+        },
+        height: 66,
+        backgroundColor: appPanel,
+        indicatorColor: appCyan.withAlpha(38),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        destinations: const <NavigationDestination>[
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: 'Inicio',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.calendar_month_outlined),
+            selectedIcon: Icon(Icons.calendar_month_rounded),
+            label: 'Agenda deportiva',
+          ),
+        ],
+      ),
     );
   }
 }

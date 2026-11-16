@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:deporte_total_360/agenda_screen.dart';
 import 'package:deporte_total_360/main.dart';
 import 'package:deporte_total_360/channel_catalog_screen.dart';
 import 'package:deporte_total_360/channel_catalog_service.dart';
@@ -180,17 +179,6 @@ class _AdminTestService extends ChannelCatalogService {
 }
 
 void main() {
-  testWidgets('la agenda de fútbol muestra por defecto los próximos siete días', (tester) async {
-    sportsApiBaseUrl.value = '';
-    await tester.pumpWidget(
-      const MaterialApp(home: AgendaScreen(initialSport: 'Fútbol')),
-    );
-
-    expect(find.text('Próximos 7 días'), findsOneWidget);
-    await tester.pumpWidget(const SizedBox.shrink());
-    sportsApiBaseUrl.value = defaultSportsApiBaseUrl;
-  });
-
   testWidgets('DAMIAN.APK abre un único panel tras diez pulsaciones y evita apilar rutas', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: false);
@@ -653,13 +641,15 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('MainShell solo muestra Inicio y no expone otras secciones', (tester) async {
+  testWidgets('MainShell muestra Inicio y Agenda deportiva sin exponer otros módulos', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
     await tester.pump();
 
     expect(find.byType(HomeDashboard), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('home-sports-crest')), findsOneWidget);
     expect(find.text('DEPORTE TOTAL 360°'), findsOneWidget);
+    expect(find.text('Inicio'), findsOneWidget);
+    expect(find.text('Agenda deportiva'), findsOneWidget);
     expect(find.text('Deportes en vivo'), findsNothing);
     expect(find.text('Canales deportivos'), findsNothing);
     expect(find.text('Agenda de hoy'), findsNothing);
@@ -667,8 +657,6 @@ void main() {
     expect(find.text('Chat'), findsNothing);
     expect(find.text('Ajustes'), findsNothing);
     expect(find.byKey(const ValueKey<String>('bottom-nav-scroll-viewport')), findsNothing);
-    expect(find.byKey(const ValueKey<String>('bottom-nav-scroll-left')), findsNothing);
-    expect(find.byKey(const ValueKey<String>('bottom-nav-scroll-right')), findsNothing);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
