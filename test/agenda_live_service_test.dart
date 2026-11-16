@@ -62,6 +62,10 @@ void main() {
       normalizeAgendaChannelReference('ESPN 7'),
       isNot(normalizeAgendaChannelReference('ESPN 2')),
     );
+    expect(
+      normalizeAgendaChannelReference('ESPN2 HD'),
+      normalizeAgendaChannelReference('ESPN 2'),
+    );
   });
 
   test('prepara una señal dentro de los cinco minutos previos al evento', () async {
