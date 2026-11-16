@@ -1901,7 +1901,14 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _visibleSourceCount = _visibleSourceCount.clamp(0, sources.length).toInt();
         _sourcesError = null;
       });
-      await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
+      // La escritura local no debe mantener bloqueada la apertura del panel.
+      // El guardado se serializa por cuenta dentro de ChannelAdminSnapshotStore.
+      unawaited(_saveLocalAdminSnapshot(
+        saveChannels: false,
+        saveSources: true,
+      ).catchError((Object error) {
+        debugPrint('No se pudo guardar la copia local de las listas: $error');
+      }));
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -2995,7 +3002,14 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           _iptvSelectedChannel = complete.firstWhere((channel) => channel.id == _iptvSelectedChannel!.id, orElse: () => _iptvSelectedChannel!);
         }
       });
-      await _saveLocalAdminSnapshot(saveChannels: true, saveSources: false);
+      // Primero libera la interfaz; el inventario completo ya está en memoria.
+      // Persistir miles de filas en disco no debe dejar el indicador animado activo.
+      unawaited(_saveLocalAdminSnapshot(
+        saveChannels: true,
+        saveSources: false,
+      ).catchError((Object error) {
+        debugPrint('No se pudo guardar la copia local del catálogo IPTV: $error');
+      }));
     } catch (error) {
       if (!mounted || requestId != _iptvRequestId) return;
       setState(() {

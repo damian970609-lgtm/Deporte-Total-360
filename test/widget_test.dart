@@ -261,6 +261,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // El contador está en la cabecera del ListView; compruébalo antes de
+    // desplazarla fuera del árbol de widgets montados.
+    expect(find.byKey(const ValueKey<String>('iptv-channel-total')), findsOneWidget);
     final firstCachedRow = find.byKey(
       const ValueKey<String>('iptv-channel-row-cached-0'),
     );
@@ -273,7 +276,6 @@ void main() {
     expect(find.text('Canal cacheado 000'), findsOneWidget);
     expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsNothing);
     expect(find.textContaining('CARGAR SIGUIENTE BLOQUE'), findsNothing);
-    expect(find.byKey(const ValueKey<String>('iptv-channel-total')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -642,6 +644,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(service._adminPageCalls, 0);
+    // El resumen forma parte de la primera tarjeta y se desmonta al desplazarse.
+    expect(find.text('Mostrando 2 de 2 canales.'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey<String>('iptv-channel-row-cached-general')),
       350,
@@ -656,7 +660,6 @@ void main() {
       maxScrolls: 10,
     );
     expect(find.text('Canal deportivo guardado'), findsOneWidget);
-    expect(find.text('Mostrando 2 de 2 canales.'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
