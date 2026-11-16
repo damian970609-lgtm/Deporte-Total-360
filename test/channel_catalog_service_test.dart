@@ -375,17 +375,17 @@ void main() {
     expect(channel.language, 'es');
   });
 
-  test('canal rechaza HTTP aunque el enlace termine en una extensión compatible', () {
-    expect(
-      () => SportsChannel.fromJson(<String, dynamic>{
-        'id': 'unsafe-http',
-        'identifier': 'unsafe-http',
-        'name': 'Canal HTTP',
-        'url': 'http://media.example/live.m3u8',
-        'isSports': true,
-      }),
-      throwsFormatException,
-    );
+  test('el catálogo conserva canales HTTP aunque el reproductor no pueda abrirlos', () {
+    final channel = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'http-channel',
+      'identifier': 'http-channel',
+      'name': 'Canal HTTP',
+      'url': 'http://media.example/live.m3u8',
+      'isSports': true,
+    });
+
+    expect(channel.url, 'http://media.example/live.m3u8');
+    expect(isSupportedChannelPlaybackUrl(channel.url), isFalse);
   });
 
   test('canal admite señales MPEG-TS directas de listas M3U', () {
@@ -399,30 +399,30 @@ void main() {
     expect(channel.url, endsWith('.ts'));
   });
 
-  test('canal rechaza páginas web y streams que no sean HTTPS directos', () {
-    expect(
-      () => SportsChannel.fromJson(<String, dynamic>{
-        'id': 'deporte',
-        'identifier': 'deporte',
-        'name': 'Canal',
-        'url': 'https://media.example/watch',
-        'isSports': true,
-      }),
-      throwsFormatException,
-    );
+  test('el catálogo conserva canales de listas aunque su enlace sea una página web', () {
+    final channel = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'web-channel',
+      'identifier': 'web-channel',
+      'name': 'Canal web',
+      'url': 'https://media.example/watch',
+      'isSports': false,
+    });
+
+    expect(channel.name, 'Canal web');
+    expect(isSupportedChannelPlaybackUrl(channel.url), isFalse);
   });
 
-  test('canal rechaza URLs con credenciales', () {
-    expect(
-      () => SportsChannel.fromJson(<String, dynamic>{
-        'id': 'deporte',
-        'identifier': 'deporte',
-        'name': 'Canal',
-        'url': 'https://usuario:clave@media.example/live.m3u8',
-        'isSports': true,
-      }),
-      throwsFormatException,
-    );
+  test('el catálogo conserva URLs con credenciales sin permitir reproducirlas', () {
+    final channel = SportsChannel.fromJson(<String, dynamic>{
+      'id': 'credential-channel',
+      'identifier': 'credential-channel',
+      'name': 'Canal privado',
+      'url': 'https://usuario:clave@media.example/live.m3u8',
+      'isSports': true,
+    });
+
+    expect(channel.name, 'Canal privado');
+    expect(isSupportedChannelPlaybackUrl(channel.url), isFalse);
   });
 
   test('canal conserva la etiqueta de idioma inglés', () {
@@ -457,6 +457,25 @@ void main() {
     });
 
     expect(channel.visible, isFalse);
+  });
+
+  test('copyWith permite guardar visibilidad e idioma sin alterar los datos del canal', () {
+    final original = SportsChannel(
+      id: 'channel-120',
+      identifier: 'channel-120',
+      name: 'Canal 120',
+      url: 'https://media.example/watch',
+      isSports: false,
+      visible: false,
+      language: 'unknown',
+    );
+    final updated = original.copyWith(visible: true, language: 'es');
+
+    expect(updated.id, original.id);
+    expect(updated.url, original.url);
+    expect(updated.isSports, isFalse);
+    expect(updated.visible, isTrue);
+    expect(updated.language, 'es');
   });
 
   test('Google OAuth confirma que APK y Worker comparten el cliente Web', () async {
