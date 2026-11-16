@@ -291,7 +291,6 @@ class AgendaLiveService {
     final assignments = <AgendaLiveAssignment>[];
     final pending = <AgendaLivePendingEvent>[];
     final usedUrls = <String>{};
-    final assignedEventIds = <String>{};
 
     for (final event in activeEvents) {
       if (assignments.length >= 8) {
@@ -322,14 +321,12 @@ class AgendaLiveService {
       }
 
       SportsChannel? matched;
-      String? matchedReference;
       for (final reference in event.channelReferences) {
         final candidate = _findMatchingChannel(reference, availableChannels)
             .where((channel) => !usedUrls.contains(channel.url))
             .firstOrNull;
         if (candidate != null) {
           matched = candidate;
-          matchedReference = reference;
           break;
         }
       }
@@ -344,11 +341,7 @@ class AgendaLiveService {
       }
 
       usedUrls.add(matched.url);
-      assignedEventIds.add(event.id);
       assignments.add(AgendaLiveAssignment(event: event, channel: matched));
-      if (matchedReference != null && matchedReference.isNotEmpty) {
-        // Keep the selected reference visible in the player detail text.
-      }
     }
 
     return AgendaLiveBoardState(
