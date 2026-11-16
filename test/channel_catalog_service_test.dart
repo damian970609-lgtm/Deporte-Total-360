@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:deporte_total_360/channel_catalog_service.dart';
+import 'package:deporte_total_360/live_media_format.dart';
 import 'package:deporte_total_360/sports_api_service.dart';
 
 void main() {
@@ -581,6 +582,68 @@ void main() {
     expect(requestedUri?.queryParameters['offset'], '2000');
     expect(requestedUri?.queryParameters['limit'], '2000');
     expect(page.offset, 2000);
+    client.close();
+  });
+
+  test('la página IPTV conserva canales de todas las categorías y formatos sin filtrarlos', () async {
+    final client = MockClient((request) async {
+      expect(request.url.path, '/api/channels/admin/catalog');
+      return http.Response(jsonEncode(<String, Object>{
+        'channels': <Map<String, Object>>[
+          <String, Object>{
+            'id': 'sports-hidden',
+            'identifier': 'sports-hidden',
+            'name': 'Canal deportivo oculto',
+            'url': 'https://media.example/sports.m3u8',
+            'isSports': true,
+            'visible': false,
+          },
+          <String, Object>{
+            'id': 'general-visible',
+            'identifier': 'general-visible',
+            'name': 'Canal general visible',
+            'url': 'https://media.example/watch',
+            'isSports': false,
+            'visible': true,
+          },
+          <String, Object>{
+            'id': 'no-url',
+            'identifier': 'no-url',
+            'name': 'Canal sin URL reproducible',
+            'url': '',
+            'isSports': false,
+            'visible': false,
+          },
+        ],
+        'total': 3,
+        'offset': 0,
+        'hasMore': false,
+      }), 200);
+    });
+    final service = ChannelCatalogService(
+      client: client,
+      accessTokenProvider: () => 'test-google-id-token',
+    );
+
+    final page = await service.fetchAdminChannelPage(limit: 2000);
+
+    expect(page.channels, hasLength(3));
+    expect(page.channels.map((channel) => channel.id), <String>[
+      'sports-hidden',
+      'general-visible',
+      'no-url',
+    ]);
+    expect(page.channels.map((channel) => channel.visible), <bool>[
+      false,
+      true,
+      false,
+    ]);
+    expect(page.channels.map((channel) => channel.isSports), <bool>[
+      true,
+      false,
+      false,
+    ]);
+    expect(page.channels.last.url, isEmpty);
     client.close();
   });
 
