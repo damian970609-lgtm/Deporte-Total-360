@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'agenda_live_service.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
@@ -189,9 +191,24 @@ class _AgendaWebScreenState extends State<AgendaWebScreen> {
   Future<void> _applyAgendaOnlyView(InAppWebViewController controller) async {
     try {
       await controller.evaluateJavascript(source: _agendaOnlyScript);
+      await controller.evaluateJavascript(source: _agendaLiveCaptureScript);
     } catch (error) {
-      debugPrint('No se pudo aplicar el filtro visual de Agenda: $error');
+      debugPrint('No se pudo aplicar el filtro o leer los eventos de Agenda: $error');
     }
+  }
+
+  void _registerAgendaBridge(InAppWebViewController controller) {
+    controller.addJavaScriptHandler(
+      handlerName: 'dt360AgendaEvents',
+      callback: (arguments) {
+        if (arguments.isNotEmpty) {
+          unawaited(
+            AgendaLiveService().captureAgendaEvents(arguments.first),
+          );
+        }
+        return true;
+      },
+    );
   }
 
   @override
@@ -221,7 +238,10 @@ class _AgendaWebScreenState extends State<AgendaWebScreen> {
                       javaScriptCanOpenWindowsAutomatically: false,
                       supportZoom: false,
                     ),
-                    onWebViewCreated: (controller) => _controller = controller,
+                    onWebViewCreated: (controller) {
+                      _controller = controller;
+                      _registerAgendaBridge(controller);
+                    },
                     onLoadStart: (controller, url) {
                       if (!mounted) return;
                       setState(() {
@@ -439,5 +459,253 @@ const String _agendaOnlyScript = r'''
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
   window.__dt360AgendaObserver = observer;
+})();
+''';
+
+
+const String _agendaLiveCaptureScript = r'''
+(function () {
+  if (window.__dt360AgendaCaptureInstalled) {
+    if (window.__dt360EmitAgendaEvents) window.__dt360EmitAgendaEvents();
+    return;
+  }
+
+  const normalize = (value) => String(value || '')
+    .normalize('NFD')
+    .replace(/[\\u0300-\\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\\s+/g, ' ')
+    .trim();
+  const timePattern = /\\b([01]?\\d|2[0-3]):([0-5]\\d)\\b/;
+  const timeGlobalPattern = /\\b(?:[01]?\\d|2[0-3]):[0-5]\\d\\b/g;
+  const referencePattern = /(?:fuente|canal|señal|senal|opción|opcion)\\s*\\d+\\s*[:\\-]?\\s*(.*?)(?=(?:fuente|canal|señal|senal|opción|opcion)\\s*\\d+|[\\n|•]|$)/gi;
+
+  function visibleText(element) {
+    return String(element && (element.innerText || element.textContent) || '')
+      .replace(/\\u00a0/g, ' ')
+      .replace(/[\\t ]+/g, ' ')
+      .trim();
+  }
+
+  function cleanReference(value) {
+    return String(value || '')
+      .replace(/\\b(?:abrir partido|abrir canal|ver partido|reproducir)\\b/gi, '')
+      .replace(/\\b(?:español|espanol|english|inglés|ingles|portugués|portugues|brasil|latino)\\b/gi, '')
+      .replace(/[·•|].*$/, '')
+      .replace(/^\\s*(?:fuente|canal|señal|senal|opción|opcion)\\s*\\d+\\s*[:\\-]?/i, '')
+      .replace(/\\s+/g, ' ')
+      .trim();
+  }
+
+  function findEventCard(timeNode) {
+    let current = timeNode && timeNode.parentElement;
+    let best = current;
+    for (let depth = 0; depth < 9 && current &&
+        current !== document.body && current !== document.documentElement; depth += 1) {
+      const value = visibleText(current);
+      const times = (value.match(timeGlobalPattern) || []).length;
+      if (value.length > 950 || times > 2) break;
+      if (value.length >= 18 && times >= 1) best = current;
+      const className = String(current.className || '').toLowerCase();
+      const looksLikeEvent = current.hasAttribute('data-event-id') ||
+        /event|match|fixture|partido|encuentro/.test(className);
+      if (looksLikeEvent && value.length >= 18 && times >= 1) return current;
+      current = current.parentElement;
+    }
+    return best;
+  }
+
+  function readStartAt(card, text) {
+    const timeElement = card.querySelector('time[datetime], [data-start], [data-start-time], [data-time]');
+    const explicit = timeElement
+      ? (timeElement.getAttribute('datetime') || timeElement.getAttribute('data-start') ||
+         timeElement.getAttribute('data-start-time') || timeElement.getAttribute('data-time') || '')
+      : '';
+    if (explicit) {
+      const parsed = new Date(explicit);
+      if (!Number.isNaN(parsed.getTime())) {
+        const local = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000);
+        return local.toISOString().slice(0, 19);
+      }
+    }
+    const match = text.match(timePattern);
+    if (!match) return '';
+    const now = new Date();
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    const start = new Date(
+      now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0, 0
+    );
+    const pad = (number) => String(number).padStart(2, '0');
+    return String(start.getFullYear()).padStart(4, '0') + '-' +
+      pad(start.getMonth() + 1) + '-' + pad(start.getDate()) + 'T' +
+      pad(hour) + ':' + pad(minute) + ':00';
+  }
+
+  function readEndAt(card) {
+    const element = card.querySelector('[data-end], [data-end-time], time[aria-label*="fin"]');
+    if (!element) return '';
+    const value = element.getAttribute('datetime') ||
+      element.getAttribute('data-end') || element.getAttribute('data-end-time') || '';
+    if (!value) return '';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '';
+    const local = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 19);
+  }
+
+  function readChannelReferences(card, cardText) {
+    const found = [];
+    const add = (raw) => {
+      const clean = cleanReference(raw);
+      if (clean.length < 2 || clean.length > 70) return;
+      const key = normalize(clean);
+      const generic = new Set([
+        'abrir', 'canal', 'senal', 'fuente', 'ver partido',
+        'programacion deportiva', 'mas informacion', 'disponible'
+      ]);
+      if (!key || generic.has(key) || found.some((item) => normalize(item) === key)) return;
+      found.push(clean);
+    };
+
+    let marker;
+    while ((marker = referencePattern.exec(cardText)) !== null) add(marker[1]);
+    referencePattern.lastIndex = 0;
+
+    const referenceNodes = card.querySelectorAll(
+      '[data-channel], [data-channel-name], [data-source], [data-signal], ' +
+      '[class*="channel"], [class*="source"], [class*="signal"], [class*="stream"]'
+    );
+    referenceNodes.forEach((element) => {
+      add(element.getAttribute('data-channel'));
+      add(element.getAttribute('data-channel-name'));
+      add(element.getAttribute('data-source'));
+      add(element.getAttribute('data-signal'));
+      add(element.getAttribute('aria-label'));
+      add(element.getAttribute('title'));
+      const value = visibleText(element);
+      if (value.length <= 70) {
+        let match;
+        while ((match = referencePattern.exec(value)) !== null) add(match[1]);
+        referencePattern.lastIndex = 0;
+        if (element.matches('a, button, [role="button"]') &&
+            !/abrir partido|abrir canal|ver partido/i.test(value)) add(value);
+      }
+    });
+    return found;
+  }
+
+  function readEvent(card) {
+    const text = visibleText(card);
+    const startAt = readStartAt(card, text);
+    if (!startAt) return null;
+    const lines = text.split(/\\n+/).map((line) => line.trim()).filter(Boolean);
+    const titleNode = card.querySelector(
+      '[data-event-title], [class*="event-title"], [class*="match-title"], h2, h3, h4, strong'
+    );
+    const titleFromNode = visibleText(titleNode);
+    const matchup = lines.find((line) =>
+      /\\b(?:vs?\\.?|versus)\\b/i.test(line)
+    ) || '';
+    const title = (matchup || titleFromNode ||
+      lines.find((line) => line.length > 5 && !timePattern.test(line)) || '')
+      .replace(timeGlobalPattern, '')
+      .replace(/\\s+/g, ' ')
+      .trim();
+    if (!title || title.length > 160) return null;
+
+    const competition = lines.find((line) =>
+      /liga|league|copa|cup|torneo|tournament|premier|champions|concacaf|conmebol|uefa|nba|mlb|nhl/i.test(line) &&
+      line !== title
+    ) || '';
+    const lower = normalize(text);
+    let status = 'unknown';
+    if (/\\b(finalizado|finalizada|terminado|terminada|finished|completed|full time|cancelado|cancelada|suspended)\\b/.test(lower)) {
+      status = 'finished';
+    } else if (/\\b(en vivo|live|1st half|2nd half|primer tiempo|segundo tiempo|entretiempo|halftime)\\b/.test(lower)) {
+      status = 'live';
+    } else if (/\\b(proximo|proxima|scheduled|por comenzar)\\b/.test(lower)) {
+      status = 'scheduled';
+    }
+
+    const channelReferences = readChannelReferences(card, text);
+    const elementId = card.getAttribute('data-event-id') ||
+      card.getAttribute('data-id') || card.id || '';
+    const id = elementId && elementId.length < 100
+      ? elementId
+      : normalize(title).replace(/[^a-z0-9]+/g, '-') + '_' + startAt;
+    const eventLink = card.querySelector(
+      'a[href*="partido"], a[href*="evento"], a[href*="match"], a[href*="event"]'
+    );
+    return {
+      id: id,
+      title: title,
+      competition: competition,
+      startsAt: startAt,
+      endsAt: readEndAt(card),
+      status: status,
+      channelReferences: channelReferences,
+      detailUrl: eventLink ? eventLink.href : location.href,
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  let lastSignature = '';
+  let queued = false;
+  function emitAgendaEvents() {
+    queued = false;
+    if (!window.flutter_inappwebview ||
+        typeof window.flutter_inappwebview.callHandler !== 'function') return;
+    const timeNodes = Array.from(document.querySelectorAll(
+      'time, [data-time], [class*="time"], span, strong, small, div'
+    )).filter((element) => element.children.length === 0 &&
+      timePattern.test(visibleText(element)));
+    const seenCards = new Set();
+    const events = [];
+    for (const node of timeNodes) {
+      const card = findEventCard(node);
+      if (!card || seenCards.has(card)) continue;
+      seenCards.add(card);
+      const event = readEvent(card);
+      if (event) events.push(event);
+    }
+    const unique = [];
+    const keys = new Set();
+    for (const event of events) {
+      const key = event.id + '|' + event.startsAt;
+      if (keys.has(key)) continue;
+      keys.add(key);
+      unique.push(event);
+    }
+    if (unique.length === 0) return;
+    const signature = JSON.stringify(unique);
+    if (signature === lastSignature) return;
+    lastSignature = signature;
+    window.flutter_inappwebview.callHandler('dt360AgendaEvents', unique);
+  }
+
+  function queueEmit() {
+    if (queued) return;
+    queued = true;
+    window.setTimeout(emitAgendaEvents, 250);
+  }
+
+  document.addEventListener('click', () => {
+    window.setTimeout(queueEmit, 250);
+    window.setTimeout(queueEmit, 900);
+    window.setTimeout(queueEmit, 1800);
+  }, true);
+
+  const observer = new MutationObserver(queueEmit);
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    characterData: true
+  });
+  window.__dt360EmitAgendaEvents = emitAgendaEvents;
+  window.__dt360AgendaCaptureObserver = observer;
+  window.__dt360AgendaCaptureInstalled = true;
+  emitAgendaEvents();
+  window.setInterval(emitAgendaEvents, 20000);
 })();
 ''';
