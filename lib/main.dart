@@ -688,17 +688,30 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
+  bool _agendaBuilt = false;
+  bool _liveBuilt = false;
+  bool _channelsBuilt = false;
 
-  void _openAgenda() {
-    if (mounted) setState(() => _selectedIndex = 1);
+  void _openAgenda() => _selectPage(1);
+
+  void _selectPage(int index) {
+    if (!mounted || index == _selectedIndex) return;
+    setState(() {
+      _selectedIndex = index;
+      if (index == 1) _agendaBuilt = true;
+      if (index == 2) _liveBuilt = true;
+      if (index == 3) _channelsBuilt = true;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: appBg,
-      body: switch (_selectedIndex) {
-        0 => HomeDashboard(
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: <Widget>[
+          HomeDashboard(
             onNavigate: (_) {},
             onContact: () {},
             onDonations: () {},
@@ -706,16 +719,17 @@ class _MainShellState extends State<MainShell> {
             onOpenAgenda: _openAgenda,
             onChat: () {},
           ),
-        1 => const AgendaWebScreen(),
-        2 => const LiveChannelsScreen(),
-        _ => const AgendaWebScreen(),
-      },
+          _agendaBuilt ? const AgendaWebScreen() : const SizedBox.shrink(),
+          _liveBuilt
+              ? LiveChannelsScreen(isActive: _selectedIndex == 2)
+              : const SizedBox.shrink(),
+          _channelsBuilt ? const ChannelCatalogScreen() : const SizedBox.shrink(),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          if (index != _selectedIndex) setState(() => _selectedIndex = index);
-        },
-        height: 66,
+        onDestinationSelected: _selectPage,
+        height: 70,
         backgroundColor: appPanel,
         indicatorColor: appCyan.withAlpha(38),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
@@ -734,6 +748,11 @@ class _MainShellState extends State<MainShell> {
             icon: Icon(Icons.live_tv_outlined),
             selectedIcon: Icon(Icons.live_tv_rounded),
             label: 'Deportes en vivo',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.sports_soccer_outlined),
+            selectedIcon: Icon(Icons.sports_soccer_rounded),
+            label: 'Canales deportivos',
           ),
         ],
       ),
