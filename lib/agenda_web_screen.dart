@@ -576,7 +576,7 @@ const String _agendaLiveCaptureScript = r'''
       found.push(clean);
     };
     const addDelimited = (raw) => {
-      String(raw || '').split(/[,;\\n•|]+/).forEach((item) => add(item));
+      String(raw || '').split(/[,;\n•|]+/).forEach((item) => add(item));
     };
 
     // Formato habitual: "Fuente 1: ESPN 2", "Canal 2: DSports".
@@ -587,8 +587,8 @@ const String _agendaLiveCaptureScript = r'''
     // Algunas fichas publican los nombres agrupados en una línea/lista,
     // sin numerar cada fuente. Captura solo el valor posterior al encabezado.
     const sectionPatterns = [
-      /(?:canales?|señales|fuentes)\\s+(?:de\\s+)?(?:referencia|disponibles|publicadas|recomendadas|posibles)\\s*:?\\s*([^\\n]{2,180})/gi,
-      /(?:transmisiones?|señales)\\s+(?:posibles|disponibles)\\s*:?\\s*([^\\n]{2,180})/gi
+      /(?:canales?|señales|fuentes)\s+(?:de\s+)?(?:referencia|disponibles|publicadas|recomendadas|posibles)\s*:?\s*([^\n]{2,180})/gi,
+      /(?:transmisiones?|señales)\s+(?:posibles|disponibles)\s*:?\s*([^\n]{2,180})/gi
     ];
     sectionPatterns.forEach((pattern) => {
       let section;
