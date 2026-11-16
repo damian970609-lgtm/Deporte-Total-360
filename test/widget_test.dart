@@ -663,13 +663,14 @@ void main() {
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.text('Deportes en vivo'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump();
     expect(find.byType(LiveChannelsScreen), findsOneWidget);
     expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsOneWidget);
     expect(find.text('SEÑAL PENDIENTE'), findsNWidgets(8));
-    expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsOneWidget);
     await tester.tap(find.text('Canales deportivos'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump();
     expect(find.byType(ChannelCatalogScreen), findsOneWidget);
     expect(tester.takeException(), isNull);
 
