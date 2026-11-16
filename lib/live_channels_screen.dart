@@ -343,16 +343,16 @@ class _OfflineSportsArtwork extends StatelessWidget {
             children: <Widget>[
               Icon(
                 Icons.sports_soccer_rounded,
-                size: compact ? 21 : 42,
+                size: compact ? 21 : 38,
                 color: _liveCyan,
               ),
-              SizedBox(height: compact ? 2 : 5),
+              SizedBox(height: compact ? 2 : 3),
               Text(
                 'DEPORTE TOTAL 360°',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: _liveCyan,
-                  fontSize: compact ? 7 : 11,
+                  fontSize: compact ? 7 : 10,
                   letterSpacing: 1.2,
                   fontWeight: FontWeight.w900,
                 ),
@@ -361,7 +361,7 @@ class _OfflineSportsArtwork extends StatelessWidget {
               Container(
                 padding: EdgeInsets.symmetric(
                   horizontal: compact ? 6 : 14,
-                  vertical: compact ? 2 : 6,
+                  vertical: compact ? 2 : 5,
                 ),
                 decoration: BoxDecoration(
                   color: _liveRed.withAlpha(28),
@@ -376,7 +376,7 @@ class _OfflineSportsArtwork extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: _liveRed,
-                    fontSize: compact ? 7 : 13,
+                    fontSize: compact ? 7 : 12,
                     letterSpacing: compact ? .6 : 1.1,
                     fontWeight: FontWeight.w900,
                   ),
