@@ -562,25 +562,46 @@ const String _agendaLiveCaptureScript = r'''
 
   function readChannelReferences(card, cardText) {
     const found = [];
+    const generic = new Set([
+      'abrir', 'canal', 'senal', 'fuente', 'ver partido',
+      'programacion deportiva', 'mas informacion', 'disponible',
+      'canales de referencia', 'senales disponibles', 'fuentes disponibles'
+    ]);
     const add = (raw) => {
       const clean = cleanReference(raw);
       if (clean.length < 2 || clean.length > 70) return;
       const key = normalize(clean);
-      const generic = new Set([
-        'abrir', 'canal', 'senal', 'fuente', 'ver partido',
-        'programacion deportiva', 'mas informacion', 'disponible'
-      ]);
-      if (!key || generic.has(key) || found.some((item) => normalize(item) === key)) return;
+      if (!key || generic.has(key) ||
+          found.some((item) => normalize(item) === key)) return;
       found.push(clean);
     };
+    const addDelimited = (raw) => {
+      String(raw || '').split(/[,;\\n•|]+/).forEach((item) => add(item));
+    };
 
+    // Formato habitual: "Fuente 1: ESPN 2", "Canal 2: DSports".
     let marker;
     while ((marker = referencePattern.exec(cardText)) !== null) add(marker[1]);
     referencePattern.lastIndex = 0;
 
+    // Algunas fichas publican los nombres agrupados en una línea/lista,
+    // sin numerar cada fuente. Captura solo el valor posterior al encabezado.
+    const sectionPatterns = [
+      /(?:canales?|señales|fuentes)\\s+(?:de\\s+)?(?:referencia|disponibles|publicadas|recomendadas|posibles)\\s*:?\\s*([^\\n]{2,180})/gi,
+      /(?:transmisiones?|señales)\\s+(?:posibles|disponibles)\\s*:?\\s*([^\\n]{2,180})/gi
+    ];
+    sectionPatterns.forEach((pattern) => {
+      let section;
+      while ((section = pattern.exec(cardText)) !== null) {
+        addDelimited(section[1]);
+      }
+      pattern.lastIndex = 0;
+    });
+
     const referenceNodes = card.querySelectorAll(
       '[data-channel], [data-channel-name], [data-source], [data-signal], ' +
-      '[class*="channel"], [class*="source"], [class*="signal"], [class*="stream"]'
+      '[class*="channel"], [class*="source"], [class*="signal"], [class*="stream"], ' +
+      '[class*="broadcast"], [class*="transmission"]'
     );
     referenceNodes.forEach((element) => {
       add(element.getAttribute('data-channel'));
@@ -589,11 +610,19 @@ const String _agendaLiveCaptureScript = r'''
       add(element.getAttribute('data-signal'));
       add(element.getAttribute('aria-label'));
       add(element.getAttribute('title'));
+      add(element.getAttribute('alt'));
       const value = visibleText(element);
-      if (value.length <= 70) {
+      if (value.length <= 180) {
         let match;
         while ((match = referencePattern.exec(value)) !== null) add(match[1]);
         referencePattern.lastIndex = 0;
+        sectionPatterns.forEach((pattern) => {
+          let section;
+          while ((section = pattern.exec(value)) !== null) {
+            addDelimited(section[1]);
+          }
+          pattern.lastIndex = 0;
+        });
         if (element.matches('a, button, [role="button"]') &&
             !/abrir partido|abrir canal|ver partido/i.test(value)) add(value);
       }
