@@ -538,13 +538,60 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Mostrando 2005 de 2005 canales.'), findsOneWidget);
 
-    final iptvList = find.byKey(
-      const ValueKey<String>('channel-admin-iptv-list'),
-    );
     expect(find.byKey(const ValueKey<String>('iptv-visibility-general-channel')), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('iptv-language-general-channel')), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('iptv-visibility-sports-channel')), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('iptv-language-sports-channel')), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('reutiliza el catálogo IPTV completo guardado sin descargarlo otra vez', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final service = _AdminTestService(autoSignIn: true);
+    final cachedChannels = <SportsChannel>[
+      const SportsChannel(
+        id: 'cached-general',
+        identifier: 'cached-general',
+        name: 'Canal guardado general',
+        url: '',
+        isSports: false,
+        visible: false,
+      ),
+      const SportsChannel(
+        id: 'cached-sports',
+        identifier: 'cached-sports',
+        name: 'Canal deportivo guardado',
+        url: 'https://media.example/cached.m3u8',
+        isSports: true,
+        visible: false,
+        language: 'es',
+      ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChannelAdminScreen(
+          service: service,
+          snapshotLoader: (_) async => ChannelAdminSnapshot(
+            email: 'admin@example.com',
+            savedAt: '2026-11-16T00:00:00Z',
+            channels: cachedChannels,
+            sources: const <ChannelPlaylistSource>[],
+            hasChannels: true,
+            hasSources: true,
+            channelsComplete: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(service._adminPageCalls, 0);
+    expect(find.text('Canal guardado general'), findsOneWidget);
+    expect(find.text('Canal deportivo guardado'), findsOneWidget);
+    expect(find.text('Mostrando 2 de 2 canales.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });

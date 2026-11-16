@@ -1,14 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'live_media_format.dart';
 import 'stream_diagnostics.dart';
 import 'sports_api_service.dart';
 
@@ -262,6 +263,7 @@ class ChannelAdminSnapshot {
     required this.sources,
     required this.hasChannels,
     required this.hasSources,
+    this.channelsComplete = false,
   });
 
   final String email;
@@ -270,6 +272,8 @@ class ChannelAdminSnapshot {
   final List<ChannelPlaylistSource> sources;
   final bool hasChannels;
   final bool hasSources;
+  /// True only after every page of the unified IPTV catalog was downloaded.
+  final bool channelsComplete;
 }
 
 ChannelAdminSnapshot? _decodeChannelAdminSnapshot(
@@ -320,12 +324,13 @@ ChannelAdminSnapshot? _decodeChannelAdminSnapshot(
     return ChannelAdminSnapshot(
       email: normalizedEmail,
       savedAt: (decoded['savedAt'] ?? '').toString(),
-      channels: channels.take(maxCachedChannelCatalogEntries).toList(
-        growable: false,
-      ),
+      // Admin IPTV cache is deliberately not capped: keep every row from all
+      // registered playlists, even when a catalog exceeds 2,000 channels.
+      channels: channels.toList(growable: false),
       sources: sources.toList(growable: false),
       hasChannels: channelRows is List,
       hasSources: sourceRows is List,
+      channelsComplete: decoded['channelsComplete'] == true,
     );
   } catch (_) {
     return null;
@@ -334,29 +339,59 @@ ChannelAdminSnapshot? _decodeChannelAdminSnapshot(
 
 class ChannelAdminSnapshotStore {
   static const String _keyPrefix = 'dt360_admin_snapshot_v1_';
+  static const String _directoryName = 'dt360_admin_snapshots';
   static final Map<String, Future<void>> _pendingWrites =
       <String, Future<void>>{};
 
-  static String _cacheKey(String normalizedEmail) {
-    final account = base64Url
-        .encode(utf8.encode(normalizedEmail))
-        .replaceAll('=', '');
-    return '$_keyPrefix$account';
+  static String _accountKey(String normalizedEmail) => base64Url
+      .encode(utf8.encode(normalizedEmail))
+      .replaceAll('=', '');
+
+  static String _cacheKey(String normalizedEmail) =>
+      '$_keyPrefix${_accountKey(normalizedEmail)}';
+
+  static Future<File?> _snapshotFile(String normalizedEmail) async {
+    try {
+      final root = await getApplicationSupportDirectory();
+      final directory = Directory(
+        '${root.path}${Platform.pathSeparator}$_directoryName',
+      );
+      await directory.create(recursive: true);
+      return File(
+        '${directory.path}${Platform.pathSeparator}${_accountKey(normalizedEmail)}.json',
+      );
+    } catch (_) {
+      // En pruebas o dispositivos sin path_provider se usa el respaldo local.
+      return null;
+    }
   }
 
-  /// Devuelve solo la copia perteneciente a la cuenta solicitada.
-  /// El JSON y sus filas se decodifican en un isolate para no bloquear la
-  /// interfaz cuando el teléfono conserva miles de canales.
-  static Future<ChannelAdminSnapshot?> load({
-    required String email,
-  }) async {
-    final normalizedEmail = email.trim().toLowerCase();
-    if (normalizedEmail.isEmpty) return null;
-
+  static Future<String?> _readRaw(String normalizedEmail) async {
+    final file = await _snapshotFile(normalizedEmail);
+    if (file != null) {
+      try {
+        if (await file.exists()) {
+          final raw = await file.readAsString();
+          if (raw.isNotEmpty) return raw;
+        }
+      } catch (_) {
+        // Si la copia en archivo no se puede leer, intenta el respaldo.
+      }
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_cacheKey(normalizedEmail));
-      if (raw == null || raw.isEmpty) return null;
+      return prefs.getString(_cacheKey(normalizedEmail));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<ChannelAdminSnapshot?> _decodeStoredSnapshot(
+    String normalizedEmail,
+    String? raw,
+  ) async {
+    if (raw == null || raw.isEmpty) return null;
+    try {
       return await compute<Map<String, String>, ChannelAdminSnapshot?>(
         _decodeChannelAdminSnapshot,
         <String, String>{
@@ -370,13 +405,47 @@ class ChannelAdminSnapshotStore {
     }
   }
 
-  /// Actualiza solo los conjuntos indicados. Las escrituras de una misma
-  /// cuenta se serializan para evitar que dos respuestas simultáneas lean
-  /// la misma versión anterior y se pisen entre sí.
+  /// Lee el archivo persistente completo. Nunca trunca el inventario IPTV.
+  static Future<ChannelAdminSnapshot?> load({
+    required String email,
+  }) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    if (normalizedEmail.isEmpty) return null;
+
+    final file = await _snapshotFile(normalizedEmail);
+    if (file != null) {
+      try {
+        if (await file.exists()) {
+          final snapshot = await _decodeStoredSnapshot(
+            normalizedEmail,
+            await file.readAsString(),
+          );
+          if (snapshot != null) return snapshot;
+        }
+      } catch (_) {
+        // Un archivo incompleto no debe impedir recuperar el respaldo.
+      }
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return _decodeStoredSnapshot(
+        normalizedEmail,
+        prefs.getString(_cacheKey(normalizedEmail)),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Actualiza solo los conjuntos indicados y serializa escrituras por cuenta.
+  /// El archivo permite conservar catálogos mayores que el límite de memoria
+  /// que se aplica únicamente a la caché pública de la pantalla de canales.
   static Future<void> save({
     required String email,
     List<SportsChannel>? channels,
     List<ChannelPlaylistSource>? sources,
+    bool? channelsComplete,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
     if (normalizedEmail.isEmpty || (channels == null && sources == null)) {
@@ -387,9 +456,8 @@ class ChannelAdminSnapshotStore {
     final previousWrite = _pendingWrites[key] ?? Future<void>.value();
     final operation = previousWrite.catchError((Object _) {}).then<void>(
       (_) async {
-        final prefs = await SharedPreferences.getInstance();
         Map<String, dynamic> previous = <String, dynamic>{};
-        final raw = prefs.getString(key);
+        final raw = await _readRaw(normalizedEmail);
         if (raw != null && raw.isNotEmpty) {
           try {
             final decoded = jsonDecode(raw);
@@ -399,32 +467,51 @@ class ChannelAdminSnapshotStore {
               previous = Map<String, dynamic>.from(decoded);
             }
           } catch (_) {
-            // La copia dañada se reemplaza por el contenido disponible.
+            // Una copia dañada se reemplaza con los datos válidos disponibles.
           }
         }
 
-        await prefs.setString(
-          key,
-          jsonEncode(<String, Object>{
-            'email': normalizedEmail,
-            'savedAt': DateTime.now().toIso8601String(),
-            'channels': channels == null
-                ? (previous['channels'] is List
-                    ? previous['channels'] as List
-                    : <Object>[])
-                : channels
-                    .take(maxCachedChannelCatalogEntries)
-                    .map((channel) => channel.toJson())
-                    .toList(growable: false),
-            'sources': sources == null
-                ? (previous['sources'] is List
-                    ? previous['sources'] as List
-                    : <Object>[])
-                : sources
-                    .map((source) => source.toJson())
-                    .toList(growable: false),
-          }),
+        final encoded = jsonEncode(<String, Object>{
+          'email': normalizedEmail,
+          'savedAt': DateTime.now().toIso8601String(),
+          'channels': channels == null
+              ? (previous['channels'] is List
+                  ? previous['channels'] as List
+                  : <Object>[])
+              : channels.map((channel) => channel.toJson()).toList(
+                    growable: false,
+                  ),
+          'sources': sources == null
+              ? (previous['sources'] is List
+                  ? previous['sources'] as List
+                  : <Object>[])
+              : sources
+                  .map((source) => source.toJson())
+                  .toList(growable: false),
+          'channelsComplete': channels == null
+              ? previous['channelsComplete'] == true
+              : (channelsComplete ?? false),
+        });
+
+        final file = await _snapshotFile(normalizedEmail);
+        if (file == null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(key, encoded);
+          return;
+        }
+
+        final temporary = File(
+          '${file.path}.${DateTime.now().microsecondsSinceEpoch}.tmp',
         );
+        await temporary.writeAsString(encoded, flush: true);
+        await temporary.rename(file.path);
+        // No se necesita duplicar todo el catálogo en SharedPreferences.
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove(key);
+        } catch (_) {
+          // El archivo persistente ya contiene la copia autoritativa.
+        }
       },
     );
     _pendingWrites[key] = operation;

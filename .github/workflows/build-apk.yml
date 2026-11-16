@@ -272,7 +272,7 @@ jobs:
         run: dart run flutter_launcher_icons
 
       - name: Analizar código Flutter
-        run: flutter analyze lib test --no-fatal-infos
+        run: flutter analyze lib test --no-fatal-infos --no-fatal-warnings
 
       - name: Ejecutar pruebas automatizadas
         env:

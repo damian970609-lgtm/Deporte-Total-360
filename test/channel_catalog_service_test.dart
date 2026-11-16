@@ -132,6 +132,38 @@ void main() {
     expect(snapshot.sources.map((item) => item.id), ['sports-list']);
   });
 
+  test('el snapshot administrativo conserva más de 2.000 canales y marca la descarga completa', () async {
+    SharedPreferences.setMockInitialValues({});
+    final channels = List<SportsChannel>.generate(
+      2005,
+      (index) => SportsChannel(
+        id: 'iptv-$index',
+        identifier: 'iptv-$index',
+        name: 'Canal IPTV $index',
+        url: index.isEven ? 'https://media.example/$index.m3u8' : '',
+        isSports: index.isEven,
+        visible: false,
+      ),
+      growable: false,
+    );
+
+    await ChannelAdminSnapshotStore.save(
+      email: 'admin@example.com',
+      channels: channels,
+      sources: [snapshotSource],
+      channelsComplete: true,
+    );
+    final snapshot = await ChannelAdminSnapshotStore.load(
+      email: 'admin@example.com',
+    );
+
+    expect(snapshot, isNotNull);
+    expect(snapshot!.channels, hasLength(2005));
+    expect(snapshot.channels.last.id, 'iptv-2004');
+    expect(snapshot.channelsComplete, isTrue);
+    expect(snapshot.sources.single.id, 'sports-list');
+  });
+
   test('guardar canales no borra las fuentes guardadas de la misma cuenta', () async {
     SharedPreferences.setMockInitialValues({});
 

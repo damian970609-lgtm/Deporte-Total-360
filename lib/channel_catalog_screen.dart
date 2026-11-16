@@ -1729,24 +1729,20 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
       setState(() {
         if (snapshot.hasChannels) {
-          _cachedAdminChannels = List<SportsChannel>.unmodifiable(
-            snapshot.channels.take(maxCachedChannelCatalogEntries),
-          );
-          _channels = _cachedAdminChannels
-              .take(_adminPageSize)
-              .toList(growable: true);
-          _catalogTotal = _cachedAdminChannels.length;
-          // Un snapshot puede contener solo los bloques ya descargados, o
-          // estar limitado a 2.000 filas; nunca se presenta como total final.
-          _catalogTotalIsEstimate =
-              _cachedAdminChannels.length >= _adminPageSize;
-          _nextAdminOffset = _channels.length;
-          _hasMore = _catalogTotalIsEstimate;
+          // Recupera el inventario IPTV completo, incluidos canales generales
+          // y filas cuya URL no sea reproducible por este dispositivo.
+          _iptvChannels = List<SportsChannel>.unmodifiable(snapshot.channels);
+          _channels = List<SportsChannel>.from(snapshot.channels);
+          _iptvLoaded = snapshot.channelsComplete;
+          _catalogTotal = snapshot.channels.length;
+          _catalogTotalIsEstimate = !snapshot.channelsComplete;
+          _nextAdminOffset = snapshot.channels.length;
+          _hasMore = !snapshot.channelsComplete;
         }
         if (snapshot.hasSources) _sources = snapshot.sources;
-        if (snapshot.hasChannels && snapshot.channels.isNotEmpty) {
-          _error =
-              'Copia local del catálogo. Se actualizará cuando Cloudflare responda.';
+        if (snapshot.hasChannels && !snapshot.channelsComplete) {
+          _iptvError =
+              'Copia local parcial. Se completará la descarga de las listas guardadas.';
         }
         if (snapshot.hasSources) {
           _sourcesError =
@@ -1767,7 +1763,12 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
 
     await ChannelAdminSnapshotStore.save(
       email: email,
-      channels: saveChannels ? List<SportsChannel>.from(_channels) : null,
+      channels: saveChannels
+          ? List<SportsChannel>.from(
+              _iptvChannels.isNotEmpty ? _iptvChannels : _channels,
+            )
+          : null,
+      channelsComplete: saveChannels ? _iptvLoaded : null,
       sources: saveSources
           ? List<ChannelPlaylistSource>.from(_sources)
           : null,
@@ -1834,7 +1835,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     // administrativo paralelo. Se leen todas las páginas de las 120 listas.
     await Future.wait<void>(<Future<void>>[
       _loadAdminSources(),
-      _loadAllIptvChannels(force: true),
+      // Una copia marcada como completa evita volver a descargar los canales.
+      _loadAllIptvChannels(),
     ]);
 
     if (!mounted) return;
@@ -2271,7 +2273,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   Future<void> _addIptvOrgGlobalIndex({bool automatic = false}) async {
     if (_working && !automatic) return;
     if (_sources.length >= maxChannelPlaylistSources) {
-      if (!automatic) _message('Ya están registradas las 100 listas.');
+      if (!automatic) _message('Ya están registradas las 120 listas.');
       return;
     }
     if (_hasIptvOrgGlobalIndex) {
@@ -2296,7 +2298,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       });
       await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
       _message(
-        'Índice global de GitHub añadido: ${_sources.length}/100 listas. '
+        'Índice global de GitHub añadido: ${_sources.length}/120 listas. '
         'Los canales se importarán por lotes en segundo plano.',
       );
     } catch (error) {
@@ -2312,8 +2314,11 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     setState(() => _working = true);
     try {
       await _service.refreshSources();
-      await _loadAdmin(showLoading: false);
-      _message('Se solicitó reimportar todas las listas guardadas. Se conservarán los canales deportivos y generales; el inventario se actualizará por bloques.');
+      await Future.wait<void>(<Future<void>>[
+        _loadAdminSources(),
+        _loadAllIptvChannels(force: true),
+      ]);
+      _message('Se solicitó reimportar todas las listas guardadas. Se conservarán los canales deportivos y generales; el catálogo IPTV se actualizará completo.');
     } catch (error) {
       _message(error.toString());
     } finally {
@@ -2929,6 +2934,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     final cached = _iptvChannels.isNotEmpty
         ? List<SportsChannel>.from(_iptvChannels)
         : List<SportsChannel>.from(_channels);
+    final cachedWasComplete = _iptvLoaded;
     setState(() {
       _iptvLoading = true;
       _iptvError = null;
@@ -2994,7 +3000,13 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       if (!mounted || requestId != _iptvRequestId) return;
       setState(() {
         _iptvError = error.toString();
-        if (_iptvChannels.isEmpty && cached.isNotEmpty) _iptvChannels = cached;
+        // Un fallo a mitad de una actualización no sustituye el último
+        // catálogo completo guardado por una página parcial recién recibida.
+        if (cached.isNotEmpty) {
+          _iptvChannels = List<SportsChannel>.unmodifiable(cached);
+          _channels = List<SportsChannel>.from(cached);
+        }
+        _iptvLoaded = cachedWasComplete;
       });
     } finally {
       if (mounted && requestId == _iptvRequestId) {
@@ -3040,6 +3052,8 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                 ),
               ],
             ),
+          ),
+        ),
       ),
     );
   }
