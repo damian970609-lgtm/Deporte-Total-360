@@ -5,7 +5,6 @@ import 'package:deporte_total_360/main.dart';
 import 'package:deporte_total_360/channel_catalog_screen.dart';
 import 'package:deporte_total_360/channel_catalog_service.dart';
 import 'package:deporte_total_360/channel_playlist_presets.dart';
-import 'package:deporte_total_360/sports_api_service.dart';
 
 void _noopHomeNavigate(int _) {}
 void _noopHomeAction() {}
