@@ -3193,63 +3193,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () => setState(() => _iptvSelectedChannel = channel),
-                child: Row(
-                  children: <Widget>[
-                    SizedBox(
-                      width: 24,
-                      child: Text(
-                        index.toString(),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: _channelCyan,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                    _ChannelLogo(channel: channel, size: 36),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            channel.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          Text(
-                            channel.groupTitle.isEmpty
-                                ? 'SIN GRUPO'
-                                : channel.groupTitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: _channelMuted,
-                              fontSize: 8,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (selected)
-                      const Icon(
-                        Icons.play_circle_fill_rounded,
-                        color: _channelGreen,
-                        size: 21,
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
               Row(
                 children: <Widget>[
                   OutlinedButton.icon(
@@ -3332,6 +3275,63 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => setState(() => _iptvSelectedChannel = channel),
+                child: Row(
+                  children: <Widget>[
+                    SizedBox(
+                      width: 24,
+                      child: Text(
+                        index.toString(),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: _channelCyan,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    _ChannelLogo(channel: channel, size: 36),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            channel.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          Text(
+                            channel.groupTitle.isEmpty
+                                ? 'SIN GRUPO'
+                                : channel.groupTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: _channelMuted,
+                              fontSize: 8,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (selected)
+                      const Icon(
+                        Icons.play_circle_fill_rounded,
+                        color: _channelGreen,
+                        size: 21,
+                      ),
+                  ],
+                ),
               ),
             ],
           ),
