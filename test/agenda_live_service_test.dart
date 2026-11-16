@@ -177,7 +177,7 @@ void main() {
 
     final events = await service.loadCapturedEvents();
     expect(events, hasLength(1));
-    expect(events.single.channelReferences, <String>['ESPN 2']);
+    expect(events.single.channelReferences, <String>['espn 2']);
   });
 
   test('retira el evento y libera su asignación cuando la Agenda lo marca finalizado', () async {
