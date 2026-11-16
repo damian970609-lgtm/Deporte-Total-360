@@ -17,6 +17,7 @@ on:
       # sin exponer secretos durante las comprobaciones pull_request.
       - codex/complete-live-schedule
       - codex/harden-offline-snapshots-ci-20261107
+      - feature/channel-proxy-and-120-playlists-20261111
     paths:
       - 'lib/**'
       - 'test/**'
@@ -68,6 +69,142 @@ jobs:
 
       - name: Preparar archivos Android
         run: flutter create --platforms=android .
+
+      - name: Integrar proxy por canal en Android
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          gradle = Path('android/app/build.gradle.kts')
+          content = gradle.read_text(encoding='utf-8')
+          match = re.search(r'namespace\s*=\s*"([^"]+)"', content)
+          if not match:
+              raise SystemExit('No se pudo determinar el namespace Android para el puente de proxy.')
+          package_name = match.group(1)
+          package_dir = Path('android/app/src/main/kotlin') / package_name.replace('.', '/')
+          package_dir.mkdir(parents=True, exist_ok=True)
+          main_activity = package_dir / 'MainActivity.kt'
+          kotlin = """package __PACKAGE__
+
+          import io.flutter.embedding.android.FlutterActivity
+          import io.flutter.embedding.engine.FlutterEngine
+          import io.flutter.plugin.common.MethodChannel
+          import java.io.IOException
+          import java.net.Authenticator
+          import java.net.InetSocketAddress
+          import java.net.PasswordAuthentication
+          import java.net.Proxy
+          import java.net.ProxySelector
+          import java.net.SocketAddress
+          import java.net.URI
+
+          class MainActivity : FlutterActivity() {
+              companion object {
+                  private const val PROXY_CHANNEL = "dt360/channel_proxy"
+              }
+
+              private var originalProxySelector: ProxySelector? = null
+                  private var proxyInstalled = false
+
+              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+                  super.configureFlutterEngine(flutterEngine)
+                  MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PROXY_CHANNEL)
+                      .setMethodCallHandler { call, result ->
+                          try {
+                              when (call.method) {
+                                  "setProxy" -> {
+                                      val args = call.arguments as? Map<*, *>
+                                          ?: throw IllegalArgumentException("Configuración de proxy vacía.")
+                                      installProxy(args)
+                                      result.success(null)
+                                  }
+                                  "clearProxy" -> {
+                                      restoreProxy()
+                                      result.success(null)
+                                  }
+                                  else -> result.notImplemented()
+                              }
+                          } catch (error: Exception) {
+                              result.error("CHANNEL_PROXY_ERROR", error.message, null)
+                          }
+                      }
+              }
+
+              private fun installProxy(args: Map<*, *>) {
+                  val type = (args["type"] as? String)?.lowercase() ?: "http"
+                  val host = (args["host"] as? String)?.trim().orEmpty()
+                  val port = (args["port"] as? Number)?.toInt() ?: 0
+                  val username = (args["username"] as? String).orEmpty()
+                  val password = (args["password"] as? String).orEmpty()
+                  require(type in setOf("http", "socks", "socks4", "socks5")) {
+                      "Tipo de proxy no compatible."
+                  }
+                  require(host.isNotBlank() && port in 1..65535) {
+                      "Host o puerto del proxy no válido."
+                  }
+
+                  if (!proxyInstalled) {
+                      originalProxySelector = ProxySelector.getDefault()
+                      proxyInstalled = true
+                  }
+
+                  val proxyType = if (type.startsWith("socks")) Proxy.Type.SOCKS else Proxy.Type.HTTP
+                  val proxy = Proxy(proxyType, InetSocketAddress(host, port))
+                  ProxySelector.setDefault(object : ProxySelector() {
+                      val targetHost = (args["targetHost"] as? String)
+                          ?.trim()
+                          ?.lowercase()
+                          ?: throw IllegalArgumentException("Falta el host del canal.")
+                      override fun select(uri: URI): List<Proxy> {
+                          val requestHost = uri.host?.lowercase()
+                          return if (requestHost == targetHost) {
+                              listOf(proxy)
+                          } else {
+                              listOf(Proxy.NO_PROXY)
+                          }
+                      }
+                      override fun connectFailed(uri: URI, sa: SocketAddress, ioe: IOException) {
+                          // El reproductor gestiona el cambio al siguiente proxy configurado.
+                      }
+                  })
+
+                  if (username.isNotEmpty()) {
+                      Authenticator.setDefault(object : Authenticator() {
+                          override fun getPasswordAuthentication(): PasswordAuthentication? {
+                              if (requestorType == Authenticator.RequestorType.PROXY &&
+                                  requestingHost.equals(host, ignoreCase = true) &&
+                                  requestingPort == port) {
+                                  return PasswordAuthentication(username, password.toCharArray())
+                              }
+                              return null
+                          }
+                      })
+                  } else {
+                      Authenticator.setDefault(null)
+                  }
+              }
+
+              private fun restoreProxy() {
+                  if (!proxyInstalled) return
+                  ProxySelector.setDefault(originalProxySelector)
+                  Authenticator.setDefault(null)
+                  originalProxySelector = null
+                  proxyInstalled = false
+              }
+
+              override fun onDestroy() {
+                  restoreProxy()
+                  super.onDestroy()
+              }
+          }
+          """
+          main_activity.write_text(
+              kotlin.replace('__PACKAGE__', package_name),
+              encoding='utf-8',
+          )
+          print(f'Puente nativo de proxy creado en {main_activity}')
+          PY
 
       # Los pull requests ejecutan análisis y pruebas, sin acceso a la llave privada.
       - name: Habilitar Internet en el APK release
