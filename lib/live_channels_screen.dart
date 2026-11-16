@@ -14,6 +14,7 @@ import 'stream_diagnostics.dart';
 
 const Color _liveBg = Color(0xFF000000);
 const Color _livePanel = Color(0xFF07090D);
+const Color _livePanel2 = Color(0xFF0D1118);
 const Color _liveLine = Color(0xFF0047FF);
 const Color _liveCyan = Color(0xFF00A3FF);
 const Color _livePink = Color(0xFFFF1744);
