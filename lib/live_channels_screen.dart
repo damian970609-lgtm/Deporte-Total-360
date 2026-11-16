@@ -219,6 +219,16 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 const Text(
+                  '8 REPRODUCTORES DISPONIBLES',
+                  style: TextStyle(
+                    color: _liveCyan,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: .7,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
                   'BÚSQUEDA AUTOMÁTICA · 5 MINUTOS ANTES',
                   style: TextStyle(
                     color: _livePink,
