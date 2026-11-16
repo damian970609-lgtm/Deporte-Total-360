@@ -143,7 +143,7 @@ void main() {
       await tester.pumpWidget(
         const MaterialApp(home: LiveChannelsScreen()),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 30)),
       );
