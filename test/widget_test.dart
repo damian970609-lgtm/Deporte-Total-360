@@ -641,7 +641,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('MainShell expone Inicio, Agenda deportiva y Deportes en vivo', (tester) async {
+  testWidgets('MainShell expone Inicio, Agenda, Deportes en vivo y Canales deportivos', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     tester.view.devicePixelRatio = 1.0;
       tester.view.physicalSize = const Size(390, 844);
@@ -654,7 +654,7 @@ void main() {
     expect(find.text('Inicio'), findsOneWidget);
     expect(find.text('Agenda deportiva'), findsOneWidget);
     expect(find.text('Deportes en vivo'), findsOneWidget);
-    expect(find.text('Canales deportivos'), findsNothing);
+    expect(find.text('Canales deportivos'), findsOneWidget);
     expect(find.text('Agenda de hoy'), findsNothing);
     expect(find.text('Mister Fantasy'), findsNothing);
     expect(find.text('Chat'), findsNothing);
@@ -667,6 +667,7 @@ void main() {
     expect(find.byType(LiveChannelsScreen), findsOneWidget);
     expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsOneWidget);
     expect(find.text('SEÑAL PENDIENTE'), findsNWidgets(8));
+    expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
