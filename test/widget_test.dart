@@ -262,20 +262,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Canal cacheado 000'), findsOneWidget);
-    expect(find.text('Canal cacheado 039'), findsOneWidget);
-    expect(find.text('Canal cacheado 040'), findsNothing);
-    expect(find.text('Canal cacheado 079'), findsNothing);
-    expect(find.textContaining('CARGAR SIGUIENTE BLOQUE · 40'), findsOneWidget);
-
-    final nextPage = find.textContaining('CARGAR SIGUIENTE BLOQUE · 40');
-    await tester.ensureVisible(nextPage);
-    await tester.pumpAndSettle();
-    await tester.tap(nextPage);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Canal cacheado 079'), findsOneWidget);
-    expect(find.text('Canal cacheado 080'), findsNothing);
-    expect(find.textContaining('CARGAR SIGUIENTE BLOQUE · 80'), findsOneWidget);
+    expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsNothing);
+    expect(find.textContaining('CARGAR SIGUIENTE BLOQUE'), findsNothing);
+    expect(find.byKey(const ValueKey<String>('iptv-channel-total')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -338,9 +327,9 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el panel completa automáticamente la lista 100 con el índice GitHub cuando hay 99', (tester) async {
+  testWidgets('el panel completa automáticamente la lista 120 con el índice GitHub cuando hay 119', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    final service = _AdminTestService(autoSignIn: true, sourceCount: 99);
+    final service = _AdminTestService(autoSignIn: true, sourceCount: 119);
     await tester.pumpWidget(
       MaterialApp(home: ChannelAdminScreen(service: service)),
     );
@@ -355,39 +344,11 @@ void main() {
       isTrue,
     );
     expect(service.refreshRequested, isFalse);
-    expect((await service.fetchSources()), hasLength(100));
+    expect((await service.fetchSources()), hasLength(120));
 
-    // Solo se construye el primer bloque; el resto aparece al pedirlo.
-    final adminScroll = find.byKey(
-      const ValueKey<String>('channel-admin-scroll'),
-    );
-    int childCount() {
-      final list = tester.widget<ListView>(adminScroll);
-      final delegate = list.childrenDelegate as SliverChildListDelegate;
-      return delegate.children.length;
-    }
-
-    final initialChildCount = childCount();
-    final showMore = find.byKey(
-      const ValueKey<String>('admin-show-more-sources'),
-    );
-    // El botón está al final del ListView. Desplazar hasta que Flutter lo
-    // construya; el aviso de éxito puede cubrirlo, así que no se simula un tap.
-    for (var attempt = 0; attempt < 30 && showMore.evaluate().isEmpty; attempt++) {
-      await tester.drag(
-        adminScroll,
-        const Offset(0, -700),
-        warnIfMissed: false,
-      );
-      await tester.pumpAndSettle();
-    }
-    expect(showMore, findsOneWidget);
-    final showMoreButton = tester.widget<OutlinedButton>(showMore);
-    expect(showMoreButton.onPressed, isNotNull);
-    showMoreButton.onPressed!.call();
-    await tester.pumpAndSettle();
-    expect(childCount(), initialChildCount + 15);
-    expect(tester.takeException(), isNull);
+    expect(find.text('IPTV · TODAS LAS LISTAS EN UNA SOLA'), findsOneWidget);
+    expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsNothing);
+    expect(find.byKey(const ValueKey<String>('channel-admin-scroll')), findsNothing);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -395,7 +356,7 @@ void main() {
 
   testWidgets('añadir una lista general no vuelve a importar las 99 fuentes existentes', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    final service = _AdminTestService(autoSignIn: true, sourceCount: 98);
+    final service = _AdminTestService(autoSignIn: true, sourceCount: 118);
     // El índice global de GitHub ya forma parte de las 99 listas anteriores.
     service.addedPlaylistRequests.add(<String, String>{
       'url': iptvOrgGlobalIndexPlaylistUrl,
@@ -448,7 +409,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('el inventario permite reimportar todas las listas guardadas sin borrar canales', (tester) async {
+  testWidgets('IPTV permite actualizar todas las listas desde el catálogo unificado', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
@@ -456,12 +417,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final reimport = find.text('REIMPORTAR LISTAS GUARDADAS · TODOS LOS CANALES');
-    expect(reimport, findsOneWidget);
-    await tester.tap(reimport);
+    expect(find.text('Canal General'), findsOneWidget);
+    expect(find.text('ESPN Deportes'), findsOneWidget);
+    final refresh = find.byTooltip('Actualizar todas las listas');
+    expect(refresh, findsOneWidget);
+    await tester.tap(refresh);
     await tester.pumpAndSettle();
 
-    expect(service.refreshRequested, isTrue);
+    expect(service.lastAdminPageLimit, channelAdminCatalogPageSize);
     expect(find.text('Canal General'), findsOneWidget);
     expect(find.text('ESPN Deportes'), findsOneWidget);
     expect(tester.takeException(), isNull);
