@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:deporte_total_360/main.dart';
+import 'package:deporte_total_360/live_channels_screen.dart';
 import 'package:deporte_total_360/channel_catalog_screen.dart';
 import 'package:deporte_total_360/channel_catalog_service.dart';
 import 'package:deporte_total_360/channel_playlist_presets.dart';
@@ -640,7 +641,8 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('MainShell muestra Inicio y Agenda deportiva sin exponer otros módulos', (tester) async {
+  testWidgets('MainShell expone Inicio, Agenda deportiva y Deportes en vivo', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
     await tester.pumpWidget(const MaterialApp(home: MainShell()));
     await tester.pump();
 
@@ -649,13 +651,20 @@ void main() {
     expect(find.text('DEPORTE TOTAL 360°'), findsOneWidget);
     expect(find.text('Inicio'), findsOneWidget);
     expect(find.text('Agenda deportiva'), findsOneWidget);
-    expect(find.text('Deportes en vivo'), findsNothing);
+    expect(find.text('Deportes en vivo'), findsOneWidget);
     expect(find.text('Canales deportivos'), findsNothing);
     expect(find.text('Agenda de hoy'), findsNothing);
     expect(find.text('Mister Fantasy'), findsNothing);
     expect(find.text('Chat'), findsNothing);
     expect(find.text('Ajustes'), findsNothing);
     expect(find.byKey(const ValueKey<String>('bottom-nav-scroll-viewport')), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Deportes en vivo'));
+    await tester.pumpAndSettle();
+    expect(find.byType(LiveChannelsScreen), findsOneWidget);
+    expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsOneWidget);
+    expect(find.text('SEÑAL PENDIENTE'), findsNWidgets(8));
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
