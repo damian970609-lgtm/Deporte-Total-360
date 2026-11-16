@@ -138,6 +138,7 @@ void main() {
         'dt360_auto_live_authorized_v1': true,
       });
 
+      tester.view.devicePixelRatio = 1.0;
       tester.view.physicalSize = const Size(390, 844);
       await tester.pumpWidget(
         const MaterialApp(home: LiveChannelsScreen()),
