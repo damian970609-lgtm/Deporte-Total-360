@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:deporte_total_360/live_channels_screen.dart';
 import 'package:video_player/video_player.dart';
 
@@ -126,101 +127,43 @@ void main() {
     });
   });
 
-  group('LiveFixture', () {
-    test('lee identidad, hora, estado, marcadores y equipos del Worker', () {
-      final fixture = LiveFixture.tryParse(
-        <String, dynamic>{
-          'fixture': <String, dynamic>{
-            'id': 12345,
-            'date': '2026-11-02T19:30:00Z',
-            'status': <String, dynamic>{
-              'short': '1H',
-              'long': 'First Half',
-            },
-          },
-          'league': <String, dynamic>{'name': 'Liga de prueba'},
-          'teams': <String, dynamic>{
-            'home': <String, dynamic>{
-              'name': 'Equipo Azul',
-              'logo': 'https://cdn.example/blue.png',
-            },
-            'away': <String, dynamic>{
-              'name': 'Equipo Rojo',
-              'logo': 'https://cdn.example/red.png',
-            },
-          },
-          'goals': <String, dynamic>{'home': 2, 'away': 1},
-        },
-        'Fútbol',
+  testWidgets(
+    'Deportes en vivo muestra ocho reproductores y limpia la configuración anterior',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'deporte_total_authorized_live_sources_v1': '[]',
+        'deporte_total_live_favorites_v1': <String>['canal-antiguo'],
+        'dt360_auto_live_playlist_url_v1': 'https://old.example/list.m3u',
+        'dt360_auto_live_epg_url_v1': 'https://old.example/guide.xml',
+        'dt360_auto_live_authorized_v1': true,
+      });
+
+      await tester.pumpWidget(
+        const MaterialApp(home: LiveChannelsScreen()),
       );
-
-      expect(fixture, isNotNull);
-      expect(fixture!.id, '12345');
-      expect(fixture.competition, 'Liga de prueba');
-      expect(fixture.homeTeam, 'Equipo Azul');
-      expect(fixture.awayTeam, 'Equipo Rojo');
-      expect(fixture.status, LiveFixtureStatus.live);
-      expect(fixture.homeScore, 2);
-      expect(fixture.awayScore, 1);
-      expect(fixture.homeLogo, 'https://cdn.example/blue.png');
-    });
-
-    test('no inventa un evento cuando falta el horario o los equipos', () {
-      expect(
-        LiveFixture.tryParse(
-          <String, dynamic>{
-            'fixture': <String, dynamic>{'id': 1},
-          },
-          'Fútbol',
-        ),
-        isNull,
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 30)),
       );
-    });
-  });
+      await tester.pump();
 
-  group('LiveStreamSource', () {
-    test('persiste solo las señales directas válidas', () {
-      final source = LiveStreamSource.fromJson(<String, dynamic>{
-        'id': 'channel-1',
-        'eventId': 'match-123',
-        'eventTitle': 'Equipo Azul vs Equipo Rojo',
-        'sport': 'Fútbol',
-        'name': 'Señal oficial',
-        'url': 'https://media.example/live.m3u8',
-      });
+      expect(find.text('DEPORTES EN VIVO'), findsOneWidget);
+      expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsOneWidget);
+      expect(find.text('SEÑAL PENDIENTE'), findsNWidgets(8));
+      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(8));
+      expect(find.text('PARTIDOS Y SEÑALES'), findsNothing);
+      expect(find.text('CONFIGURAR GUÍAS EPG XMLTV'), findsNothing);
+      expect(find.text('Buscar equipo, evento o competición'), findsNothing);
 
-      expect(source, isNotNull);
-      expect(source!.eventId, 'match-123');
-      expect(source.validatedUri!.path, '/live.m3u8');
-    });
+      final preferences = await SharedPreferences.getInstance();
+      expect(preferences.containsKey('deporte_total_authorized_live_sources_v1'), isFalse);
+      expect(preferences.containsKey('deporte_total_live_favorites_v1'), isFalse);
+      expect(preferences.getString('dt360_auto_live_playlist_url_v1'), '');
+      expect(preferences.getString('dt360_auto_live_epg_url_v1'), '');
+      expect(preferences.getBool('dt360_auto_live_authorized_v1'), isFalse);
+      expect(tester.takeException(), isNull);
 
-    test('identifica una señal llegada del catálogo remoto', () {
-      final source = LiveStreamSource.fromCatalogJson(<String, dynamic>{
-        'id': 'football-123-main',
-        'eventId': '123',
-        'eventTitle': 'Equipo Azul vs Equipo Rojo',
-        'sport': 'football',
-        'name': 'Señal oficial',
-        'url': 'https://media.example/live.m3u8',
-      });
-
-      expect(source, isNotNull);
-      expect(source!.isRemote, isTrue);
-      expect(source.eventId, '123');
-      expect(source.validatedUri!.scheme, 'https');
-    });
-
-    test('descarta un player web guardado como si fuera una señal', () {
-      final source = LiveStreamSource.fromJson(<String, dynamic>{
-        'id': 'bad-channel',
-        'eventId': 'match-123',
-        'eventTitle': 'Partido',
-        'sport': 'Fútbol',
-        'name': 'Página',
-        'url': 'https://example.com/player?id=123',
-      });
-
-      expect(source, isNull);
-    });
-  });
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 }
