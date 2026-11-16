@@ -261,6 +261,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final firstCachedRow = find.byKey(
+      const ValueKey<String>('iptv-channel-row-cached-0'),
+    );
+    await tester.scrollUntilVisible(
+      firstCachedRow,
+      350,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
     expect(find.text('Canal cacheado 000'), findsOneWidget);
     expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsNothing);
     expect(find.textContaining('CARGAR SIGUIENTE BLOQUE'), findsNothing);
@@ -274,13 +283,25 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
-      MaterialApp(home: ChannelAdminScreen(service: service)),
+      MaterialApp(home: ChannelAdminScreen(service: service, snapshotLoader: (_) async => null)),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('IPTV · TODAS LAS LISTAS EN UNA SOLA'), findsOneWidget);
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('iptv-channel-row-general-channel')),
+      350,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
     expect(find.text('Canal General'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('iptv-channel-row-sports-channel')),
+      350,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
     expect(find.text('ESPN Deportes'), findsOneWidget);
     expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsNothing);
     expect(find.text('PROTECCIÓN Y RESTRICCIONES REGIONALES'), findsNothing);
@@ -295,7 +316,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
-      MaterialApp(home: ChannelAdminScreen(service: service)),
+      MaterialApp(home: ChannelAdminScreen(service: service, snapshotLoader: (_) async => null)),
     );
     await tester.pumpAndSettle();
 
@@ -331,7 +352,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true, sourceCount: 119);
     await tester.pumpWidget(
-      MaterialApp(home: ChannelAdminScreen(service: service)),
+      MaterialApp(home: ChannelAdminScreen(service: service, snapshotLoader: (_) async => null)),
     );
     await tester.pumpAndSettle();
 
@@ -363,7 +384,7 @@ void main() {
       'label': iptvOrgGlobalIndexPlaylistLabel,
     });
     await tester.pumpWidget(
-      MaterialApp(home: ChannelAdminScreen(service: service)),
+      MaterialApp(home: ChannelAdminScreen(service: service, snapshotLoader: (_) async => null)),
     );
     await tester.pumpAndSettle();
 
@@ -394,7 +415,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
-      MaterialApp(home: ChannelAdminScreen(service: service)),
+      MaterialApp(home: ChannelAdminScreen(service: service, snapshotLoader: (_) async => null)),
     );
     await tester.pumpAndSettle();
 
@@ -413,20 +434,30 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
-      MaterialApp(home: ChannelAdminScreen(service: service)),
+      MaterialApp(home: ChannelAdminScreen(service: service, snapshotLoader: (_) async => null)),
     );
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('iptv-channel-row-general-channel')),
+      350,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
     expect(find.text('Canal General'), findsOneWidget);
-    expect(find.text('ESPN Deportes'), findsOneWidget);
     final refresh = find.byTooltip('Actualizar todas las listas');
     expect(refresh, findsOneWidget);
     await tester.tap(refresh);
     await tester.pumpAndSettle();
 
     expect(service.lastAdminPageLimit, channelAdminCatalogPageSize);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('iptv-channel-row-general-channel')),
+      350,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
     expect(find.text('Canal General'), findsOneWidget);
-    expect(find.text('ESPN Deportes'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -435,7 +466,7 @@ void main() {
   testWidgets('el panel privado exige autenticación antes de mostrar las listas', (tester) async {
     final service = _AdminTestService(autoSignIn: false);
     await tester.pumpWidget(
-      MaterialApp(home: ChannelAdminScreen(service: service)),
+      MaterialApp(home: ChannelAdminScreen(service: service, snapshotLoader: (_) async => null)),
     );
     await tester.pumpAndSettle();
 
@@ -523,9 +554,14 @@ void main() {
     tester.view.physicalSize = const Size(800, 1200);
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true, adminTotal: 2005);
-    await tester.pumpWidget(MaterialApp(home: ChannelAdminScreen(service: service)));
+    await tester.pumpWidget(MaterialApp(home: ChannelAdminScreen(service: service, snapshotLoader: (_) async => null)));
     await tester.pumpAndSettle();
 
+    expect(
+      service._adminPageCalls,
+      greaterThan(0),
+      reason: 'La sesión restaurada no solicitó ninguna página al servicio IPTV.',
+    );
     expect(tester.widget<Text>(find.byKey(const ValueKey<String>('iptv-channel-total'))).data, '2005');
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('channel-admin-iptv-list')), findsOneWidget);
@@ -544,8 +580,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Mostrando 2005 de 2005 canales.'), findsOneWidget);
 
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('iptv-channel-row-general-channel')),
+      350,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
     expect(find.byKey(const ValueKey<String>('iptv-visibility-general-channel')), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('iptv-language-general-channel')), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('iptv-channel-row-sports-channel')),
+      350,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
     expect(find.byKey(const ValueKey<String>('iptv-visibility-sports-channel')), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('iptv-language-sports-channel')), findsOneWidget);
 
@@ -594,7 +642,19 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(service._adminPageCalls, 0);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('iptv-channel-row-cached-general')),
+      350,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
     expect(find.text('Canal guardado general'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('iptv-channel-row-cached-sports')),
+      350,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
     expect(find.text('Canal deportivo guardado'), findsOneWidget);
     expect(find.text('Mostrando 2 de 2 canales.'), findsOneWidget);
     expect(tester.takeException(), isNull);

@@ -3148,7 +3148,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
             child: OutlinedButton.icon(
               onPressed: _working || _sources.length >= maxChannelPlaylistSources ? null : _addGeneralPreset,
               icon: const Icon(Icons.playlist_add_rounded),
-              label: const Text('AGREGAR LISTA GENERAL'),
+              label: const Text('AÑADIR LISTA GENERAL'),
             ),
           ),
           const SizedBox(height: 7),
@@ -3158,6 +3158,21 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
               onPressed: _working ? null : _fillPlaylistCatalogTo100,
               icon: const Icon(Icons.cloud_download_rounded),
               label: Text(_sources.length >= maxChannelPlaylistSources ? '120 LISTAS REGISTRADAS' : 'AGREGAR PREAJUSTES DISPONIBLES (LÍMITE 120)'),
+            ),
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _working || _sources.length >= maxChannelPlaylistSources
+                  ? null
+                  : () => _addIptvOrgGlobalIndex(),
+              icon: const Icon(Icons.public_rounded),
+              label: Text(
+                _hasIptvOrgGlobalIndex
+                    ? 'ÍNDICE GLOBAL IPTV-ORG REGISTRADO'
+                    : 'AÑADIR ÍNDICE GLOBAL IPTV-ORG',
+              ),
             ),
           ),
           const SizedBox(height: 6),
@@ -3452,15 +3467,15 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                   ),
                 );
               }
-              if (index <= rows.length) {
-                final channel = rows[index - 1];
-                return _buildIptvChannelRow(channel, index);
-              }
-              if (index == rows.length + 1) {
+              if (index == 1) {
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 7),
                   child: _buildIptvAddListCard(),
                 );
+              }
+              if (index <= rows.length + 1) {
+                final channel = rows[index - 2];
+                return _buildIptvChannelRow(channel, index - 1);
               }
               return const SizedBox.shrink();
             },
