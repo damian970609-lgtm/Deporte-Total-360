@@ -2916,32 +2916,11 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   }
 
 
-  void _openAdminSection() {
-    if (mounted) {
-      setState(() {
-        _showIptvSection = false;
-        _showVpnSection = false;
-      });
-    }
-  }
-
   void _openIptvSection() {
-    if (mounted) {
-      setState(() {
-        _showIptvSection = true;
-        _showVpnSection = false;
-      });
+    if (mounted && !_showIptvSection) {
+      setState(() => _showIptvSection = true);
     }
     if (!_iptvLoaded && !_iptvLoading) unawaited(_loadAllIptvChannels());
-  }
-
-  void _openVpnSection() {
-    if (mounted) {
-      setState(() {
-        _showIptvSection = false;
-        _showVpnSection = true;
-      });
-    }
   }
 
   Future<void> _loadAllIptvChannels({bool force = false}) async {
@@ -3027,37 +3006,44 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
   Widget _buildAdminSectionSwitcher() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(13, 10, 13, 8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-        decoration: BoxDecoration(
-          color: _channelPanel,
+      child: Material(
+        color: _channelPanel,
+        borderRadius: BorderRadius.circular(11),
+        child: InkWell(
           borderRadius: BorderRadius.circular(11),
-          border: Border.all(color: _channelCyan.withAlpha(130)),
-        ),
-        child: Row(
-          children: <Widget>[
-            const Icon(Icons.live_tv_rounded, color: _channelCyan, size: 19),
-            const SizedBox(width: 9),
-            const Expanded(
-              child: Text(
-                'IPTV · TODAS LAS LISTAS EN UNA SOLA',
-                style: TextStyle(
-                  color: _channelCyan,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: .35,
+          onTap: _openIptvSection,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: _channelCyan.withAlpha(130)),
+            ),
+            child: Row(
+              children: <Widget>[
+                const Icon(Icons.live_tv_rounded, color: _channelCyan, size: 19),
+                const SizedBox(width: 9),
+                const Expanded(
+                  child: Text(
+                    'IPTV · TODAS LAS LISTAS EN UNA SOLA',
+                    style: TextStyle(
+                      color: _channelCyan,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: .35,
+                    ),
+                  ),
                 ),
-              ),
+                Text(
+                  '${maxChannelPlaylistSources} LISTAS',
+                  style: const TextStyle(
+                    color: _channelGreen,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
             ),
-            Text(
-              '${maxChannelPlaylistSources} LISTAS',
-              style: const TextStyle(
-                color: _channelGreen,
-                fontSize: 9,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -3180,6 +3166,172 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
     );
   }
 
+  Widget _buildIptvChannelRow(SportsChannel channel, int index) {
+    final selected = _iptvSelectedChannel?.id == channel.id;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Material(
+        key: ValueKey<String>('iptv-channel-row-${channel.id}'),
+        color: selected ? _channelCyan.withAlpha(24) : _channelPanel,
+        borderRadius: BorderRadius.circular(11),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(
+              color: selected ? _channelCyan : _channelLine.withAlpha(100),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => setState(() => _iptvSelectedChannel = channel),
+                child: Row(
+                  children: <Widget>[
+                    SizedBox(
+                      width: 24,
+                      child: Text(
+                        index.toString(),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: _channelCyan,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    _ChannelLogo(channel: channel, size: 36),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            channel.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          Text(
+                            channel.groupTitle.isEmpty
+                                ? 'SIN GRUPO'
+                                : channel.groupTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: _channelMuted,
+                              fontSize: 8,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (selected)
+                      const Icon(
+                        Icons.play_circle_fill_rounded,
+                        color: _channelGreen,
+                        size: 21,
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: <Widget>[
+                  OutlinedButton.icon(
+                    key: ValueKey<String>('iptv-visibility-${channel.id}'),
+                    onPressed: _working
+                        ? null
+                        : () => _toggleVisibility(channel),
+                    icon: Icon(
+                      channel.visible
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
+                      size: 15,
+                    ),
+                    label: Text(
+                      channel.visible ? 'OCULTAR' : 'HACER VISIBLE',
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor:
+                          channel.visible ? _channelPink : _channelGreen,
+                      side: BorderSide(
+                        color: channel.visible ? _channelPink : _channelGreen,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 7,
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  const Icon(
+                    Icons.translate_rounded,
+                    color: _channelCyan,
+                    size: 15,
+                  ),
+                  const SizedBox(width: 5),
+                  SizedBox(
+                    width: 154,
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        key: ValueKey<String>('iptv-language-${channel.id}'),
+                        value: channel.language,
+                        isDense: true,
+                        isExpanded: true,
+                        dropdownColor: _channelPanel2,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        items: const <DropdownMenuItem<String>>[
+                          DropdownMenuItem<String>(
+                            value: 'unknown',
+                            child: Text('Sin definir'),
+                          ),
+                          DropdownMenuItem<String>(
+                            value: 'es',
+                            child: Text('Español 🇪🇸'),
+                          ),
+                          DropdownMenuItem<String>(
+                            value: 'en',
+                            child: Text('Inglés 🇺🇸'),
+                          ),
+                        ],
+                        onChanged: _working
+                            ? null
+                            : (value) {
+                                if (value != null &&
+                                    value != channel.language) {
+                                  unawaited(
+                                    _setChannelLanguage(channel, value),
+                                  );
+                                }
+                              },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildIptvScreen() {
     final query = _iptvSearchController.text.trim().toLowerCase();
     final rows = _iptvChannels.where((channel) =>
@@ -3298,67 +3450,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
               );
               if (index <= rows.length + 1) {
                 final channel = rows[index - 2];
-                final selected = _iptvSelectedChannel?.id == channel.id;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Material(
-                    color: selected ? _channelCyan.withAlpha(24) : _channelPanel,
-                    borderRadius: BorderRadius.circular(11),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(11),
-                      onTap: () => setState(() => _iptvSelectedChannel = channel),
-                      child: Container(
-                        padding: const EdgeInsets.all(9),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(11),
-                          border: Border.all(color: selected ? _channelCyan : _channelLine.withAlpha(100)),
-                        ),
-                        child: Row(children: <Widget>[
-                          SizedBox(width: 25, child: Text((index - 1).toString(), textAlign: TextAlign.center, style: const TextStyle(color: _channelCyan, fontSize: 9, fontWeight: FontWeight.w900))),
-                          _ChannelLogo(channel: channel, size: 34),
-                          const SizedBox(width: 8),
-                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-                            Text(channel.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900)),
-                            Text((channel.groupTitle.isEmpty ? 'SIN GRUPO' : channel.groupTitle) + ' · ' + (channel.isSports ? 'DEPORTIVO' : 'GENERAL'), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _channelMuted, fontSize: 8)),
-                          ])),
-                          ChannelLanguageBadge(language: channel.language),
-                          const SizedBox(width: 5),
-                          if (channel.isSports)
-                            OutlinedButton.icon(
-                              key: ValueKey<String>('iptv-add-channel-' + channel.id),
-                              onPressed: _working ? null : () => _toggleVisibility(channel),
-                              icon: Icon(
-                                channel.visible ? Icons.visibility_off_rounded : Icons.add_circle_outline_rounded,
-                                size: 14,
-                              ),
-                              label: Text(channel.visible ? 'OCULTAR' : 'AGREGAR'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: channel.visible ? _channelPink : _channelGreen,
-                                side: BorderSide(color: channel.visible ? _channelPink : _channelGreen),
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-                                textStyle: const TextStyle(fontSize: 8, fontWeight: FontWeight.w900),
-                              ),
-                            )
-                          else
-                            OutlinedButton.icon(
-                              key: ValueKey<String>('iptv-classify-channel-' + channel.id),
-                              onPressed: _working ? null : () => _setChannelSportsClassification(channel),
-                              icon: const Icon(Icons.sports_rounded, size: 14),
-                              label: const Text('CLASIFICAR'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: _channelYellow,
-                                side: const BorderSide(color: _channelYellow),
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-                                textStyle: const TextStyle(fontSize: 8, fontWeight: FontWeight.w900),
-                              ),
-                            ),
-                        ]),
-                      ),
-                    ),
-                  ),
-                );
+                return _buildIptvChannelRow(channel, index - 1);
               }
               final source = _sources[index - rows.length - 2];
               return Padding(
@@ -3665,11 +3757,9 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                 children: <Widget>[
                   _buildAdminSectionSwitcher(),
                   Expanded(
-                    child: _showVpnSection
-                        ? const ProtonVpnScreen()
-                        : _showIptvSection
-                            ? _buildIptvScreen()
-                            : RefreshIndicator(
+                    child: _showIptvSection
+                        ? _buildIptvScreen()
+                        : RefreshIndicator(
                 color: _channelCyan,
                 backgroundColor: _channelPanel,
                 onRefresh: () => _loadAdmin(),
