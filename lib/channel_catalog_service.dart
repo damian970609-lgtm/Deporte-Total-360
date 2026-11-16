@@ -429,7 +429,7 @@ class ChannelAdminSnapshotStore {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      return _decodeStoredSnapshot(
+      return await _decodeStoredSnapshot(
         normalizedEmail,
         prefs.getString(_cacheKey(normalizedEmail)),
       );

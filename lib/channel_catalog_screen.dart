@@ -3054,7 +3054,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
             ),
           ),
         ),
-      ),
     );
   }
 
