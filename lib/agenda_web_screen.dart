@@ -197,14 +197,20 @@ class _AgendaWebScreenState extends State<AgendaWebScreen> {
     }
   }
 
+  Future<void> _storeCapturedAgendaEvents(dynamic payload) async {
+    try {
+      await AgendaLiveService().captureAgendaEvents(payload);
+    } catch (error) {
+      debugPrint('No se pudieron guardar las referencias de canales de Agenda: $error');
+    }
+  }
+
   void _registerAgendaBridge(InAppWebViewController controller) {
     controller.addJavaScriptHandler(
       handlerName: 'dt360AgendaEvents',
       callback: (arguments) {
         if (arguments.isNotEmpty) {
-          unawaited(
-            AgendaLiveService().captureAgendaEvents(arguments.first),
-          );
+          unawaited(_storeCapturedAgendaEvents(arguments.first));
         }
         return true;
       },
