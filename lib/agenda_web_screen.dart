@@ -323,7 +323,15 @@ const String _agendaOnlyScript = r'''
   function hideHeadingBlock(heading) {
     const block = heading.closest('section, article');
     if (block) {
-      block.style.setProperty('display', 'none', 'important');
+      const containsAgendaHeading = Array.from(
+        block.querySelectorAll('h1, h2, h3, h4')
+      ).some((candidate) =>
+        normalize(candidate.textContent).includes('programacion del dia'));
+      if (!containsAgendaHeading) {
+        block.style.setProperty('display', 'none', 'important');
+      } else {
+        heading.style.setProperty('display', 'none', 'important');
+      }
       return;
     }
     let candidate = heading;
@@ -370,13 +378,6 @@ const String _agendaOnlyScript = r'''
       }
     });
 
-    document.querySelectorAll('section, article').forEach((block) => {
-      const headings = Array.from(block.querySelectorAll('h1, h2, h3, h4'));
-      if (headings.some((heading) =>
-          excludedHeadings.some((part) => normalize(heading.textContent).includes(part)))) {
-        block.style.setProperty('display', 'none', 'important');
-      }
-    });
   }
 
   window.__dt360ApplyAgendaFilter = applyAgendaFilter;
