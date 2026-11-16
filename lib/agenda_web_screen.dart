@@ -369,6 +369,53 @@ const String _agendaOnlyScript = r'''
       }
     });
 
+    // Oculta también las tarjetas de canal, incluso si la web no las agrupa
+    // dentro de un <section> semántico.
+    const channelActions = Array.from(
+      document.querySelectorAll('a, button, [role="button"]')
+    ).filter((element) =>
+      normalize(element.textContent).startsWith('abrir canal')
+    );
+
+    if (channelActions.length > 1) {
+      let channelContainer = channelActions[0];
+      while (channelContainer.parentElement &&
+          channelContainer.parentElement !== document.body &&
+          channelContainer.parentElement !== document.documentElement &&
+          !channelActions.every((action) => channelContainer.contains(action))) {
+        channelContainer = channelContainer.parentElement;
+      }
+
+      const hasAgenda = Array.from(
+        channelContainer.querySelectorAll('h1, h2, h3, h4')
+      ).some((heading) =>
+        normalize(heading.textContent).includes('programacion del dia'));
+
+      if (channelContainer !== document.body &&
+          channelContainer !== document.documentElement && !hasAgenda) {
+        channelContainer.style.setProperty('display', 'none', 'important');
+      } else {
+        // Si la web comparte el contenedor, oculta cada tarjeta individual.
+        channelActions.forEach((action) => {
+          let card = action;
+          for (let depth = 0; depth < 8; depth += 1) {
+            const parent = card.parentElement;
+            if (!parent || parent === document.body ||
+                parent === document.documentElement || parent === channelContainer) break;
+            card = parent;
+            const actionCount = Array.from(
+              card.querySelectorAll('a, button, [role="button"]')
+            ).filter((element) =>
+              normalize(element.textContent).startsWith('abrir canal')
+            ).length;
+            const hasChannelTitle = card.querySelector('h3, h4, img, picture');
+            if (actionCount === 1 && hasChannelTitle) break;
+          }
+          card.style.setProperty('display', 'none', 'important');
+        });
+      }
+    }
+
     document.querySelectorAll('a').forEach((link) => {
       const label = normalize(link.textContent);
       const href = String(link.getAttribute('href') || '').toLowerCase();
