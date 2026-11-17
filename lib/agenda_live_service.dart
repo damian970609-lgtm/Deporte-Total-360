@@ -376,15 +376,6 @@ class AgendaLiveService {
     final usedUrls = <String>{};
 
     for (final event in activeEvents) {
-      if (assignments.length >= 8) {
-        pending.add(AgendaLivePendingEvent(
-          event: event,
-          status: 'ESPERANDO UN REPRODUCTOR',
-          detail: 'Los ocho reproductores están ocupados. Este evento se asignará cuando se libere uno.',
-        ));
-        continue;
-      }
-
       if (current.isBefore(
         event.startsAt.subtract(agendaLivePreparationWindow),
       )) {
@@ -429,7 +420,7 @@ class AgendaLiveService {
     );
     return AgendaLiveBoardState(
       assignments: assignments,
-      pending: pending.take(8 - assignments.length).toList(growable: false),
+      pending: pending.toList(growable: false),
       transmissionOptionCount: optionCount,
     );
   }
