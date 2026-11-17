@@ -3098,7 +3098,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
             style: const TextStyle(color: Colors.white, fontSize: 11),
             decoration: const InputDecoration(
               labelText: 'URL HTTPS de la lista IPTV',
-              hintText: 'M3U/M3U8, PLS, XSPF, XML/ASX, JSON, CSV o TXT',
+              hintText: 'M3U/M3U8, PLS, XSPF, XML/ASX, WPL/SMIL, JSON, CSV o TXT',
               prefixIcon: Icon(Icons.link_rounded),
             ),
           ),
