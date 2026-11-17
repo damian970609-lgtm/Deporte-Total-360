@@ -26,21 +26,6 @@ const Color _liveMuted = Color(0xFFEAF0F8);
 bool isSupportedAuthorizedMediaUrl(String value) =>
     liveMediaFormatForUrl(value) != null;
 
-VideoFormat _videoFormatHintFor(Uri uri) {
-  switch (liveMediaFormatForUrl(uri.toString())) {
-    case LiveMediaFormat.hls:
-      return VideoFormat.hls;
-    case LiveMediaFormat.dash:
-      return VideoFormat.dash;
-    case LiveMediaFormat.smoothStreaming:
-      return VideoFormat.ss;
-    case LiveMediaFormat.progressive:
-    case null:
-      return VideoFormat.other;
-  }
-}
-
-
 /// Pantalla visible con los ocho reproductores preparados.
 /// La configuración de señales anterior se ha retirado; se conectará un
 /// método nuevo en una actualización posterior.
@@ -964,9 +949,8 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
       return;
     }
 
-    final controller = VideoPlayerController.networkUrl(
+    final controller = createCompatibleNetworkVideoController(
       uri,
-      formatHint: _videoFormatHintFor(uri),
       videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
     );
     _controller = controller;
