@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const String _agendaLiveEventsKey = 'dt360_agenda_live_references_v1';
+const String _agendaChannelsKey = 'dt360_agenda_public_channels_v1';
 const Duration agendaLivePreparationWindow = Duration(minutes: 5);
 const Duration _agendaEventFallbackDuration = Duration(hours: 3);
 
@@ -70,6 +71,83 @@ bool isSafeAgendaTransmissionUrl(String value) {
       uri.host.isNotEmpty &&
       uri.userInfo.isEmpty;
 }
+
+
+class AgendaChannelReference {
+  const AgendaChannelReference({
+    required this.id,
+    required this.name,
+    required this.url,
+    required this.order,
+    this.logoUrl = '',
+    this.popularityScore = 0,
+  });
+
+  final String id;
+  final String name;
+  final String url;
+  final int order;
+  final String logoUrl;
+  final int popularityScore;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'id': id,
+        'name': name,
+        'url': url,
+        'order': order,
+        'logoUrl': logoUrl,
+        'popularityScore': popularityScore,
+      };
+
+  static AgendaChannelReference? tryParse(dynamic value, int fallbackOrder) {
+    if (value is! Map) return null;
+    final map = Map<String, dynamic>.from(value);
+    final name = (map['name'] ?? map['label'] ?? map['title'] ?? '')
+        .toString()
+        .replaceAll(RegExp(r'\bver en vivo\b', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final url = (map['url'] ?? map['href'] ?? '').toString().trim();
+    if (name.isEmpty || name.length > 100 || !isSafeAgendaTransmissionUrl(url)) {
+      return null;
+    }
+    final normalizedName = normalizeAgendaChannelReference(name);
+    final explicitId = (map['id'] ?? '').toString().trim();
+    final id = normalizedName.isNotEmpty
+        ? normalizedName
+        : explicitId.isNotEmpty
+            ? explicitId
+            : _channelKey(url);
+    final rawLogo = (map['logoUrl'] ?? map['logo'] ?? map['image'] ?? '')
+        .toString()
+        .trim();
+    final logoUri = Uri.tryParse(rawLogo);
+    final logoUrl = logoUri != null &&
+            logoUri.scheme == 'https' &&
+            logoUri.hasAuthority &&
+            logoUri.userInfo.isEmpty
+        ? rawLogo
+        : '';
+    final order = int.tryParse((map['order'] ?? fallbackOrder).toString()) ??
+        fallbackOrder;
+    final score = int.tryParse(
+          (map['popularityScore'] ?? map['popularity'] ?? map['views'] ?? 0)
+              .toString(),
+        ) ??
+        0;
+    return AgendaChannelReference(
+      id: id,
+      name: name,
+      url: url,
+      order: order,
+      logoUrl: logoUrl,
+      popularityScore: score < 0 ? 0 : score,
+    );
+  }
+}
+
+String _channelKey(String url) =>
+    'channel_\${url.hashCode.toRadixString(16)}';
 
 /// Highest published popularity score wins. When the site exposes no metric,
 /// its own order is preserved instead of inventing popularity data.
@@ -310,46 +388,84 @@ class AgendaLiveBoardState {
 
 class AgendaLiveService {
   Future<void> captureAgendaEvents(dynamic rawPayload) async {
+    final isMap = rawPayload is Map;
     final rows = rawPayload is List
         ? rawPayload
-        : rawPayload is Map && rawPayload['events'] is List
+        : isMap && rawPayload['events'] is List
             ? rawPayload['events'] as List
             : const <dynamic>[];
-    if (rows.isEmpty) return;
-
     final incoming = rows
         .map(AgendaEventReference.tryParse)
         .whereType<AgendaEventReference>()
         .toList(growable: false);
-    if (incoming.isEmpty) return;
+    final rawChannels =
+        isMap && rawPayload['channels'] is List
+            ? rawPayload['channels'] as List
+            : const <dynamic>[];
+    final incomingChannels = rawChannels
+        .asMap()
+        .entries
+        .map((entry) =>
+            AgendaChannelReference.tryParse(entry.value, entry.key))
+        .whereType<AgendaChannelReference>()
+        .toList(growable: false);
 
+    if (incoming.isEmpty && incomingChannels.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    final existing = await _readEvents(prefs);
-    final byId = <String, AgendaEventReference>{
-      for (final event in existing) event.id: event,
-    };
-    for (final event in incoming) {
-      final previous = byId[event.id];
-      byId[event.id] = previous == null ? event : event.merge(previous);
+
+    if (incoming.isNotEmpty) {
+      final existing = await _readEvents(prefs);
+      final byId = <String, AgendaEventReference>{
+        for (final event in existing) event.id: event,
+      };
+      for (final event in incoming) {
+        final previous = byId[event.id];
+        byId[event.id] = previous == null ? event : event.merge(previous);
+      }
+
+      final now = DateTime.now();
+      final retained = byId.values
+          .where((event) =>
+              !event.isFinished &&
+              now.isBefore(event.effectiveEndsAt.add(const Duration(hours: 1))) &&
+              !event.startsAt.isBefore(now.subtract(const Duration(hours: 24))))
+          .toList(growable: false)
+        ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+      await prefs.setString(
+        _agendaLiveEventsKey,
+        jsonEncode(retained.map((event) => event.toJson()).toList()),
+      );
     }
 
-    final now = DateTime.now();
-    final retained = byId.values
-        .where((event) =>
-            !event.isFinished &&
-            now.isBefore(event.effectiveEndsAt.add(const Duration(hours: 1))) &&
-            !event.startsAt.isBefore(now.subtract(const Duration(hours: 24))))
-        .toList(growable: false)
-      ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
-    await prefs.setString(
-      _agendaLiveEventsKey,
-      jsonEncode(retained.map((event) => event.toJson()).toList()),
-    );
+    if (incomingChannels.isNotEmpty) {
+      final existing = await _readChannels(prefs);
+      final byId = <String, AgendaChannelReference>{
+        for (final channel in existing) channel.id: channel,
+      };
+      for (final channel in incomingChannels) {
+        byId[channel.id] = channel;
+      }
+      final retained = byId.values.toList(growable: false)
+        ..sort((a, b) {
+          final score = b.popularityScore.compareTo(a.popularityScore);
+          if (score != 0) return score;
+          return a.order.compareTo(b.order);
+        });
+      await prefs.setString(
+        _agendaChannelsKey,
+        jsonEncode(retained.map((channel) => channel.toJson()).toList()),
+      );
+    }
   }
 
   Future<List<AgendaEventReference>> loadCapturedEvents() async {
     final prefs = await SharedPreferences.getInstance();
     return _readEvents(prefs);
+  }
+
+  Future<List<AgendaChannelReference>> loadCapturedChannels() async {
+    final prefs = await SharedPreferences.getInstance();
+    return _readChannels(prefs);
   }
 
   Future<AgendaLiveBoardState> buildBoardState({DateTime? now}) async {
@@ -396,25 +512,31 @@ class AgendaLiveService {
         continue;
       }
 
-      if (event.transmissionOptions.isEmpty) {
-        pending.add(AgendaLivePendingEvent(
-          event: event,
-          status: 'FALTAN OPCIONES DE TRANSMISIÓN',
-          detail: 'Abre el evento en Agenda y toca una opción visible de transmisión. La app no consulta listas IPTV.',
-        ));
-        continue;
-      }
-
       final ranked = rankAgendaTransmissionOptions(event.transmissionOptions);
       final selected = ranked.where((option) =>
           isSafeAgendaTransmissionUrl(option.url) &&
           !usedUrls.contains(option.url));
-      final option = selected.isEmpty ? null : selected.first;
+      AgendaTransmissionOption? option =
+          selected.isEmpty ? null : selected.first;
+
+      // Si la ficha aún no expone botones de canal, abre la página del partido
+      // para que se use el reproductor original y sus propios controles.
+      final detailUrl = event.detailUrl.trim();
+      if (option == null &&
+          isSafeAgendaTransmissionUrl(detailUrl) &&
+          !usedUrls.contains(detailUrl)) {
+        option = AgendaTransmissionOption(
+          id: 'event-page-\${event.id}',
+          name: 'Reproductor original',
+          url: detailUrl,
+          order: 0,
+        );
+      }
       if (option == null) {
         pending.add(AgendaLivePendingEvent(
           event: event,
-          status: 'BUSCANDO UNA OPCIÓN DISPONIBLE',
-          detail: 'Las opciones publicadas ya están asignadas a otro evento o no son enlaces HTTPS seguros.',
+          status: 'FALTA EL ENLACE DE LA FICHA',
+          detail: 'La agenda no publicó un enlace HTTPS de la ficha ni una opción visible de transmisión para este partido.',
         ));
         continue;
       }
@@ -432,6 +554,26 @@ class AgendaLiveService {
       pending: pending.take(8 - assignments.length).toList(growable: false),
       transmissionOptionCount: optionCount,
     );
+  }
+
+  static Future<List<AgendaChannelReference>> _readChannels(
+    SharedPreferences prefs,
+  ) async {
+    final raw = prefs.getString(_agendaChannelsKey);
+    if (raw == null || raw.isEmpty) return <AgendaChannelReference>[];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return <AgendaChannelReference>[];
+      return decoded
+          .asMap()
+          .entries
+          .map((entry) =>
+              AgendaChannelReference.tryParse(entry.value, entry.key))
+          .whereType<AgendaChannelReference>()
+          .toList(growable: false);
+    } catch (_) {
+      return <AgendaChannelReference>[];
+    }
   }
 
   static Future<List<AgendaEventReference>> _readEvents(
