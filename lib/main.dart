@@ -680,7 +680,12 @@ class _AppAccessGateState extends State<AppAccessGate> {
 
 
 class MainShell extends StatefulWidget {
-  const MainShell({super.key});
+  const MainShell({
+    super.key,
+    this.enableAgendaBackgroundCapture = true,
+  });
+
+  final bool enableAgendaBackgroundCapture;
 
   @override
   State<MainShell> createState() => _MainShellState();
@@ -725,7 +730,12 @@ class _MainShellState extends State<MainShell> {
           _liveBuilt
               ? LiveChannelsScreen(isActive: _selectedIndex == 2)
               : const SizedBox.shrink(),
-          _channelsBuilt ? AgendaChannelsScreen(onOpenAgenda: _openAgenda) : const SizedBox.shrink(),
+          _channelsBuilt
+              ? AgendaChannelsScreen(
+                  onOpenAgenda: _openAgenda,
+                  captureInBackground: widget.enableAgendaBackgroundCapture,
+                )
+              : const SizedBox.shrink(),
           _settingsBuilt ? const SettingsScreen() : const SizedBox.shrink(),
         ],
       ),
