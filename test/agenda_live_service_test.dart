@@ -51,7 +51,7 @@ void main() {
 
   test('prepara una transmisión dentro de los cinco minutos previos', () async {
     final service = AgendaLiveService();
-    final now = DateTime(2026, 11, 16, 18, 0);
+    final now = DateTime.now();
     await service.captureAgendaEvents(<dynamic>[
       _event(
         startsAt: now.add(const Duration(minutes: 4)),
@@ -74,7 +74,7 @@ void main() {
 
   test('selecciona la opción con mayor popularidad pública', () async {
     final service = AgendaLiveService();
-    final now = DateTime(2026, 11, 16, 18, 0);
+    final now = DateTime.now();
     await service.captureAgendaEvents(<dynamic>[
       _event(
         startsAt: now.subtract(const Duration(minutes: 1)),
@@ -117,7 +117,7 @@ void main() {
 
   test('usa la ficha del partido cuando todavía no hay opciones visibles', () async {
     final service = AgendaLiveService();
-    final now = DateTime(2026, 11, 16, 18, 0);
+    final now = DateTime.now();
     await service.captureAgendaEvents(<dynamic>[
       _event(
         startsAt: now.subtract(const Duration(minutes: 1)),
@@ -135,7 +135,7 @@ void main() {
 
   test('no inventa un enlace cuando la ficha y sus opciones están vacías', () async {
     final service = AgendaLiveService();
-    final now = DateTime(2026, 11, 16, 18, 0);
+    final now = DateTime.now();
     await service.captureAgendaEvents(<dynamic>[
       _event(startsAt: now.subtract(const Duration(minutes: 1))),
     ]);
@@ -172,7 +172,7 @@ void main() {
 
   test('no asigna la misma página a dos eventos simultáneos', () async {
     final service = AgendaLiveService();
-    final now = DateTime(2026, 11, 16, 18, 0);
+    final now = DateTime.now();
     final sameOption = <Map<String, Object?>>[
       _option(name: 'Señal única', url: 'https://player.example/shared'),
     ];
@@ -192,7 +192,7 @@ void main() {
 
   test('conserva opciones ya capturadas si una actualización no las incluye', () async {
     final service = AgendaLiveService();
-    final startsAt = DateTime(2026, 11, 16, 19, 0);
+    final startsAt = DateTime.now();
     await service.captureAgendaEvents(<dynamic>[
       _event(startsAt: startsAt, options: <Map<String, Object?>>[
         _option(name: 'Canal oficial', url: 'https://player.example/one'),
@@ -206,7 +206,7 @@ void main() {
 
   test('retira el evento cuando la agenda lo marca finalizado', () async {
     final service = AgendaLiveService();
-    final now = DateTime(2026, 11, 16, 20, 0);
+    final now = DateTime.now();
     final startsAt = now.subtract(const Duration(hours: 1));
     await service.captureAgendaEvents(<dynamic>[
       _event(startsAt: startsAt, options: <Map<String, Object?>>[
@@ -223,7 +223,7 @@ void main() {
 
   test('libera el reproductor al llegar la hora de fin del evento', () async {
     final service = AgendaLiveService();
-    final now = DateTime(2026, 11, 16, 20, 0);
+    final now = DateTime.now();
     await service.captureAgendaEvents(<dynamic>[
       _event(
         id: 'old-match',
