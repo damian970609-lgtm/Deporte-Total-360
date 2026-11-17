@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
+import 'agenda_web_screen.dart';
+
 import 'agenda_live_service.dart';
 
 const Color _agendaChannelsBg = Color(0xFF000000);
@@ -150,8 +152,10 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: <Widget>[
+          Column(
+            children: <Widget>[
           Container(
             width: double.infinity,
             color: _agendaChannelsPanel,
@@ -291,6 +295,15 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
                     ),
                   ),
           ),
+            ],
+          ),
+          if (_channels.isEmpty && !_loading)
+            const Offstage(
+              offstage: true,
+              child: SizedBox.expand(
+                child: AgendaWebScreen(),
+              ),
+            ),
         ],
       ),
     );
