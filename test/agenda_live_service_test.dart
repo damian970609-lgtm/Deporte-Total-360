@@ -144,6 +144,29 @@ void main() {
     expect(state.pending, hasLength(1));
   });
 
+  test('muestra más de ocho partidos sin descartar eventos', () async {
+    final service = AgendaLiveService();
+    final now = DateTime(2026, 11, 16, 18, 0);
+    final events = List<dynamic>.generate(10, (index) {
+      return _event(
+        id: 'match-$index',
+        title: 'Equipo $index vs Rival $index',
+        startsAt: now.subtract(const Duration(minutes: 1)),
+        options: <Map<String, Object?>>[
+          _option(
+            name: 'Canal $index',
+            url: 'https://player.example/event-$index',
+          ),
+        ],
+      );
+    });
+    await service.captureAgendaEvents(events);
+
+    final state = await service.buildBoardState(now: now);
+    expect(state.assignments, hasLength(10));
+    expect(state.pending, isEmpty);
+  });
+
   test('conserva opciones ya capturadas si una actualización no las incluye', () async {
     final service = AgendaLiveService();
     final startsAt = DateTime(2026, 11, 16, 19, 0);
