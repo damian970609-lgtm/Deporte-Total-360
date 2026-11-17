@@ -147,7 +147,7 @@ class AgendaChannelReference {
 }
 
 String _channelKey(String url) =>
-    'channel_\${url.hashCode.toRadixString(16)}';
+    'channel_${url.hashCode.toRadixString(16)}';
 
 /// Highest published popularity score wins. When the site exposes no metric,
 /// its own order is preserved instead of inventing popularity data.
@@ -526,7 +526,7 @@ class AgendaLiveService {
           isSafeAgendaTransmissionUrl(detailUrl) &&
           !usedUrls.contains(detailUrl)) {
         option = AgendaTransmissionOption(
-          id: 'event-page-\${event.id}',
+          id: 'event-page-${event.id}',
           name: 'Reproductor original',
           url: detailUrl,
           order: 0,
