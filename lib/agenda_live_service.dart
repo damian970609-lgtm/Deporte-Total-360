@@ -49,7 +49,7 @@ class AgendaTransmissionOption {
     final explicitId = (map['id'] ?? '').toString().trim();
     return AgendaTransmissionOption(
       id: explicitId.isNotEmpty ? explicitId : _optionKey(url, order),
-      name: name.isNotEmpty ? name : 'Opción \${fallbackOrder + 1}',
+      name: name.isNotEmpty ? name : 'Opción ${fallbackOrder + 1}',
       url: url,
       order: order,
       popularityScore: score < 0 ? 0 : score,
@@ -58,7 +58,7 @@ class AgendaTransmissionOption {
 }
 
 String _optionKey(String url, int order) =>
-    '\${order}_\${url.hashCode.toRadixString(16)}';
+    '${order}_${url.hashCode.toRadixString(16)}';
 
 /// Only visible HTTPS links are accepted. Credentials and non-web schemes
 /// are deliberately excluded.
@@ -233,7 +233,7 @@ String _eventKey(String title, DateTime startsAt) {
       .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
       .replaceAll(RegExp(r'^-+|-+$'), '');
   final date = startsAt.toLocal();
-  return '\${normalized}_\${date.year}-\${date.month.toString().padLeft(2, '0')}-\${date.day.toString().padLeft(2, '0')}_\${date.hour.toString().padLeft(2, '0')}\${date.minute.toString().padLeft(2, '0')}';
+  return '${normalized}_${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}_${date.hour.toString().padLeft(2, '0')}${date.minute.toString().padLeft(2, '0')}';
 }
 
 String normalizeAgendaChannelReference(String value) {
@@ -264,7 +264,7 @@ String normalizeAgendaChannelReference(String value) {
   );
   text = text.replaceAllMapped(
     RegExp(r'([a-z])([0-9])'),
-    (match) => '\${match.group(1)} \${match.group(2)}',
+    (match) => '${match.group(1)} ${match.group(2)}',
   );
   text = text.replaceAll(
     RegExp(r'\b(?:us|uk|gb|ca|mx|ar|co|ve|cl|pe|uy|py|bo|cr|gt|hn|ni|pa|cw|jm|do|sv)\b'),

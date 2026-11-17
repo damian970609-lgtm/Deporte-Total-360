@@ -60,10 +60,10 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
 
   String _eventTime(DateTime value) {
     final local = value.toLocal();
-    return '\${local.day.toString().padLeft(2, '0')}/'
-        '\${local.month.toString().padLeft(2, '0')} · '
-        '\${local.hour.toString().padLeft(2, '0')}:'
-        '\${local.minute.toString().padLeft(2, '0')}';
+    return '${local.day.toString().padLeft(2, '0')}/'
+        '${local.month.toString().padLeft(2, '0')} · '
+        '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -116,7 +116,7 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '\$totalOptions opciones en \${eventsWithOptions.length} eventos · sin listas IPTV',
+                  '$totalOptions opciones en ${eventsWithOptions.length} eventos · sin listas IPTV',
                   style: const TextStyle(
                     color: _agendaChannelsMuted,
                     fontSize: 10,
