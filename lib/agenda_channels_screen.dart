@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-import 'agenda_web_screen.dart';
 
 import 'agenda_live_service.dart';
 
@@ -17,11 +16,9 @@ class AgendaChannelsScreen extends StatefulWidget {
   const AgendaChannelsScreen({
     super.key,
     required this.onOpenAgenda,
-    this.captureInBackground = true,
   });
 
   final VoidCallback onOpenAgenda;
-  final bool captureInBackground;
 
   @override
   State<AgendaChannelsScreen> createState() => _AgendaChannelsScreenState();
@@ -299,13 +296,6 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
           ),
             ],
           ),
-          if (widget.captureInBackground && _channels.isEmpty && !_loading)
-            const Offstage(
-              offstage: true,
-              child: SizedBox.expand(
-                child: AgendaWebScreen(),
-              ),
-            ),
         ],
       ),
     );
