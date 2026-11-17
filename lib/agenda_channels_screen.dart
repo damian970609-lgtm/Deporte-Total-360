@@ -17,9 +17,11 @@ class AgendaChannelsScreen extends StatefulWidget {
   const AgendaChannelsScreen({
     super.key,
     required this.onOpenAgenda,
+    this.captureInBackground = true,
   });
 
   final VoidCallback onOpenAgenda;
+  final bool captureInBackground;
 
   @override
   State<AgendaChannelsScreen> createState() => _AgendaChannelsScreenState();
@@ -297,7 +299,7 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
           ),
             ],
           ),
-          if (_channels.isEmpty && !_loading)
+          if (widget.captureInBackground && _channels.isEmpty && !_loading)
             const Offstage(
               offstage: true,
               child: SizedBox.expand(
