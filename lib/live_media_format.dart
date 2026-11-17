@@ -129,7 +129,8 @@ LiveMediaFormat? liveMediaFormatForUrl(String value) {
     return LiveMediaFormat.progressive;
   }
 
-  final lastSegment = path.split('/').where((part) => part.isNotEmpty).lastOrNull ?? '';
+  final pathSegments = path.split('/').where((part) => part.isNotEmpty).toList(growable: false);
+  final lastSegment = pathSegments.isEmpty ? '' : pathSegments.last;
   final extensionMatch = RegExp(r'\.[a-z0-9]{1,10}$').firstMatch(lastSegment);
   final extension = extensionMatch?.group(0);
 
