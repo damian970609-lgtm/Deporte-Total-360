@@ -1778,6 +1778,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
 
             _settingsCard(
+              border: appPink,
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0x33FF1744),
+                  child: Icon(Icons.sports_rounded, color: appPink),
+                ),
+                title: const Text(
+                  'MENÚ DAMIÁN APK',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Canales y transmisiones publicados en la Agenda deportiva.',
+                  style: TextStyle(color: appMuted, fontSize: 11, height: 1.4),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            _settingsCard(
               border: appBlue,
               child: Material(
                 color: Colors.transparent,

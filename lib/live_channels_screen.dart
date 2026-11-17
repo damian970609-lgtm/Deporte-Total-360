@@ -93,12 +93,12 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
       for (final key in <String>[
         'deporte_total_authorized_live_sources_v1',
         'deporte_total_live_favorites_v1',
-        'dt360_auto_live_playlist_url_v1',
-        'dt360_auto_live_epg_url_v1',
-        'dt360_auto_live_authorized_v1',
       ]) {
         await preferences.remove(key);
       }
+      await preferences.setString('dt360_auto_live_playlist_url_v1', '');
+      await preferences.setString('dt360_auto_live_epg_url_v1', '');
+      await preferences.setBool('dt360_auto_live_authorized_v1', false);
     } catch (error) {
       debugPrint('No se pudo limpiar la configuración antigua de IPTV: $error');
     }
