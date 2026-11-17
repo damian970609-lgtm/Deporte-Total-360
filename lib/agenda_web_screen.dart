@@ -648,7 +648,7 @@ const String _agendaLiveCaptureScript = r'''
       'h1, h2, h3, h4, h5, [role="heading"]'
     )).filter((heading) => {
       const label = normalize(visibleText(heading));
-      return /canales? (?:deportivos?|en vivo)|canales deportivos|señales deportivas/.test(label);
+      return /canales? (?:deportivos?|en vivo|y transmisiones?|y disponibilidad)|señales deportivas/.test(label);
     });
 
     headings.forEach((heading) => {
