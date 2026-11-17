@@ -22,6 +22,39 @@ class AgendaChannelsScreen extends StatefulWidget {
   State<AgendaChannelsScreen> createState() => _AgendaChannelsScreenState();
 }
 
+class _AgendaChannelOccurrence {
+  const _AgendaChannelOccurrence({
+    required this.event,
+    required this.option,
+  });
+
+  final AgendaEventReference event;
+  final AgendaTransmissionOption option;
+}
+
+class _AgendaChannelEntry {
+  _AgendaChannelEntry(this.name);
+
+  final String name;
+  final List<_AgendaChannelOccurrence> occurrences =
+      <_AgendaChannelOccurrence>[];
+}
+
+String _normalizeChannelName(String value) {
+  return value
+      .toLowerCase()
+      .replaceAll('á', 'a')
+      .replaceAll('é', 'e')
+      .replaceAll('í', 'i')
+      .replaceAll('ó', 'o')
+      .replaceAll('ú', 'u')
+      .replaceAll('ü', 'u')
+      .replaceAll('ñ', 'n')
+      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+      .trim()
+      .replaceAll(RegExp(r'\s+'), ' ');
+}
+
 class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
   final AgendaLiveService _service = AgendaLiveService();
   Timer? _refreshTimer;
@@ -58,6 +91,50 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
     }
   }
 
+  List<_AgendaChannelEntry> _buildChannelEntries() {
+    final byName = <String, _AgendaChannelEntry>{};
+    for (final event in _events) {
+      for (final option in event.transmissionOptions) {
+        final key = _normalizeChannelName(option.name);
+        if (key.isEmpty || !isSafeAgendaTransmissionUrl(option.url)) continue;
+        final entry = byName.putIfAbsent(
+          key,
+          () => _AgendaChannelEntry(option.name.trim()),
+        );
+        final alreadyAdded = entry.occurrences.any(
+          (item) =>
+              item.event.id == event.id && item.option.url == option.url,
+        );
+        if (!alreadyAdded) {
+          entry.occurrences.add(
+            _AgendaChannelOccurrence(event: event, option: option),
+          );
+        }
+      }
+    }
+
+    final entries = byName.values.toList(growable: false);
+    for (final entry in entries) {
+      entry.occurrences.sort((first, second) {
+        final popularity = second.option.popularityScore.compareTo(
+          first.option.popularityScore,
+        );
+        if (popularity != 0) return popularity;
+        final time = first.event.startsAt.compareTo(second.event.startsAt);
+        if (time != 0) return time;
+        return first.option.order.compareTo(second.option.order);
+      });
+    }
+    entries.sort((first, second) {
+      final availability = second.occurrences.length.compareTo(
+        first.occurrences.length,
+      );
+      if (availability != 0) return availability;
+      return first.name.toLowerCase().compareTo(second.name.toLowerCase());
+    });
+    return entries;
+  }
+
   String _eventTime(DateTime value) {
     final local = value.toLocal();
     return '${local.day.toString().padLeft(2, '0')}/'
@@ -68,12 +145,10 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final eventsWithOptions = _events
-        .where((event) => event.transmissionOptions.isNotEmpty)
-        .toList(growable: false);
-    final totalOptions = eventsWithOptions.fold<int>(
+    final channels = _buildChannelEntries();
+    final totalOccurrences = channels.fold<int>(
       0,
-      (total, event) => total + event.transmissionOptions.length,
+      (total, channel) => total + channel.occurrences.length,
     );
 
     return Scaffold(
@@ -92,7 +167,7 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
         actions: <Widget>[
           IconButton(
             onPressed: _loading ? null : _refresh,
-            tooltip: 'Actualizar opciones de la agenda',
+            tooltip: 'Actualizar canales de la agenda',
             icon: const Icon(Icons.refresh_rounded, color: _agendaChannelsBlue),
           ),
         ],
@@ -107,7 +182,7 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 const Text(
-                  'FUENTE: OPCIONES VISIBLES DE LA AGENDA',
+                  'CANALES PUBLICADOS EN FÚTBOL LIBRE',
                   style: TextStyle(
                     color: _agendaChannelsBlue,
                     fontSize: 10,
@@ -116,10 +191,19 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$totalOptions opciones en ${eventsWithOptions.length} eventos · sin listas IPTV',
+                  '${channels.length} canales únicos · ${totalOccurrences} opciones asociadas a partidos',
                   style: const TextStyle(
                     color: _agendaChannelsMuted,
                     fontSize: 10,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                const Text(
+                  'Cada opción abre la página original y conserva el reproductor que publica la fuente.',
+                  style: TextStyle(
+                    color: _agendaChannelsMuted,
+                    fontSize: 9,
+                    height: 1.35,
                   ),
                 ),
                 if (_loading)
@@ -135,7 +219,7 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
             ),
           ),
           Expanded(
-            child: eventsWithOptions.isEmpty
+            child: channels.isEmpty
                 ? _EmptyAgendaChannels(onOpenAgenda: widget.onOpenAgenda)
                 : RefreshIndicator(
                     onRefresh: _refresh,
@@ -143,12 +227,9 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
                     backgroundColor: _agendaChannelsPanel,
                     child: ListView.builder(
                       padding: const EdgeInsets.fromLTRB(10, 10, 10, 24),
-                      itemCount: eventsWithOptions.length,
+                      itemCount: channels.length,
                       itemBuilder: (context, index) {
-                        final event = eventsWithOptions[index];
-                        final ranked =
-                            rankAgendaTransmissionOptions(event.transmissionOptions);
-                        final best = ranked.isEmpty ? null : ranked.first;
+                        final channel = channels[index];
                         return Container(
                           margin: const EdgeInsets.only(bottom: 10),
                           decoration: BoxDecoration(
@@ -166,14 +247,14 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
                                 Row(
                                   children: <Widget>[
                                     const Icon(
-                                      Icons.sports_soccer_rounded,
+                                      Icons.live_tv_rounded,
                                       color: _agendaChannelsBlue,
-                                      size: 18,
+                                      size: 19,
                                     ),
-                                    const SizedBox(width: 7),
+                                    const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
-                                        event.title,
+                                        channel.name,
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
@@ -184,32 +265,30 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
                                       ),
                                     ),
                                     Text(
-                                      _eventTime(event.startsAt),
+                                      '${channel.occurrences.length} partidos',
                                       style: const TextStyle(
                                         color: _agendaChannelsMuted,
-                                        fontSize: 9,
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.w800,
                                       ),
                                     ),
                                   ],
                                 ),
-                                if (event.competition.isNotEmpty) ...<Widget>[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    event.competition,
-                                    style: const TextStyle(
-                                      color: _agendaChannelsMuted,
-                                      fontSize: 9,
+                                const Divider(
+                                  color: Color(0xFF193044),
+                                  height: 16,
+                                ),
+                                for (var occurrenceIndex = 0;
+                                    occurrenceIndex < channel.occurrences.length;
+                                    occurrenceIndex++)
+                                  _AgendaChannelOccurrenceTile(
+                                    occurrence: channel.occurrences[
+                                        occurrenceIndex],
+                                    eventTime: _eventTime(
+                                      channel.occurrences[occurrenceIndex]
+                                          .event.startsAt,
                                     ),
-                                  ),
-                                ],
-                                const Divider(color: Color(0xFF193044), height: 16),
-                                for (var optionIndex = 0;
-                                    optionIndex < ranked.length;
-                                    optionIndex++)
-                                  _TransmissionOptionTile(
-                                    option: ranked[optionIndex],
-                                    isPreferred: identical(ranked[optionIndex], best),
-                                    fallbackIndex: optionIndex + 1,
+                                    isPreferred: occurrenceIndex == 0,
                                   ),
                               ],
                             ),
@@ -225,19 +304,21 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
   }
 }
 
-class _TransmissionOptionTile extends StatelessWidget {
-  const _TransmissionOptionTile({
-    required this.option,
+class _AgendaChannelOccurrenceTile extends StatelessWidget {
+  const _AgendaChannelOccurrenceTile({
+    required this.occurrence,
+    required this.eventTime,
     required this.isPreferred,
-    required this.fallbackIndex,
   });
 
-  final AgendaTransmissionOption option;
+  final _AgendaChannelOccurrence occurrence;
+  final String eventTime;
   final bool isPreferred;
-  final int fallbackIndex;
 
   @override
   Widget build(BuildContext context) {
+    final option = occurrence.option;
+    final event = occurrence.event;
     final hasPopularityMetric = option.popularityScore > 0;
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
@@ -259,21 +340,21 @@ class _TransmissionOptionTile extends StatelessWidget {
           size: 23,
         ),
         title: Text(
-          option.name,
+          event.title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w800,
-            fontSize: 11,
+            fontSize: 10,
           ),
         ),
         subtitle: Text(
           isPreferred
               ? (hasPopularityMetric
-                  ? 'MEJOR PUNTUADA POR LA MÉTRICA PÚBLICA'
-                  : 'PRIMERA OPCIÓN PUBLICADA · SIN MÉTRICA DE POPULARIDAD')
-              : 'OPCIÓN $fallbackIndex',
+                  ? 'MÁS POPULAR · $eventTime'
+                  : 'PRIMERA OPCIÓN PUBLICADA · $eventTime')
+              : '$eventTime · OPCIÓN DE LA AGENDA',
           maxLines: 2,
           style: TextStyle(
             color: isPreferred ? _agendaChannelsBlue : _agendaChannelsMuted,
@@ -290,7 +371,7 @@ class _TransmissionOptionTile extends StatelessWidget {
           Navigator.of(context).push<void>(
             MaterialPageRoute<void>(
               builder: (_) => AgendaTransmissionWebView(
-                title: option.name,
+                title: '${option.name} · ${event.title}',
                 url: option.url,
               ),
             ),
@@ -331,7 +412,7 @@ class _EmptyAgendaChannels extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Abre un evento en Agenda y toca una de sus opciones visibles de transmisión. La app guardará el enlace de esa opción aquí.',
+              'Abre un partido en Agenda y despliega sus canales. La app guardará los nombres y las páginas de reproducción que estén publicadas.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: _agendaChannelsMuted,
@@ -352,8 +433,8 @@ class _EmptyAgendaChannels extends StatelessWidget {
   }
 }
 
-/// Opens the same public page link shown by the agenda. It does not extract
-/// media URLs from iframes or bypass third-party player controls.
+/// Abre la página original publicada por la Agenda y conserva su reproductor.
+/// No extrae URLs internas de vídeo ni interfiere con controles o protecciones.
 class AgendaTransmissionWebView extends StatefulWidget {
   const AgendaTransmissionWebView({
     super.key,
