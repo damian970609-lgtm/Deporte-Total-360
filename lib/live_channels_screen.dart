@@ -144,7 +144,8 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
         subtitle: details.join(' · '),
         eventId: event.id,
         startAt: event.startsAt,
-        useEmbeddedPage: liveMediaFormatForUrl(option.url) == null,
+        // Mantener el reproductor y los controles de la página original.
+        useEmbeddedPage: true,
       );
     }).toList(growable: false);
   }
@@ -232,7 +233,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
                 ),
                 const SizedBox(height: 5),
                 const Text(
-                  'La app lee las opciones visibles de la ficha de cada evento y prepara la mejor opción publicada. Al finalizar el evento, libera el reproductor.',
+                  'Cada partido abre la página de transmisión publicada por la Agenda dentro del reproductor web, conservando sus controles originales. Al finalizar el evento, libera el reproductor.',
                   style: TextStyle(
                     color: _liveMuted,
                     fontSize: 10,
