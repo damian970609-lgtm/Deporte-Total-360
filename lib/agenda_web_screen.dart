@@ -605,9 +605,20 @@ const String _agendaLiveCaptureScript = r'''
       const rawUrl = element.href ||
         element.getAttribute('data-href') ||
         element.getAttribute('data-url') || '';
+      const rawUrlText = String(rawUrl || '').trim();
+      if (!rawUrlText || rawUrlText.startsWith('#') ||
+          /^(?:javascript:|mailto:|tel:)/i.test(rawUrlText)) return;
       let url = '';
       try {
-        url = new URL(rawUrl, document.baseURI).href;
+        const parsedUrl = new URL(rawUrlText, document.baseURI);
+        const currentUrl = new URL(document.baseURI);
+        if (parsedUrl.protocol !== 'https:' || parsedUrl.username ||
+            parsedUrl.password ||
+            (parsedUrl.origin === currentUrl.origin &&
+              parsedUrl.pathname === currentUrl.pathname &&
+              parsedUrl.search === currentUrl.search &&
+              parsedUrl.hash)) return;
+        url = parsedUrl.href;
       } catch (_) {
         return;
       }
@@ -669,9 +680,20 @@ const String _agendaLiveCaptureScript = r'''
         const rawUrl = element.href ||
           element.getAttribute('data-href') ||
           element.getAttribute('data-url') || '';
+        const rawUrlText = String(rawUrl || '').trim();
+        if (!rawUrlText || rawUrlText.startsWith('#') ||
+            /^(?:javascript:|mailto:|tel:)/i.test(rawUrlText)) return;
         let url = '';
         try {
-          url = new URL(rawUrl, document.baseURI).href;
+          const parsedUrl = new URL(rawUrlText, document.baseURI);
+          const currentUrl = new URL(document.baseURI);
+          if (parsedUrl.protocol !== 'https:' || parsedUrl.username ||
+              parsedUrl.password ||
+              (parsedUrl.origin === currentUrl.origin &&
+                parsedUrl.pathname === currentUrl.pathname &&
+                parsedUrl.search === currentUrl.search &&
+                parsedUrl.hash)) return;
+          url = parsedUrl.href;
         } catch (_) {
           return;
         }
@@ -865,11 +887,19 @@ const String _agendaLiveCaptureScript = r'''
               : target.getAttribute('data-event-url') ||
                 target.getAttribute('data-href') ||
                 target.getAttribute('data-url') || '';
-            if (clickedUrl) {
+            const clickedUrlText = String(clickedUrl || '').trim();
+            if (clickedUrlText && !clickedUrlText.startsWith('#') &&
+                !/^(?:javascript:|mailto:|tel:)/i.test(clickedUrlText)) {
               try {
-                const parsed = new URL(clickedUrl, document.baseURI);
+                const parsed = new URL(clickedUrlText, document.baseURI);
+                const current = new URL(document.baseURI);
                 if (parsed.protocol === 'https:' && !parsed.username &&
-                    !parsed.password) event.detailUrl = parsed.href;
+                    !parsed.password &&
+                    !(parsed.origin === current.origin &&
+                      parsed.pathname === current.pathname &&
+                      parsed.search === current.search && parsed.hash)) {
+                  event.detailUrl = parsed.href;
+                }
               } catch (_) {}
             }
             activeEvent = event;
