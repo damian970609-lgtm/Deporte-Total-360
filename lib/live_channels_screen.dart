@@ -130,7 +130,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
   }
 
   List<LivePlayerSource> _playerSources() {
-    return _board.assignments.take(8).map((assignment) {
+    return _board.assignments.map((assignment) {
       final event = assignment.event;
       final option = assignment.option;
       final details = <String>[
@@ -151,7 +151,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
 
   List<LivePlayerWaitingEvent> _waitingEvents() {
     final now = DateTime.now();
-    return _board.pending.take(8).map((pending) {
+    return _board.pending.map((pending) {
       final event = pending.event;
       final start = event.startsAt.toLocal();
       final time = '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
@@ -212,7 +212,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 const Text(
-                  '8 REPRODUCTORES DISPONIBLES',
+                  'UN REPRODUCTOR POR PARTIDO',
                   style: TextStyle(
                     color: _liveCyan,
                     fontSize: 11,
@@ -222,7 +222,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'BÚSQUEDA AUTOMÁTICA · 5 MINUTOS ANTES',
+                  'CAPTURA DE OPCIONES DESDE LA AGENDA',
                   style: TextStyle(
                     color: _livePink,
                     fontSize: 10,
@@ -232,7 +232,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
                 ),
                 const SizedBox(height: 5),
                 const Text(
-                  'La app lee las opciones visibles de la ficha de cada evento y prepara la mejor opción publicada. Al finalizar el evento, libera el reproductor.',
+                  'Cada partido conserva el reproductor de su propia página. La opción con mayor popularidad publicada se coloca primero; si no hay métricas, se respeta el orden de la Agenda. Solo el primer cuadro se inicia automáticamente para evitar demasiadas conexiones.',
                   style: TextStyle(
                     color: _liveMuted,
                     fontSize: 10,
@@ -241,7 +241,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  '${sources.length}/8 reproductores asignados · ${_board.transmissionOptionCount} opciones de transmisión capturadas',
+                  '${sources.length} partidos con opción asignada · ${waiting.length} pendientes · ${_board.transmissionOptionCount} opciones capturadas',
                   style: const TextStyle(
                     color: _liveCyan,
                     fontSize: 9,
@@ -357,10 +357,8 @@ class LivePlayerBoard extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth > constraints.maxHeight ? 3 : 2;
-        final activeSources = sources.take(8).toList(growable: false);
-        final waiting = waitingEvents
-            .take(8 - activeSources.length)
-            .toList(growable: false);
+        final activeSources = sources.toList(growable: false);
+        final waiting = waitingEvents.toList(growable: false);
         return Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 960),
@@ -368,7 +366,9 @@ class LivePlayerBoard extends StatelessWidget {
               shrinkWrap: true,
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.all(8),
-              itemCount: 8,
+              itemCount: activeSources.isEmpty && waiting.isEmpty
+                  ? 8
+                  : activeSources.length + waiting.length,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
                 crossAxisSpacing: 8,
