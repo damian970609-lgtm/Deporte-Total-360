@@ -8,7 +8,7 @@ Archivos principales:
 - lib/main.dart: control de acceso y navegación visible de Inicio, Agenda, En vivo, Canales y Ajustes.
 - lib/agenda_live_service.dart: guarda eventos y canales de referencia capturados en Agenda, cruza nombres con señales deportivas visibles del catálogo, abre la ventana de preparación cinco minutos antes y libera las asignaciones al finalizar el evento.
 - lib/live_channels_screen.dart: tablero de ocho reproductores, actualiza las asignaciones mientras la app está en primer plano y detiene/reemplaza las tarjetas cuando los eventos terminan.
-- lib/live_media_format.dart y el motor de reproducción: compatibilidad con HLS, DASH, Smooth Streaming y vídeo progresivo directo; las URLs proceden de los canales visibles y se cargan en el reproductor asignado.
+- lib/live_media_format.dart y el motor de reproducción: compatibilidad con HLS, DASH, Smooth Streaming y vídeo/audio progresivo (MP4, M4A, FMP4, WebM, Matroska, MP3, Ogg, WAV, MPEG-TS, FLV, AAC, FLAC y AMR); las URLs proceden de los canales visibles y se cargan en el reproductor asignado.
 - lib/public_chat_screen.dart: comunidad privada de compradores con alias estable por cuenta, denuncias de mensajes, revisión administrativa, eliminación moderada y sesión Google vinculada a licencias de pago.
 - lib/app_update_screen.dart: consulta la versión publicada en GitHub Releases y abre la APK oficial; no depende de la cuota de Cloudflare ni de SportsAPI.
 - lib/sports_api_service.dart: cliente legado de API-Sports/Worker, conservado para compatibilidad.
@@ -55,7 +55,7 @@ señal; no puede crear resoluciones que el proveedor no publique.
 
 El menú Damián APK es accesible desde Ajustes y mantiene el acceso administrativo protegido por Google. El panel abre directamente la vista IPTV unificada; Proton VPN y la pantalla administrativa principal anterior ya no aparecen. No se eliminan ni se reinicializan las listas o los
 datos existentes. En la versión completa, el panel permite iniciar sesión con
-Google y añadir listas M3U, PLS, XSPF/XML, JSON o TXT mediante HTTPS; confirma
+Google y añadir listas M3U/M3U8, PLS, XSPF, XML/ASX, WPL/SMIL, JSON, CSV o TXT mediante HTTPS; confirma
 que tienes autorización para distribuir las señales. Cloudflare descarga y procesa las listas en segundo plano; el inventario privado conserva
 todos los canales compatibles, tanto deportivos como generales. La clasificación
 deportiva no descarta entradas: solo determina cuáles pueden publicarse en la
