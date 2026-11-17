@@ -693,7 +693,7 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
-  bool _agendaBuilt = false;
+  bool _agendaBuilt = true;
   bool _liveBuilt = false;
   bool _channelsBuilt = false;
   bool _settingsBuilt = false;
@@ -731,10 +731,7 @@ class _MainShellState extends State<MainShell> {
               ? LiveChannelsScreen(isActive: _selectedIndex == 2)
               : const SizedBox.shrink(),
           _channelsBuilt
-              ? AgendaChannelsScreen(
-                  onOpenAgenda: _openAgenda,
-                  captureInBackground: widget.enableAgendaBackgroundCapture,
-                )
+              ? AgendaChannelsScreen(onOpenAgenda: _openAgenda)
               : const SizedBox.shrink(),
           _settingsBuilt ? const SettingsScreen() : const SizedBox.shrink(),
         ],
