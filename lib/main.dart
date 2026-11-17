@@ -693,10 +693,16 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
-  bool _agendaBuilt = true;
+  bool _agendaBuilt = false;
   bool _liveBuilt = false;
   bool _channelsBuilt = false;
   bool _settingsBuilt = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _agendaBuilt = widget.enableAgendaBackgroundCapture;
+  }
 
   void _openAgenda() => _selectPage(1);
 
