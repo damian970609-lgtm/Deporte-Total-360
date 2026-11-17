@@ -5,8 +5,8 @@ import 'agenda_live_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'automatic_live_service.dart';
 import 'package:video_player/video_player.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'live_media_format.dart';
 import 'stream_diagnostics.dart';
@@ -48,7 +48,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
   AgendaLiveBoardState _board = const AgendaLiveBoardState(
     assignments: <AgendaLiveAssignment>[],
     pending: <AgendaLivePendingEvent>[],
-    catalogueChannelCount: 0,
+    transmissionOptionCount: 0,
   );
 
   @override
@@ -90,11 +90,17 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
   Future<void> _clearLegacyTransmissionConfiguration() async {
     try {
       final preferences = await SharedPreferences.getInstance();
-      await preferences.remove('deporte_total_authorized_live_sources_v1');
-      await preferences.remove('deporte_total_live_favorites_v1');
-      await AutoLiveSettings.clear();
+      for (final key in <String>[
+        'deporte_total_authorized_live_sources_v1',
+        'deporte_total_live_favorites_v1',
+        'dt360_auto_live_playlist_url_v1',
+        'dt360_auto_live_epg_url_v1',
+        'dt360_auto_live_authorized_v1',
+      ]) {
+        await preferences.remove(key);
+      }
     } catch (error) {
-      debugPrint('No se pudo limpiar toda la configuración antigua de transmisión: $error');
+      debugPrint('No se pudo limpiar la configuración antigua de IPTV: $error');
     }
   }
 
@@ -126,18 +132,19 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
   List<LivePlayerSource> _playerSources() {
     return _board.assignments.take(8).map((assignment) {
       final event = assignment.event;
-      final channel = assignment.channel;
+      final option = assignment.option;
       final details = <String>[
         if (event.competition.isNotEmpty) event.competition,
         event.title,
-        channel.name,
+        option.name,
       ];
       return LivePlayerSource(
-        title: 'DEPORTE TOTAL 360° · ${channel.name}',
-        url: channel.url,
+        title: 'DEPORTE TOTAL 360° · ${option.name}',
+        url: option.url,
         subtitle: details.join(' · '),
         eventId: event.id,
         startAt: event.startsAt,
+        useEmbeddedPage: true,
       );
     }).toList(growable: false);
   }
@@ -225,7 +232,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
                 ),
                 const SizedBox(height: 5),
                 const Text(
-                  'La app toma los canales publicados en la ficha de cada evento y busca una coincidencia entre tus canales deportivos visibles. Al finalizar el evento, libera el reproductor.',
+                  'La app lee las opciones visibles de la ficha de cada evento y prepara la mejor opción publicada. Al finalizar el evento, libera el reproductor.',
                   style: TextStyle(
                     color: _liveMuted,
                     fontSize: 10,
@@ -234,7 +241,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  '${sources.length}/8 reproductores asignados · ${_board.catalogueChannelCount} canales deportivos revisados',
+                  '${sources.length}/8 reproductores asignados · ${_board.transmissionOptionCount} opciones de transmisión capturadas',
                   style: const TextStyle(
                     color: _liveCyan,
                     fontSize: 9,
@@ -284,6 +291,7 @@ class LivePlayerSource {
     this.subtitle,
     this.eventId,
     this.startAt,
+    this.useEmbeddedPage = false,
   });
 
   final String title;
@@ -291,6 +299,7 @@ class LivePlayerSource {
   final String? subtitle;
   final String? eventId;
   final DateTime? startAt;
+  final bool useEmbeddedPage;
 }
 
 class LivePlayerWaitingEvent {
@@ -401,22 +410,30 @@ class LivePlayerBoard extends StatelessWidget {
                           child: Center(
                             child: AspectRatio(
                               aspectRatio: 16 / 9,
-                              child: _LiveVideoTile(
-                                key: ValueKey<String>(
-                                  'board-$channelNumber-${source.eventId ?? ''}-${source.url}',
-                                ),
-                                source: source,
-                                initiallyMuted: index > 0,
-                                // El listado ya ordena primero el evento priorizado.
-                                // Si se entra desde la pestaña Live, también debe
-                                // arrancar la primera señal disponible sin exigir
-                                // que el usuario venga desde la Agenda.
-                                autoStart: shouldAutomaticallyStartLiveSource(
-                                  index: index,
-                                  isActive: isActive,
-                                ),
-                                isActive: isActive,
-                              ),
+                              child: source.useEmbeddedPage
+                                  ? _LiveWebPageTile(
+                                      key: ValueKey<String>(
+                                        'board-page-$channelNumber-${source.eventId ?? ''}-${source.url}',
+                                      ),
+                                      source: source,
+                                      autoStart: shouldAutomaticallyStartLiveSource(
+                                        index: index,
+                                        isActive: isActive,
+                                      ),
+                                      isActive: isActive,
+                                    )
+                                  : _LiveVideoTile(
+                                      key: ValueKey<String>(
+                                        'board-$channelNumber-${source.eventId ?? ''}-${source.url}',
+                                      ),
+                                      source: source,
+                                      initiallyMuted: index > 0,
+                                      autoStart: shouldAutomaticallyStartLiveSource(
+                                        index: index,
+                                        isActive: isActive,
+                                      ),
+                                      isActive: isActive,
+                                    ),
                             ),
                           ),
                         ),
@@ -835,6 +852,141 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
                 initiallyMuted: index > 0,
               ),
             ),
+    );
+  }
+}
+
+class _LiveWebPageTile extends StatefulWidget {
+  const _LiveWebPageTile({
+    super.key,
+    required this.source,
+    required this.autoStart,
+    required this.isActive,
+  });
+
+  final LivePlayerSource source;
+  final bool autoStart;
+  final bool isActive;
+
+  @override
+  State<_LiveWebPageTile> createState() => _LiveWebPageTileState();
+}
+
+class _LiveWebPageTileState extends State<_LiveWebPageTile> {
+  bool _started = false;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _started = widget.autoStart && widget.isActive;
+  }
+
+  @override
+  void didUpdateWidget(covariant _LiveWebPageTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActive && widget.isActive && widget.autoStart) {
+      setState(() => _started = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_started) {
+      return Container(
+        color: const Color(0xFF07090D),
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Icon(Icons.play_circle_outline_rounded,
+                color: _liveCyan, size: 34),
+            const SizedBox(height: 4),
+            TextButton(
+              onPressed: widget.isActive
+                  ? () => setState(() => _started = true)
+                  : null,
+              child: const Text('CARGAR TRANSMISIÓN',
+                  style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (!isSafeAgendaTransmissionUrl(widget.source.url)) {
+      return const Center(
+        child: Text(
+          'Enlace HTTPS no válido',
+          style: TextStyle(color: Colors.white, fontSize: 9),
+        ),
+      );
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        InAppWebView(
+          initialUrlRequest: URLRequest(url: WebUri(widget.source.url)),
+          initialSettings: InAppWebViewSettings(
+            javaScriptEnabled: true,
+            useShouldOverrideUrlLoading: true,
+            javaScriptCanOpenWindowsAutomatically: false,
+            supportMultipleWindows: false,
+            mediaPlaybackRequiresUserGesture: false,
+            allowsInlineMediaPlayback: true,
+            supportZoom: false,
+          ),
+          shouldOverrideUrlLoading: (controller, action) async {
+            final target = action.request.url;
+            if (target == null) return NavigationActionPolicy.CANCEL;
+            if (target.scheme == 'about') return NavigationActionPolicy.ALLOW;
+            return target.scheme == 'https' && target.userInfo.isEmpty
+                ? NavigationActionPolicy.ALLOW
+                : NavigationActionPolicy.CANCEL;
+          },
+          onLoadStart: (controller, url) {
+            if (mounted) setState(() => _loading = true);
+          },
+          onLoadStop: (controller, url) {
+            if (mounted) setState(() => _loading = false);
+          },
+          onReceivedError: (controller, request, error) {
+            if (request.isForMainFrame == false || !mounted) return;
+            setState(() {
+              _loading = false;
+              _error = 'No se pudo cargar esta página de transmisión.';
+            });
+          },
+        ),
+        if (_loading)
+          const Center(
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: _liveCyan,
+            ),
+          ),
+        if (_error != null)
+          Positioned.fill(
+            child: ColoredBox(
+              color: const Color(0xE8000000),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

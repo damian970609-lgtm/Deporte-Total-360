@@ -395,53 +395,6 @@ const String _agendaOnlyScript = r'''
       }
     });
 
-    // Oculta también las tarjetas de canal, incluso si la web no las agrupa
-    // dentro de un <section> semántico.
-    const channelActions = Array.from(
-      document.querySelectorAll('a, button, [role="button"]')
-    ).filter((element) =>
-      normalize(element.textContent).startsWith('abrir canal')
-    );
-
-    if (channelActions.length > 1) {
-      let channelContainer = channelActions[0];
-      while (channelContainer.parentElement &&
-          channelContainer.parentElement !== document.body &&
-          channelContainer.parentElement !== document.documentElement &&
-          !channelActions.every((action) => channelContainer.contains(action))) {
-        channelContainer = channelContainer.parentElement;
-      }
-
-      const hasAgenda = Array.from(
-        channelContainer.querySelectorAll('h1, h2, h3, h4')
-      ).some((heading) =>
-        normalize(heading.textContent).includes('programacion del dia'));
-
-      if (channelContainer !== document.body &&
-          channelContainer !== document.documentElement && !hasAgenda) {
-        channelContainer.style.setProperty('display', 'none', 'important');
-      } else {
-        // Si la web comparte el contenedor, oculta cada tarjeta individual.
-        channelActions.forEach((action) => {
-          let card = action;
-          for (let depth = 0; depth < 8; depth += 1) {
-            const parent = card.parentElement;
-            if (!parent || parent === document.body ||
-                parent === document.documentElement || parent === channelContainer) break;
-            card = parent;
-            const actionCount = Array.from(
-              card.querySelectorAll('a, button, [role="button"]')
-            ).filter((element) =>
-              normalize(element.textContent).startsWith('abrir canal')
-            ).length;
-            const hasChannelTitle = card.querySelector('h3, h4, img, picture');
-            if (actionCount === 1 && hasChannelTitle) break;
-          }
-          card.style.setProperty('display', 'none', 'important');
-        });
-      }
-    }
-
     document.querySelectorAll('a').forEach((link) => {
       const label = normalize(link.textContent);
       const href = String(link.getAttribute('href') || '').toLowerCase();
@@ -630,6 +583,61 @@ const String _agendaLiveCaptureScript = r'''
     return found;
   }
 
+
+  function readTransmissionOptions(root) {
+    const found = [];
+    const selector = 'a[href], button[data-href], button[data-url], ' +
+      '[role="link"][href], [role="button"][data-href], [role="button"][data-url]';
+    const elements = Array.from(root.querySelectorAll(selector));
+    elements.forEach((element, index) => {
+      if (element.getClientRects && element.getClientRects().length === 0) return;
+      const label = visibleText(element) ||
+        element.getAttribute('aria-label') ||
+        element.getAttribute('title') || '';
+      const metadata = [
+        label,
+        element.className,
+        element.getAttribute('aria-label'),
+        element.getAttribute('title')
+      ].join(' ').toLowerCase();
+      if (!/(canal|fuente|señal|senal|opci[oó]n|transmisi[oó]n|stream|player|watch|ver directo|abrir canal)/i.test(metadata)) return;
+
+      const rawUrl = element.href ||
+        element.getAttribute('data-href') ||
+        element.getAttribute('data-url') || '';
+      let url = '';
+      try {
+        url = new URL(rawUrl, document.baseURI).href;
+      } catch (_) {
+        return;
+      }
+      if (!/^https:\/\//i.test(url)) return;
+
+      const popularityText = [
+        element.getAttribute('data-popularity'),
+        element.getAttribute('data-views'),
+        element.getAttribute('data-votes'),
+        element.getAttribute('data-rating')
+      ].join(' ');
+      const metricMatch = popularityText.match(/[0-9]+/);
+      let popularityScore = metricMatch ? Number(metricMatch[0]) : 0;
+      if (/(popular|destacad[oa]|recomendad[oa]|principal|m[aá]s visto|top)/i.test(metadata)) {
+        popularityScore = Math.max(popularityScore, 1000000);
+      }
+      if (!label || label.length > 100) return;
+      if (found.some((item) => item.url === url)) return;
+      found.push({
+        id: String(index) + '-' + url,
+        name: label,
+        url: url,
+        order: index,
+        popularityScore: popularityScore
+      });
+    });
+    return found;
+  }
+
+
   function readEvent(card) {
     const text = visibleText(card);
     const startAt = readStartAt(card, text);
@@ -680,6 +688,7 @@ const String _agendaLiveCaptureScript = r'''
       endsAt: readEndAt(card),
       status: status,
       channelReferences: channelReferences,
+      transmissionOptions: readTransmissionOptions(card),
       detailUrl: eventLink ? eventLink.href : location.href,
       updatedAt: new Date().toISOString()
     };
@@ -687,6 +696,7 @@ const String _agendaLiveCaptureScript = r'''
 
   let lastSignature = '';
   let queued = false;
+  let activeEvent = null;
   function emitAgendaEvents() {
     queued = false;
     if (!window.flutter_inappwebview ||
@@ -712,6 +722,15 @@ const String _agendaLiveCaptureScript = r'''
       keys.add(key);
       unique.push(event);
     }
+    if (activeEvent) {
+      const expandedOptions = readTransmissionOptions(document.body);
+      if (expandedOptions.length > 0) {
+        activeEvent.transmissionOptions = expandedOptions;
+        const existingIndex = unique.findIndex((event) => event.id === activeEvent.id);
+        if (existingIndex >= 0) unique[existingIndex] = activeEvent;
+        else unique.push(activeEvent);
+      }
+    }
     if (unique.length === 0) return;
     const signature = JSON.stringify(unique);
     if (signature === lastSignature) return;
@@ -725,7 +744,28 @@ const String _agendaLiveCaptureScript = r'''
     window.setTimeout(emitAgendaEvents, 250);
   }
 
-  document.addEventListener('click', () => {
+  document.addEventListener('click', (clickEvent) => {
+    const target = clickEvent.target && clickEvent.target.closest
+      ? clickEvent.target.closest('a, button, [role="button"], [data-event-id]')
+      : null;
+    if (target) {
+      let candidate = target;
+      for (let depth = 0; depth < 9 && candidate &&
+          candidate !== document.body && candidate !== document.documentElement; depth += 1) {
+        const timeNode = candidate.querySelector &&
+          candidate.querySelector('time[datetime], [data-time], [data-start-time], time');
+        const containsClock = timePattern.test(visibleText(candidate));
+        if (timeNode || containsClock) {
+          const card = timeNode ? findEventCard(timeNode) : candidate;
+          const event = readEvent(card);
+          if (event) {
+            activeEvent = event;
+            break;
+          }
+        }
+        candidate = candidate.parentElement;
+      }
+    }
     window.setTimeout(queueEmit, 250);
     window.setTimeout(queueEmit, 900);
     window.setTimeout(queueEmit, 1800);

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:deporte_total_360/main.dart';
 import 'package:deporte_total_360/live_channels_screen.dart';
 import 'package:deporte_total_360/channel_catalog_screen.dart';
+import 'package:deporte_total_360/agenda_channels_screen.dart';
 import 'package:deporte_total_360/channel_catalog_service.dart';
 import 'package:deporte_total_360/channel_playlist_presets.dart';
 
@@ -179,45 +180,24 @@ class _AdminTestService extends ChannelCatalogService {
 }
 
 void main() {
-  testWidgets('DAMIAN.APK abre un único panel tras diez pulsaciones y evita apilar rutas', (tester) async {
+  testWidgets('DAMIAN.APK queda como firma y no abre el antiguo panel IPTV', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    final service = _AdminTestService(autoSignIn: false);
-    await tester.pumpWidget(
-      MaterialApp(home: SettingsScreen(adminService: service)),
-    );
+    await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
     await tester.pump();
 
     final signature = find.text('DAMIAN.APK');
     expect(signature, findsOneWidget);
-    for (var tap = 0; tap < 9; tap++) {
+    expect(find.byKey(const ValueKey<String>('settings-damian-apk-menu')), findsNothing);
+    for (var tap = 0; tap < 12; tap++) {
       await tester.tap(signature);
       await tester.pump();
     }
-    expect(find.text('IPTV · DAMIÁN.APK'), findsNothing);
 
-    final tapTarget = find.ancestor(
-      of: signature,
-      matching: find.byType(GestureDetector),
-    ).first;
-    final onTap = tester.widget<GestureDetector>(tapTarget).onTap!;
-    onTap();
-    // Simula toques adicionales durante la transición de apertura.
-    for (var tap = 0; tap < 30; tap++) {
-      onTap();
-    }
-    await tester.pumpAndSettle();
-
-    expect(
-      find.text('IPTV · DAMIÁN.APK', skipOffstage: false),
-      findsOneWidget,
-    );
-    expect(find.text('ENTRAR CON GOOGLE'), findsOneWidget);
+    expect(find.text('IPTV · DAMIÁN.APK', skipOffstage: false), findsNothing);
+    expect(find.text('ENTRAR CON GOOGLE'), findsNothing);
     expect(tester.takeException(), isNull);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox.shrink());
   });
-
 
   testWidgets('el panel pagina la copia local y no construye todos los canales al abrir', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -715,7 +695,7 @@ void main() {
     expect(find.text('Inicio'), findsOneWidget);
     expect(find.text('Agenda'), findsOneWidget);
     expect(find.text('En vivo'), findsOneWidget);
-    expect(find.text('Canales'), findsOneWidget);
+    expect(find.text('Canales deportivos'), findsOneWidget);
     expect(find.text('Ajustes'), findsOneWidget);
     expect(find.text('Agenda de hoy'), findsNothing);
     expect(find.text('Mister Fantasy'), findsNothing);
@@ -729,10 +709,10 @@ void main() {
     expect(find.byType(LiveChannelsScreen), findsOneWidget);
     expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsOneWidget);
     expect(find.text('SEÑAL PENDIENTE'), findsNWidgets(8));
-    await tester.tap(find.text('Canales'));
+    await tester.tap(find.text('Canales deportivos'));
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump();
-    expect(find.byType(ChannelCatalogScreen), findsOneWidget);
+    expect(find.byType(AgendaChannelsScreen), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.text('Ajustes'));
