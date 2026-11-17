@@ -413,6 +413,27 @@ class _AgendaTransmissionWebViewState extends State<AgendaTransmissionWebView> {
   String? _error;
   bool _loading = true;
 
+  InAppWebViewController? _controller;
+
+  Future<void> _reload() async {
+    final controller = _controller;
+    if (controller == null) return;
+    setState(() {
+      _error = null;
+      _loading = true;
+    });
+    try {
+      await controller.reload();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'No se pudo recargar el reproductor.';
+      });
+      debugPrint('Error al recargar el reproductor del canal: $error');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final safe = isSafeAgendaTransmissionUrl(widget.url);
