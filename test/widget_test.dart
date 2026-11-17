@@ -686,7 +686,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     tester.view.devicePixelRatio = 1.0;
       tester.view.physicalSize = const Size(390, 844);
-    await tester.pumpWidget(const MaterialApp(home: MainShell()));
+    await tester.pumpWidget(const MaterialApp(home: MainShell(enableAgendaBackgroundCapture: false)));
     await tester.pump();
 
     expect(find.byType(HomeDashboard), findsOneWidget);
