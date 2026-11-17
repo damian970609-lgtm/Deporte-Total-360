@@ -638,6 +638,103 @@ const String _agendaLiveCaptureScript = r'''
   }
 
 
+
+  function readSportsChannels(root) {
+    const found = [];
+    const seen = new Set();
+    const selector = 'a[href], button[data-href], button[data-url], ' +
+      '[role="link"][href], [role="button"][data-href], [role="button"][data-url]';
+    const headings = Array.from(root.querySelectorAll(
+      'h1, h2, h3, h4, h5, [role="heading"]'
+    )).filter((heading) => {
+      const label = normalize(visibleText(heading));
+      return /canales? (?:deportivos?|en vivo)|canales deportivos|señales deportivas/.test(label);
+    });
+
+    headings.forEach((heading) => {
+      let scope = heading.closest('section, article') || heading.parentElement;
+      let bestScope = scope;
+      for (let depth = 0; depth < 6 && scope &&
+          scope !== document.body && scope !== document.documentElement; depth += 1) {
+        const count = scope.querySelectorAll(selector).length;
+        if (count > 0 && count <= 160) {
+          bestScope = scope;
+          if (count > 1 || depth > 1) break;
+        }
+        scope = scope.parentElement;
+      }
+      if (!bestScope) return;
+
+      Array.from(bestScope.querySelectorAll(selector)).forEach((element) => {
+        const rawUrl = element.href ||
+          element.getAttribute('data-href') ||
+          element.getAttribute('data-url') || '';
+        let url = '';
+        try {
+          url = new URL(rawUrl, document.baseURI).href;
+        } catch (_) {
+          return;
+        }
+        if (!/^https:\/\//i.test(url)) return;
+
+        let card = element.closest('article, li, [class*="channel"], [class*="card"]') ||
+          element.parentElement || element;
+        let titleNode = card.querySelector(
+          '[data-channel-name], h2, h3, h4, h5, [class*="channel-title"], [class*="title"]'
+        );
+        let name = visibleText(titleNode);
+        const image = card.querySelector('img');
+        if (!name && image) name = image.getAttribute('alt') || '';
+        if (!name) name = visibleText(element) ||
+          element.getAttribute('aria-label') || element.getAttribute('title') || '';
+        name = String(name || '')
+          .replace(/\b(?:ver en vivo|ver canal|ver online|reproducir|en vivo)\b/gi, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        const normalizedName = normalize(name);
+        if (!normalizedName || normalizedName.length < 2 ||
+            /^(canales? deportivos?|canales? en vivo|ver|reproducir|abrir)$/.test(normalizedName)) return;
+
+        const key = normalizedName;
+        if (seen.has(key)) return;
+        seen.add(key);
+
+        let logoUrl = '';
+        if (image) {
+          const rawLogo = image.currentSrc || image.src ||
+            image.getAttribute('data-src') || '';
+          try {
+            const parsedLogo = new URL(rawLogo, document.baseURI);
+            if (parsedLogo.protocol === 'https:') logoUrl = parsedLogo.href;
+          } catch (_) {}
+        }
+        const popularityText = [
+          element.getAttribute('data-popularity'),
+          element.getAttribute('data-views'),
+          element.getAttribute('data-votes'),
+          element.getAttribute('data-rating'),
+          card.getAttribute('data-popularity'),
+          card.getAttribute('data-views')
+        ].join(' ');
+        const metricMatch = popularityText.match(/[0-9]+/);
+        let popularityScore = metricMatch ? Number(metricMatch[0]) : 0;
+        if (/(popular|destacad[oa]|recomendad[oa]|principal|m[aá]s visto|top)/i.test(
+          popularityText + ' ' + element.className + ' ' + card.className
+        )) popularityScore = Math.max(popularityScore, 1000000);
+
+        found.push({
+          id: key,
+          name: name,
+          url: url,
+          logoUrl: logoUrl,
+          order: found.length,
+          popularityScore: popularityScore
+        });
+      });
+    });
+    return found;
+  }
+
   function readEvent(card) {
     const text = visibleText(card);
     const startAt = readStartAt(card, text);
@@ -731,11 +828,13 @@ const String _agendaLiveCaptureScript = r'''
         else unique.push(activeEvent);
       }
     }
-    if (unique.length === 0) return;
-    const signature = JSON.stringify(unique);
+    const channels = readSportsChannels(document.body);
+    if (unique.length === 0 && channels.length === 0) return;
+    const payload = { events: unique, channels: channels };
+    const signature = JSON.stringify(payload);
     if (signature === lastSignature) return;
     lastSignature = signature;
-    window.flutter_inappwebview.callHandler('dt360AgendaEvents', unique);
+    window.flutter_inappwebview.callHandler('dt360AgendaEvents', payload);
   }
 
   function queueEmit() {
