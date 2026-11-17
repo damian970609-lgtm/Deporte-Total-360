@@ -137,10 +137,26 @@ LiveMediaFormat? liveMediaFormatForUrl(String value) {
   if (extension != null && _nonMediaExtensions.contains(extension)) {
     return null;
   }
-  if (extension == null || _dynamicStreamExtensions.contains(extension)) {
-    // Muchos proveedores IPTV publican señales directas en /live/ID o
-    // /stream.php sin extensión; ExoPlayer intentará detectar el contenedor.
+  if (_dynamicStreamExtensions.contains(extension)) {
+    // Endpoints dinámicos habituales de proveedores IPTV.
     return LiveMediaFormat.progressive;
+  }
+
+  if (extension == null) {
+    const directRouteSegments = <String>{
+      'live', 'stream', 'channel', 'hls', 'dash', 'vod', 'video',
+    };
+    final hasKnownDirectRoute = pathSegments.length == 1
+        ? directRouteSegments.contains(pathSegments.last.toLowerCase())
+        : pathSegments.length >= 2 &&
+            directRouteSegments.contains(
+              pathSegments[pathSegments.length - 2].toLowerCase(),
+            );
+    if (hasKnownDirectRoute) {
+      // Solo se aceptan rutas con estructura de señal reconocible, nunca
+      // páginas genéricas como /watch, /player o /embed.
+      return LiveMediaFormat.progressive;
+    }
   }
 
   return null;
