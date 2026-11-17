@@ -707,7 +707,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump();
     expect(find.byType(LiveChannelsScreen), findsOneWidget);
-    expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsOneWidget);
+    expect(find.text('UN REPRODUCTOR POR PARTIDO'), findsOneWidget);
     expect(find.text('SEÑAL PENDIENTE'), findsNWidgets(8));
     await tester.tap(find.text('Canales deportivos'));
     await tester.pump(const Duration(milliseconds: 350));
