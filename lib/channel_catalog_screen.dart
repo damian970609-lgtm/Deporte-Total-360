@@ -957,7 +957,7 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
       _tracks = <VideoTrack>[];
     });
 
-    final controller = VideoPlayerController.networkUrl(
+    final controller = createCompatibleNetworkVideoController(
       uri,
       videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
     );
