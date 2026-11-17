@@ -590,7 +590,7 @@ const String _agendaLiveCaptureScript = r'''
       '[role="link"][href], [role="button"][data-href], [role="button"][data-url]';
     const elements = Array.from(root.querySelectorAll(selector));
     elements.forEach((element, index) => {
-      if (element.getClientRects && element.getClientRects().length === 0) return;
+      // Incluye enlaces ya presentes en el DOM aunque la tarjeta los oculte por CSS.
       const label = visibleText(element) ||
         element.getAttribute('aria-label') ||
         element.getAttribute('title') || '';
