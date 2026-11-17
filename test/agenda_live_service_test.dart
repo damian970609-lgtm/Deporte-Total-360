@@ -22,6 +22,7 @@ Map<String, Object?> _event({
   DateTime? endsAt,
   List<Map<String, Object?>> options = const <Map<String, Object?>>[],
   String status = 'unknown',
+  String detailUrl = '',
 }) => <String, Object?>{
       'id': id,
       'title': title,
@@ -31,6 +32,7 @@ Map<String, Object?> _event({
       'channelReferences': const <String>['ESPN 2'],
       'transmissionOptions': options,
       'status': status,
+      if (detailUrl.isNotEmpty) 'detailUrl': detailUrl,
     };
 
 void main() {
@@ -113,7 +115,25 @@ void main() {
     expect(isSafeAgendaTransmissionUrl('https://user:pass@player.example/event'), isFalse);
   });
 
-  test('no usa listas IPTV como respaldo si no hay opciones web', () async {
+  test('usa la ficha del partido cuando todavía no hay opciones visibles', () async {
+    final service = AgendaLiveService();
+    final now = DateTime(2026, 11, 16, 18, 0);
+    await service.captureAgendaEvents(<dynamic>[
+      _event(
+        startsAt: now.subtract(const Duration(minutes: 1)),
+        detailUrl: 'https://futbol-libre.cam/en-vivo/partido-1',
+      ),
+    ]);
+    final state = await service.buildBoardState(now: now);
+    expect(state.assignments, hasLength(1));
+    expect(state.assignments.single.option.name, 'Reproductor original');
+    expect(
+      state.assignments.single.option.url,
+      'https://futbol-libre.cam/en-vivo/partido-1',
+    );
+  });
+
+  test('no inventa un enlace cuando la ficha y sus opciones están vacías', () async {
     final service = AgendaLiveService();
     final now = DateTime(2026, 11, 16, 18, 0);
     await service.captureAgendaEvents(<dynamic>[
@@ -121,7 +141,33 @@ void main() {
     ]);
     final state = await service.buildBoardState(now: now);
     expect(state.assignments, isEmpty);
-    expect(state.pending.single.status, 'FALTAN OPCIONES DE TRANSMISIÓN');
+    expect(state.pending.single.status, 'FALTA EL ENLACE DE LA FICHA');
+  });
+
+  test('guarda canales públicos y descarta URL inseguras', () async {
+    final service = AgendaLiveService();
+    await service.captureAgendaEvents(<String, Object?>{
+      'events': <dynamic>[],
+      'channels': <Map<String, Object?>>[
+        <String, Object?>{
+          'name': 'ESPN 1 Ver en Vivo',
+          'url': 'https://futbol-libre.cam/canales/espn-1',
+          'logoUrl': 'https://futbol-libre.cam/images/espn-1.png',
+          'order': 2,
+          'popularityScore': 120,
+        },
+        <String, Object?>{
+          'name': 'Canal inseguro',
+          'url': 'javascript:alert(1)',
+        },
+      ],
+    });
+    final channels = await service.loadCapturedChannels();
+    expect(channels, hasLength(1));
+    expect(channels.single.name, 'ESPN 1');
+    expect(channels.single.id, 'espn 1');
+    expect(channels.single.popularityScore, 120);
+    expect(channels.single.logoUrl, 'https://futbol-libre.cam/images/espn-1.png');
   });
 
   test('no asigna la misma página a dos eventos simultáneos', () async {
