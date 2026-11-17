@@ -775,7 +775,9 @@ const String _agendaLiveCaptureScript = r'''
       ? elementId
       : normalize(title).replace(/[^a-z0-9]+/g, '-') + '_' + startAt;
     const eventLink = card.querySelector(
-      'a[href*="partido"], a[href*="evento"], a[href*="match"], a[href*="event"]'
+      'a[href*="partido"], a[href*="evento"], a[href*="match"], ' +
+      'a[href*="event"], a[href*="en-vivo"], a[href*="live"], ' +
+      'a[data-event-link], [data-event-url]'
     );
     return {
       id: id,
@@ -858,6 +860,18 @@ const String _agendaLiveCaptureScript = r'''
           const card = timeNode ? findEventCard(timeNode) : candidate;
           const event = readEvent(card);
           if (event) {
+            const clickedUrl = target.matches('a[href]')
+              ? target.href
+              : target.getAttribute('data-event-url') ||
+                target.getAttribute('data-href') ||
+                target.getAttribute('data-url') || '';
+            if (clickedUrl) {
+              try {
+                const parsed = new URL(clickedUrl, document.baseURI);
+                if (parsed.protocol === 'https:' && !parsed.username &&
+                    !parsed.password) event.detailUrl = parsed.href;
+              } catch (_) {}
+            }
             activeEvent = event;
             break;
           }
