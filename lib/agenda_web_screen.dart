@@ -873,6 +873,15 @@ const String _agendaLiveCaptureScript = r'''
               } catch (_) {}
             }
             activeEvent = event;
+            // Guarda la ficha seleccionada antes de que el sitio navegue a ella.
+            // Así En vivo conserva la URL exacta incluso si la página cambia rápido.
+            if (window.flutter_inappwebview &&
+                typeof window.flutter_inappwebview.callHandler === 'function') {
+              window.flutter_inappwebview.callHandler(
+                'dt360AgendaEvents',
+                { events: [event], channels: [] }
+              );
+            }
             break;
           }
         }
