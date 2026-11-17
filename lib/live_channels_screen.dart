@@ -144,7 +144,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
         subtitle: details.join(' · '),
         eventId: event.id,
         startAt: event.startsAt,
-        useEmbeddedPage: true,
+        useEmbeddedPage: liveMediaFormatForUrl(option.url) == null,
       );
     }).toList(growable: false);
   }
