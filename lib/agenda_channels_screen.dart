@@ -170,8 +170,8 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
                 const SizedBox(height: 4),
                 Text(
                   _usingEventSources
-                      ? '\${_channels.length} opciones encontradas en las fichas de partidos'
-                      : '\${_channels.length} canales encontrados en la sección de canales de la web',
+                      ? '${_channels.length} opciones encontradas en las fichas de partidos'
+                      : '${_channels.length} canales encontrados en la sección de canales de la web',
                   style: const TextStyle(
                     color: _agendaChannelsMuted,
                     fontSize: 10,
@@ -270,7 +270,7 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
                             ),
                             subtitle: Text(
                               hasPopularityMetric
-                                  ? 'POPULARIDAD PUBLICADA: \${channel.popularityScore}'
+                                  ? 'POPULARIDAD PUBLICADA: ${channel.popularityScore}'
                                   : 'REPRODUCTOR ORIGINAL DE LA WEB',
                               maxLines: 1,
                               style: const TextStyle(
@@ -428,10 +428,7 @@ class _AgendaTransmissionWebViewState extends State<AgendaTransmissionWebView> {
         actions: <Widget>[
           IconButton(
             tooltip: 'Recargar reproductor',
-            onPressed: !safe ? null : () => setState(() {
-              _error = null;
-              _loading = true;
-            }),
+            onPressed: !safe || _controller == null ? null : _reload,
             icon: const Icon(Icons.refresh_rounded, color: _agendaChannelsBlue),
           ),
         ],
@@ -446,6 +443,7 @@ class _AgendaTransmissionWebViewState extends State<AgendaTransmissionWebView> {
           : Stack(
               children: <Widget>[
                 InAppWebView(
+                  onWebViewCreated: (controller) => _controller = controller,
                   initialUrlRequest: URLRequest(url: WebUri(widget.url)),
                   initialSettings: InAppWebViewSettings(
                     javaScriptEnabled: true,
