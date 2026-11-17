@@ -464,7 +464,9 @@ class _AgendaTransmissionWebViewState extends State<AgendaTransmissionWebView> {
           : Stack(
               children: <Widget>[
                 InAppWebView(
-                  onWebViewCreated: (controller) => _controller = controller,
+                  onWebViewCreated: (controller) {
+                    if (mounted) setState(() => _controller = controller);
+                  },
                   initialUrlRequest: URLRequest(url: WebUri(widget.url)),
                   initialSettings: InAppWebViewSettings(
                     javaScriptEnabled: true,
