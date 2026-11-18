@@ -314,7 +314,7 @@ void main() {
           _option(name: 'Canal futuro', url: 'https://player.example/tomorrow'),
         ],
       ),
-    ]);
+    ], now: now);
 
     final events = await service.loadCapturedEvents();
     expect(events.map((event) => event.id), <String>['today']);
@@ -358,7 +358,7 @@ void main() {
         'url': 'https://channels.example/fox',
         'order': 2,
       },
-    ]);
+    ], now: now);
 
     final entries = await service.loadChannelsForCurrentDay(now: now);
 
@@ -385,7 +385,7 @@ void main() {
           _option(name: 'Transmisión terminada', url: 'https://player.example/ended'),
         ],
       ),
-    ]);
+    ], now: now);
 
     expect(
       await service.loadChannelsForCurrentDay(now: now),
