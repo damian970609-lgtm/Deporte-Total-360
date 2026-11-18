@@ -178,8 +178,9 @@ void main() {
       await tester.pump();
 
       expect(find.text('DEPORTES EN VIVO'), findsOneWidget);
-      expect(find.text('EVENTOS EN PREPARACIÓN O EN VIVO'), findsOneWidget);
+      expect(find.text('REPRODUCTOR DEPORTE TOTAL 360°'), findsOneWidget);
       expect(find.text('NO HAY EVENTOS EN PREPARACIÓN O EN VIVO'), findsOneWidget);
+      expect(find.text('EVENTOS EN PREPARACIÓN O EN VIVO'), findsNothing);
       expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsNothing);
       expect(find.text('SEÑAL PENDIENTE'), findsNothing);
       expect(find.text('ESPERANDO TRANSMISIÓN'), findsNothing);
