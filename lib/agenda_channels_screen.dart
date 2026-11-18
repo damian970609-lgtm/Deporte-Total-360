@@ -26,7 +26,7 @@ class AgendaChannelsScreen extends StatefulWidget {
 class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
   final AgendaLiveService _service = AgendaLiveService();
   Timer? _refreshTimer;
-  List<AgendaTransmissionOption> _channels = <AgendaTransmissionOption>[];
+  List<AgendaChannelEntry> _channels = <AgendaChannelEntry>[];
   LivePlayerSource? _selectedSource;
   bool _loading = true;
 
@@ -48,11 +48,18 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
 
   Future<void> _refresh() async {
     try {
-      final channels = await _service.loadCapturedChannels();
+      final channels = await _service.loadChannelsForCurrentDay();
       if (!mounted) return;
-      channels.sort((a, b) => a.order.compareTo(b.order));
+      final activeEventIds = channels
+          .where((entry) => entry.belongsToEvent)
+          .map((entry) => entry.eventId)
+          .toSet();
       setState(() {
         _channels = channels;
+        if (_selectedSource?.eventId != null &&
+            !activeEventIds.contains(_selectedSource!.eventId)) {
+          _selectedSource = null;
+        }
         _loading = false;
       });
     } catch (_) {
@@ -88,7 +95,59 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
           LiveSharedPlayerPanel(
             source: _selectedSource,
             compact: true,
-            emptyMessage: 'Elige un canal de abajo y pulsa PLAY para reproducirlo aquí.',
+            emptyMessage: 'Elige una transmisión de los eventos de hoy y pulsa PLAY.',
+          ),
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.fromLTRB(10, 2, 10, 8),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: <Color>[Color(0xFF071B31), Color(0xFF17101A)],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _agendaChannelsBlue.withAlpha(120)),
+            ),
+            child: Row(
+              children: <Widget>[
+                const Icon(Icons.sports_score_rounded,
+                    color: _agendaChannelsBlue, size: 22),
+                const SizedBox(width: 9),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'TRANSMISIONES DE LOS EVENTOS DE HOY',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: .35,
+                        ),
+                      ),
+                      SizedBox(height: 3),
+                      Text(
+                        'Fuentes publicadas dentro de cada ficha de la Agenda',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: _agendaChannelsMuted, fontSize: 8),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '${_channels.length}',
+                  style: const TextStyle(
+                    color: _agendaChannelsBlue,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
           ),
           Container(
             width: double.infinity,
@@ -153,7 +212,7 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
                             childAspectRatio: 1.55,
                           ),
                           itemBuilder: (context, index) => _TransmissionOptionTile(
-                            option: _channels[index],
+                            entry: _channels[index],
                             isPreferred: index == 0,
                             fallbackIndex: index + 1,
                             onPlay: _playOption,
@@ -171,11 +230,16 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
     );
   }
 
-  void _playOption(AgendaTransmissionOption option) {
+  void _playOption(AgendaChannelEntry entry) {
+    final option = entry.option;
     final source = LivePlayerSource(
       title: option.name,
       url: option.url,
-      subtitle: 'CANALES DEPORTIVOS · ${option.name}',
+      subtitle: entry.eventTitle == null
+          ? 'CANALES DEPORTIVOS · ${option.name}'
+          : '${entry.eventTitle} · ${option.name}',
+      eventId: entry.eventId,
+      startAt: entry.startsAt,
       useEmbeddedPage: !isSupportedAuthorizedMediaUrl(option.url),
     );
     setState(() => _selectedSource = source);
@@ -184,19 +248,20 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
 
 class _TransmissionOptionTile extends StatelessWidget {
   const _TransmissionOptionTile({
-    required this.option,
+    required this.entry,
     required this.isPreferred,
     required this.fallbackIndex,
     required this.onPlay,
   });
 
-  final AgendaTransmissionOption option;
+  final AgendaChannelEntry entry;
   final bool isPreferred;
   final int fallbackIndex;
   final ValueChanged<AgendaTransmissionOption> onPlay;
 
   @override
   Widget build(BuildContext context) {
+    final option = entry.option;
     final hasPopularityMetric = option.popularityScore > 0;
     return Material(
       color: const Color(0xFF0D1118),
@@ -207,13 +272,25 @@ class _TransmissionOptionTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(9),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: <Color>[Color(0xFF121B29), Color(0xFF080B11)],
+            ),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isPreferred
                   ? _agendaChannelsBlue.withAlpha(190)
                   : Colors.white.withAlpha(35),
               width: isPreferred ? 1.3 : 1,
             ),
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: _agendaChannelsBlue.withAlpha(isPreferred ? 28 : 10),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -252,8 +329,23 @@ class _TransmissionOptionTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
+              if (entry.eventTitle != null) ...<Widget>[
+                const SizedBox(height: 4),
+                Text(
+                  entry.eventTitle!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _agendaChannelsMuted,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
               Text(
-                hasPopularityMetric ? 'POPULARIDAD PUBLICADA' : 'FUENTE DE AGENDA',
+                entry.eventTitle != null
+                    ? 'VINCULADO A UN EVENTO DE HOY'
+                    : (hasPopularityMetric ? 'POPULARIDAD PUBLICADA' : 'FUENTE DE AGENDA'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -322,7 +414,7 @@ class _EmptyAgendaChannels extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             const Text(
-              'TODAVÍA NO HAY CANALES CAPTURADOS',
+              'TODAVÍA NO HAY TRANSMISIONES CAPTURADAS',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white,
@@ -332,7 +424,7 @@ class _EmptyAgendaChannels extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Abre Agenda y espera a que cargue: las opciones de canales publicadas se guardarán automáticamente y aparecerán aquí. Las transmisiones vinculadas a cada evento se mostrarán en su sección cuando estén disponibles.',
+              'Las fuentes HTTPS asociadas a cada evento aparecerán aquí cuando la Agenda termine de cargar. Las entradas que solo abren la propia Agenda se excluyen automáticamente.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: _agendaChannelsMuted,
