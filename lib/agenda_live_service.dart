@@ -40,6 +40,7 @@ class AgendaTransmissionOption {
     final name = (map['name'] ?? map['label'] ?? map['title'] ?? '')
         .toString()
         .trim();
+    if (isAgendaLandingPageReference(name, url)) return null;
     final order = int.tryParse((map['order'] ?? fallbackOrder).toString()) ??
         fallbackOrder;
     final score = int.tryParse(
@@ -70,6 +71,37 @@ bool isSafeAgendaTransmissionUrl(String value) {
       uri.hasAuthority &&
       uri.host.isNotEmpty &&
       uri.userInfo.isEmpty;
+}
+
+/// Elimina de los catálogos los enlaces que llevan de vuelta a la propia
+/// agenda, ya que no son una transmisión deportiva.
+bool isAgendaLandingPageReference(String name, String url) {
+  final normalizedName = name
+      .toLowerCase()
+      .replaceAll('á', 'a')
+      .replaceAll('é', 'e')
+      .replaceAll('í', 'i')
+      .replaceAll('ó', 'o')
+      .replaceAll('ú', 'u')
+      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+      .trim();
+  final uri = Uri.tryParse(url.trim());
+  final host = uri?.host.toLowerCase().replaceFirst(RegExp(r'^www\\.'), '') ?? '';
+  final path = uri?.path.toLowerCase() ?? '';
+  final agendaLabel = normalizedName.contains('agenda') ||
+      normalizedName == 'programacion del dia' ||
+      normalizedName == 'programacion deportiva';
+  final agendaRoute = RegExp(r'(^|/)(agenda|programacion|calendario)(/|$)')
+      .hasMatch(path);
+  final agendaHome = host == 'futbol-libre.cam' &&
+      (path.isEmpty || path == '/');
+  return agendaLabel || agendaRoute || agendaHome;
+}
+
+bool isSameLocalAgendaDay(DateTime first, DateTime second) {
+  final a = first.toLocal();
+  final b = second.toLocal();
+  return a.year == b.year && a.month == b.month && a.day == b.day;
 }
 
 /// Highest published popularity score wins. When the site exposes no metric,
@@ -295,6 +327,22 @@ class AgendaLiveAssignment {
   final AgendaTransmissionOption option;
 }
 
+class AgendaChannelEntry {
+  const AgendaChannelEntry({
+    required this.option,
+    this.eventId,
+    this.eventTitle,
+    this.startsAt,
+  });
+
+  final AgendaTransmissionOption option;
+  final String? eventId;
+  final String? eventTitle;
+  final DateTime? startsAt;
+
+  bool get belongsToEvent => eventId != null;
+}
+
 class AgendaLivePendingEvent {
   const AgendaLivePendingEvent({
     required this.event,
@@ -348,8 +396,8 @@ class AgendaLiveService {
     final retained = byId.values
         .where((event) =>
             !event.isFinished &&
-            now.isBefore(event.effectiveEndsAt.add(const Duration(hours: 1))) &&
-            !event.startsAt.isBefore(now.subtract(const Duration(hours: 24))))
+            isSameLocalAgendaDay(event.startsAt, now) &&
+            now.isBefore(event.effectiveEndsAt.add(const Duration(hours: 1))))
         .toList(growable: false)
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
     await prefs.setString(
@@ -404,6 +452,55 @@ class AgendaLiveService {
     return _readChannels(prefs);
   }
 
+  /// Une los canales independientes con las opciones publicadas dentro de
+  /// cada evento de hoy. Conserva la relación evento-transmisión y descarta
+  /// enlaces que solo vuelven a abrir la Agenda.
+  Future<List<AgendaChannelEntry>> loadChannelsForCurrentDay({
+    DateTime? now,
+  }) async {
+    final current = (now ?? DateTime.now()).toLocal();
+    final events = await loadCapturedEvents();
+    final entries = <AgendaChannelEntry>[];
+    final usedEventUrls = <String>{};
+    final todaysEvents = events.where((event) =>
+        isSameLocalAgendaDay(event.startsAt, current) &&
+        !event.isFinished &&
+        current.isBefore(event.effectiveEndsAt)).toList()
+      ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+
+    for (final event in todaysEvents) {
+      for (final option in rankAgendaTransmissionOptions(
+        event.transmissionOptions,
+      )) {
+        final key = '${event.id}|${option.url}';
+        if (!isSafeAgendaTransmissionUrl(option.url) ||
+            isAgendaLandingPageReference(option.name, option.url) ||
+            !usedEventUrls.add(key)) {
+          continue;
+        }
+        entries.add(AgendaChannelEntry(
+          option: option,
+          eventId: event.id,
+          eventTitle: event.title,
+          startsAt: event.startsAt,
+        ));
+      }
+    }
+
+    final usedUrls = entries.map((entry) => entry.option.url).toSet();
+    final standalone = await loadCapturedChannels();
+    standalone.sort((a, b) => a.order.compareTo(b.order));
+    for (final option in standalone) {
+      if (!isSafeAgendaTransmissionUrl(option.url) ||
+          isAgendaLandingPageReference(option.name, option.url) ||
+          !usedUrls.add(option.url)) {
+        continue;
+      }
+      entries.add(AgendaChannelEntry(option: option));
+    }
+    return entries;
+  }
+
   static List<AgendaTransmissionOption> _readChannels(
     SharedPreferences prefs,
   ) {
@@ -433,8 +530,8 @@ class AgendaLiveService {
     final activeEvents = stored
         .where((event) =>
             !event.isFinished &&
-            current.isBefore(event.effectiveEndsAt) &&
-            !event.startsAt.isBefore(current.subtract(const Duration(hours: 24))))
+            isSameLocalAgendaDay(event.startsAt, current) &&
+            current.isBefore(event.effectiveEndsAt))
         .toList(growable: false)
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
 
