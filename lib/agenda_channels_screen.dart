@@ -300,7 +300,7 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
     );
     setState(() => _selectedSource = source);
   }
-
+}
 
 class _TransmissionOptionTile extends StatelessWidget {
   const _TransmissionOptionTile({
