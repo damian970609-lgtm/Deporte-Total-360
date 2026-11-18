@@ -391,15 +391,6 @@ class LiveSharedPlayerPanel extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  if (selected != null)
-                    IconButton(
-                      tooltip: 'Cerrar transmisión',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () {
-                        // La selección se gestiona en la pantalla anfitriona.
-                      },
-                      icon: const Icon(Icons.play_arrow_rounded, color: _liveCyan, size: 17),
-                    ),
                 ],
               ),
               if (selected != null) ...<Widget>[
