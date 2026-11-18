@@ -50,6 +50,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
     pending: <AgendaLivePendingEvent>[],
     transmissionOptionCount: 0,
   );
+  LivePlayerSource? _selectedSource;
 
   @override
   void initState() {
@@ -276,11 +277,28 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
             ),
           ),
           Expanded(
-            child: LivePlayerBoard(
-              sources: sources,
-              waitingEvents: waiting,
-              isActive: widget.isActive,
-              showOnlyAssignedEvents: true,
+            child: Column(
+              children: <Widget>[
+                LiveSharedPlayerPanel(
+                  source: _selectedSource,
+                  isActive: widget.isActive,
+                  emptyMessage: 'Selecciona un evento y pulsa PLAY para verlo aquí.',
+                ),
+                Expanded(
+                  child: _LiveEventTransmissionList(
+                    assignments: _board.assignments,
+                    pendingEvents: _board.pending
+                        .where((pending) => isAgendaEventWithinLiveWindow(
+                              pending.event,
+                              DateTime.now(),
+                            ))
+                        .toList(growable: false),
+                    onPlay: (source) {
+                      if (mounted) setState(() => _selectedSource = source);
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -321,6 +339,319 @@ class LivePlayerWaitingEvent {
   final String startLabel;
   final String processStatus;
   final String processDetail;
+}
+
+/// Reproductor único y fijo que comparten Canales deportivos y En vivo.
+class LiveSharedPlayerPanel extends StatelessWidget {
+  const LiveSharedPlayerPanel({
+    super.key,
+    required this.source,
+    this.isActive = true,
+    this.emptyMessage = 'Selecciona una transmisión para reproducirla aquí.',
+  });
+
+  final LivePlayerSource? source;
+  final bool isActive;
+  final String emptyMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final playerHeight = (constraints.maxWidth * 9 / 16)
+            .clamp(160.0, 255.0)
+            .toDouble();
+        final selected = source;
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.fromLTRB(10, 9, 10, 7),
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: _livePanel,
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: _liveCyan.withAlpha(170), width: 1.2),
+            boxShadow: <BoxShadow>[
+              BoxShadow(color: _liveCyan.withAlpha(22), blurRadius: 13),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  const Icon(Icons.live_tv_rounded, color: _liveCyan, size: 17),
+                  const SizedBox(width: 7),
+                  const Text(
+                    'REPRODUCTOR DEPORTE TOTAL 360°',
+                    style: TextStyle(
+                      color: _liveCyan,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: .45,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (selected != null)
+                    IconButton(
+                      tooltip: 'Cerrar transmisión',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () {
+                        // La selección se gestiona en la pantalla anfitriona.
+                      },
+                      icon: const Icon(Icons.play_arrow_rounded, color: _liveCyan, size: 17),
+                    ),
+                ],
+              ),
+              if (selected != null) ...<Widget>[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6, left: 2, right: 2),
+                  child: Text(
+                    selected.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+              SizedBox(
+                height: playerHeight,
+                width: double.infinity,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: selected == null
+                      ? Container(
+                          color: Colors.black,
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  const Icon(Icons.play_circle_outline_rounded,
+                                      color: _liveCyan, size: 45),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    emptyMessage,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: _liveMuted,
+                                      fontSize: 10,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        )
+                      : selected.useEmbeddedPage
+                          ? _LiveWebPageTile(
+                              key: ValueKey<String>('shared-web-${selected.eventId ?? ''}-${selected.url}'),
+                              source: selected,
+                              autoStart: true,
+                              isActive: isActive,
+                            )
+                          : _LiveVideoTile(
+                              key: ValueKey<String>('shared-media-${selected.eventId ?? ''}-${selected.url}'),
+                              source: selected,
+                              initiallyMuted: false,
+                              autoStart: true,
+                              isActive: isActive,
+                            ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _LiveEventEntry {
+  const _LiveEventEntry({
+    required this.event,
+    this.option,
+    this.status = '',
+    this.detail = '',
+  });
+
+  final AgendaEventReference event;
+  final AgendaTransmissionOption? option;
+  final String status;
+  final String detail;
+}
+
+class _LiveEventTransmissionList extends StatelessWidget {
+  const _LiveEventTransmissionList({
+    required this.assignments,
+    required this.pendingEvents,
+    required this.onPlay,
+  });
+
+  final List<AgendaLiveAssignment> assignments;
+  final List<AgendaLivePendingEvent> pendingEvents;
+  final ValueChanged<LivePlayerSource> onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = <_LiveEventEntry>[
+      ...assignments.map((assignment) => _LiveEventEntry(
+            event: assignment.event,
+            option: assignment.option,
+          )),
+      ...pendingEvents.map((pending) => _LiveEventEntry(
+            event: pending.event,
+            status: pending.status,
+            detail: pending.detail,
+          )),
+    ]..sort((a, b) => a.event.startsAt.compareTo(b.event.startsAt));
+
+    if (entries.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(Icons.sports_soccer_rounded, color: _liveCyan, size: 42),
+              SizedBox(height: 10),
+              Text(
+                'NO HAY EVENTOS EN PREPARACIÓN O EN VIVO',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              SizedBox(height: 6),
+              Text(
+                'Cada evento aparecerá desde cinco minutos antes de comenzar, con su propia ficha y botón PLAY cuando exista una transmisión publicada.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: _liveMuted, fontSize: 10, height: 1.45),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(10, 2, 10, 18),
+      itemCount: entries.length,
+      itemBuilder: (context, index) {
+        final entry = entries[index];
+        final event = entry.event;
+        final localStart = event.startsAt.toLocal();
+        final time = '${localStart.hour.toString().padLeft(2, '0')}:${localStart.minute.toString().padLeft(2, '0')}';
+        final competition = event.competition.isNotEmpty
+            ? event.competition
+            : 'EVENTO DEPORTIVO';
+        final option = entry.option;
+        final source = option == null ? null : LivePlayerSource(
+          title: event.title,
+          url: option.url,
+          subtitle: '${competition} · ${event.title} · ${option.name}',
+          eventId: event.id,
+          startAt: event.startsAt,
+          useEmbeddedPage: !isSupportedAuthorizedMediaUrl(option.url),
+        );
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 9),
+          padding: const EdgeInsets.all(11),
+          decoration: BoxDecoration(
+            color: _livePanel,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: option == null
+                  ? _livePink.withAlpha(120)
+                  : _liveCyan.withAlpha(170),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  const Icon(Icons.sports_rounded, color: _liveCyan, size: 18),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      competition,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: _liveCyan,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    time,
+                    style: const TextStyle(color: _liveMuted, fontSize: 10),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                event.title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      option == null
+                          ? (entry.status.isNotEmpty ? entry.status : 'TRANSMISIÓN NO DISPONIBLE')
+                          : 'TRANSMISIÓN: ${option.name}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: option == null ? _liveMuted : _liveGreen,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: source == null ? null : () => onPlay(source),
+                    icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                    label: const Text('PLAY'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _liveCyan,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                      minimumSize: const Size(72, 38),
+                    ),
+                  ),
+                ],
+              ),
+              if (entry.detail.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 5),
+                Text(
+                  entry.detail,
+                  style: const TextStyle(color: _liveMuted, fontSize: 8, height: 1.3),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// Solo arranca automáticamente el primer canal para evitar ocho
