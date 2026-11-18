@@ -180,14 +180,14 @@ class _AdminTestService extends ChannelCatalogService {
 }
 
 void main() {
-  testWidgets('Canales deportivos muestra solo los canales independientes de Agenda', (tester) async {
+  testWidgets('Canales deportivos combina canales independientes con fuentes de eventos de hoy', (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     SharedPreferences.setMockInitialValues(<String, Object>{
       'dt360_agenda_channels_v1':
           '[{"id":"channel-1","name":"ESPN Español","url":"https://channels.example/espn","order":0}]',
       'dt360_agenda_live_references_v1':
-          '[{"id":"match-1","title":"Equipo Azul vs Equipo Rojo","competition":"Liga de prueba","startsAt":"2026-11-18T09:00:00","channelReferences":[],"transmissionOptions":[{"id":"event-link","name":"Transmisión del evento","url":"https://player.example/event","order":0}],"status":"unknown"}]',
+          '[{"id":"match-1","title":"Equipo Azul vs Equipo Rojo","competition":"Liga de prueba","startsAt":"${DateTime.now().subtract(const Duration(minutes: 5)).toIso8601String()}","channelReferences":[],"transmissionOptions":[{"id":"event-link","name":"Transmisión del evento","url":"https://player.example/event","order":0}],"status":"unknown"}]',
     });
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(390, 844);
@@ -204,9 +204,10 @@ void main() {
     expect(find.text('REPRODUCTOR DEPORTE TOTAL 360°'), findsOneWidget);
     expect(find.text('CANALES DISPONIBLES'), findsOneWidget);
     expect(find.text('ESPN Español'), findsOneWidget);
-    expect(find.text('TRANSMISIONES POR EVENTO'), findsNothing);
+    expect(find.text('TRANSMISIONES DE LOS EVENTOS DE HOY'), findsOneWidget);
+    expect(find.text('VINCULADO A UN EVENTO DE HOY'), findsOneWidget);
     expect(find.text('Liga de prueba'), findsNothing);
-    expect(find.text('Transmisión del evento'), findsNothing);
+    expect(find.text('Transmisión del evento'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
