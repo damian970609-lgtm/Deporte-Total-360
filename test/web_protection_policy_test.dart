@@ -45,6 +45,20 @@ void main() {
       );
       expect(
         WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+          'https://player.futbol-libre.cam/embed/espn',
+          playerUrl: 'https://futbol-libre.cam/canal/espn',
+        ),
+        isTrue,
+      );
+      expect(
+        WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+          'http://futbol-libre.cam/partido/123',
+          playerUrl: 'https://futbol-libre.cam/canal/espn',
+        ),
+        isFalse,
+      );
+      expect(
+        WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
           'https://doubleclick.net/redirect',
           playerUrl: 'https://futbol-libre.cam/canal/espn',
         ),
