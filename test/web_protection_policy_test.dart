@@ -21,6 +21,51 @@ void main() {
       expect(WebProtectionPolicy.isBlockedUrl('https://player.example.net/live/index.m3u8'), isFalse);
     });
 
+    test('el reproductor solo permite navegación principal en su mismo dominio', () {
+      expect(
+        WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+          'https://futbol-libre.cam/partido/123',
+          playerUrl: 'https://futbol-libre.cam/canal/espn',
+        ),
+        isTrue,
+      );
+      expect(
+        WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+          'https://www.futbol-libre.cam/partido/123',
+          playerUrl: 'https://futbol-libre.cam/canal/espn',
+        ),
+        isTrue,
+      );
+      expect(
+        WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+          'https://basura.example/redirect',
+          playerUrl: 'https://futbol-libre.cam/canal/espn',
+        ),
+        isFalse,
+      );
+      expect(
+        WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+          'https://doubleclick.net/redirect',
+          playerUrl: 'https://futbol-libre.cam/canal/espn',
+        ),
+        isFalse,
+      );
+      expect(
+        WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+          'javascript:window.location="https://basura.example"',
+          playerUrl: 'https://futbol-libre.cam/canal/espn',
+        ),
+        isFalse,
+      );
+    });
+
+    test('el reproductor permite iframes de video externos sin abrir otra página', () {
+      expect(
+        WebProtectionPolicy.isBlockedUrl('https://player-cdn.example/embed/live'),
+        isFalse,
+      );
+    });
+
     test('construye todos los bloqueadores en una lista modificable', () {
       final blockers = WebProtectionPolicy.buildContentBlockers();
 
