@@ -26,9 +26,7 @@ const Color _liveMuted = Color(0xFFEAF0F8);
 bool isSupportedAuthorizedMediaUrl(String value) =>
     liveMediaFormatForUrl(value) != null;
 
-/// Pantalla visible con los ocho reproductores preparados.
-/// La configuración de señales anterior se ha retirado; se conectará un
-/// método nuevo en una actualización posterior.
+/// Pantalla de eventos en vivo con un reproductor compartido y fijo.
 class LiveChannelsScreen extends StatefulWidget {
   const LiveChannelsScreen({super.key, this.isActive = true});
 
@@ -130,56 +128,9 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
     }
   }
 
-  List<LivePlayerSource> _playerSources() {
-    return _board.assignments.take(8).map((assignment) {
-      final event = assignment.event;
-      final option = assignment.option;
-      final details = <String>[
-        if (event.competition.isNotEmpty) event.competition,
-        event.title,
-        option.name,
-      ];
-      return LivePlayerSource(
-        title: 'DEPORTE TOTAL 360° · ${option.name}',
-        url: option.url,
-        subtitle: details.join(' · '),
-        eventId: event.id,
-        startAt: event.startsAt,
-        useEmbeddedPage: liveMediaFormatForUrl(option.url) == null,
-      );
-    }).toList(growable: false);
-  }
-
-  List<LivePlayerWaitingEvent> _waitingEvents() {
-    final now = DateTime.now();
-    return _board.pending
-        .where((pending) =>
-            isAgendaEventWithinLiveWindow(pending.event, now))
-        .take(8)
-        .map((pending) {
-      final event = pending.event;
-      final start = event.startsAt.toLocal();
-      final time = '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
-      final heading = event.competition.isNotEmpty
-          ? event.competition
-          : 'AGENDA DEPORTIVA';
-      final startLabel = now.isBefore(event.startsAt)
-          ? 'Comienza a las $time'
-          : 'Evento iniciado · $time';
-      return LivePlayerWaitingEvent(
-        heading: heading,
-        match: event.title,
-        startLabel: startLabel,
-        processStatus: pending.status,
-        processDetail: pending.detail,
-      );
-    }).toList(growable: false);
-  }
 
   @override
   Widget build(BuildContext context) {
-    final sources = _playerSources();
-    final waiting = _waitingEvents();
     return Scaffold(
       backgroundColor: _liveBg,
       appBar: AppBar(
@@ -206,99 +157,44 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
       ),
       body: Column(
         children: <Widget>[
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 11),
-            decoration: const BoxDecoration(
-              color: _livePanel,
-              border: Border(bottom: BorderSide(color: _liveLine)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                const Text(
-                  'EVENTOS EN PREPARACIÓN O EN VIVO',
-                  style: TextStyle(
-                    color: _liveCyan,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: .7,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'ACTIVACIÓN AUTOMÁTICA · 5 MINUTOS ANTES',
-                  style: TextStyle(
-                    color: _livePink,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: .55,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                const Text(
-                  'Los eventos aparecen aquí desde cinco minutos antes de comenzar. Los enlaces multimedia directos usan el reproductor de la app; las páginas web se abren dentro del cuadro con el reproductor del propio sitio.',
-                  style: TextStyle(
-                    color: _liveMuted,
-                    fontSize: 10,
-                    height: 1.45,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  '${sources.length} reproductores asignados · ${waiting.length} eventos en espera dentro de la ventana · ${_board.transmissionOptionCount} opciones capturadas',
-                  style: const TextStyle(
-                    color: _liveCyan,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                if (_loading || _refreshing)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 7),
-                    child: LinearProgressIndicator(
-                      minHeight: 2,
-                      color: _liveCyan,
-                      backgroundColor: _livePanel2,
-                    ),
-                  ),
-                if (_notice != null) ...<Widget>[
-                  const SizedBox(height: 6),
-                  Text(
-                    _notice!,
-                    style: const TextStyle(
-                      color: Color(0xFFFFB4C0),
-                      fontSize: 9,
-                      height: 1.35,
-                    ),
-                  ),
-                ],
-              ],
-            ),
+          LiveSharedPlayerPanel(
+            source: _selectedSource,
+            compact: true,
+            isActive: widget.isActive,
+            emptyMessage: 'Selecciona un evento y pulsa PLAY para verlo aquí.',
           ),
+          if (_loading || _refreshing)
+            const LinearProgressIndicator(
+              minHeight: 2,
+              color: _liveCyan,
+              backgroundColor: _livePanel2,
+            ),
+          if (_notice != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 7),
+              child: Text(
+                _notice!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFFFFB4C0),
+                  fontSize: 9,
+                  height: 1.3,
+                ),
+              ),
+            ),
           Expanded(
-            child: Column(
-              children: <Widget>[
-                LiveSharedPlayerPanel(
-                  source: _selectedSource,
-                  isActive: widget.isActive,
-                  emptyMessage: 'Selecciona un evento y pulsa PLAY para verlo aquí.',
-                ),
-                Expanded(
-                  child: _LiveEventTransmissionList(
-                    assignments: _board.assignments,
-                    pendingEvents: _board.pending
-                        .where((pending) => isAgendaEventWithinLiveWindow(
-                              pending.event,
-                              DateTime.now(),
-                            ))
-                        .toList(growable: false),
-                    onPlay: (source) {
-                      if (mounted) setState(() => _selectedSource = source);
-                    },
-                  ),
-                ),
-              ],
+            child: _LiveEventTransmissionList(
+              assignments: _board.assignments,
+              pendingEvents: _board.pending
+                  .where((pending) => isAgendaEventWithinLiveWindow(
+                        pending.event,
+                        DateTime.now(),
+                      ))
+                  .toList(growable: false),
+              onPlay: (source) {
+                if (mounted) setState(() => _selectedSource = source);
+              },
             ),
           ),
         ],
@@ -347,11 +243,13 @@ class LiveSharedPlayerPanel extends StatelessWidget {
     super.key,
     required this.source,
     this.isActive = true,
+    this.compact = false,
     this.emptyMessage = 'Selecciona una transmisión para reproducirla aquí.',
   });
 
   final LivePlayerSource? source;
   final bool isActive;
+  final bool compact;
   final String emptyMessage;
 
   @override
@@ -359,12 +257,12 @@ class LiveSharedPlayerPanel extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final playerHeight = (constraints.maxWidth * 9 / 16)
-            .clamp(160.0, 255.0)
+            .clamp(compact ? 112.0 : 160.0, compact ? 190.0 : 255.0)
             .toDouble();
         final selected = source;
         return Container(
           width: double.infinity,
-          margin: const EdgeInsets.fromLTRB(10, 9, 10, 7),
+          margin: EdgeInsets.fromLTRB(10, compact ? 6 : 9, 10, compact ? 5 : 7),
           padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
             color: _livePanel,
