@@ -111,8 +111,16 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
     try {
       final next = await _agendaLive.buildBoardState(now: DateTime.now());
       if (!mounted) return;
+      final retainedEventIds = <String>{
+        ...next.assignments.map((assignment) => assignment.event.id),
+        ...next.pending.map((pending) => pending.event.id),
+      };
       setState(() {
         _board = next;
+        if (_selectedSource?.eventId != null &&
+            !retainedEventIds.contains(_selectedSource!.eventId)) {
+          _selectedSource = null;
+        }
         _loading = false;
         _notice = null;
       });
@@ -170,6 +178,45 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
               color: _liveCyan,
               backgroundColor: _livePanel2,
             ),
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.fromLTRB(10, 3, 10, 7),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: <Color>[Color(0xFF071B31), Color(0xFF17101A)],
+              ),
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: _liveCyan.withAlpha(115)),
+            ),
+            child: Row(
+              children: <Widget>[
+                const Icon(Icons.sports_score_rounded, color: _liveCyan, size: 20),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'UNA TRANSMISIÓN POR EVENTO · SOLO HOY',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: .35,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${_board.assignments.length}',
+                  style: const TextStyle(
+                    color: _liveGreen,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
           if (_notice != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 7),
@@ -457,13 +504,24 @@ class _LiveEventTransmissionList extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 9),
           padding: const EdgeInsets.all(11),
           decoration: BoxDecoration(
-            color: _livePanel,
-            borderRadius: BorderRadius.circular(12),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: <Color>[Color(0xFF111A27), Color(0xFF07090D)],
+            ),
+            borderRadius: BorderRadius.circular(15),
             border: Border.all(
               color: option == null
                   ? _livePink.withAlpha(120)
                   : _liveCyan.withAlpha(170),
             ),
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: (option == null ? _livePink : _liveCyan).withAlpha(18),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
