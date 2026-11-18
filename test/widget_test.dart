@@ -181,6 +181,8 @@ class _AdminTestService extends ChannelCatalogService {
 
 void main() {
   testWidgets('Canales deportivos muestra solo los canales independientes de Agenda', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     SharedPreferences.setMockInitialValues(<String, Object>{
       'dt360_agenda_channels_v1':
           '[{"id":"channel-1","name":"ESPN Español","url":"https://channels.example/espn","order":0}]',
