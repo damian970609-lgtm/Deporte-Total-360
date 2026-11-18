@@ -270,7 +270,7 @@ class _TransmissionOptionTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         onTap: () => onPlay(entry),
         child: Container(
-          padding: const EdgeInsets.all(9),
+          padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
