@@ -190,8 +190,8 @@ class _AgendaWebScreenState extends State<AgendaWebScreen> {
 
   Future<void> _applyAgendaOnlyView(InAppWebViewController controller) async {
     try {
-      await controller.evaluateJavascript(source: _agendaOnlyScript);
       await controller.evaluateJavascript(source: _agendaLiveCaptureScript);
+      await controller.evaluateJavascript(source: _agendaOnlyScript);
     } catch (error) {
       debugPrint('No se pudo aplicar el filtro o leer los eventos de Agenda: $error');
     }
@@ -205,12 +205,29 @@ class _AgendaWebScreenState extends State<AgendaWebScreen> {
     }
   }
 
+  Future<void> _storeCapturedAgendaChannels(dynamic payload) async {
+    try {
+      await AgendaLiveService().captureAgendaChannels(payload);
+    } catch (error) {
+      debugPrint('No se pudieron guardar los canales publicados en Agenda: $error');
+    }
+  }
+
   void _registerAgendaBridge(InAppWebViewController controller) {
     controller.addJavaScriptHandler(
       handlerName: 'dt360AgendaEvents',
       callback: (arguments) {
         if (arguments.isNotEmpty) {
           unawaited(_storeCapturedAgendaEvents(arguments.first));
+        }
+        return true;
+      },
+    );
+    controller.addJavaScriptHandler(
+      handlerName: 'dt360AgendaChannels',
+      callback: (arguments) {
+        if (arguments.isNotEmpty) {
+          unawaited(_storeCapturedAgendaChannels(arguments.first));
         }
         return true;
       },
@@ -404,6 +421,50 @@ const String _agendaOnlyScript = r'''
       }
     });
 
+    // Quita las tarjetas independientes de canales de debajo de la agenda.
+    // Las fichas que contienen una hora de evento se conservan.
+    const channelAction = /(abrir canal|ver canal|reproducir canal|watch channel|open channel)/i;
+    document.querySelectorAll('a[href], button[data-href], button[data-url], [role="link"][href], [role="button"][data-href], [role="button"][data-url]').forEach((element) => {
+      const label = visibleLabel(element);
+      if (!channelAction.test(label)) return;
+      let candidate = element;
+      let target = element;
+      for (let depth = 0; depth < 8 && candidate && candidate !== document.body; depth += 1) {
+        const value = normalize(candidate.innerText || candidate.textContent || '');
+        const clocks = (value.match(/\\b(?:[01]?\\d|2[0-3]):[0-5]\\d\\b/g) || []).length;
+        if (clocks > 0 || /\\b(?:vs?\\.?|versus)\\b/i.test(value)) return;
+        if (value.length >= 3 && value.length <= 900) target = candidate;
+        const className = String(candidate.className || '').toLowerCase();
+        if (candidate.matches('article, li, section') || /card|channel|station/.test(className)) break;
+        candidate = candidate.parentElement;
+      }
+      target.style.setProperty('display', 'none', 'important');
+    });
+
+    function visibleLabel(element) {
+      return normalize(element.innerText || element.textContent ||
+        element.getAttribute('aria-label') || element.getAttribute('title') || '');
+    }
+
+    // Tocar una ficha de evento en Agenda no navega ni expande nada.
+    if (!window.__dt360AgendaEventTapDisabled) {
+      document.addEventListener('click', (clickEvent) => {
+        let candidate = clickEvent.target;
+        for (let depth = 0; depth < 9 && candidate && candidate !== document.body; depth += 1) {
+          const value = normalize(candidate.innerText || candidate.textContent || '');
+          const clocks = (value.match(/\\b(?:[01]?\\d|2[0-3]):[0-5]\\d\\b/g) || []).length;
+          if (clocks > 0 && clocks <= 2 && value.length >= 18 && value.length <= 950) {
+            clickEvent.preventDefault();
+            clickEvent.stopPropagation();
+            if (clickEvent.stopImmediatePropagation) clickEvent.stopImmediatePropagation();
+            return;
+          }
+          if (clocks > 2 || value.length > 950) return;
+          candidate = candidate.parentElement;
+        }
+      }, true);
+      window.__dt360AgendaEventTapDisabled = true;
+    }
   }
 
   window.__dt360ApplyAgendaFilter = applyAgendaFilter;
@@ -590,7 +651,6 @@ const String _agendaLiveCaptureScript = r'''
       '[role="link"][href], [role="button"][data-href], [role="button"][data-url]';
     const elements = Array.from(root.querySelectorAll(selector));
     elements.forEach((element, index) => {
-      if (element.getClientRects && element.getClientRects().length === 0) return;
       const label = visibleText(element) ||
         element.getAttribute('aria-label') ||
         element.getAttribute('title') || '';
@@ -632,6 +692,66 @@ const String _agendaLiveCaptureScript = r'''
         url: url,
         order: index,
         popularityScore: popularityScore
+      });
+    });
+    return found;
+  }
+
+  function readStandaloneChannels(root) {
+    const found = [];
+    const controls = Array.from(root.querySelectorAll(
+      'a[href], button[data-href], button[data-url], [role="link"][href], [role="button"][data-href], [role="button"][data-url]'
+    ));
+    controls.forEach((element, index) => {
+      const actionText = visibleText(element) ||
+        element.getAttribute('aria-label') || element.getAttribute('title') || '';
+      const metadata = [
+        actionText, element.className,
+        element.getAttribute('aria-label'), element.getAttribute('title')
+      ].join(' ');
+      if (!/(abrir canal|ver canal|reproducir canal|watch channel|open channel|channel|canal)/i.test(metadata)) return;
+
+      const rawUrl = element.href ||
+        element.getAttribute('data-href') ||
+        element.getAttribute('data-url') || '';
+      let url = '';
+      try { url = new URL(rawUrl, document.baseURI).href; } catch (_) { return; }
+      if (!/^https:\\/\\//i.test(url)) return;
+
+      let card = element;
+      let best = element;
+      for (let depth = 0; depth < 8 && card && card !== document.body; depth += 1) {
+        const value = visibleText(card);
+        const clocks = (value.match(timeGlobalPattern) || []).length;
+        if (clocks > 0 || /\\b(?:vs?\\.?|versus)\\b/i.test(value)) return;
+        if (value.length >= 2 && value.length <= 900) best = card;
+        const className = String(card.className || '').toLowerCase();
+        if (card.matches('article, li, section') || /card|channel|station/.test(className)) break;
+        card = card.parentElement;
+      }
+
+      const titleNodes = Array.from(best.querySelectorAll(
+        'h1, h2, h3, h4, [class*="title"], strong, b'
+      ));
+      const ignored = /^(canal|channel|abrir canal|ver canal|reproducir|play|watch|en vivo|live)$/i;
+      const titleNode = titleNodes.find((node) => {
+        const value = visibleText(node);
+        return value.length >= 2 && value.length <= 70 && !ignored.test(value);
+      });
+      let name = titleNode ? visibleText(titleNode) : '';
+      if (!name) {
+        const lines = visibleText(best).split(/\\n+/).map((line) => line.trim()).filter(Boolean);
+        name = lines.find((line) => line.length >= 2 && line.length <= 70 &&
+          !ignored.test(line) && !/(programación deportiva|grandes torneos|abrir canal|ver canal)/i.test(line)) || '';
+      }
+      if (!name) return;
+      if (found.some((item) => item.url === url)) return;
+      found.push({
+        id: 'channel-' + index + '-' + url,
+        name: name,
+        url: url,
+        order: index,
+        popularityScore: 0
       });
     });
     return found;
@@ -725,8 +845,8 @@ const String _agendaLiveCaptureScript = r'''
   }
 
   let lastSignature = '';
+  let lastChannelSignature = '';
   let queued = false;
-  let activeEvent = null;
   function emitAgendaEvents() {
     queued = false;
     if (!window.flutter_inappwebview ||
@@ -752,14 +872,12 @@ const String _agendaLiveCaptureScript = r'''
       keys.add(key);
       unique.push(event);
     }
-    if (activeEvent) {
-      const expandedOptions = readTransmissionOptions(document.body);
-      if (expandedOptions.length > 0) {
-        activeEvent.transmissionOptions = expandedOptions;
-        const existingIndex = unique.findIndex((event) => event.id === activeEvent.id);
-        if (existingIndex >= 0) unique[existingIndex] = activeEvent;
-        else unique.push(activeEvent);
-      }
+
+    const channels = readStandaloneChannels(document.body);
+    const channelSignature = JSON.stringify(channels);
+    if (channels.length > 0 && channelSignature !== lastChannelSignature) {
+      lastChannelSignature = channelSignature;
+      window.flutter_inappwebview.callHandler('dt360AgendaChannels', channels);
     }
     if (unique.length === 0) return;
     const signature = JSON.stringify(unique);
@@ -783,31 +901,8 @@ const String _agendaLiveCaptureScript = r'''
     window.setTimeout(emitAgendaEvents, 250);
   }
 
-  document.addEventListener('click', (clickEvent) => {
-    const target = clickEvent.target && clickEvent.target.closest
-      ? clickEvent.target.closest('a, button, [role="button"], [data-event-id]')
-      : null;
-    if (target) {
-      let candidate = target;
-      for (let depth = 0; depth < 9 && candidate &&
-          candidate !== document.body && candidate !== document.documentElement; depth += 1) {
-        const timeNode = candidate.querySelector &&
-          candidate.querySelector('time[datetime], [data-time], [data-start-time], time');
-        const containsClock = timePattern.test(visibleText(candidate));
-        if (timeNode || containsClock) {
-          const card = timeNode ? findEventCard(timeNode) : candidate;
-          const event = readEvent(card);
-          if (event) {
-            activeEvent = event;
-            break;
-          }
-        }
-        candidate = candidate.parentElement;
-      }
-    }
+  document.addEventListener('click', () => {
     window.setTimeout(queueEmit, 250);
-    window.setTimeout(queueEmit, 900);
-    window.setTimeout(queueEmit, 1800);
   }, true);
 
   const observer = new MutationObserver(queueEmit);
