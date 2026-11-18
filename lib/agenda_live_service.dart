@@ -7,8 +7,9 @@ const String _agendaChannelsKey = 'dt360_agenda_channels_v1';
 const Duration agendaLivePreparationWindow = Duration(minutes: 5);
 const Duration _agendaEventFallbackDuration = Duration(hours: 3);
 
-/// A source option explicitly exposed as a clickable HTTPS link by the agenda.
-/// The app stores the page link; it does not inspect hidden iframe/video URLs.
+/// A source option explicitly published by an event card (including HTTPS
+/// links stored in data attributes). The app keeps the page link; it does not
+/// read embedded iframe/video URLs.
 class AgendaTransmissionOption {
   const AgendaTransmissionOption({
     required this.id,
@@ -86,7 +87,7 @@ bool isAgendaLandingPageReference(String name, String url) {
       .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
       .trim();
   final uri = Uri.tryParse(url.trim());
-  final host = uri?.host.toLowerCase().replaceFirst(RegExp(r'^www\\.'), '') ?? '';
+  final host = uri?.host.toLowerCase().replaceFirst(RegExp(r'^www\.'), '') ?? '';
   final path = uri?.path.toLowerCase() ?? '';
   final agendaLabel = normalizedName.contains('agenda') ||
       normalizedName == 'programacion del dia' ||
