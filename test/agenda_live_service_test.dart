@@ -217,6 +217,35 @@ void main() {
     expect(events.single.transmissionOptions.single.name, 'Canal oficial');
   });
 
+  test('asigna una transmisión a más de ocho eventos activos sin limitar el tablero', () async {
+    final service = AgendaLiveService();
+    final now = DateTime.now();
+    final events = List<Map<String, Object?>>.generate(10, (index) {
+      return _event(
+        id: 'active-match-$index',
+        title: 'Equipo $index vs Rival $index',
+        startsAt: now.subtract(const Duration(minutes: 1)),
+        options: <Map<String, Object?>>[
+          _option(
+            name: 'Transmisión $index',
+            url: 'https://player.example/live-$index',
+            order: index,
+          ),
+        ],
+      );
+    });
+
+    await service.captureAgendaEvents(events);
+    final state = await service.buildBoardState(now: now);
+
+    expect(state.assignments, hasLength(10));
+    expect(state.pending, isEmpty);
+    expect(
+      state.assignments.map((assignment) => assignment.event.id).toSet(),
+      hasLength(10),
+    );
+  });
+
   test('retira el evento cuando la agenda lo marca finalizado', () async {
     final service = AgendaLiveService();
     final now = DateTime.now();
