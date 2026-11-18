@@ -87,11 +87,16 @@ class WebProtectionPolicy {
     final target = Uri.tryParse(targetUrl.trim());
     final player = Uri.tryParse(playerUrl.trim());
     if (target == null || player == null) return false;
-    if (!_isWebUri(target) || !_isWebUri(player)) return false;
+    if (target.scheme != 'https' || player.scheme != 'https') return false;
+    if (target.host.isEmpty || player.host.isEmpty) return false;
     if (target.userInfo.isNotEmpty || player.userInfo.isNotEmpty) return false;
     if (isBlockedUrl(targetUrl)) return false;
 
-    return _withoutWww(target.host) == _withoutWww(player.host);
+    final targetHost = _withoutWww(target.host);
+    final playerHost = _withoutWww(player.host);
+    return targetHost == playerHost ||
+        targetHost.endsWith('.$playerHost') ||
+        playerHost.endsWith('.$targetHost');
   }
 
   /// Filtra recursos publicitarios conocidos y evita que una navegación
