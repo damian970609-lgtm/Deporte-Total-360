@@ -90,8 +90,7 @@ bool isAgendaLandingPageReference(String name, String url) {
   final host = uri?.host.toLowerCase().replaceFirst(RegExp(r'^www\.'), '') ?? '';
   final path = uri?.path.toLowerCase() ?? '';
   final agendaLabel = normalizedName.contains('agenda') ||
-      normalizedName == 'programacion del dia' ||
-      normalizedName == 'programacion deportiva';
+      normalizedName.startsWith('programacion');
   final agendaRoute = RegExp(r'(^|/)(agenda|programacion|calendario)(/|$)')
       .hasMatch(path);
   final agendaHome = host == 'futbol-libre.cam' &&
