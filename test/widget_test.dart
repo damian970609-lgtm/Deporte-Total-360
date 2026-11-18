@@ -180,6 +180,36 @@ class _AdminTestService extends ChannelCatalogService {
 }
 
 void main() {
+  testWidgets('Canales deportivos muestra solo los canales independientes de Agenda', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'dt360_agenda_channels_v1':
+          '[{"id":"channel-1","name":"ESPN Español","url":"https://channels.example/espn","order":0}]',
+      'dt360_agenda_live_references_v1':
+          '[{"id":"match-1","title":"Equipo Azul vs Equipo Rojo","competition":"Liga de prueba","startsAt":"2026-11-18T09:00:00","channelReferences":[],"transmissionOptions":[{"id":"event-link","name":"Transmisión del evento","url":"https://player.example/event","order":0}],"status":"unknown"}]',
+    });
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+
+    await tester.pumpWidget(
+      MaterialApp(home: AgendaChannelsScreen(onOpenAgenda: _noopHomeAction)),
+    );
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 30)),
+    );
+    await tester.pump();
+
+    expect(find.text('REPRODUCTOR DEPORTE TOTAL 360°'), findsOneWidget);
+    expect(find.text('CANALES DISPONIBLES'), findsOneWidget);
+    expect(find.text('ESPN Español'), findsOneWidget);
+    expect(find.text('TRANSMISIONES POR EVENTO'), findsNothing);
+    expect(find.text('Liga de prueba'), findsNothing);
+    expect(find.text('Transmisión del evento'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('DAMIAN.APK queda como firma y no abre el antiguo panel IPTV', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
@@ -707,7 +737,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump();
     expect(find.byType(LiveChannelsScreen), findsOneWidget);
-    expect(find.text('EVENTOS EN PREPARACIÓN O EN VIVO'), findsOneWidget);
+    expect(find.text('REPRODUCTOR DEPORTE TOTAL 360°'), findsOneWidget);
+    expect(find.text('EVENTOS EN PREPARACIÓN O EN VIVO'), findsNothing);
     expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsNothing);
     expect(find.text('SEÑAL PENDIENTE'), findsNothing);
     await tester.tap(find.text('Canales deportivos'));
