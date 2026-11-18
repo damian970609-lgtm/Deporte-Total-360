@@ -431,8 +431,8 @@ const String _agendaOnlyScript = r'''
       let target = element;
       for (let depth = 0; depth < 8 && candidate && candidate !== document.body; depth += 1) {
         const value = normalize(candidate.innerText || candidate.textContent || '');
-        const clocks = (value.match(/\\b(?:[01]?\\d|2[0-3]):[0-5]\\d\\b/g) || []).length;
-        if (clocks > 0 || /\\b(?:vs?\\.?|versus)\\b/i.test(value)) return;
+        const clocks = (value.match(/\b(?:[01]?\d|2[0-3]):[0-5]\d\b/g) || []).length;
+        if (clocks > 0 || /\b(?:vs?\\.?|versus)\b/i.test(value)) return;
         if (value.length >= 3 && value.length <= 900) target = candidate;
         const className = String(candidate.className || '').toLowerCase();
         if (candidate.matches('article, li, section') || /card|channel|station/.test(className)) break;
@@ -452,7 +452,7 @@ const String _agendaOnlyScript = r'''
         let candidate = clickEvent.target;
         for (let depth = 0; depth < 9 && candidate && candidate !== document.body; depth += 1) {
           const value = normalize(candidate.innerText || candidate.textContent || '');
-          const clocks = (value.match(/\\b(?:[01]?\\d|2[0-3]):[0-5]\\d\\b/g) || []).length;
+          const clocks = (value.match(/\b(?:[01]?\d|2[0-3]):[0-5]\d\b/g) || []).length;
           if (clocks > 0 && clocks <= 2 && value.length >= 18 && value.length <= 950) {
             clickEvent.preventDefault();
             clickEvent.stopPropagation();
@@ -716,14 +716,14 @@ const String _agendaLiveCaptureScript = r'''
         element.getAttribute('data-url') || '';
       let url = '';
       try { url = new URL(rawUrl, document.baseURI).href; } catch (_) { return; }
-      if (!/^https:\\/\\//i.test(url)) return;
+      if (!/^https:\/\//i.test(url)) return;
 
       let card = element;
       let best = element;
       for (let depth = 0; depth < 8 && card && card !== document.body; depth += 1) {
         const value = visibleText(card);
         const clocks = (value.match(timeGlobalPattern) || []).length;
-        if (clocks > 0 || /\\b(?:vs?\\.?|versus)\\b/i.test(value)) return;
+        if (clocks > 0 || /\b(?:vs?\\.?|versus)\b/i.test(value)) return;
         if (value.length >= 2 && value.length <= 900) best = card;
         const className = String(card.className || '').toLowerCase();
         if (card.matches('article, li, section') || /card|channel|station/.test(className)) break;
@@ -740,7 +740,7 @@ const String _agendaLiveCaptureScript = r'''
       });
       let name = titleNode ? visibleText(titleNode) : '';
       if (!name) {
-        const lines = visibleText(best).split(/\\n+/).map((line) => line.trim()).filter(Boolean);
+        const lines = visibleText(best).split(/\n+/).map((line) => line.trim()).filter(Boolean);
         name = lines.find((line) => line.length >= 2 && line.length <= 70 &&
           !ignored.test(line) && !/(programación deportiva|grandes torneos|abrir canal|ver canal)/i.test(line)) || '';
       }
