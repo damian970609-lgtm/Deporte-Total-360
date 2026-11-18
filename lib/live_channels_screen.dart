@@ -10,6 +10,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'live_media_format.dart';
 import 'stream_diagnostics.dart';
+import 'web_protection_policy.dart';
 
 
 const Color _liveBg = Color(0xFF000000);
@@ -1120,6 +1121,110 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
   }
 }
 
+const String _fitEmbeddedPlayerScript = r'''
+(function () {
+  const styleId = 'dt360-embedded-player-fit';
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent =
+      'html,body{width:100%!important;height:100%!important;margin:0!important;' +
+      'overflow:hidden!important;background:#000!important}' +
+      'video,iframe{max-width:100vw!important;max-height:100vh!important;' +
+      'object-fit:contain!important}';
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  const playerSelector =
+    '[id*="player" i],[class*="player" i],[id*="video" i],[class*="video" i],' +
+    '[id*="embed" i],[class*="embed" i],[id*="stream" i],[class*="stream" i]';
+
+  function fitPlayer() {
+    const candidates = Array.from(document.querySelectorAll(
+      'video,iframe,' + playerSelector
+    )).filter((element) => {
+      if (!element || element === document.body ||
+          element === document.documentElement) return false;
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      return rect.width > 80 && rect.height > 45 &&
+        style.display !== 'none' && style.visibility !== 'hidden';
+    });
+
+    if (!candidates.length) return;
+    candidates.sort((first, second) => {
+      const a = first.getBoundingClientRect();
+      const b = second.getBoundingClientRect();
+      return (b.width * b.height) - (a.width * a.height);
+    });
+
+    const selected = candidates[0];
+    const player = selected.matches('video,iframe')
+      ? (selected.closest(playerSelector) || selected)
+      : selected;
+    if (!player || player === document.body ||
+        player === document.documentElement) return;
+
+    const frame = player.getBoundingClientRect();
+    if (frame.width < 80 || frame.height < 45) return;
+
+    player.style.setProperty('position', 'fixed', 'important');
+    player.style.setProperty('left', '0', 'important');
+    player.style.setProperty('top', '0', 'important');
+    player.style.setProperty('width', '100vw', 'important');
+    player.style.setProperty('height', '100vh', 'important');
+    player.style.setProperty('max-width', '100vw', 'important');
+    player.style.setProperty('max-height', '100vh', 'important');
+    player.style.setProperty('margin', '0', 'important');
+    player.style.setProperty('padding', '0', 'important');
+    player.style.setProperty('background', '#000', 'important');
+    player.style.setProperty('z-index', '2147483647', 'important');
+
+    const media = [];
+    if (player.matches && player.matches('video,iframe')) media.push(player);
+    player.querySelectorAll('video,iframe').forEach((element) => media.push(element));
+    media.forEach((element) => {
+      element.style.setProperty('display', 'block', 'important');
+      element.style.setProperty('width', '100%', 'important');
+      element.style.setProperty('height', '100%', 'important');
+      element.style.setProperty('max-width', '100vw', 'important');
+      element.style.setProperty('max-height', '100vh', 'important');
+      element.style.setProperty('object-fit', 'contain', 'important');
+      element.style.setProperty('border', '0', 'important');
+      if (element.tagName === 'IFRAME') {
+        element.setAttribute('allowfullscreen', '');
+        const allow = element.getAttribute('allow') || '';
+        if (!/fullscreen/i.test(allow)) {
+          element.setAttribute('allow', (allow ? allow + '; ' : '') + 'fullscreen');
+        }
+      } else {
+        element.setAttribute('playsinline', '');
+        element.setAttribute('webkit-playsinline', '');
+      }
+    });
+  }
+
+  fitPlayer();
+  if (!window.__dt360PlayerFitObserver) {
+    window.__dt360PlayerFitObserver = new MutationObserver(() => {
+      if (window.__dt360PlayerFitQueued) return;
+      window.__dt360PlayerFitQueued = true;
+      window.requestAnimationFrame(() => {
+        window.__dt360PlayerFitQueued = false;
+        fitPlayer();
+      });
+    });
+    window.__dt360PlayerFitObserver.observe(document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+  }
+  if (!window.__dt360PlayerFitInterval) {
+    window.__dt360PlayerFitInterval = window.setInterval(fitPlayer, 1200);
+  }
+})();
+''';
+
 class _LiveWebPageTile extends StatefulWidget {
   const _LiveWebPageTile({
     super.key,
@@ -1196,25 +1301,133 @@ class _LiveWebPageTileState extends State<_LiveWebPageTile> {
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
             useShouldOverrideUrlLoading: true,
+            useShouldInterceptRequest: true,
             javaScriptCanOpenWindowsAutomatically: false,
-            supportMultipleWindows: false,
+            supportMultipleWindows: true,
             mediaPlaybackRequiresUserGesture: false,
             allowsInlineMediaPlayback: true,
+            iframeAllowFullscreen: true,
+            isElementFullscreenEnabled: true,
             supportZoom: false,
+            contentBlockers: WebProtectionPolicy.buildContentBlockers(),
           ),
           shouldOverrideUrlLoading: (controller, action) async {
             final target = action.request.url;
             if (target == null) return NavigationActionPolicy.CANCEL;
-            if (target.scheme == 'about') return NavigationActionPolicy.ALLOW;
-            return target.scheme == 'https' && target.userInfo.isEmpty
-                ? NavigationActionPolicy.ALLOW
-                : NavigationActionPolicy.CANCEL;
+            if (target.scheme == 'about' && target.toString() == 'about:blank') {
+              return NavigationActionPolicy.ALLOW;
+            }
+            if (action.isForMainFrame) {
+              return WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+                target.toString(),
+                playerUrl: widget.source.url,
+              )
+                  ? NavigationActionPolicy.ALLOW
+                  : NavigationActionPolicy.CANCEL;
+            }
+            return WebProtectionPolicy.isBlockedUrl(target.toString())
+                ? NavigationActionPolicy.CANCEL
+                : NavigationActionPolicy.ALLOW;
+          },
+          shouldInterceptRequest: (controller, request) async {
+            return WebProtectionPolicy.interceptEmbeddedPlayerRequest(
+              request,
+              playerUrl: widget.source.url,
+            );
+          },
+          onCreateWindow: (controller, action) async {
+            final target = action.request.url;
+            if (target != null &&
+                action.isForMainFrame &&
+                action.hasGesture == true &&
+                WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+                  target.toString(),
+                  playerUrl: widget.source.url,
+                )) {
+              try {
+                // Una ventana interna del mismo sitio se reutiliza en este
+                // mismo cuadro. Los pop-ups de otros dominios se descartan.
+                await controller.loadUrl(urlRequest: action.request);
+              } catch (error) {
+                debugPrint('No se pudo abrir el reproductor interno: $error');
+              }
+            }
+            return false;
           },
           onLoadStart: (controller, url) {
+            final target = url?.toString();
+            if (target != null &&
+                target != 'about:blank' &&
+                !WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+                  target,
+                  playerUrl: widget.source.url,
+                )) {
+              unawaited(controller.stopLoading());
+              if (mounted) {
+                setState(() {
+                  _loading = false;
+                  _error = 'Se bloqueó una redirección fuera del reproductor.';
+                });
+              }
+              return;
+            }
             if (mounted) setState(() => _loading = true);
           },
-          onLoadStop: (controller, url) {
+          onLoadStop: (controller, url) async {
+            final target = url?.toString();
+            if (target != null &&
+                target != 'about:blank' &&
+                !WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+                  target,
+                  playerUrl: widget.source.url,
+                )) {
+              final canGoBack = await controller.canGoBack();
+              if (canGoBack) {
+                await controller.goBack();
+              } else {
+                await controller.stopLoading();
+              }
+              if (mounted) {
+                setState(() {
+                  _loading = false;
+                  if (!canGoBack) {
+                    _error = 'Se bloqueó una redirección fuera del reproductor.';
+                  }
+                });
+              }
+              return;
+            }
+            try {
+              await controller.evaluateJavascript(source: _fitEmbeddedPlayerScript);
+            } catch (error) {
+              debugPrint('No se pudo ajustar el reproductor web: $error');
+            }
             if (mounted) setState(() => _loading = false);
+          },
+          onUpdateVisitedHistory: (controller, url, androidIsReload) async {
+            final target = url?.toString();
+            if (target == null ||
+                target == 'about:blank' ||
+                WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+                  target,
+                  playerUrl: widget.source.url,
+                )) {
+              return;
+            }
+            final canGoBack = await controller.canGoBack();
+            if (canGoBack) {
+              await controller.goBack();
+            } else {
+              await controller.stopLoading();
+            }
+            if (mounted) {
+              setState(() {
+                _loading = false;
+                if (!canGoBack) {
+                  _error = 'Se bloqueó una redirección fuera del reproductor.';
+                }
+              });
+            }
           },
           onReceivedError: (controller, request, error) {
             if (request.isForMainFrame == false || !mounted) return;
