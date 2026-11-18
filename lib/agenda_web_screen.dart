@@ -749,6 +749,7 @@ const String _agendaLiveCaptureScript = r'''
       }
       if (!name) return;
       if (found.some((item) => item.url === url)) return;
+      best.setAttribute('data-dt360-standalone-channel', 'true');
       found.push({
         id: 'channel-' + index + '-' + url,
         name: name,
@@ -761,8 +762,16 @@ const String _agendaLiveCaptureScript = r'''
   }
 
 
-  // Oculta únicamente las tarjetas/enlaces de transmisión después de
-  // guardar sus opciones visibles. La agenda y sus fichas de eventos permanecen.
+  // Oculta las tarjetas independientes de canales una vez guardadas.
+  // Las fichas de eventos nunca se marcan como canales independientes.
+  function hideCapturedStandaloneChannelCards() {
+    document.querySelectorAll('[data-dt360-standalone-channel="true"]').forEach((card) => {
+      card.style.setProperty('display', 'none', 'important');
+    });
+  }
+
+  // Oculta únicamente las opciones de transmisión de cada evento después de
+  // guardar sus enlaces visibles. La agenda y sus fichas permanecen.
   function hideCapturedTransmissionOptions() {
     const selector = 'a[href], button[data-href], button[data-url], ' +
       '[role="link"][href], [role="button"][data-href], [role="button"][data-url]';
@@ -881,6 +890,9 @@ const String _agendaLiveCaptureScript = r'''
     if (channels.length > 0 && channelSignature !== lastChannelSignature) {
       lastChannelSignature = channelSignature;
       window.flutter_inappwebview.callHandler('dt360AgendaChannels', channels);
+    }
+    if (channels.length > 0) {
+      window.setTimeout(hideCapturedStandaloneChannelCards, 0);
     }
     if (unique.length === 0) return;
     const signature = JSON.stringify(unique);
