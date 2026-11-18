@@ -257,7 +257,7 @@ class _TransmissionOptionTile extends StatelessWidget {
   final AgendaChannelEntry entry;
   final bool isPreferred;
   final int fallbackIndex;
-  final ValueChanged<AgendaTransmissionOption> onPlay;
+  final ValueChanged<AgendaChannelEntry> onPlay;
 
   @override
   Widget build(BuildContext context) {
