@@ -47,6 +47,39 @@ void main() {
         isNot(normalizeAgendaChannelReference('ESPN 2')));
   });
 
+  test('En vivo solo incluye eventos desde cinco minutos antes hasta su fin', () {
+    final startsAt = DateTime(2026, 11, 18, 19);
+    final event = AgendaEventReference.tryParse(
+      _event(startsAt: startsAt),
+    )!;
+
+    expect(
+      isAgendaEventWithinLiveWindow(
+        event,
+        startsAt.subtract(const Duration(minutes: 5, seconds: 1)),
+      ),
+      isFalse,
+    );
+    expect(
+      isAgendaEventWithinLiveWindow(
+        event,
+        startsAt.subtract(const Duration(minutes: 5)),
+      ),
+      isTrue,
+    );
+    expect(
+      isAgendaEventWithinLiveWindow(event, startsAt),
+      isTrue,
+    );
+    expect(
+      isAgendaEventWithinLiveWindow(
+        event,
+        startsAt.add(const Duration(hours: 3)),
+      ),
+      isFalse,
+    );
+  });
+
   test('prepara una transmisión dentro de los cinco minutos previos', () async {
     final service = AgendaLiveService();
     final now = DateTime.now();
