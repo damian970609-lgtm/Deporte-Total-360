@@ -358,7 +358,7 @@ void main() {
         'url': 'https://channels.example/fox',
         'order': 2,
       },
-    ], now: now);
+    ]);
 
     final entries = await service.loadChannelsForCurrentDay(now: now);
 
