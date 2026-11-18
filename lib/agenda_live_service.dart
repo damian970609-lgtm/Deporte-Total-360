@@ -227,6 +227,16 @@ class AgendaEventReference {
   }
 }
 
+/// Indica cuándo un evento debe aparecer en «En vivo»: desde cinco minutos
+/// antes del inicio y hasta su finalización, sin mostrar eventos lejanos.
+bool isAgendaEventWithinLiveWindow(
+  AgendaEventReference event,
+  DateTime now,
+) =>
+    !event.isFinished &&
+    !now.isBefore(event.startsAt.subtract(agendaLivePreparationWindow)) &&
+    now.isBefore(event.effectiveEndsAt);
+
 String _eventKey(String title, DateTime startsAt) {
   final normalized = title
       .toLowerCase()
