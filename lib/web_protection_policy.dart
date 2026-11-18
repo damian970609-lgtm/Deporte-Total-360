@@ -77,6 +77,62 @@ class WebProtectionPolicy {
     return scheme == 'http' || scheme == 'https';
   }
 
+  /// El documento principal del reproductor solo puede permanecer en el
+  /// mismo host que la página elegida en Agenda (se acepta el alias www).
+  /// Los iframes de vídeo de otros hosts se siguen permitiendo.
+  static bool allowsEmbeddedPlayerMainFrameNavigation(
+    String targetUrl, {
+    required String playerUrl,
+  }) {
+    final target = Uri.tryParse(targetUrl.trim());
+    final player = Uri.tryParse(playerUrl.trim());
+    if (target == null || player == null) return false;
+    if (!_isWebUri(target) || !_isWebUri(player)) return false;
+    if (target.userInfo.isNotEmpty || player.userInfo.isNotEmpty) return false;
+    if (isBlockedUrl(targetUrl)) return false;
+
+    return _withoutWww(target.host) == _withoutWww(player.host);
+  }
+
+  /// Filtra recursos publicitarios conocidos y evita que una navegación
+  /// principal salga del dominio del reproductor. Los recursos de iframe
+  /// de otros hosts permanecen disponibles para la señal.
+  static WebResourceResponse? interceptEmbeddedPlayerRequest(
+    WebResourceRequest request, {
+    required String playerUrl,
+  }) {
+    final uri = Uri.tryParse(request.url.toString());
+    if (uri == null || !_isWebUri(uri)) return null;
+
+    final blockedResource = intercept(request);
+    if (blockedResource != null) return blockedResource;
+
+    if (request.isForMainFrame &&
+        !allowsEmbeddedPlayerMainFrameNavigation(
+          uri.toString(),
+          playerUrl: playerUrl,
+        )) {
+      return _noContentResponse();
+    }
+    return null;
+  }
+
+  static bool _isWebUri(Uri uri) =>
+      (uri.scheme == 'http' || uri.scheme == 'https') &&
+      uri.host.isNotEmpty;
+
+  static String _withoutWww(String host) =>
+      host.toLowerCase().trim().replaceFirst(RegExp(r'^www\\.'), '');
+
+  static WebResourceResponse _noContentResponse() => WebResourceResponse(
+        contentType: 'text/plain',
+        contentEncoding: 'utf-8',
+        data: Uint8List(0),
+        statusCode: 204,
+        reasonPhrase: 'No Content',
+        headers: <String, String>{'Cache-Control': 'no-store'},
+      );
+
   static List<ContentBlocker> buildContentBlockers() {
     return blockedDomains.map((domain) {
       final escaped = RegExp.escape(domain);
@@ -107,13 +163,6 @@ class WebProtectionPolicy {
   static WebResourceResponse? intercept(WebResourceRequest request) {
     final uri = request.url;
     if (!isBlockedUrl(uri.toString())) return null;
-    return WebResourceResponse(
-      contentType: 'text/plain',
-      contentEncoding: 'utf-8',
-      data: Uint8List(0),
-      statusCode: 204,
-      reasonPhrase: 'No Content',
-      headers: <String, String>{'Cache-Control': 'no-store'},
-    );
+    return _noContentResponse();
   }
 }
