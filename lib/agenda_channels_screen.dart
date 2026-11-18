@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'agenda_live_service.dart';
+import 'live_channels_screen.dart';
 
 const Color _agendaChannelsBg = Color(0xFF000000);
 const Color _agendaChannelsPanel = Color(0xFF07090D);
@@ -203,14 +204,35 @@ class _AgendaChannelsScreenState extends State<AgendaChannelsScreen> {
                                   ),
                                 ],
                                 const Divider(color: Color(0xFF193044), height: 16),
-                                for (var optionIndex = 0;
-                                    optionIndex < ranked.length;
-                                    optionIndex++)
-                                  _TransmissionOptionTile(
-                                    option: ranked[optionIndex],
-                                    isPreferred: identical(ranked[optionIndex], best),
-                                    fallbackIndex: optionIndex + 1,
-                                  ),
+                                LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    final columns =
+                                        constraints.maxWidth >= 560 ? 3 : 2;
+                                    return GridView.builder(
+                                      shrinkWrap: true,
+                                      physics:
+                                          const NeverScrollableScrollPhysics(),
+                                      itemCount: ranked.length,
+                                      gridDelegate:
+                                          SliverGridDelegateWithFixedCrossAxisCount(
+                                        crossAxisCount: columns,
+                                        crossAxisSpacing: 8,
+                                        mainAxisSpacing: 8,
+                                        childAspectRatio: 1.55,
+                                      ),
+                                      itemBuilder: (context, optionIndex) {
+                                        return _TransmissionOptionTile(
+                                          option: ranked[optionIndex],
+                                          isPreferred: identical(
+                                            ranked[optionIndex],
+                                            best,
+                                          ),
+                                          fallbackIndex: optionIndex + 1,
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
                               ],
                             ),
                           ),
@@ -236,66 +258,122 @@ class _TransmissionOptionTile extends StatelessWidget {
   final bool isPreferred;
   final int fallbackIndex;
 
+  void _open(BuildContext context) {
+    if (isSupportedAuthorizedMediaUrl(option.url)) {
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => LivePlayerGridScreen(
+            sources: <LivePlayerSource>[
+              LivePlayerSource(
+                title: option.name,
+                url: option.url,
+                subtitle: 'CANALES DEPORTIVOS · ${option.name}',
+              ),
+            ],
+          ),
+        ),
+      );
+      return;
+    }
+
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => AgendaTransmissionWebView(
+          title: option.name,
+          url: option.url,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasPopularityMetric = option.popularityScore > 0;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D1118),
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(
-          color: isPreferred
-              ? _agendaChannelsBlue.withAlpha(180)
-              : Colors.white.withAlpha(30),
-        ),
-      ),
-      child: ListTile(
-        dense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 9, vertical: 0),
-        leading: Icon(
-          Icons.play_circle_fill_rounded,
-          color: isPreferred ? _agendaChannelsBlue : _agendaChannelsMuted,
-          size: 23,
-        ),
-        title: Text(
-          option.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-            fontSize: 11,
-          ),
-        ),
-        subtitle: Text(
-          isPreferred
-              ? (hasPopularityMetric
-                  ? 'MEJOR PUNTUADA POR LA MÉTRICA PÚBLICA'
-                  : 'PRIMERA OPCIÓN PUBLICADA · SIN MÉTRICA DE POPULARIDAD')
-              : 'OPCIÓN $fallbackIndex',
-          maxLines: 2,
-          style: TextStyle(
-            color: isPreferred ? _agendaChannelsBlue : _agendaChannelsMuted,
-            fontSize: 8,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        trailing: const Icon(
-          Icons.open_in_new_rounded,
-          color: _agendaChannelsBlue,
-          size: 17,
-        ),
-        onTap: () {
-          Navigator.of(context).push<void>(
-            MaterialPageRoute<void>(
-              builder: (_) => AgendaTransmissionWebView(
-                title: option.name,
-                url: option.url,
-              ),
+    return Material(
+      color: const Color(0xFF0D1118),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => _open(context),
+        child: Container(
+          padding: const EdgeInsets.all(9),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isPreferred
+                  ? _agendaChannelsBlue.withAlpha(190)
+                  : Colors.white.withAlpha(35),
+              width: isPreferred ? 1.3 : 1,
             ),
-          );
-        },
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.play_circle_fill_rounded,
+                    color: isPreferred
+                        ? _agendaChannelsBlue
+                        : _agendaChannelsMuted,
+                    size: 21,
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      isPreferred ? 'OPCIÓN PRINCIPAL' : 'OPCIÓN $fallbackIndex',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isPreferred
+                            ? _agendaChannelsBlue
+                            : _agendaChannelsMuted,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Text(
+                option.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                hasPopularityMetric
+                    ? 'POPULARIDAD PUBLICADA'
+                    : 'ORDEN ORIGINAL DE LA AGENDA',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: _agendaChannelsMuted,
+                  fontSize: 7,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 3),
+              const Text(
+                'TOCAR PARA REPRODUCIR',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: _agendaChannelsBlue,
+                  fontSize: 7,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: .3,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
