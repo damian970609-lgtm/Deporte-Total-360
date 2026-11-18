@@ -121,8 +121,10 @@ class WebProtectionPolicy {
       (uri.scheme == 'http' || uri.scheme == 'https') &&
       uri.host.isNotEmpty;
 
-  static String _withoutWww(String host) =>
-      host.toLowerCase().trim().replaceFirst(RegExp(r'^www\\.'), '');
+  static String _withoutWww(String host) {
+    final normalized = host.toLowerCase().trim();
+    return normalized.startsWith('www.') ? normalized.substring(4) : normalized;
+  }
 
   static WebResourceResponse _noContentResponse() => WebResourceResponse(
         contentType: 'text/plain',
