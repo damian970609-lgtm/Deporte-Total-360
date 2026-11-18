@@ -368,7 +368,10 @@ class AgendaLiveBoardState {
 }
 
 class AgendaLiveService {
-  Future<void> captureAgendaEvents(dynamic rawPayload) async {
+  Future<void> captureAgendaEvents(
+    dynamic rawPayload, {
+    DateTime? now,
+  }) async {
     final rows = rawPayload is List
         ? rawPayload
         : rawPayload is Map && rawPayload['events'] is List
@@ -392,12 +395,12 @@ class AgendaLiveService {
       byId[event.id] = previous == null ? event : event.merge(previous);
     }
 
-    final now = DateTime.now();
+    final current = (now ?? DateTime.now()).toLocal();
     final retained = byId.values
         .where((event) =>
             !event.isFinished &&
-            isSameLocalAgendaDay(event.startsAt, now) &&
-            now.isBefore(event.effectiveEndsAt.add(const Duration(hours: 1))))
+            isSameLocalAgendaDay(event.startsAt, current) &&
+            current.isBefore(event.effectiveEndsAt.add(const Duration(hours: 1))))
         .toList(growable: false)
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
     await prefs.setString(
