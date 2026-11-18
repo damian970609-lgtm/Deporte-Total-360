@@ -638,6 +638,36 @@ const String _agendaLiveCaptureScript = r'''
   }
 
 
+  // Oculta únicamente las tarjetas/enlaces de transmisión después de
+  // guardar sus opciones visibles. La agenda y sus fichas de eventos permanecen.
+  function hideCapturedTransmissionOptions() {
+    const selector = 'a[href], button[data-href], button[data-url], ' +
+      '[role="link"][href], [role="button"][data-href], [role="button"][data-url]';
+    const optionPattern =
+      /(canal|fuente|señal|senal|opci[oó]n|transmisi[oó]n|stream|player|watch|ver directo|abrir canal)/i;
+    document.querySelectorAll(selector).forEach((element) => {
+      const metadata = [
+        visibleText(element),
+        element.className,
+        element.getAttribute('aria-label'),
+        element.getAttribute('title')
+      ].join(' ');
+      if (!optionPattern.test(metadata)) return;
+
+      const container = element.closest(
+        '[class*="channel"], [class*="source"], [class*="signal"], ' +
+        '[class*="stream"], [class*="broadcast"], [class*="transmission"]'
+      );
+      const target = container || element;
+      const targetClass = String(target.className || '').toLowerCase();
+      const isEventCard = /event|match|fixture|partido|encuentro/.test(targetClass) ||
+        !!target.querySelector('time[datetime], [data-time], [data-start-time]');
+      const safeTarget = isEventCard ? element : target;
+      safeTarget.style.setProperty('display', 'none', 'important');
+    });
+  }
+
+
   function readEvent(card) {
     const text = visibleText(card);
     const startAt = readStartAt(card, text);
@@ -735,7 +765,16 @@ const String _agendaLiveCaptureScript = r'''
     const signature = JSON.stringify(unique);
     if (signature === lastSignature) return;
     lastSignature = signature;
+    const hasTransmissionOptions = unique.some((event) =>
+      Array.isArray(event.transmissionOptions) &&
+      event.transmissionOptions.length > 0
+    );
     window.flutter_inappwebview.callHandler('dt360AgendaEvents', unique);
+    // La aplicación ya recibió las opciones publicadas; se retiran solo sus
+    // botones/cuadros del área de agenda, no los controles del reproductor.
+    if (hasTransmissionOptions) {
+      window.setTimeout(hideCapturedTransmissionOptions, 0);
+    }
   }
 
   function queueEmit() {
