@@ -432,7 +432,10 @@ const String _agendaOnlyScript = r'''
       for (let depth = 0; depth < 8 && candidate && candidate !== document.body; depth += 1) {
         const value = normalize(candidate.innerText || candidate.textContent || '');
         const clocks = (value.match(/\b(?:[01]?\d|2[0-3]):[0-5]\d\b/g) || []).length;
-        if (clocks > 0 || /\b(?:vs?\.?|versus)\b/i.test(value)) return;
+        if (clocks > 0 || /\b(?:vs?\.?|versus)\b/i.test(value)) {
+          target = element;
+          break;
+        }
         if (value.length >= 3 && value.length <= 900) target = candidate;
         const className = String(candidate.className || '').toLowerCase();
         if (candidate.matches('article, li, section') || /card|channel|station/.test(className)) break;
