@@ -268,7 +268,7 @@ class _TransmissionOptionTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        onTap: () => onPlay(option),
+        onTap: () => onPlay(entry),
         child: Container(
           padding: const EdgeInsets.all(9),
           decoration: BoxDecoration(
