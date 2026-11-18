@@ -452,7 +452,7 @@ class _EmptyAgendaChannels extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Abre un evento en Agenda y toca una de sus opciones visibles de transmisión. La app guardará el enlace de esa opción aquí.',
+              'Abre Agenda y espera a que cargue: las opciones de canales publicadas se guardarán automáticamente y aparecerán aquí. Las transmisiones vinculadas a cada evento se mostrarán en su sección cuando estén disponibles.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: _agendaChannelsMuted,
