@@ -151,7 +151,11 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
 
   List<LivePlayerWaitingEvent> _waitingEvents() {
     final now = DateTime.now();
-    return _board.pending.take(8).map((pending) {
+    return _board.pending
+        .where((pending) =>
+            isAgendaEventWithinLiveWindow(pending.event, now))
+        .take(8)
+        .map((pending) {
       final event = pending.event;
       final start = event.startsAt.toLocal();
       final time = '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
@@ -212,7 +216,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 const Text(
-                  '8 REPRODUCTORES DISPONIBLES',
+                  'EVENTOS EN PREPARACIÓN O EN VIVO',
                   style: TextStyle(
                     color: _liveCyan,
                     fontSize: 11,
@@ -222,7 +226,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'BÚSQUEDA AUTOMÁTICA · 5 MINUTOS ANTES',
+                  'ACTIVACIÓN AUTOMÁTICA · 5 MINUTOS ANTES',
                   style: TextStyle(
                     color: _livePink,
                     fontSize: 10,
@@ -232,7 +236,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
                 ),
                 const SizedBox(height: 5),
                 const Text(
-                  'La app lee las opciones visibles de la ficha de cada evento y prepara la mejor opción publicada. Al finalizar el evento, libera el reproductor.',
+                  'Los eventos aparecen aquí desde cinco minutos antes de comenzar. Los enlaces multimedia directos usan el reproductor de la app; las páginas web se abren dentro del cuadro con el reproductor del propio sitio.',
                   style: TextStyle(
                     color: _liveMuted,
                     fontSize: 10,
@@ -241,7 +245,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  '${sources.length}/8 reproductores asignados · ${_board.transmissionOptionCount} opciones de transmisión capturadas',
+                  '${sources.length} reproductores asignados · ${waiting.length} eventos en espera dentro de la ventana · ${_board.transmissionOptionCount} opciones capturadas',
                   style: const TextStyle(
                     color: _liveCyan,
                     fontSize: 9,
@@ -361,6 +365,39 @@ class LivePlayerBoard extends StatelessWidget {
         final waiting = waitingEvents
             .take(8 - activeSources.length)
             .toList(growable: false);
+        if (activeSources.isEmpty && waiting.isEmpty) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(Icons.sports_soccer_rounded, color: _liveCyan, size: 48),
+                  SizedBox(height: 12),
+                  Text(
+                    'NO HAY EVENTOS EN PREPARACIÓN O EN VIVO',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  SizedBox(height: 7),
+                  Text(
+                    'Los cuadros aparecerán automáticamente cuando un evento entre en los cinco minutos previos a su inicio.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _liveMuted,
+                      fontSize: 10,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         return Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 960),
@@ -368,7 +405,7 @@ class LivePlayerBoard extends StatelessWidget {
               shrinkWrap: true,
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.all(8),
-              itemCount: 8,
+              itemCount: activeSources.length + waiting.length,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
                 crossAxisSpacing: 8,
@@ -379,21 +416,6 @@ class LivePlayerBoard extends StatelessWidget {
                 final channelNumber = index + 1;
                 if (index < activeSources.length) {
                   final source = activeSources[index];
-                  if (source.startAt != null &&
-                      DateTime.now().isBefore(source.startAt!)) {
-                    final start = source.startAt!.toLocal();
-                    final startLabel = 'Comienza ${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
-                    return _WaitingLivePlayerTile(
-                      channelNumber: channelNumber,
-                      event: LivePlayerWaitingEvent(
-                        heading: 'TRANSMISIÓN PREPARADA',
-                        match: source.subtitle ?? source.title,
-                        startLabel: startLabel,
-                        processStatus: 'CANAL ASIGNADO',
-                        processDetail: 'El reproductor se activará al comenzar el evento.',
-                      ),
-                    );
-                  }
                   return Container(
                     padding: const EdgeInsets.all(5),
                     decoration: BoxDecoration(
@@ -465,7 +487,7 @@ class LivePlayerBoard extends StatelessWidget {
                     event: waiting[waitingIndex],
                   );
                 }
-                return _WaitingLivePlayerTile(channelNumber: channelNumber);
+                return const SizedBox.shrink();
               },
             ),
           ),
@@ -907,7 +929,7 @@ class _LiveWebPageTileState extends State<_LiveWebPageTile> {
               onPressed: widget.isActive
                   ? () => setState(() => _started = true)
                   : null,
-              child: const Text('CARGAR TRANSMISIÓN',
+              child: const Text('ABRIR PLAYER WEB',
                   style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900)),
             ),
           ],
