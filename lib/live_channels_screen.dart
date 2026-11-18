@@ -344,6 +344,7 @@ class LiveSharedPlayerPanel extends StatelessWidget {
                               source: selected,
                               autoStart: true,
                               isActive: isActive,
+                              protectEmbeddedPlayer: true,
                             )
                           : _LiveVideoTile(
                               key: ValueKey<String>('shared-media-${selected.eventId ?? ''}-${selected.url}'),
@@ -1231,11 +1232,13 @@ class _LiveWebPageTile extends StatefulWidget {
     required this.source,
     required this.autoStart,
     required this.isActive,
+    this.protectEmbeddedPlayer = false,
   });
 
   final LivePlayerSource source;
   final bool autoStart;
   final bool isActive;
+  final bool protectEmbeddedPlayer;
 
   @override
   State<_LiveWebPageTile> createState() => _LiveWebPageTileState();
@@ -1300,63 +1303,73 @@ class _LiveWebPageTileState extends State<_LiveWebPageTile> {
           initialUrlRequest: URLRequest(url: WebUri(widget.source.url)),
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
-            useShouldOverrideUrlLoading: true,
-            useShouldInterceptRequest: true,
+            useShouldOverrideUrlLoading: widget.protectEmbeddedPlayer,
+            useShouldInterceptRequest: widget.protectEmbeddedPlayer,
             javaScriptCanOpenWindowsAutomatically: false,
-            supportMultipleWindows: true,
+            supportMultipleWindows: widget.protectEmbeddedPlayer,
             mediaPlaybackRequiresUserGesture: false,
             allowsInlineMediaPlayback: true,
-            iframeAllowFullscreen: true,
-            isElementFullscreenEnabled: true,
+            iframeAllowFullscreen: widget.protectEmbeddedPlayer,
+            isElementFullscreenEnabled: widget.protectEmbeddedPlayer,
             supportZoom: false,
-            contentBlockers: WebProtectionPolicy.buildContentBlockers(),
+            contentBlockers: widget.protectEmbeddedPlayer
+                ? WebProtectionPolicy.buildContentBlockers()
+                : null,
           ),
-          shouldOverrideUrlLoading: (controller, action) async {
-            final target = action.request.url;
-            if (target == null) return NavigationActionPolicy.CANCEL;
-            if (target.scheme == 'about' && target.toString() == 'about:blank') {
-              return NavigationActionPolicy.ALLOW;
-            }
-            if (action.isForMainFrame) {
-              return WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
-                target.toString(),
-                playerUrl: widget.source.url,
-              )
-                  ? NavigationActionPolicy.ALLOW
-                  : NavigationActionPolicy.CANCEL;
-            }
-            return WebProtectionPolicy.isBlockedUrl(target.toString())
-                ? NavigationActionPolicy.CANCEL
-                : NavigationActionPolicy.ALLOW;
-          },
-          shouldInterceptRequest: (controller, request) async {
-            return WebProtectionPolicy.interceptEmbeddedPlayerRequest(
-              request,
-              playerUrl: widget.source.url,
-            );
-          },
-          onCreateWindow: (controller, action) async {
-            final target = action.request.url;
-            if (target != null &&
-                action.isForMainFrame &&
-                action.hasGesture == true &&
-                WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
-                  target.toString(),
-                  playerUrl: widget.source.url,
-                )) {
-              try {
-                // Una ventana interna del mismo sitio se reutiliza en este
-                // mismo cuadro. Los pop-ups de otros dominios se descartan.
-                await controller.loadUrl(urlRequest: action.request);
-              } catch (error) {
-                debugPrint('No se pudo abrir el reproductor interno: $error');
-              }
-            }
-            return false;
-          },
+          shouldOverrideUrlLoading: widget.protectEmbeddedPlayer
+              ? (controller, action) async {
+                  final target = action.request.url;
+                  if (target == null) return NavigationActionPolicy.CANCEL;
+                  if (target.scheme == 'about' &&
+                      target.toString() == 'about:blank') {
+                    return NavigationActionPolicy.ALLOW;
+                  }
+                  if (action.isForMainFrame) {
+                    return WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+                      target.toString(),
+                      playerUrl: widget.source.url,
+                    )
+                        ? NavigationActionPolicy.ALLOW
+                        : NavigationActionPolicy.CANCEL;
+                  }
+                  return WebProtectionPolicy.isBlockedUrl(target.toString())
+                      ? NavigationActionPolicy.CANCEL
+                      : NavigationActionPolicy.ALLOW;
+                }
+              : null,
+          shouldInterceptRequest: widget.protectEmbeddedPlayer
+              ? (controller, request) async {
+                  return WebProtectionPolicy.interceptEmbeddedPlayerRequest(
+                    request,
+                    playerUrl: widget.source.url,
+                  );
+                }
+              : null,
+          onCreateWindow: widget.protectEmbeddedPlayer
+              ? (controller, action) async {
+                  final target = action.request.url;
+                  if (target != null &&
+                      action.isForMainFrame &&
+                      action.hasGesture == true &&
+                      WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+                        target.toString(),
+                        playerUrl: widget.source.url,
+                      )) {
+                    try {
+                      // Las ventanas internas del mismo sitio se abren en
+                      // este cuadro; los pop-ups externos se descartan.
+                      await controller.loadUrl(urlRequest: action.request);
+                    } catch (error) {
+                      debugPrint('No se pudo abrir el reproductor interno: $error');
+                    }
+                  }
+                  return false;
+                }
+              : null,
           onLoadStart: (controller, url) {
             final target = url?.toString();
-            if (target != null &&
+            if (widget.protectEmbeddedPlayer &&
+                target != null &&
                 target != 'about:blank' &&
                 !WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
                   target,
@@ -1375,7 +1388,8 @@ class _LiveWebPageTileState extends State<_LiveWebPageTile> {
           },
           onLoadStop: (controller, url) async {
             final target = url?.toString();
-            if (target != null &&
+            if (widget.protectEmbeddedPlayer &&
+                target != null &&
                 target != 'about:blank' &&
                 !WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
                   target,
@@ -1397,38 +1411,44 @@ class _LiveWebPageTileState extends State<_LiveWebPageTile> {
               }
               return;
             }
-            try {
-              await controller.evaluateJavascript(source: _fitEmbeddedPlayerScript);
-            } catch (error) {
-              debugPrint('No se pudo ajustar el reproductor web: $error');
+            if (widget.protectEmbeddedPlayer) {
+              try {
+                await controller.evaluateJavascript(
+                  source: _fitEmbeddedPlayerScript,
+                );
+              } catch (error) {
+                debugPrint('No se pudo ajustar el reproductor web: $error');
+              }
             }
             if (mounted) setState(() => _loading = false);
           },
-          onUpdateVisitedHistory: (controller, url, androidIsReload) async {
-            final target = url?.toString();
-            if (target == null ||
-                target == 'about:blank' ||
-                WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
-                  target,
-                  playerUrl: widget.source.url,
-                )) {
-              return;
-            }
-            final canGoBack = await controller.canGoBack();
-            if (canGoBack) {
-              await controller.goBack();
-            } else {
-              await controller.stopLoading();
-            }
-            if (mounted) {
-              setState(() {
-                _loading = false;
-                if (!canGoBack) {
-                  _error = 'Se bloqueó una redirección fuera del reproductor.';
+          onUpdateVisitedHistory: widget.protectEmbeddedPlayer
+              ? (controller, url, androidIsReload) async {
+                  final target = url?.toString();
+                  if (target == null ||
+                      target == 'about:blank' ||
+                      WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+                        target,
+                        playerUrl: widget.source.url,
+                      )) {
+                    return;
+                  }
+                  final canGoBack = await controller.canGoBack();
+                  if (canGoBack) {
+                    await controller.goBack();
+                  } else {
+                    await controller.stopLoading();
+                  }
+                  if (mounted) {
+                    setState(() {
+                      _loading = false;
+                      if (!canGoBack) {
+                        _error = 'Se bloqueó una redirección fuera del reproductor.';
+                      }
+                    });
+                  }
                 }
-              });
-            }
-          },
+              : null,
           onReceivedError: (controller, request, error) {
             if (request.isForMainFrame == false || !mounted) return;
             setState(() {
