@@ -148,6 +148,7 @@ class _AgendaWebScreenState extends State<AgendaWebScreen> {
       final now = DateTime.now();
       if (!_sameDay(now, _displayDate) && mounted) {
         setState(() => _displayDate = now);
+        unawaited(_reload());
       }
     });
   }
@@ -466,6 +467,8 @@ const String _agendaOnlyScript = r'''
       const dateKey = dateKeyFromValue(rawDate) || dateKeyFromValue(cardText);
       if (dateKey && dateKey !== todayKey) {
         card.style.setProperty('display', 'none', 'important');
+      } else if (dateKey === todayKey) {
+        card.style.removeProperty('display');
       }
     });
 
@@ -701,7 +704,8 @@ const String _agendaLiveCaptureScript = r'''
     const selector = 'a[href], button[data-href], button[data-url], ' +
       '[role="link"][href], [role="button"][data-href], [role="button"][data-url], ' +
       '[data-channel-url], [data-source-url], [data-stream-url], [data-player-url], ' +
-      '[data-watch-url], [data-broadcast-url], [data-href], [data-url]';
+      '[data-watch-url], [data-broadcast-url], [data-link], [data-player], ' +
+      '[data-channel], [data-source], [data-stream], [data-href], [data-url]';
     const elements = Array.from(root.querySelectorAll(selector));
     if (root.matches && root.matches(selector)) elements.unshift(root);
     elements.forEach((element, index) => {
@@ -727,6 +731,11 @@ const String _agendaLiveCaptureScript = r'''
         element.getAttribute('data-player-url') ||
         element.getAttribute('data-watch-url') ||
         element.getAttribute('data-broadcast-url') ||
+        element.getAttribute('data-link') ||
+        element.getAttribute('data-player') ||
+        element.getAttribute('data-channel') ||
+        element.getAttribute('data-source') ||
+        element.getAttribute('data-stream') ||
         element.getAttribute('data-href') ||
         element.getAttribute('data-url') || '';
       let url = '';
@@ -737,7 +746,8 @@ const String _agendaLiveCaptureScript = r'''
       }
       const channelMetadata = /(canal|fuente|señal|senal|opci[oó]n|transmisi[oó]n|stream|player|watch|ver directo|abrir canal|broadcast)/i.test(metadata);
       const channelUrl = /(?:canal|channel|fuente|source|senal|signal|stream|player|watch|broadcast|transmision|directo)/i.test(url);
-      if (!channelMetadata && !channelUrl) return;
+      const explicitSourceUrl = ['data-channel-url', 'data-source-url', 'data-stream-url', 'data-player-url', 'data-watch-url', 'data-broadcast-url'].some((attribute) => element.hasAttribute(attribute));
+      if (!channelMetadata && !channelUrl && !explicitSourceUrl) return;
       if (!/^https:\/\//i.test(url)) return;
       const normalizedLabel = normalize(label);
       let parsedUrl;
@@ -745,7 +755,7 @@ const String _agendaLiveCaptureScript = r'''
       const rootAgenda = parsedUrl.hostname.replace(/^www\./i, '') === 'futbol-libre.cam' &&
         (parsedUrl.pathname === '/' || parsedUrl.pathname === '');
       const agendaRoute = /\/(?:agenda|programacion|calendario)(?:\/|$)/i.test(parsedUrl.pathname);
-      if (normalizedLabel.includes('agenda') || rootAgenda || agendaRoute) return;
+      if (normalizedLabel.includes('agenda') || normalizedLabel.startsWith('programacion') || rootAgenda || agendaRoute) return;
 
       const popularityText = [
         element.getAttribute('data-popularity'),
@@ -875,6 +885,15 @@ const String _agendaLiveCaptureScript = r'''
     const text = visibleText(card);
     const startAt = readStartAt(card, text);
     if (!startAt) return null;
+    const eventDate = new Date(startAt);
+    const now = new Date();
+    const isToday = !Number.isNaN(eventDate.getTime()) &&
+      eventDate.getFullYear() === now.getFullYear() &&
+      eventDate.getMonth() === now.getMonth() &&
+      eventDate.getDate() === now.getDate();
+    card.setAttribute('data-dt360-event-card', 'true');
+    if (!isToday) card.style.setProperty('display', 'none', 'important');
+    else card.style.removeProperty('display');
     const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
     const titleNode = card.querySelector(
       '[data-event-title], [class*="event-title"], [class*="match-title"], h2, h3, h4, strong'
