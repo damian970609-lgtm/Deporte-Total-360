@@ -112,7 +112,7 @@ class WebProtectionPolicy {
     final blockedResource = intercept(request);
     if (blockedResource != null) return blockedResource;
 
-    if (request.isForMainFrame &&
+    if (request.isForMainFrame == true &&
         !allowsEmbeddedPlayerMainFrameNavigation(
           uri.toString(),
           playerUrl: playerUrl,
