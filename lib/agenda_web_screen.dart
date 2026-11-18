@@ -811,7 +811,7 @@ const String _agendaLiveCaptureScript = r'''
     if (!title || title.length > 160) return null;
 
     const competition = lines.find((line) =>
-      /liga|league|copa|cup|torneo|tournament|premier|champions|concacaf|conmebol|uefa|nba|mlb|nhl/i.test(line) &&
+      /liga|league|copa|cup|torneo|tournament|premier|champions|concacaf|conmebol|uefa|tenis|tennis|atp|wta|formula|motogp|futbol|football|soccer|baloncesto|basquet|basketball|nba|beisbol|baseball|mlb|hockey|nhl|rugby|voleibol|volleyball|cricket|golf|boxeo|boxing|mma|ufc|ciclismo|cycling/i.test(line) &&
       line !== title
     ) || '';
     const lower = normalize(text);
