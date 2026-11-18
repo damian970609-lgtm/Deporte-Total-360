@@ -288,4 +288,113 @@ void main() {
     expect(state.assignments, hasLength(1));
     expect(state.assignments.single.event.id, 'next-match');
   });
+
+  test('solo conserva eventos cuya fecha local coincide con hoy', () async {
+    final service = AgendaLiveService();
+    final now = DateTime(2026, 11, 18, 12);
+    await service.captureAgendaEvents(<dynamic>[
+      _event(
+        id: 'today',
+        startsAt: now.add(const Duration(hours: 1)),
+        options: <Map<String, Object?>>[
+          _option(name: 'Canal de hoy', url: 'https://player.example/today'),
+        ],
+      ),
+      _event(
+        id: 'yesterday',
+        startsAt: now.subtract(const Duration(days: 1)),
+        options: <Map<String, Object?>>[
+          _option(name: 'Canal anterior', url: 'https://player.example/yesterday'),
+        ],
+      ),
+      _event(
+        id: 'tomorrow',
+        startsAt: now.add(const Duration(days: 1)),
+        options: <Map<String, Object?>>[
+          _option(name: 'Canal futuro', url: 'https://player.example/tomorrow'),
+        ],
+      ),
+    ]);
+
+    final events = await service.loadCapturedEvents();
+    expect(events.map((event) => event.id), <String>['today']);
+  });
+
+  test('Canales deportivos reúne las fuentes de los eventos de hoy y excluye la Agenda', () async {
+    final service = AgendaLiveService();
+    final now = DateTime(2026, 11, 18, 12);
+    await service.captureAgendaEvents(<dynamic>[
+      _event(
+        id: 'match-today',
+        title: 'Equipo Azul vs Equipo Rojo',
+        startsAt: now.add(const Duration(minutes: 20)),
+        options: <Map<String, Object?>>[
+          _option(
+            name: 'Agenda',
+            url: 'https://futbol-libre.cam/',
+            order: 0,
+          ),
+          _option(
+            name: 'ESPN 2 · Español',
+            url: 'https://channels.example/espn2',
+            order: 1,
+          ),
+        ],
+      ),
+    ]);
+    await service.captureAgendaChannels(<Map<String, Object?>>[
+      <String, Object?>{
+        'name': 'Agenda deportiva',
+        'url': 'https://futbol-libre.cam/',
+        'order': 0,
+      },
+      <String, Object?>{
+        'name': 'ESPN 2',
+        'url': 'https://channels.example/espn2',
+        'order': 1,
+      },
+      <String, Object?>{
+        'name': 'Fox Deportes',
+        'url': 'https://channels.example/fox',
+        'order': 2,
+      },
+    ]);
+
+    final entries = await service.loadChannelsForCurrentDay(now: now);
+
+    expect(entries, hasLength(2));
+    expect(entries.first.option.name, 'ESPN 2 · Español');
+    expect(entries.first.eventId, 'match-today');
+    expect(entries.first.eventTitle, 'Equipo Azul vs Equipo Rojo');
+    expect(entries.last.option.name, 'Fox Deportes');
+    expect(
+      isAgendaLandingPageReference('Canal de agenda', 'https://example.org/live'),
+      isTrue,
+    );
+  });
+
+  test('retira de Canales deportivos la opción cuando termina su evento', () async {
+    final service = AgendaLiveService();
+    final now = DateTime(2026, 11, 18, 18);
+    await service.captureAgendaEvents(<dynamic>[
+      _event(
+        id: 'finished-match',
+        startsAt: now.subtract(const Duration(hours: 1)),
+        endsAt: now.subtract(const Duration(minutes: 1)),
+        options: <Map<String, Object?>>[
+          _option(name: 'Transmisión terminada', url: 'https://player.example/ended'),
+        ],
+      ),
+    ]);
+
+    expect(
+      await service.loadChannelsForCurrentDay(now: now),
+      isEmpty,
+    );
+    expect(
+      (await service.buildBoardState(now: now)).assignments,
+      isEmpty,
+    );
+  });
+
 }
