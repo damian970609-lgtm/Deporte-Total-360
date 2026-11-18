@@ -80,6 +80,32 @@ void main() {
     );
   });
 
+  test('guarda canales independientes publicados debajo de la agenda', () async {
+    final service = AgendaLiveService();
+    await service.captureAgendaChannels(<Map<String, Object?>>[
+      <String, Object?>{
+        'name': 'ESPN',
+        'url': 'https://channels.example/espn',
+        'order': 0,
+      },
+      <String, Object?>{
+        'name': 'ESPN 2',
+        'url': 'https://channels.example/espn2',
+        'order': 1,
+      },
+    ]);
+
+    final channels = await service.loadCapturedChannels();
+    expect(channels.map((channel) => channel.name), <String>['ESPN', 'ESPN 2']);
+    expect(
+      channels.map((channel) => channel.url),
+      <String>[
+        'https://channels.example/espn',
+        'https://channels.example/espn2',
+      ],
+    );
+  });
+
   test('prepara una transmisión dentro de los cinco minutos previos', () async {
     final service = AgendaLiveService();
     final now = DateTime.now();
