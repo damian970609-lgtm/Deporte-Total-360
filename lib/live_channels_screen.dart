@@ -280,6 +280,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
               sources: sources,
               waitingEvents: waiting,
               isActive: widget.isActive,
+              showOnlyAssignedEvents: true,
             ),
           ),
         ],
@@ -349,12 +350,14 @@ class LivePlayerBoard extends StatelessWidget {
     this.waitingEvents = const <LivePlayerWaitingEvent>[],
     this.isActive = true,
     this.prioritizedEventId,
+    this.showOnlyAssignedEvents = false,
   });
 
   final List<LivePlayerSource> sources;
   final List<LivePlayerWaitingEvent> waitingEvents;
   final bool isActive;
   final String? prioritizedEventId;
+  final bool showOnlyAssignedEvents;
 
   @override
   Widget build(BuildContext context) {
@@ -365,7 +368,9 @@ class LivePlayerBoard extends StatelessWidget {
         final waiting = waitingEvents
             .take(8 - activeSources.length)
             .toList(growable: false);
-        if (activeSources.isEmpty && waiting.isEmpty) {
+        if (showOnlyAssignedEvents &&
+            activeSources.isEmpty &&
+            waiting.isEmpty) {
           return const Center(
             child: Padding(
               padding: EdgeInsets.all(28),
@@ -405,7 +410,9 @@ class LivePlayerBoard extends StatelessWidget {
               shrinkWrap: true,
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.all(8),
-              itemCount: activeSources.length + waiting.length,
+              itemCount: showOnlyAssignedEvents
+                  ? activeSources.length + waiting.length
+                  : 8,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
                 crossAxisSpacing: 8,
@@ -416,6 +423,21 @@ class LivePlayerBoard extends StatelessWidget {
                 final channelNumber = index + 1;
                 if (index < activeSources.length) {
                   final source = activeSources[index];
+                  if (!showOnlyAssignedEvents && source.startAt != null &&
+                      DateTime.now().isBefore(source.startAt!)) {
+                    final start = source.startAt!.toLocal();
+                    final startLabel = 'Comienza ${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
+                    return _WaitingLivePlayerTile(
+                      channelNumber: channelNumber,
+                      event: LivePlayerWaitingEvent(
+                        heading: 'TRANSMISIÓN PREPARADA',
+                        match: source.subtitle ?? source.title,
+                        startLabel: startLabel,
+                        processStatus: 'CANAL ASIGNADO',
+                        processDetail: 'El reproductor se activará al comenzar el evento.',
+                      ),
+                    );
+                  }
                   return Container(
                     padding: const EdgeInsets.all(5),
                     decoration: BoxDecoration(
@@ -487,7 +509,7 @@ class LivePlayerBoard extends StatelessWidget {
                     event: waiting[waitingIndex],
                   );
                 }
-                return const SizedBox.shrink();
+                return _WaitingLivePlayerTile(channelNumber: channelNumber);
               },
             ),
           ),
