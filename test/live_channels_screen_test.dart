@@ -137,6 +137,24 @@ void main() {
     });
   });
 
+  testWidgets('el reproductor superior compartido muestra su estado inicial', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: LiveSharedPlayerPanel(
+            source: null,
+            emptyMessage: 'Selecciona un canal y pulsa PLAY.',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('REPRODUCTOR DEPORTE TOTAL 360°'), findsOneWidget);
+    expect(find.text('Selecciona un canal y pulsa PLAY.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
     'En vivo no muestra cuadros vacíos cuando no hay eventos y limpia IPTV antiguo',
     (tester) async {
