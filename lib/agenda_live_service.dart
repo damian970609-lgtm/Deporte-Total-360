@@ -2,23 +2,130 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'channel_catalog_service.dart';
-import 'live_media_format.dart';
-
 const String _agendaLiveEventsKey = 'dt360_agenda_live_references_v1';
+const String _agendaChannelsKey = 'dt360_agenda_channels_v1';
 const Duration agendaLivePreparationWindow = Duration(minutes: 5);
 const Duration _agendaEventFallbackDuration = Duration(hours: 3);
-const Duration _agendaLiveCatalogueMaxAge = Duration(minutes: 15);
 
-/// A schedule row and the channel names published in its event details.
-/// The schedule page supplies names only; playback URLs always come from the
-/// user's own visible sports-channel catalog.
+/// A source option explicitly published by an event card (including HTTPS
+/// links stored in data attributes). The app keeps the page link; it does not
+/// read embedded iframe/video URLs.
+class AgendaTransmissionOption {
+  const AgendaTransmissionOption({
+    required this.id,
+    required this.name,
+    required this.url,
+    required this.order,
+    this.popularityScore = 0,
+  });
+
+  final String id;
+  final String name;
+  final String url;
+  final int order;
+  final int popularityScore;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'id': id,
+        'name': name,
+        'url': url,
+        'order': order,
+        'popularityScore': popularityScore,
+      };
+
+  static AgendaTransmissionOption? tryParse(dynamic value, int fallbackOrder) {
+    if (value is! Map) return null;
+    final map = Map<String, dynamic>.from(value);
+    final url = (map['url'] ?? map['href'] ?? '').toString().trim();
+    if (!isSafeAgendaTransmissionUrl(url)) return null;
+    final name = (map['name'] ?? map['label'] ?? map['title'] ?? '')
+        .toString()
+        .trim();
+    if (isAgendaLandingPageReference(name, url)) return null;
+    final order = int.tryParse((map['order'] ?? fallbackOrder).toString()) ??
+        fallbackOrder;
+    final score = int.tryParse(
+          (map['popularityScore'] ?? map['popularity'] ?? map['views'] ?? 0)
+              .toString(),
+        ) ??
+        0;
+    final explicitId = (map['id'] ?? '').toString().trim();
+    return AgendaTransmissionOption(
+      id: explicitId.isNotEmpty ? explicitId : _optionKey(url, order),
+      name: name.isNotEmpty ? name : 'Opción ${fallbackOrder + 1}',
+      url: url,
+      order: order,
+      popularityScore: score < 0 ? 0 : score,
+    );
+  }
+}
+
+String _optionKey(String url, int order) =>
+    '${order}_${url.hashCode.toRadixString(16)}';
+
+/// Only visible HTTPS links are accepted. Credentials and non-web schemes
+/// are deliberately excluded.
+bool isSafeAgendaTransmissionUrl(String value) {
+  final uri = Uri.tryParse(value.trim());
+  return uri != null &&
+      uri.scheme == 'https' &&
+      uri.hasAuthority &&
+      uri.host.isNotEmpty &&
+      uri.userInfo.isEmpty;
+}
+
+/// Elimina de los catálogos los enlaces que llevan de vuelta a la propia
+/// agenda, ya que no son una transmisión deportiva.
+bool isAgendaLandingPageReference(String name, String url) {
+  final normalizedName = name
+      .toLowerCase()
+      .replaceAll('á', 'a')
+      .replaceAll('é', 'e')
+      .replaceAll('í', 'i')
+      .replaceAll('ó', 'o')
+      .replaceAll('ú', 'u')
+      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+      .trim();
+  final uri = Uri.tryParse(url.trim());
+  final host = uri?.host.toLowerCase().replaceFirst(RegExp(r'^www\.'), '') ?? '';
+  final path = uri?.path.toLowerCase() ?? '';
+  final agendaLabel = normalizedName.contains('agenda') ||
+      normalizedName.startsWith('programacion');
+  final agendaRoute = RegExp(r'(^|/)(agenda|programacion|calendario)(/|$)')
+      .hasMatch(path);
+  final agendaHome = host == 'futbol-libre.cam' &&
+      (path.isEmpty || path == '/');
+  return agendaLabel || agendaRoute || agendaHome;
+}
+
+bool isSameLocalAgendaDay(DateTime first, DateTime second) {
+  final a = first.toLocal();
+  final b = second.toLocal();
+  return a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+/// Highest published popularity score wins. When the site exposes no metric,
+/// its own order is preserved instead of inventing popularity data.
+List<AgendaTransmissionOption> rankAgendaTransmissionOptions(
+  Iterable<AgendaTransmissionOption> options,
+) {
+  final ranked = List<AgendaTransmissionOption>.of(options)
+    ..sort((first, second) {
+      final popularity =
+          second.popularityScore.compareTo(first.popularityScore);
+      if (popularity != 0) return popularity;
+      return first.order.compareTo(second.order);
+    });
+  return ranked;
+}
+
 class AgendaEventReference {
   const AgendaEventReference({
     required this.id,
     required this.title,
     required this.startsAt,
     required this.channelReferences,
+    this.transmissionOptions = const <AgendaTransmissionOption>[],
     this.competition = '',
     this.status = 'unknown',
     this.endsAt,
@@ -32,6 +139,7 @@ class AgendaEventReference {
   final DateTime startsAt;
   final DateTime? endsAt;
   final List<String> channelReferences;
+  final List<AgendaTransmissionOption> transmissionOptions;
   final String status;
   final String detailUrl;
   final DateTime? updatedAt;
@@ -45,21 +153,9 @@ class AgendaEventReference {
         .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
         .trim();
     return const <String>{
-      'finished',
-      'final',
-      'finalizado',
-      'finalizada',
-      'terminado',
-      'terminada',
-      'completed',
-      'ended',
-      'cancelled',
-      'canceled',
-      'postponed',
-      'suspendido',
-      'suspendida',
-      'cancelado',
-      'cancelada',
+      'finished', 'final', 'finalizado', 'finalizada', 'terminado',
+      'terminada', 'completed', 'ended', 'cancelled', 'canceled',
+      'postponed', 'suspendido', 'suspendida', 'cancelado', 'cancelada',
     }.contains(normalized);
   }
 
@@ -70,6 +166,8 @@ class AgendaEventReference {
         'startsAt': startsAt.toIso8601String(),
         'endsAt': endsAt?.toIso8601String(),
         'channelReferences': channelReferences,
+        'transmissionOptions':
+            transmissionOptions.map((option) => option.toJson()).toList(),
         'status': status,
         'detailUrl': detailUrl,
         'updatedAt': updatedAt?.toIso8601String(),
@@ -81,14 +179,16 @@ class AgendaEventReference {
     final title = (map['title'] ?? map['eventTitle'] ?? map['match'] ?? '')
         .toString()
         .trim();
-    final rawStart = (map['startsAt'] ?? map['startAt'] ?? map['dateTime'] ?? '')
-        .toString()
-        .trim();
+    final rawStart =
+        (map['startsAt'] ?? map['startAt'] ?? map['dateTime'] ?? '')
+            .toString()
+            .trim();
     final startsAt = DateTime.tryParse(rawStart);
     if (title.isEmpty || startsAt == null) return null;
 
     final refs = <String>[];
-    final rawRefs = map['channelReferences'] ?? map['channels'] ?? map['sources'];
+    final rawRefs =
+        map['channelReferences'] ?? map['channels'] ?? map['sources'];
     if (rawRefs is List) {
       for (final raw in rawRefs) {
         final label = raw is Map
@@ -96,6 +196,19 @@ class AgendaEventReference {
             : raw.toString();
         final clean = normalizeAgendaChannelReference(label);
         if (clean.isNotEmpty && !refs.contains(clean)) refs.add(clean);
+      }
+    }
+
+    final rawOptions =
+        map['transmissionOptions'] ?? map['options'] ?? map['broadcasts'];
+    final options = <AgendaTransmissionOption>[];
+    if (rawOptions is List) {
+      for (var index = 0; index < rawOptions.length; index++) {
+        final option =
+            AgendaTransmissionOption.tryParse(rawOptions[index], index);
+        if (option != null && !options.any((item) => item.url == option.url)) {
+          options.add(option);
+        }
       }
     }
 
@@ -116,6 +229,7 @@ class AgendaEventReference {
       startsAt: startsAt,
       endsAt: endsAt,
       channelReferences: refs,
+      transmissionOptions: options,
       status: status.isEmpty ? 'unknown' : status,
       detailUrl: detailUrl,
       updatedAt: DateTime.tryParse(updatedValue),
@@ -126,6 +240,9 @@ class AgendaEventReference {
     final references = channelReferences.isNotEmpty
         ? channelReferences
         : previous.channelReferences;
+    final options = transmissionOptions.isNotEmpty
+        ? transmissionOptions
+        : previous.transmissionOptions;
     final hasStatus = status.toLowerCase() != 'unknown' &&
         status.toLowerCase() != 'scheduled';
     return AgendaEventReference(
@@ -135,12 +252,23 @@ class AgendaEventReference {
       startsAt: startsAt,
       endsAt: endsAt ?? previous.endsAt,
       channelReferences: references,
+      transmissionOptions: options,
       status: hasStatus ? status : previous.status,
       detailUrl: detailUrl.isNotEmpty ? detailUrl : previous.detailUrl,
       updatedAt: updatedAt ?? previous.updatedAt,
     );
   }
 }
+
+/// Indica cuándo un evento debe aparecer en «En vivo»: desde cinco minutos
+/// antes del inicio y hasta su finalización, sin mostrar eventos lejanos.
+bool isAgendaEventWithinLiveWindow(
+  AgendaEventReference event,
+  DateTime now,
+) =>
+    !event.isFinished &&
+    !now.isBefore(event.startsAt.subtract(agendaLivePreparationWindow)) &&
+    now.isBefore(event.effectiveEndsAt);
 
 String _eventKey(String title, DateTime startsAt) {
   final normalized = title
@@ -151,12 +279,19 @@ String _eventKey(String title, DateTime startsAt) {
   return '${normalized}_${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}_${date.hour.toString().padLeft(2, '0')}${date.minute.toString().padLeft(2, '0')}';
 }
 
-/// Removes labels and quality/language suffixes while preserving channel
-/// numbers (ESPN 2 must never be treated as ESPN 1).
 String normalizeAgendaChannelReference(String value) {
   var text = value.trim().toLowerCase();
-  text = text.replaceAll(RegExp(r'^(?:fuente|canal|señal|senal|opción|opcion)\s*\d*\s*[:.\-]?\s*'), '');
-  text = text.replaceAll(RegExp(r'\s*[·|•]\s*(?:español|espanol|english|inglés|ingles|português|portugues|brasil|latino).*$', caseSensitive: false), '');
+  text = text.replaceAll(
+    RegExp(r'^(?:fuente|canal|señal|senal|opción|opcion)\s*\d*\s*[:.\-]?\s*'),
+    '',
+  );
+  text = text.replaceAll(
+    RegExp(
+      r'\s*[·|•]\s*(?:español|espanol|english|inglés|ingles|português|portugues|brasil|latino).*$',
+      caseSensitive: false,
+    ),
+    '',
+  );
   text = text
       .replaceAll('á', 'a')
       .replaceAll('é', 'e')
@@ -174,7 +309,10 @@ String normalizeAgendaChannelReference(String value) {
     RegExp(r'([a-z])([0-9])'),
     (match) => '${match.group(1)} ${match.group(2)}',
   );
-  text = text.replaceAll(RegExp(r'\b(?:us|uk|gb|ca|mx|ar|co|ve|cl|pe|uy|py|bo|cr|gt|hn|ni|pa|cw|jm|do|sv)\b'), ' ');
+  text = text.replaceAll(
+    RegExp(r'\b(?:us|uk|gb|ca|mx|ar|co|ve|cl|pe|uy|py|bo|cr|gt|hn|ni|pa|cw|jm|do|sv)\b'),
+    ' ',
+  );
   text = text.replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
   return text.trim().replaceAll(RegExp(r'\s+'), ' ');
 }
@@ -182,11 +320,27 @@ String normalizeAgendaChannelReference(String value) {
 class AgendaLiveAssignment {
   const AgendaLiveAssignment({
     required this.event,
-    required this.channel,
+    required this.option,
   });
 
   final AgendaEventReference event;
-  final SportsChannel channel;
+  final AgendaTransmissionOption option;
+}
+
+class AgendaChannelEntry {
+  const AgendaChannelEntry({
+    required this.option,
+    this.eventId,
+    this.eventTitle,
+    this.startsAt,
+  });
+
+  final AgendaTransmissionOption option;
+  final String? eventId;
+  final String? eventTitle;
+  final DateTime? startsAt;
+
+  bool get belongsToEvent => eventId != null;
 }
 
 class AgendaLivePendingEvent {
@@ -205,23 +359,19 @@ class AgendaLiveBoardState {
   const AgendaLiveBoardState({
     required this.assignments,
     required this.pending,
-    required this.catalogueChannelCount,
+    required this.transmissionOptionCount,
   });
 
   final List<AgendaLiveAssignment> assignments;
   final List<AgendaLivePendingEvent> pending;
-  final int catalogueChannelCount;
+  final int transmissionOptionCount;
 }
 
-/// Coordinates the five-minute preparation window and temporary allocation of
-/// one matching, visible sports channel to one of the eight live players.
 class AgendaLiveService {
-  AgendaLiveService({ChannelCatalogService? catalogService})
-      : _catalogService = catalogService ?? channelCatalogService;
-
-  final ChannelCatalogService _catalogService;
-
-  Future<void> captureAgendaEvents(dynamic rawPayload) async {
+  Future<void> captureAgendaEvents(
+    dynamic rawPayload, {
+    DateTime? now,
+  }) async {
     final rows = rawPayload is List
         ? rawPayload
         : rawPayload is Map && rawPayload['events'] is List
@@ -245,12 +395,12 @@ class AgendaLiveService {
       byId[event.id] = previous == null ? event : event.merge(previous);
     }
 
-    final now = DateTime.now();
+    final current = (now ?? DateTime.now()).toLocal();
     final retained = byId.values
         .where((event) =>
             !event.isFinished &&
-            now.isBefore(event.effectiveEndsAt.add(const Duration(hours: 1))) &&
-            !event.startsAt.isBefore(now.subtract(const Duration(hours: 24))))
+            isSameLocalAgendaDay(event.startsAt, current) &&
+            current.isBefore(event.effectiveEndsAt.add(const Duration(hours: 1))))
         .toList(growable: false)
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
     await prefs.setString(
@@ -264,18 +414,127 @@ class AgendaLiveService {
     return _readEvents(prefs);
   }
 
-  Future<AgendaLiveBoardState> buildBoardState({
+  /// Guarda los canales independientes publicados debajo de la agenda.
+  /// Solo almacena enlaces HTTPS visibles/publicados por la propia página.
+  Future<void> captureAgendaChannels(dynamic rawPayload) async {
+    final rows = rawPayload is List
+        ? rawPayload
+        : rawPayload is Map && rawPayload['channels'] is List
+            ? rawPayload['channels'] as List
+            : const <dynamic>[];
+    if (rows.isEmpty) return;
+
+    final incoming = <AgendaTransmissionOption>[];
+    for (var index = 0; index < rows.length; index++) {
+      final option = AgendaTransmissionOption.tryParse(rows[index], index);
+      if (option != null && !incoming.any((item) => item.url == option.url)) {
+        incoming.add(option);
+      }
+    }
+    if (incoming.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final previous = _readChannels(prefs);
+    final byUrl = <String, AgendaTransmissionOption>{
+      for (final option in previous) option.url: option,
+    };
+    for (final option in incoming) {
+      byUrl[option.url] = option;
+    }
+    final retained = byUrl.values.toList(growable: false)
+      ..sort((a, b) => a.order.compareTo(b.order));
+    await prefs.setString(
+      _agendaChannelsKey,
+      jsonEncode(retained.map((option) => option.toJson()).toList()),
+    );
+  }
+
+  /// Devuelve el catálogo de canales independientes guardado desde Agenda.
+  Future<List<AgendaTransmissionOption>> loadCapturedChannels() async {
+    final prefs = await SharedPreferences.getInstance();
+    return _readChannels(prefs);
+  }
+
+  /// Une los canales independientes con las opciones publicadas dentro de
+  /// cada evento de hoy. Conserva la relación evento-transmisión y descarta
+  /// enlaces que solo vuelven a abrir la Agenda.
+  Future<List<AgendaChannelEntry>> loadChannelsForCurrentDay({
     DateTime? now,
-    List<SportsChannel>? channels,
   }) async {
+    final current = (now ?? DateTime.now()).toLocal();
+    final events = await loadCapturedEvents();
+    final entries = <AgendaChannelEntry>[];
+    final usedEventUrls = <String>{};
+    final todaysEvents = events.where((event) =>
+        isSameLocalAgendaDay(event.startsAt, current) &&
+        !event.isFinished &&
+        current.isBefore(event.effectiveEndsAt)).toList()
+      ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+
+    for (final event in todaysEvents) {
+      for (final option in rankAgendaTransmissionOptions(
+        event.transmissionOptions,
+      )) {
+        final key = '${event.id}|${option.url}';
+        if (!isSafeAgendaTransmissionUrl(option.url) ||
+            isAgendaLandingPageReference(option.name, option.url) ||
+            !usedEventUrls.add(key)) {
+          continue;
+        }
+        entries.add(AgendaChannelEntry(
+          option: option,
+          eventId: event.id,
+          eventTitle: event.title,
+          startsAt: event.startsAt,
+        ));
+      }
+    }
+
+    final usedUrls = entries.map((entry) => entry.option.url).toSet();
+    final standalone = await loadCapturedChannels();
+    standalone.sort((a, b) => a.order.compareTo(b.order));
+    for (final option in standalone) {
+      if (!isSafeAgendaTransmissionUrl(option.url) ||
+          isAgendaLandingPageReference(option.name, option.url) ||
+          !usedUrls.add(option.url)) {
+        continue;
+      }
+      entries.add(AgendaChannelEntry(option: option));
+    }
+    return entries;
+  }
+
+  static List<AgendaTransmissionOption> _readChannels(
+    SharedPreferences prefs,
+  ) {
+    final raw = prefs.getString(_agendaChannelsKey);
+    if (raw == null || raw.isEmpty) return <AgendaTransmissionOption>[];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return <AgendaTransmissionOption>[];
+      return decoded
+          .asMap()
+          .entries
+          .map((entry) => AgendaTransmissionOption.tryParse(
+                entry.value,
+                entry.key,
+              ))
+          .whereType<AgendaTransmissionOption>()
+          .toList(growable: false);
+    } catch (_) {
+      return <AgendaTransmissionOption>[];
+    }
+  }
+
+  Future<AgendaLiveBoardState> buildBoardState({DateTime? now}) async {
     final current = (now ?? DateTime.now()).toLocal();
     final prefs = await SharedPreferences.getInstance();
     final stored = await _readEvents(prefs);
     final activeEvents = stored
         .where((event) =>
             !event.isFinished &&
-            current.isBefore(event.effectiveEndsAt) &&
-            !event.startsAt.isBefore(current.subtract(const Duration(hours: 24))))
+            isSameLocalAgendaDay(event.startsAt, current) &&
+            current.isBefore(event.effectiveEndsAt))
         .toList(growable: false)
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
 
@@ -286,29 +545,14 @@ class AgendaLiveService {
       );
     }
 
-    final dueEvents = activeEvents
-        .where((event) => !current.isBefore(
-              event.startsAt.subtract(agendaLivePreparationWindow),
-            ))
-        .toList(growable: false);
-    final availableChannels = dueEvents.any((event) => event.channelReferences.isNotEmpty)
-        ? (channels ?? await _loadVisibleSportsChannels())
-        : (channels ?? <SportsChannel>[]);
     final assignments = <AgendaLiveAssignment>[];
     final pending = <AgendaLivePendingEvent>[];
     final usedUrls = <String>{};
 
     for (final event in activeEvents) {
-      if (assignments.length >= 8) {
-        pending.add(AgendaLivePendingEvent(
-          event: event,
-          status: 'ESPERANDO UN REPRODUCTOR',
-          detail: 'Los ocho reproductores están ocupados. Este evento se asignará cuando se libere uno.',
-        ));
-        continue;
-      }
-
-      if (current.isBefore(event.startsAt.subtract(agendaLivePreparationWindow))) {
+      if (current.isBefore(
+        event.startsAt.subtract(agendaLivePreparationWindow),
+      )) {
         pending.add(AgendaLivePendingEvent(
           event: event,
           status: 'ESPERANDO LA VENTANA DE PREPARACIÓN',
@@ -317,126 +561,42 @@ class AgendaLiveService {
         continue;
       }
 
-      if (event.channelReferences.isEmpty) {
+      if (event.transmissionOptions.isEmpty) {
         pending.add(AgendaLivePendingEvent(
           event: event,
-          status: 'FALTAN LOS CANALES DE REFERENCIA',
-          detail: 'Abre el evento en Agenda deportiva para que la app lea los canales publicados en su ficha.',
+          status: 'FALTAN OPCIONES DE TRANSMISIÓN',
+          detail: 'Abre el evento en Agenda y toca una opción visible de transmisión. La app no consulta listas IPTV.',
         ));
         continue;
       }
 
-      SportsChannel? matched;
-      for (final reference in event.channelReferences) {
-        final candidate = _findMatchingChannel(reference, availableChannels)
-            .where((channel) => !usedUrls.contains(channel.url))
-            .firstOrNull;
-        if (candidate != null) {
-          matched = candidate;
-          break;
-        }
-      }
-
-      if (matched == null) {
+      final ranked = rankAgendaTransmissionOptions(event.transmissionOptions);
+      final selected = ranked.where((option) =>
+          isSafeAgendaTransmissionUrl(option.url) &&
+          !usedUrls.contains(option.url));
+      final option = selected.isEmpty ? null : selected.first;
+      if (option == null) {
         pending.add(AgendaLivePendingEvent(
           event: event,
-          status: 'BUSCANDO EN CANALES DEPORTIVOS',
-          detail: 'Referencias: ${event.channelReferences.join(', ')}. Aún no hay una coincidencia visible y reproducible en tu catálogo.',
+          status: 'BUSCANDO UNA OPCIÓN DISPONIBLE',
+          detail: 'Las opciones publicadas ya están asignadas a otro evento o no son enlaces HTTPS seguros.',
         ));
         continue;
       }
 
-      usedUrls.add(matched.url);
-      assignments.add(AgendaLiveAssignment(event: event, channel: matched));
+      usedUrls.add(option.url);
+      assignments.add(AgendaLiveAssignment(event: event, option: option));
     }
 
+    final optionCount = activeEvents.fold<int>(
+      0,
+      (total, event) => total + event.transmissionOptions.length,
+    );
     return AgendaLiveBoardState(
       assignments: assignments,
-      pending: pending.take(8 - assignments.length).toList(growable: false),
-      catalogueChannelCount: availableChannels.length,
+      pending: pending,
+      transmissionOptionCount: optionCount,
     );
-  }
-
-  Future<List<SportsChannel>> _loadVisibleSportsChannels() async {
-    final cached = await loadCachedVisibleSportsChannels();
-    if (cached.isNotEmpty &&
-        await isCachedPublicChannelSnapshotFresh(
-          maxAge: _agendaLiveCatalogueMaxAge,
-        )) {
-      return cached
-          .where((channel) =>
-              channel.isSports &&
-              channel.visible &&
-              isSupportedChannelPlaybackUrl(channel.url))
-          .toList(growable: false);
-    }
-
-    try {
-      final all = <SportsChannel>[];
-      var offset = 0;
-      for (var pageNumber = 0; pageNumber < 100; pageNumber++) {
-        final page = await _catalogService.fetchPublicChannelPage(
-          offset: offset,
-          limit: 2000,
-        );
-        all.addAll(page.channels);
-        if (!page.hasMore || page.channels.isEmpty) break;
-        final nextOffset = page.offset + page.channels.length;
-        if (nextOffset <= offset) {
-          throw StateError('El catálogo de Canales deportivos no avanzó a la siguiente página.');
-        }
-        offset = nextOffset;
-        if (pageNumber == 99) {
-          throw StateError('El catálogo de Canales deportivos supera el límite de páginas.');
-        }
-      }
-      await saveCachedPublicChannelSnapshot(all);
-      return all
-          .where((channel) =>
-              channel.isSports &&
-              channel.visible &&
-              isSupportedChannelPlaybackUrl(channel.url))
-          .toList(growable: false);
-    } catch (_) {
-      if (cached.isNotEmpty) {
-        return cached
-            .where((channel) =>
-                channel.isSports &&
-                channel.visible &&
-                isSupportedChannelPlaybackUrl(channel.url))
-            .toList(growable: false);
-      }
-      rethrow;
-    }
-  }
-
-  static List<SportsChannel> _findMatchingChannel(
-    String reference,
-    List<SportsChannel> channels,
-  ) {
-    final normalizedReference = normalizeAgendaChannelReference(reference);
-    if (normalizedReference.isEmpty) return <SportsChannel>[];
-    final matches = channels.where((channel) {
-      if (!channel.isSports ||
-          !channel.visible ||
-          !isSupportedChannelPlaybackUrl(channel.url)) {
-        return false;
-      }
-      return <String>[
-        channel.name,
-        channel.identifier,
-        channel.tvgId,
-      ].any((label) =>
-          normalizeAgendaChannelReference(label) == normalizedReference);
-    }).toList(growable: false);
-
-    final sorted = List<SportsChannel>.of(matches)
-      ..sort((first, second) {
-        final firstLanguage = first.language == 'es' ? 0 : first.language == 'en' ? 1 : 2;
-        final secondLanguage = second.language == 'es' ? 0 : second.language == 'en' ? 1 : 2;
-        return firstLanguage.compareTo(secondLanguage);
-      });
-    return sorted;
   }
 
   static Future<List<AgendaEventReference>> _readEvents(
@@ -454,12 +614,5 @@ class AgendaLiveService {
     } catch (_) {
       return <AgendaEventReference>[];
     }
-  }
-}
-
-extension _FirstOrNullAgenda<T> on Iterable<T> {
-  T? get firstOrNull {
-    final iterator = this.iterator;
-    return iterator.moveNext() ? iterator.current : null;
   }
 }

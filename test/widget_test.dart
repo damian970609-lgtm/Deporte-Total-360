@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:deporte_total_360/main.dart';
 import 'package:deporte_total_360/live_channels_screen.dart';
 import 'package:deporte_total_360/channel_catalog_screen.dart';
+import 'package:deporte_total_360/agenda_channels_screen.dart';
 import 'package:deporte_total_360/channel_catalog_service.dart';
 import 'package:deporte_total_360/channel_playlist_presets.dart';
 
@@ -179,45 +180,57 @@ class _AdminTestService extends ChannelCatalogService {
 }
 
 void main() {
-  testWidgets('DAMIAN.APK abre un único panel tras diez pulsaciones y evita apilar rutas', (tester) async {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
-    final service = _AdminTestService(autoSignIn: false);
+  testWidgets('Canales deportivos combina canales independientes con fuentes de eventos de hoy', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'dt360_agenda_channels_v1':
+          '[{"id":"channel-1","name":"ESPN Español","url":"https://channels.example/espn","order":0}]',
+      'dt360_agenda_live_references_v1':
+          '[{"id":"match-1","title":"Equipo Azul vs Equipo Rojo","competition":"Liga de prueba","startsAt":"${DateTime.now().subtract(const Duration(minutes: 5)).toIso8601String()}","channelReferences":[],"transmissionOptions":[{"id":"event-link","name":"Transmisión del evento","url":"https://player.example/event","order":0}],"status":"unknown"}]',
+    });
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+
     await tester.pumpWidget(
-      MaterialApp(home: SettingsScreen(adminService: service)),
+      MaterialApp(home: AgendaChannelsScreen(onOpenAgenda: _noopHomeAction)),
     );
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 30)),
+    );
+    await tester.pump();
+
+    expect(find.text('REPRODUCTOR DEPORTE TOTAL 360°'), findsOneWidget);
+    expect(find.text('CANALES DISPONIBLES'), findsOneWidget);
+    expect(find.text('ESPN Español'), findsOneWidget);
+    expect(find.text('TRANSMISIONES DE LOS EVENTOS DE HOY'), findsOneWidget);
+    expect(find.text('VINCULADO A UN EVENTO DE HOY'), findsOneWidget);
+    expect(find.text('Liga de prueba'), findsNothing);
+    expect(find.text('Transmisión del evento'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('DAMIAN.APK queda como firma y no abre el antiguo panel IPTV', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
     await tester.pump();
 
     final signature = find.text('DAMIAN.APK');
     expect(signature, findsOneWidget);
-    for (var tap = 0; tap < 9; tap++) {
+    expect(find.byKey(const ValueKey<String>('settings-damian-apk-menu')), findsNothing);
+    for (var tap = 0; tap < 12; tap++) {
       await tester.tap(signature);
       await tester.pump();
     }
-    expect(find.text('ADMINISTRACIÓN · DAMIÁN.APK'), findsNothing);
 
-    final tapTarget = find.ancestor(
-      of: signature,
-      matching: find.byType(GestureDetector),
-    ).first;
-    final onTap = tester.widget<GestureDetector>(tapTarget).onTap!;
-    onTap();
-    // Simula toques adicionales durante la transición de apertura.
-    for (var tap = 0; tap < 30; tap++) {
-      onTap();
-    }
-    await tester.pumpAndSettle();
-
-    expect(
-      find.text('ADMINISTRACIÓN · DAMIÁN.APK', skipOffstage: false),
-      findsOneWidget,
-    );
-    expect(find.text('ENTRAR CON GOOGLE'), findsOneWidget);
+    expect(find.text('IPTV · DAMIÁN.APK', skipOffstage: false), findsNothing);
+    expect(find.text('ENTRAR CON GOOGLE'), findsNothing);
     expect(tester.takeException(), isNull);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox.shrink());
   });
-
 
   testWidgets('el panel pagina la copia local y no construye todos los canales al abrir', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -261,10 +274,21 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // El contador está en la cabecera del ListView; compruébalo antes de
+    // desplazarla fuera del árbol de widgets montados.
+    expect(find.byKey(const ValueKey<String>('iptv-channel-total')), findsOneWidget);
+    final firstCachedRow = find.byKey(
+      const ValueKey<String>('iptv-channel-row-cached-0'),
+    );
+    await tester.scrollUntilVisible(
+      firstCachedRow,
+      350,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
     expect(find.text('Canal cacheado 000'), findsOneWidget);
     expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsNothing);
     expect(find.textContaining('CARGAR SIGUIENTE BLOQUE'), findsNothing);
-    expect(find.byKey(const ValueKey<String>('iptv-channel-total')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -274,13 +298,25 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
-      MaterialApp(home: ChannelAdminScreen(service: service)),
+      MaterialApp(home: ChannelAdminScreen(service: service, snapshotLoader: (_) async => null)),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('IPTV · TODAS LAS LISTAS EN UNA SOLA'), findsOneWidget);
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('iptv-channel-row-general-channel')),
+      350,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
     expect(find.text('Canal General'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('iptv-channel-row-sports-channel')),
+      350,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
     expect(find.text('ESPN Deportes'), findsOneWidget);
     expect(find.text('INVENTARIO COMPLETO DE CANALES'), findsNothing);
     expect(find.text('PROTECCIÓN Y RESTRICCIONES REGIONALES'), findsNothing);
@@ -295,7 +331,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
-      MaterialApp(home: ChannelAdminScreen(service: service)),
+      MaterialApp(home: ChannelAdminScreen(service: service, snapshotLoader: (_) async => null)),
     );
     await tester.pumpAndSettle();
 
@@ -331,7 +367,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true, sourceCount: 119);
     await tester.pumpWidget(
-      MaterialApp(home: ChannelAdminScreen(service: service)),
+      MaterialApp(home: ChannelAdminScreen(service: service, snapshotLoader: (_) async => null)),
     );
     await tester.pumpAndSettle();
 
@@ -363,7 +399,7 @@ void main() {
       'label': iptvOrgGlobalIndexPlaylistLabel,
     });
     await tester.pumpWidget(
-      MaterialApp(home: ChannelAdminScreen(service: service)),
+      MaterialApp(home: ChannelAdminScreen(service: service, snapshotLoader: (_) async => null)),
     );
     await tester.pumpAndSettle();
 
@@ -394,7 +430,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
-      MaterialApp(home: ChannelAdminScreen(service: service)),
+      MaterialApp(home: ChannelAdminScreen(service: service, snapshotLoader: (_) async => null)),
     );
     await tester.pumpAndSettle();
 
@@ -413,20 +449,31 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true);
     await tester.pumpWidget(
-      MaterialApp(home: ChannelAdminScreen(service: service)),
+      MaterialApp(home: ChannelAdminScreen(service: service, snapshotLoader: (_) async => null)),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Canal General'), findsOneWidget);
-    expect(find.text('ESPN Deportes'), findsOneWidget);
+    // Primero lleva el botón a la zona visible. El catálogo usa una lista
+    // desplazable y puede desmontar los controles que quedan fuera de pantalla.
+    await tester.scrollUntilVisible(
+      find.text('REIMPORTAR TODAS LAS LISTAS GUARDADAS'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
     final refresh = find.byTooltip('Actualizar todas las listas');
     expect(refresh, findsOneWidget);
     await tester.tap(refresh);
     await tester.pumpAndSettle();
 
     expect(service.lastAdminPageLimit, channelAdminCatalogPageSize);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('iptv-channel-row-general-channel')),
+      350,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
     expect(find.text('Canal General'), findsOneWidget);
-    expect(find.text('ESPN Deportes'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -435,7 +482,7 @@ void main() {
   testWidgets('el panel privado exige autenticación antes de mostrar las listas', (tester) async {
     final service = _AdminTestService(autoSignIn: false);
     await tester.pumpWidget(
-      MaterialApp(home: ChannelAdminScreen(service: service)),
+      MaterialApp(home: ChannelAdminScreen(service: service, snapshotLoader: (_) async => null)),
     );
     await tester.pumpAndSettle();
 
@@ -455,6 +502,12 @@ void main() {
     await tester.pump();
 
     expect(find.text('Servidor de datos deportivos'), findsNothing);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('settings-update-apk')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
     expect(find.text('Actualizar APK'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey<String>('creator-whatsapp-button')),
@@ -517,14 +570,19 @@ void main() {
     tester.view.physicalSize = const Size(800, 1200);
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final service = _AdminTestService(autoSignIn: true, adminTotal: 2005);
-    await tester.pumpWidget(MaterialApp(home: ChannelAdminScreen(service: service)));
+    await tester.pumpWidget(MaterialApp(home: ChannelAdminScreen(service: service, snapshotLoader: (_) async => null)));
     await tester.pumpAndSettle();
 
+    expect(
+      service._adminPageCalls,
+      greaterThan(0),
+      reason: 'La sesión restaurada no solicitó ninguna página al servicio IPTV.',
+    );
     expect(tester.widget<Text>(find.byKey(const ValueKey<String>('iptv-channel-total'))).data, '2005');
     expect(find.text('REPRODUCTOR IPTV'), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('channel-admin-iptv-list')), findsOneWidget);
     expect(find.text('AÑADIR CANALES Y LISTAS IPTV'), findsOneWidget);
-    expect(service._adminPageCalls, greaterThanOrEqualTo(3));
+    expect(service._adminPageCalls, greaterThanOrEqualTo(2));
 
     await tester.enterText(
       find.byKey(const ValueKey<String>('iptv-search-field')),
@@ -538,8 +596,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Mostrando 2005 de 2005 canales.'), findsOneWidget);
 
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('iptv-channel-row-general-channel')),
+      350,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
     expect(find.byKey(const ValueKey<String>('iptv-visibility-general-channel')), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('iptv-language-general-channel')), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('iptv-channel-row-sports-channel')),
+      350,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
     expect(find.byKey(const ValueKey<String>('iptv-visibility-sports-channel')), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('iptv-language-sports-channel')), findsOneWidget);
 
@@ -588,9 +658,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(service._adminPageCalls, 0);
-    expect(find.text('Canal guardado general'), findsOneWidget);
-    expect(find.text('Canal deportivo guardado'), findsOneWidget);
+    // El resumen forma parte de la primera tarjeta y se desmonta al desplazarse.
     expect(find.text('Mostrando 2 de 2 canales.'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('iptv-channel-row-cached-general')),
+      350,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
+    expect(find.text('Canal guardado general'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('iptv-channel-row-cached-sports')),
+      350,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 10,
+    );
+    expect(find.text('Canal deportivo guardado'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -645,7 +728,7 @@ void main() {
     expect(find.text('Inicio'), findsOneWidget);
     expect(find.text('Agenda'), findsOneWidget);
     expect(find.text('En vivo'), findsOneWidget);
-    expect(find.text('Canales'), findsOneWidget);
+    expect(find.text('Canales deportivos'), findsOneWidget);
     expect(find.text('Ajustes'), findsOneWidget);
     expect(find.text('Agenda de hoy'), findsNothing);
     expect(find.text('Mister Fantasy'), findsNothing);
@@ -657,12 +740,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump();
     expect(find.byType(LiveChannelsScreen), findsOneWidget);
-    expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsOneWidget);
-    expect(find.text('SEÑAL PENDIENTE'), findsNWidgets(8));
-    await tester.tap(find.text('Canales'));
+    expect(find.text('REPRODUCTOR DEPORTE TOTAL 360°'), findsOneWidget);
+    expect(find.text('EVENTOS EN PREPARACIÓN O EN VIVO'), findsNothing);
+    expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsNothing);
+    expect(find.text('SEÑAL PENDIENTE'), findsNothing);
+    await tester.tap(find.text('Canales deportivos'));
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump();
-    expect(find.byType(ChannelCatalogScreen), findsOneWidget);
+    expect(find.byType(AgendaChannelsScreen), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.text('Ajustes'));

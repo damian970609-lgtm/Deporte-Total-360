@@ -957,7 +957,7 @@ class _ChannelInlinePlayerState extends State<ChannelInlinePlayer> {
       _tracks = <VideoTrack>[];
     });
 
-    final controller = VideoPlayerController.networkUrl(
+    final controller = createCompatibleNetworkVideoController(
       uri,
       videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
     );
@@ -1676,7 +1676,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
       await _loadCachedAdminSnapshot(email);
       if (!mounted) return;
       setState(() => _working = false);
-      unawaited(_loadAdmin());
+      await _loadAdmin();
     } on TimeoutException {
       if (!mounted) return;
       setState(() {
@@ -1901,7 +1901,14 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
         _visibleSourceCount = _visibleSourceCount.clamp(0, sources.length).toInt();
         _sourcesError = null;
       });
-      await _saveLocalAdminSnapshot(saveChannels: false, saveSources: true);
+      // La escritura local no debe mantener bloqueada la apertura del panel.
+      // El guardado se serializa por cuenta dentro de ChannelAdminSnapshotStore.
+      unawaited(_saveLocalAdminSnapshot(
+        saveChannels: false,
+        saveSources: true,
+      ).catchError((Object error) {
+        debugPrint('No se pudo guardar la copia local de las listas: $error');
+      }));
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -2995,7 +3002,14 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           _iptvSelectedChannel = complete.firstWhere((channel) => channel.id == _iptvSelectedChannel!.id, orElse: () => _iptvSelectedChannel!);
         }
       });
-      await _saveLocalAdminSnapshot(saveChannels: true, saveSources: false);
+      // Primero libera la interfaz; el inventario completo ya está en memoria.
+      // Persistir miles de filas en disco no debe dejar el indicador animado activo.
+      unawaited(_saveLocalAdminSnapshot(
+        saveChannels: true,
+        saveSources: false,
+      ).catchError((Object error) {
+        debugPrint('No se pudo guardar la copia local del catálogo IPTV: $error');
+      }));
     } catch (error) {
       if (!mounted || requestId != _iptvRequestId) return;
       setState(() {
@@ -3084,7 +3098,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
             style: const TextStyle(color: Colors.white, fontSize: 11),
             decoration: const InputDecoration(
               labelText: 'URL HTTPS de la lista IPTV',
-              hintText: 'M3U/M3U8, PLS, XSPF, XML/ASX, JSON, CSV o TXT',
+              hintText: 'M3U/M3U8, PLS, XSPF, XML/ASX, WPL/SMIL, JSON, CSV o TXT',
               prefixIcon: Icon(Icons.link_rounded),
             ),
           ),
@@ -3148,7 +3162,7 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
             child: OutlinedButton.icon(
               onPressed: _working || _sources.length >= maxChannelPlaylistSources ? null : _addGeneralPreset,
               icon: const Icon(Icons.playlist_add_rounded),
-              label: const Text('AGREGAR LISTA GENERAL'),
+              label: const Text('AÑADIR LISTA GENERAL'),
             ),
           ),
           const SizedBox(height: 7),
@@ -3164,9 +3178,27 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: _working ? null : _refreshSources,
-              icon: const Icon(Icons.sync_rounded),
-              label: const Text('REIMPORTAR TODAS LAS LISTAS GUARDADAS'),
+              onPressed: _working || _sources.length >= maxChannelPlaylistSources
+                  ? null
+                  : () => _addIptvOrgGlobalIndex(),
+              icon: const Icon(Icons.public_rounded),
+              label: Text(
+                _hasIptvOrgGlobalIndex
+                    ? 'ÍNDICE GLOBAL IPTV-ORG REGISTRADO'
+                    : 'AÑADIR ÍNDICE GLOBAL IPTV-ORG',
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: double.infinity,
+            child: Tooltip(
+              message: 'Actualizar todas las listas',
+              child: OutlinedButton.icon(
+                onPressed: _working ? null : _refreshSources,
+                icon: const Icon(Icons.sync_rounded),
+                label: const Text('REIMPORTAR TODAS LAS LISTAS GUARDADAS'),
+              ),
             ),
           ),
         ],
@@ -3193,63 +3225,6 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () => setState(() => _iptvSelectedChannel = channel),
-                child: Row(
-                  children: <Widget>[
-                    SizedBox(
-                      width: 24,
-                      child: Text(
-                        index.toString(),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: _channelCyan,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                    _ChannelLogo(channel: channel, size: 36),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            channel.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          Text(
-                            channel.groupTitle.isEmpty
-                                ? 'SIN GRUPO'
-                                : channel.groupTitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: _channelMuted,
-                              fontSize: 8,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (selected)
-                      const Icon(
-                        Icons.play_circle_fill_rounded,
-                        color: _channelGreen,
-                        size: 21,
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
               Row(
                 children: <Widget>[
                   OutlinedButton.icon(
@@ -3332,6 +3307,63 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => setState(() => _iptvSelectedChannel = channel),
+                child: Row(
+                  children: <Widget>[
+                    SizedBox(
+                      width: 24,
+                      child: Text(
+                        index.toString(),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: _channelCyan,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    _ChannelLogo(channel: channel, size: 36),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            channel.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          Text(
+                            channel.groupTitle.isEmpty
+                                ? 'SIN GRUPO'
+                                : channel.groupTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: _channelMuted,
+                              fontSize: 8,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (selected)
+                      const Icon(
+                        Icons.play_circle_fill_rounded,
+                        color: _channelGreen,
+                        size: 21,
+                      ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -3452,10 +3484,12 @@ class _ChannelAdminScreenState extends State<ChannelAdminScreen> {
                   ),
                 );
               }
-              if (index == 1) return Padding(
-                padding: const EdgeInsets.only(bottom: 7),
-                child: _buildIptvAddListCard(),
-              );
+              if (index == 1) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 7),
+                  child: _buildIptvAddListCard(),
+                );
+              }
               if (index <= rows.length + 1) {
                 final channel = rows[index - 2];
                 return _buildIptvChannelRow(channel, index - 1);

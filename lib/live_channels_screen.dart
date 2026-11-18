@@ -5,11 +5,12 @@ import 'agenda_live_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'automatic_live_service.dart';
 import 'package:video_player/video_player.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'live_media_format.dart';
 import 'stream_diagnostics.dart';
+import 'web_protection_policy.dart';
 
 
 const Color _liveBg = Color(0xFF000000);
@@ -26,24 +27,7 @@ const Color _liveMuted = Color(0xFFEAF0F8);
 bool isSupportedAuthorizedMediaUrl(String value) =>
     liveMediaFormatForUrl(value) != null;
 
-VideoFormat _videoFormatHintFor(Uri uri) {
-  switch (liveMediaFormatForUrl(uri.toString())) {
-    case LiveMediaFormat.hls:
-      return VideoFormat.hls;
-    case LiveMediaFormat.dash:
-      return VideoFormat.dash;
-    case LiveMediaFormat.smoothStreaming:
-      return VideoFormat.ss;
-    case LiveMediaFormat.progressive:
-    case null:
-      return VideoFormat.other;
-  }
-}
-
-
-/// Pantalla visible con los ocho reproductores preparados.
-/// La configuración de señales anterior se ha retirado; se conectará un
-/// método nuevo en una actualización posterior.
+/// Pantalla de eventos en vivo con un reproductor compartido y fijo.
 class LiveChannelsScreen extends StatefulWidget {
   const LiveChannelsScreen({super.key, this.isActive = true});
 
@@ -63,8 +47,9 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
   AgendaLiveBoardState _board = const AgendaLiveBoardState(
     assignments: <AgendaLiveAssignment>[],
     pending: <AgendaLivePendingEvent>[],
-    catalogueChannelCount: 0,
+    transmissionOptionCount: 0,
   );
+  LivePlayerSource? _selectedSource;
 
   @override
   void initState() {
@@ -105,11 +90,17 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
   Future<void> _clearLegacyTransmissionConfiguration() async {
     try {
       final preferences = await SharedPreferences.getInstance();
-      await preferences.remove('deporte_total_authorized_live_sources_v1');
-      await preferences.remove('deporte_total_live_favorites_v1');
-      await AutoLiveSettings.clear();
+      for (final key in <String>[
+        'deporte_total_authorized_live_sources_v1',
+        'deporte_total_live_favorites_v1',
+      ]) {
+        await preferences.remove(key);
+      }
+      await preferences.setString('dt360_auto_live_playlist_url_v1', '');
+      await preferences.setString('dt360_auto_live_epg_url_v1', '');
+      await preferences.setBool('dt360_auto_live_authorized_v1', false);
     } catch (error) {
-      debugPrint('No se pudo limpiar toda la configuración antigua de transmisión: $error');
+      debugPrint('No se pudo limpiar la configuración antigua de IPTV: $error');
     }
   }
 
@@ -120,8 +111,16 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
     try {
       final next = await _agendaLive.buildBoardState(now: DateTime.now());
       if (!mounted) return;
+      final retainedEventIds = <String>{
+        ...next.assignments.map((assignment) => assignment.event.id),
+        ...next.pending.map((pending) => pending.event.id),
+      };
       setState(() {
         _board = next;
+        if (_selectedSource?.eventId != null &&
+            !retainedEventIds.contains(_selectedSource!.eventId)) {
+          _selectedSource = null;
+        }
         _loading = false;
         _notice = null;
       });
@@ -138,51 +137,9 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
     }
   }
 
-  List<LivePlayerSource> _playerSources() {
-    return _board.assignments.take(8).map((assignment) {
-      final event = assignment.event;
-      final channel = assignment.channel;
-      final details = <String>[
-        if (event.competition.isNotEmpty) event.competition,
-        event.title,
-        channel.name,
-      ];
-      return LivePlayerSource(
-        title: 'DEPORTE TOTAL 360° · ${channel.name}',
-        url: channel.url,
-        subtitle: details.join(' · '),
-        eventId: event.id,
-        startAt: event.startsAt,
-      );
-    }).toList(growable: false);
-  }
-
-  List<LivePlayerWaitingEvent> _waitingEvents() {
-    final now = DateTime.now();
-    return _board.pending.take(8).map((pending) {
-      final event = pending.event;
-      final start = event.startsAt.toLocal();
-      final time = '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
-      final heading = event.competition.isNotEmpty
-          ? event.competition
-          : 'AGENDA DEPORTIVA';
-      final startLabel = now.isBefore(event.startsAt)
-          ? 'Comienza a las $time'
-          : 'Evento iniciado · $time';
-      return LivePlayerWaitingEvent(
-        heading: heading,
-        match: event.title,
-        startLabel: startLabel,
-        processStatus: pending.status,
-        processDetail: pending.detail,
-      );
-    }).toList(growable: false);
-  }
 
   @override
   Widget build(BuildContext context) {
-    final sources = _playerSources();
-    final waiting = _waitingEvents();
     return Scaffold(
       backgroundColor: _liveBg,
       appBar: AppBar(
@@ -209,81 +166,83 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
       ),
       body: Column(
         children: <Widget>[
+          LiveSharedPlayerPanel(
+            source: _selectedSource,
+            compact: true,
+            isActive: widget.isActive,
+            emptyMessage: 'Selecciona un evento y pulsa PLAY para verlo aquí.',
+          ),
+          if (_loading || _refreshing)
+            const LinearProgressIndicator(
+              minHeight: 2,
+              color: _liveCyan,
+              backgroundColor: _livePanel2,
+            ),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 11),
-            decoration: const BoxDecoration(
-              color: _livePanel,
-              border: Border(bottom: BorderSide(color: _liveLine)),
+            margin: const EdgeInsets.fromLTRB(10, 3, 10, 7),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: <Color>[Color(0xFF071B31), Color(0xFF17101A)],
+              ),
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: _liveCyan.withAlpha(115)),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: <Widget>[
-                const Text(
-                  '8 REPRODUCTORES DISPONIBLES',
-                  style: TextStyle(
-                    color: _liveCyan,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: .7,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'BÚSQUEDA AUTOMÁTICA · 5 MINUTOS ANTES',
-                  style: TextStyle(
-                    color: _livePink,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: .55,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                const Text(
-                  'La app toma los canales publicados en la ficha de cada evento y busca una coincidencia entre tus canales deportivos visibles. Al finalizar el evento, libera el reproductor.',
-                  style: TextStyle(
-                    color: _liveMuted,
-                    fontSize: 10,
-                    height: 1.45,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  '${sources.length}/8 reproductores asignados · ${_board.catalogueChannelCount} canales deportivos revisados',
-                  style: const TextStyle(
-                    color: _liveCyan,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                if (_loading || _refreshing)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 7),
-                    child: LinearProgressIndicator(
-                      minHeight: 2,
-                      color: _liveCyan,
-                      backgroundColor: _livePanel2,
-                    ),
-                  ),
-                if (_notice != null) ...<Widget>[
-                  const SizedBox(height: 6),
-                  Text(
-                    _notice!,
-                    style: const TextStyle(
-                      color: Color(0xFFFFB4C0),
+                const Icon(Icons.sports_score_rounded, color: _liveCyan, size: 20),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'UNA TRANSMISIÓN POR EVENTO · SOLO HOY',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
                       fontSize: 9,
-                      height: 1.35,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: .35,
                     ),
                   ),
-                ],
+                ),
+                Text(
+                  '${_board.assignments.length}',
+                  style: const TextStyle(
+                    color: _liveGreen,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               ],
             ),
           ),
+          if (_notice != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 7),
+              child: Text(
+                _notice!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFFFFB4C0),
+                  fontSize: 9,
+                  height: 1.3,
+                ),
+              ),
+            ),
           Expanded(
-            child: LivePlayerBoard(
-              sources: sources,
-              waitingEvents: waiting,
-              isActive: widget.isActive,
+            child: _LiveEventTransmissionList(
+              assignments: _board.assignments,
+              pendingEvents: _board.pending
+                  .where((pending) => isAgendaEventWithinLiveWindow(
+                        pending.event,
+                        DateTime.now(),
+                      ))
+                  .toList(growable: false),
+              onPlay: (source) {
+                if (mounted) setState(() => _selectedSource = source);
+              },
             ),
           ),
         ],
@@ -299,6 +258,7 @@ class LivePlayerSource {
     this.subtitle,
     this.eventId,
     this.startAt,
+    this.useEmbeddedPage = false,
   });
 
   final String title;
@@ -306,6 +266,7 @@ class LivePlayerSource {
   final String? subtitle;
   final String? eventId;
   final DateTime? startAt;
+  final bool useEmbeddedPage;
 }
 
 class LivePlayerWaitingEvent {
@@ -322,6 +283,324 @@ class LivePlayerWaitingEvent {
   final String startLabel;
   final String processStatus;
   final String processDetail;
+}
+
+/// Reproductor único y fijo que comparten Canales deportivos y En vivo.
+class LiveSharedPlayerPanel extends StatelessWidget {
+  const LiveSharedPlayerPanel({
+    super.key,
+    required this.source,
+    this.isActive = true,
+    this.compact = false,
+    this.emptyMessage = 'Selecciona una transmisión para reproducirla aquí.',
+  });
+
+  final LivePlayerSource? source;
+  final bool isActive;
+  final bool compact;
+  final String emptyMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final playerHeight = (constraints.maxWidth * 9 / 16)
+            .clamp(compact ? 112.0 : 160.0, compact ? 190.0 : 255.0)
+            .toDouble();
+        final selected = source;
+        return Container(
+          width: double.infinity,
+          margin: EdgeInsets.fromLTRB(10, compact ? 6 : 9, 10, compact ? 5 : 7),
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: _livePanel,
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: _liveCyan.withAlpha(170), width: 1.2),
+            boxShadow: <BoxShadow>[
+              BoxShadow(color: _liveCyan.withAlpha(22), blurRadius: 13),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  const Icon(Icons.live_tv_rounded, color: _liveCyan, size: 17),
+                  const SizedBox(width: 7),
+                  const Text(
+                    'REPRODUCTOR DEPORTE TOTAL 360°',
+                    style: TextStyle(
+                      color: _liveCyan,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: .45,
+                    ),
+                  ),
+                  const Spacer(),
+                ],
+              ),
+              if (selected != null) ...<Widget>[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6, left: 2, right: 2),
+                  child: Text(
+                    selected.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+              SizedBox(
+                height: playerHeight,
+                width: double.infinity,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: selected == null
+                      ? Container(
+                          color: Colors.black,
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  const Icon(Icons.play_circle_outline_rounded,
+                                      color: _liveCyan, size: 45),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    emptyMessage,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: _liveMuted,
+                                      fontSize: 10,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        )
+                      : selected.useEmbeddedPage
+                          ? _LiveWebPageTile(
+                              key: ValueKey<String>('shared-web-${selected.eventId ?? ''}-${selected.url}'),
+                              source: selected,
+                              autoStart: true,
+                              isActive: isActive,
+                              protectEmbeddedPlayer: true,
+                            )
+                          : _LiveVideoTile(
+                              key: ValueKey<String>('shared-media-${selected.eventId ?? ''}-${selected.url}'),
+                              source: selected,
+                              initiallyMuted: false,
+                              autoStart: true,
+                              isActive: isActive,
+                            ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _LiveEventEntry {
+  const _LiveEventEntry({
+    required this.event,
+    this.option,
+    this.status = '',
+    this.detail = '',
+  });
+
+  final AgendaEventReference event;
+  final AgendaTransmissionOption? option;
+  final String status;
+  final String detail;
+}
+
+class _LiveEventTransmissionList extends StatelessWidget {
+  const _LiveEventTransmissionList({
+    required this.assignments,
+    required this.pendingEvents,
+    required this.onPlay,
+  });
+
+  final List<AgendaLiveAssignment> assignments;
+  final List<AgendaLivePendingEvent> pendingEvents;
+  final ValueChanged<LivePlayerSource> onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = <_LiveEventEntry>[
+      ...assignments.map((assignment) => _LiveEventEntry(
+            event: assignment.event,
+            option: assignment.option,
+          )),
+      ...pendingEvents.map((pending) => _LiveEventEntry(
+            event: pending.event,
+            status: pending.status,
+            detail: pending.detail,
+          )),
+    ]..sort((a, b) => a.event.startsAt.compareTo(b.event.startsAt));
+
+    if (entries.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(Icons.sports_soccer_rounded, color: _liveCyan, size: 42),
+              SizedBox(height: 10),
+              Text(
+                'NO HAY EVENTOS EN PREPARACIÓN O EN VIVO',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              SizedBox(height: 6),
+              Text(
+                'Cada evento aparecerá desde cinco minutos antes de comenzar, con su propia ficha y botón PLAY cuando exista una transmisión publicada.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: _liveMuted, fontSize: 10, height: 1.45),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(10, 2, 10, 18),
+      itemCount: entries.length,
+      itemBuilder: (context, index) {
+        final entry = entries[index];
+        final event = entry.event;
+        final localStart = event.startsAt.toLocal();
+        final time = '${localStart.hour.toString().padLeft(2, '0')}:${localStart.minute.toString().padLeft(2, '0')}';
+        final competition = event.competition.isNotEmpty
+            ? event.competition
+            : 'EVENTO DEPORTIVO';
+        final option = entry.option;
+        final source = option == null ? null : LivePlayerSource(
+          title: event.title,
+          url: option.url,
+          subtitle: '${competition} · ${event.title} · ${option.name}',
+          eventId: event.id,
+          startAt: event.startsAt,
+          useEmbeddedPage: !isSupportedAuthorizedMediaUrl(option.url),
+        );
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 9),
+          padding: const EdgeInsets.all(11),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: <Color>[Color(0xFF111A27), Color(0xFF07090D)],
+            ),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(
+              color: option == null
+                  ? _livePink.withAlpha(120)
+                  : _liveCyan.withAlpha(170),
+            ),
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: (option == null ? _livePink : _liveCyan).withAlpha(18),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  const Icon(Icons.sports_rounded, color: _liveCyan, size: 18),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      competition,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: _liveCyan,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    time,
+                    style: const TextStyle(color: _liveMuted, fontSize: 10),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                event.title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      option == null
+                          ? (entry.status.isNotEmpty ? entry.status : 'TRANSMISIÓN NO DISPONIBLE')
+                          : 'TRANSMISIÓN: ${option.name}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: option == null ? _liveMuted : _liveGreen,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: source == null ? null : () => onPlay(source),
+                    icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                    label: const Text('PLAY'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _liveCyan,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                      minimumSize: const Size(72, 38),
+                    ),
+                  ),
+                ],
+              ),
+              if (entry.detail.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 5),
+                Text(
+                  entry.detail,
+                  style: const TextStyle(color: _liveMuted, fontSize: 8, height: 1.3),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// Solo arranca automáticamente el primer canal para evitar ocho
@@ -351,12 +630,14 @@ class LivePlayerBoard extends StatelessWidget {
     this.waitingEvents = const <LivePlayerWaitingEvent>[],
     this.isActive = true,
     this.prioritizedEventId,
+    this.showOnlyAssignedEvents = false,
   });
 
   final List<LivePlayerSource> sources;
   final List<LivePlayerWaitingEvent> waitingEvents;
   final bool isActive;
   final String? prioritizedEventId;
+  final bool showOnlyAssignedEvents;
 
   @override
   Widget build(BuildContext context) {
@@ -367,6 +648,41 @@ class LivePlayerBoard extends StatelessWidget {
         final waiting = waitingEvents
             .take(8 - activeSources.length)
             .toList(growable: false);
+        if (showOnlyAssignedEvents &&
+            activeSources.isEmpty &&
+            waiting.isEmpty) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(Icons.sports_soccer_rounded, color: _liveCyan, size: 48),
+                  SizedBox(height: 12),
+                  Text(
+                    'NO HAY EVENTOS EN PREPARACIÓN O EN VIVO',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  SizedBox(height: 7),
+                  Text(
+                    'Los cuadros aparecerán automáticamente cuando un evento entre en los cinco minutos previos a su inicio.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _liveMuted,
+                      fontSize: 10,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         return Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 960),
@@ -374,7 +690,9 @@ class LivePlayerBoard extends StatelessWidget {
               shrinkWrap: true,
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.all(8),
-              itemCount: 8,
+              itemCount: showOnlyAssignedEvents
+                  ? activeSources.length + waiting.length
+                  : 8,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
                 crossAxisSpacing: 8,
@@ -385,7 +703,7 @@ class LivePlayerBoard extends StatelessWidget {
                 final channelNumber = index + 1;
                 if (index < activeSources.length) {
                   final source = activeSources[index];
-                  if (source.startAt != null &&
+                  if (!showOnlyAssignedEvents && source.startAt != null &&
                       DateTime.now().isBefore(source.startAt!)) {
                     final start = source.startAt!.toLocal();
                     final startLabel = 'Comienza ${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
@@ -416,22 +734,30 @@ class LivePlayerBoard extends StatelessWidget {
                           child: Center(
                             child: AspectRatio(
                               aspectRatio: 16 / 9,
-                              child: _LiveVideoTile(
-                                key: ValueKey<String>(
-                                  'board-$channelNumber-${source.eventId ?? ''}-${source.url}',
-                                ),
-                                source: source,
-                                initiallyMuted: index > 0,
-                                // El listado ya ordena primero el evento priorizado.
-                                // Si se entra desde la pestaña Live, también debe
-                                // arrancar la primera señal disponible sin exigir
-                                // que el usuario venga desde la Agenda.
-                                autoStart: shouldAutomaticallyStartLiveSource(
-                                  index: index,
-                                  isActive: isActive,
-                                ),
-                                isActive: isActive,
-                              ),
+                              child: source.useEmbeddedPage
+                                  ? _LiveWebPageTile(
+                                      key: ValueKey<String>(
+                                        'board-page-$channelNumber-${source.eventId ?? ''}-${source.url}',
+                                      ),
+                                      source: source,
+                                      autoStart: shouldAutomaticallyStartLiveSource(
+                                        index: index,
+                                        isActive: isActive,
+                                      ),
+                                      isActive: isActive,
+                                    )
+                                  : _LiveVideoTile(
+                                      key: ValueKey<String>(
+                                        'board-$channelNumber-${source.eventId ?? ''}-${source.url}',
+                                      ),
+                                      source: source,
+                                      initiallyMuted: index > 0,
+                                      autoStart: shouldAutomaticallyStartLiveSource(
+                                        index: index,
+                                        isActive: isActive,
+                                      ),
+                                      isActive: isActive,
+                                    ),
                             ),
                           ),
                         ),
@@ -854,6 +1180,372 @@ class _LivePlayerGridScreenState extends State<LivePlayerGridScreen> {
   }
 }
 
+const String _fitEmbeddedPlayerScript = r'''
+(function () {
+  const styleId = 'dt360-embedded-player-fit';
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent =
+      'html,body{width:100%!important;height:100%!important;margin:0!important;' +
+      'overflow:hidden!important;background:#000!important}' +
+      'video,iframe{max-width:100vw!important;max-height:100vh!important;' +
+      'object-fit:contain!important}';
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  const playerSelector =
+    '[id*="player" i],[class*="player" i],[id*="video" i],[class*="video" i],' +
+    '[id*="embed" i],[class*="embed" i],[id*="stream" i],[class*="stream" i]';
+
+  function fitPlayer() {
+    const candidates = Array.from(document.querySelectorAll(
+      'video,iframe,' + playerSelector
+    )).filter((element) => {
+      if (!element || element === document.body ||
+          element === document.documentElement) return false;
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      return rect.width > 80 && rect.height > 45 &&
+        style.display !== 'none' && style.visibility !== 'hidden';
+    });
+
+    if (!candidates.length) return;
+    candidates.sort((first, second) => {
+      const a = first.getBoundingClientRect();
+      const b = second.getBoundingClientRect();
+      return (b.width * b.height) - (a.width * a.height);
+    });
+
+    const selected = candidates[0];
+    const player = selected.matches('video,iframe')
+      ? (selected.closest(playerSelector) || selected)
+      : selected;
+    if (!player || player === document.body ||
+        player === document.documentElement) return;
+
+    const frame = player.getBoundingClientRect();
+    if (frame.width < 80 || frame.height < 45) return;
+
+    player.style.setProperty('position', 'fixed', 'important');
+    player.style.setProperty('left', '0', 'important');
+    player.style.setProperty('top', '0', 'important');
+    player.style.setProperty('width', '100vw', 'important');
+    player.style.setProperty('height', '100vh', 'important');
+    player.style.setProperty('max-width', '100vw', 'important');
+    player.style.setProperty('max-height', '100vh', 'important');
+    player.style.setProperty('margin', '0', 'important');
+    player.style.setProperty('padding', '0', 'important');
+    player.style.setProperty('background', '#000', 'important');
+    player.style.setProperty('z-index', '2147483647', 'important');
+
+    const media = [];
+    if (player.matches && player.matches('video,iframe')) media.push(player);
+    player.querySelectorAll('video,iframe').forEach((element) => media.push(element));
+    media.forEach((element) => {
+      element.style.setProperty('display', 'block', 'important');
+      element.style.setProperty('width', '100%', 'important');
+      element.style.setProperty('height', '100%', 'important');
+      element.style.setProperty('max-width', '100vw', 'important');
+      element.style.setProperty('max-height', '100vh', 'important');
+      element.style.setProperty('object-fit', 'contain', 'important');
+      element.style.setProperty('border', '0', 'important');
+      if (element.tagName === 'IFRAME') {
+        element.setAttribute('allowfullscreen', '');
+        const allow = element.getAttribute('allow') || '';
+        if (!/fullscreen/i.test(allow)) {
+          element.setAttribute('allow', (allow ? allow + '; ' : '') + 'fullscreen');
+        }
+      } else {
+        element.setAttribute('playsinline', '');
+        element.setAttribute('webkit-playsinline', '');
+      }
+    });
+  }
+
+  fitPlayer();
+  if (!window.__dt360PlayerFitObserver) {
+    window.__dt360PlayerFitObserver = new MutationObserver(() => {
+      if (window.__dt360PlayerFitQueued) return;
+      window.__dt360PlayerFitQueued = true;
+      window.requestAnimationFrame(() => {
+        window.__dt360PlayerFitQueued = false;
+        fitPlayer();
+      });
+    });
+    window.__dt360PlayerFitObserver.observe(document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+  }
+  if (!window.__dt360PlayerFitInterval) {
+    window.__dt360PlayerFitInterval = window.setInterval(fitPlayer, 1200);
+  }
+})();
+''';
+
+class _LiveWebPageTile extends StatefulWidget {
+  const _LiveWebPageTile({
+    super.key,
+    required this.source,
+    required this.autoStart,
+    required this.isActive,
+    this.protectEmbeddedPlayer = false,
+  });
+
+  final LivePlayerSource source;
+  final bool autoStart;
+  final bool isActive;
+  final bool protectEmbeddedPlayer;
+
+  @override
+  State<_LiveWebPageTile> createState() => _LiveWebPageTileState();
+}
+
+class _LiveWebPageTileState extends State<_LiveWebPageTile> {
+  bool _started = false;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _started = widget.autoStart && widget.isActive;
+  }
+
+  @override
+  void didUpdateWidget(covariant _LiveWebPageTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActive && widget.isActive && widget.autoStart) {
+      setState(() => _started = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_started) {
+      return Container(
+        color: const Color(0xFF07090D),
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Icon(Icons.play_circle_outline_rounded,
+                color: _liveCyan, size: 34),
+            const SizedBox(height: 4),
+            TextButton(
+              onPressed: widget.isActive
+                  ? () => setState(() => _started = true)
+                  : null,
+              child: const Text('ABRIR PLAYER WEB',
+                  style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (!isSafeAgendaTransmissionUrl(widget.source.url)) {
+      return const Center(
+        child: Text(
+          'Enlace HTTPS no válido',
+          style: TextStyle(color: Colors.white, fontSize: 9),
+        ),
+      );
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        InAppWebView(
+          initialUrlRequest: URLRequest(url: WebUri(widget.source.url)),
+          initialSettings: InAppWebViewSettings(
+            javaScriptEnabled: true,
+            useShouldOverrideUrlLoading: widget.protectEmbeddedPlayer,
+            useShouldInterceptRequest: widget.protectEmbeddedPlayer,
+            javaScriptCanOpenWindowsAutomatically: false,
+            supportMultipleWindows: widget.protectEmbeddedPlayer,
+            mediaPlaybackRequiresUserGesture: false,
+            allowsInlineMediaPlayback: true,
+            iframeAllowFullscreen: widget.protectEmbeddedPlayer,
+            isElementFullscreenEnabled: widget.protectEmbeddedPlayer,
+            supportZoom: false,
+            contentBlockers: widget.protectEmbeddedPlayer
+                ? WebProtectionPolicy.buildContentBlockers()
+                : null,
+          ),
+          shouldOverrideUrlLoading: widget.protectEmbeddedPlayer
+              ? (controller, action) async {
+                  final target = action.request.url;
+                  if (target == null) return NavigationActionPolicy.CANCEL;
+                  if (target.scheme == 'about' &&
+                      target.toString() == 'about:blank') {
+                    return NavigationActionPolicy.ALLOW;
+                  }
+                  if (action.isForMainFrame) {
+                    return WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+                      target.toString(),
+                      playerUrl: widget.source.url,
+                    )
+                        ? NavigationActionPolicy.ALLOW
+                        : NavigationActionPolicy.CANCEL;
+                  }
+                  return WebProtectionPolicy.isBlockedUrl(target.toString())
+                      ? NavigationActionPolicy.CANCEL
+                      : NavigationActionPolicy.ALLOW;
+                }
+              : null,
+          shouldInterceptRequest: widget.protectEmbeddedPlayer
+              ? (controller, request) async {
+                  return WebProtectionPolicy.interceptEmbeddedPlayerRequest(
+                    request,
+                    playerUrl: widget.source.url,
+                  );
+                }
+              : null,
+          onCreateWindow: widget.protectEmbeddedPlayer
+              ? (controller, action) async {
+                  final target = action.request.url;
+                  if (target != null &&
+                      action.isForMainFrame &&
+                      action.hasGesture == true &&
+                      WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+                        target.toString(),
+                        playerUrl: widget.source.url,
+                      )) {
+                    try {
+                      // Las ventanas internas del mismo sitio se abren en
+                      // este cuadro; los pop-ups externos se descartan.
+                      await controller.loadUrl(urlRequest: action.request);
+                    } catch (error) {
+                      debugPrint('No se pudo abrir el reproductor interno: $error');
+                    }
+                  }
+                  return false;
+                }
+              : null,
+          onLoadStart: (controller, url) {
+            final target = url?.toString();
+            if (widget.protectEmbeddedPlayer &&
+                target != null &&
+                target != 'about:blank' &&
+                !WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+                  target,
+                  playerUrl: widget.source.url,
+                )) {
+              unawaited(controller.stopLoading());
+              if (mounted) {
+                setState(() {
+                  _loading = false;
+                  _error = 'Se bloqueó una redirección fuera del reproductor.';
+                });
+              }
+              return;
+            }
+            if (mounted) setState(() => _loading = true);
+          },
+          onLoadStop: (controller, url) async {
+            final target = url?.toString();
+            if (widget.protectEmbeddedPlayer &&
+                target != null &&
+                target != 'about:blank' &&
+                !WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+                  target,
+                  playerUrl: widget.source.url,
+                )) {
+              final canGoBack = await controller.canGoBack();
+              if (canGoBack) {
+                await controller.goBack();
+              } else {
+                await controller.stopLoading();
+              }
+              if (mounted) {
+                setState(() {
+                  _loading = false;
+                  if (!canGoBack) {
+                    _error = 'Se bloqueó una redirección fuera del reproductor.';
+                  }
+                });
+              }
+              return;
+            }
+            if (widget.protectEmbeddedPlayer) {
+              try {
+                await controller.evaluateJavascript(
+                  source: _fitEmbeddedPlayerScript,
+                );
+              } catch (error) {
+                debugPrint('No se pudo ajustar el reproductor web: $error');
+              }
+            }
+            if (mounted) setState(() => _loading = false);
+          },
+          onUpdateVisitedHistory: widget.protectEmbeddedPlayer
+              ? (controller, url, androidIsReload) async {
+                  final target = url?.toString();
+                  if (target == null ||
+                      target == 'about:blank' ||
+                      WebProtectionPolicy.allowsEmbeddedPlayerMainFrameNavigation(
+                        target,
+                        playerUrl: widget.source.url,
+                      )) {
+                    return;
+                  }
+                  final canGoBack = await controller.canGoBack();
+                  if (canGoBack) {
+                    await controller.goBack();
+                  } else {
+                    await controller.stopLoading();
+                  }
+                  if (mounted) {
+                    setState(() {
+                      _loading = false;
+                      if (!canGoBack) {
+                        _error = 'Se bloqueó una redirección fuera del reproductor.';
+                      }
+                    });
+                  }
+                }
+              : null,
+          onReceivedError: (controller, request, error) {
+            if (request.isForMainFrame == false || !mounted) return;
+            setState(() {
+              _loading = false;
+              _error = 'No se pudo cargar esta página de transmisión.';
+            });
+          },
+        ),
+        if (_loading)
+          const Center(
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: _liveCyan,
+            ),
+          ),
+        if (_error != null)
+          Positioned.fill(
+            child: ColoredBox(
+              color: const Color(0xE8000000),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _LiveVideoTile extends StatefulWidget {
   const _LiveVideoTile({
     super.key,
@@ -964,9 +1656,8 @@ class _LiveVideoTileState extends State<_LiveVideoTile> {
       return;
     }
 
-    final controller = VideoPlayerController.networkUrl(
+    final controller = createCompatibleNetworkVideoController(
       uri,
-      formatHint: _videoFormatHintFor(uri),
       videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
     );
     _controller = controller;

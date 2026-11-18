@@ -109,6 +109,16 @@ void main() {
         isTrue,
       );
       expect(
+        isSupportedAuthorizedMediaUrl(
+          'https://futbol-libre.cam/media/partido.m3u8',
+        ),
+        isTrue,
+      );
+      expect(
+        isSupportedAuthorizedMediaUrl('https://futbol-libre.cam/partido/123'),
+        isFalse,
+      );
+      expect(
         isSupportedAuthorizedMediaUrl('https://example.com/watch?v=123'),
         isFalse,
       );
@@ -127,8 +137,26 @@ void main() {
     });
   });
 
+  testWidgets('el reproductor superior compartido muestra su estado inicial', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: LiveSharedPlayerPanel(
+            source: null,
+            emptyMessage: 'Selecciona un canal y pulsa PLAY.',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('REPRODUCTOR DEPORTE TOTAL 360°'), findsOneWidget);
+    expect(find.text('Selecciona un canal y pulsa PLAY.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
-    'Deportes en vivo muestra ocho reproductores y limpia la configuración anterior',
+    'En vivo no muestra cuadros vacíos cuando no hay eventos y limpia IPTV antiguo',
     (tester) async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'deporte_total_authorized_live_sources_v1': '[]',
@@ -150,9 +178,12 @@ void main() {
       await tester.pump();
 
       expect(find.text('DEPORTES EN VIVO'), findsOneWidget);
-      expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsOneWidget);
-      expect(find.text('SEÑAL PENDIENTE'), findsNWidgets(8));
-      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNWidgets(8));
+      expect(find.text('REPRODUCTOR DEPORTE TOTAL 360°'), findsOneWidget);
+      expect(find.text('NO HAY EVENTOS EN PREPARACIÓN O EN VIVO'), findsOneWidget);
+      expect(find.text('EVENTOS EN PREPARACIÓN O EN VIVO'), findsNothing);
+      expect(find.text('8 REPRODUCTORES DISPONIBLES'), findsNothing);
+      expect(find.text('SEÑAL PENDIENTE'), findsNothing);
+      expect(find.text('ESPERANDO TRANSMISIÓN'), findsNothing);
       expect(find.text('PARTIDOS Y SEÑALES'), findsNothing);
       expect(find.text('CONFIGURAR GUÍAS EPG XMLTV'), findsNothing);
       expect(find.text('Buscar equipo, evento o competición'), findsNothing);

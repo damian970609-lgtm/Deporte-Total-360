@@ -1,5 +1,6 @@
 import 'agenda_web_screen.dart';
 import 'app_section_design.dart';
+import 'agenda_channels_screen.dart';
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'dart:math' as math;
@@ -10,7 +11,6 @@ import 'app_i18n.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'channel_catalog_screen.dart';
 import 'channel_catalog_service.dart';
 
 import 'notification_service.dart';
@@ -725,7 +725,7 @@ class _MainShellState extends State<MainShell> {
           _liveBuilt
               ? LiveChannelsScreen(isActive: _selectedIndex == 2)
               : const SizedBox.shrink(),
-          _channelsBuilt ? const ChannelCatalogScreen() : const SizedBox.shrink(),
+          _channelsBuilt ? AgendaChannelsScreen(onOpenAgenda: _openAgenda) : const SizedBox.shrink(),
           _settingsBuilt ? const SettingsScreen() : const SizedBox.shrink(),
         ],
       ),
@@ -755,7 +755,7 @@ class _MainShellState extends State<MainShell> {
           NavigationDestination(
             icon: Icon(Icons.sports_soccer_outlined),
             selectedIcon: Icon(Icons.sports_soccer_rounded),
-            label: 'Canales',
+            label: 'Canales deportivos',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
@@ -1497,9 +1497,7 @@ class _HomeAtmospherePainter extends CustomPainter {
 }
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, this.adminService});
-
-  final ChannelCatalogService? adminService;
+  const SettingsScreen({super.key});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -1559,45 +1557,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  int _signatureTapCount = 0;
-  DateTime? _lastSignatureTapAt;
-  bool _signatureAdminNavigationInProgress = false;
-
-  void _handleSignatureTap() {
-    // Ignora nuevas pulsaciones mientras el panel está abriéndose o visible.
-    // Evita apilar varias rutas y recrear repetidamente el panel privado.
-    if (_signatureAdminNavigationInProgress) return;
-
-    final now = DateTime.now();
-    final lastTap = _lastSignatureTapAt;
-    if (lastTap == null || now.difference(lastTap) > const Duration(seconds: 3)) {
-      _signatureTapCount = 0;
-    }
-    _lastSignatureTapAt = now;
-    _signatureTapCount++;
-
-    if (_signatureTapCount >= 10) {
-      _signatureTapCount = 0;
-      unawaited(_openSignatureAdminPanel());
-    }
-  }
-
-  Future<void> _openSignatureAdminPanel() async {
-    if (!mounted || _signatureAdminNavigationInProgress) return;
-    _signatureAdminNavigationInProgress = true;
-    try {
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
-          builder: (_) => ChannelAdminScreen(service: widget.adminService),
-        ),
-      );
-    } finally {
-      _signatureAdminNavigationInProgress = false;
-      _signatureTapCount = 0;
-      _lastSignatureTapAt = null;
-    }
-  }
-
   Future<void> _setLanguage(AppLanguage? value) async {
     if (value == null) return;
     appLanguage.value = value;
@@ -1641,7 +1600,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
           children: <Widget>[
             Container(
-              height: 125,
+              constraints: const BoxConstraints(minHeight: 125),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
@@ -1689,7 +1648,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         SizedBox(height: 4),
                         GestureDetector(
                           behavior: HitTestBehavior.opaque,
-                          onTap: _handleSignatureTap,
+                          
                           child: const Padding(
                             padding: EdgeInsets.symmetric(vertical: 2),
                             child: Text(
@@ -1820,33 +1779,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             _settingsCard(
               border: appPink,
-              child: Material(
-                color: Colors.transparent,
-                child: ListTile(
-                  key: const ValueKey<String>('settings-damian-apk-menu'),
-                  contentPadding: EdgeInsets.zero,
-                  leading: const CircleAvatar(
-                    backgroundColor: Color(0x33FF1744),
-                    child: Icon(Icons.live_tv_rounded, color: appPink),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0x33FF1744),
+                  child: Icon(Icons.sports_rounded, color: appPink),
+                ),
+                title: const Text(
+                  'MENÚ DAMIÁN APK',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
                   ),
-                  title: const Text(
-                    'MENÚ DAMIÁN APK',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 14,
-                    ),
-                  ),
-                  subtitle: const Text(
-                    'Administrar tus listas IPTV, canales, visibilidad e idioma.',
-                    style: TextStyle(color: appMuted, fontSize: 11, height: 1.4),
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded, color: appPink),
-                  onTap: _openSignatureAdminPanel,
+                ),
+                subtitle: const Text(
+                  'Canales y transmisiones publicados en la Agenda deportiva.',
+                  style: TextStyle(color: appMuted, fontSize: 11, height: 1.4),
                 ),
               ),
             ),
             const SizedBox(height: 12),
+
             _settingsCard(
               border: appBlue,
               child: Material(
