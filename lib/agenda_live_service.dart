@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const String _agendaLiveEventsKey = 'dt360_agenda_live_references_v1';
+const String _agendaChannelsKey = 'dt360_agenda_channels_v1';
 const Duration agendaLivePreparationWindow = Duration(minutes: 5);
 const Duration _agendaEventFallbackDuration = Duration(hours: 3);
 
@@ -360,6 +361,69 @@ class AgendaLiveService {
   Future<List<AgendaEventReference>> loadCapturedEvents() async {
     final prefs = await SharedPreferences.getInstance();
     return _readEvents(prefs);
+  }
+
+  /// Guarda los canales independientes publicados debajo de la agenda.
+  /// Solo almacena enlaces HTTPS visibles/publicados por la propia página.
+  Future<void> captureAgendaChannels(dynamic rawPayload) async {
+    final rows = rawPayload is List
+        ? rawPayload
+        : rawPayload is Map && rawPayload['channels'] is List
+            ? rawPayload['channels'] as List
+            : const <dynamic>[];
+    if (rows.isEmpty) return;
+
+    final incoming = <AgendaTransmissionOption>[];
+    for (var index = 0; index < rows.length; index++) {
+      final option = AgendaTransmissionOption.tryParse(rows[index], index);
+      if (option != null && !incoming.any((item) => item.url == option.url)) {
+        incoming.add(option);
+      }
+    }
+    if (incoming.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final previous = _readChannels(prefs);
+    final byUrl = <String, AgendaTransmissionOption>{
+      for (final option in previous) option.url: option,
+    };
+    for (final option in incoming) {
+      byUrl[option.url] = option;
+    }
+    final retained = byUrl.values.toList(growable: false)
+      ..sort((a, b) => a.order.compareTo(b.order));
+    await prefs.setString(
+      _agendaChannelsKey,
+      jsonEncode(retained.map((option) => option.toJson()).toList()),
+    );
+  }
+
+  /// Devuelve el catálogo de canales independientes guardado desde Agenda.
+  Future<List<AgendaTransmissionOption>> loadCapturedChannels() async {
+    final prefs = await SharedPreferences.getInstance();
+    return _readChannels(prefs);
+  }
+
+  static List<AgendaTransmissionOption> _readChannels(
+    SharedPreferences prefs,
+  ) {
+    final raw = prefs.getString(_agendaChannelsKey);
+    if (raw == null || raw.isEmpty) return <AgendaTransmissionOption>[];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return <AgendaTransmissionOption>[];
+      return decoded
+          .asMap()
+          .entries
+          .map((entry) => AgendaTransmissionOption.tryParse(
+                entry.value,
+                entry.key,
+              ))
+          .whereType<AgendaTransmissionOption>()
+          .toList(growable: false);
+    } catch (_) {
+      return <AgendaTransmissionOption>[];
+    }
   }
 
   Future<AgendaLiveBoardState> buildBoardState({DateTime? now}) async {
