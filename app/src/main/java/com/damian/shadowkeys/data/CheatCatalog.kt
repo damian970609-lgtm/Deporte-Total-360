@@ -14,7 +14,7 @@ object CheatCatalog {
     // Códigos publicados para la edición móvil de GTA San Andreas. La recepción
     // de cada código aún debe validarse en la compilación instalada en el dispositivo.
     val all: List<Cheat> = listOf(
-        Cheat("Vida, chaleco y \$250 000", "PJYNQCQ", PLAYER, "Restaura la salud y el chaleco, añade dinero y repara el vehículo actual."),
+        Cheat("Vida, chaleco y \$250 000", "PJYNQCQ", PLAYER, "Restaura la salud y el chaleco, añade \$250 000 y repara el vehículo actual. Evítalo durante persecuciones de misión como Just Business y End of the Line."),
         Cheat("Salud infinita", "BLOKKIK", PLAYER, "Evita el daño de balas y golpes; explosiones, caídas y ahogamiento todavía pueden afectar a CJ."),
         Cheat("Suicidio", "SLOTSFK", PLAYER, "Elimina inmediatamente a CJ."),
         Cheat("Grasa al máximo", "AESHXWQI", PLAYER, "Lleva la grasa de CJ al máximo."),
@@ -31,7 +31,7 @@ object CheatCatalog {
         Cheat("Armas: conjunto 3", "GOIZSSX", WEAPONS, "Entrega el tercer conjunto de armas."),
         Cheat("Munición infinita", "NECUMZ", WEAPONS, "Munición ilimitada sin recargar.", "Puede provocar fallos de audio y afectar a peatones."),
         Cheat("Apuntar libremente al conducir", "RYSMRM", WEAPONS, "Permite apuntar desde vehículos y entrega un arma si hace falta."),
-        Cheat("Armas: conjunto 4", "BIEUHQY", WEAPONS, "Conjunto móvil con minigun y gafas especiales."),
+        Cheat("Armas: conjunto 4", "BIEUHQY", WEAPONS, "Entrega una minigun y gafas de visión nocturna o térmica; repetir el código cambia el tipo de gafas."),
         Cheat("Aparecer con jetpack", "CDGUDEP", VEHICLES, "Entrega un jetpack."),
         Cheat("Aparecer con paracaídas", "GSUMLEG", VEHICLES, "Entrega un paracaídas."),
         Cheat("Aparecer con tanque Rhino", "AYNVQVK", VEHICLES, "Aparece un tanque Rhino."),
@@ -44,8 +44,8 @@ object CheatCatalog {
         Cheat("Aparecer con limusina", "IXSMWCQ", VEHICLES, "Aparece una limusina Stretch."),
         Cheat("Aparecer con Trashmaster", "QPOLSVK", VEHICLES, "Aparece un camión de basura."),
         Cheat("Aparecer con Caddy", "DAHESZY", VEHICLES, "Aparece un carrito de golf."),
-        Cheat("Coche invencible", "BXBTUBTI", VEHICLES, "Tu coche resiste impactos y destruye los vehículos que toca."),
-        Cheat("Destruir vehículos", "BKFONFE", VEHICLES, "Hace explotar los vehículos cercanos.", "Puede fallar misiones que dependen de un vehículo."),
+        Cheat("Coche invencible", "BXBTUBTI", VEHICLES, "Tu coche resiste impactos y destruye los vehículos que toca. La protección puede desactivarse tras una cinemática; vuelve a entrar al coche para restaurarla."),
+        Cheat("Destruir vehículos", "BKFONFE", VEHICLES, "Hace explotar todos los vehículos cercanos excepto las bicicletas.", "Puede fallar misiones que dependen de vehículos y bloquear algunas escenas."),
         Cheat("Conducción perfecta", "DLNNHZJ", VEHICLES, "Mejora el agarre y el control de los coches."),
         Cheat("Nitro en todos los coches", "WUSDOTO", VEHICLES, "Instala nitro en todos los coches."),
         Cheat("Coches voladores", "DOTBSFK", VEHICLES, "Permite que los coches despeguen y vuelen."),
@@ -64,8 +64,8 @@ object CheatCatalog {
         Cheat("Tráfico de deportivos", "FRIUBIL", WORLD, "El tráfico se compone de coches deportivos."),
         Cheat("Tráfico de coches baratos", "JTBCSN", WORLD, "Aparecen coches antiguos y baratos."),
         Cheat("Tráfico reducido", "DEHDRX", WORLD, "Reduce peatones y tráfico."),
-        Cheat("Disturbios de peatones", "NJXPCYE", WORLD, "Los peatones luchan por toda la ciudad.", "Puede quedar permanente al guardar y romper misiones. No guardes la partida con este truco activo."),
-        Cheat("Modo caos", "AKOZBCH", WORLD, "Los peatones se atacan entre sí.", "Puede quedar permanente al guardar la partida."),
+        Cheat("Disturbios de peatones", "NJXPCYE", WORLD, "Los peatones luchan por toda la ciudad.", "Se vuelve permanente si guardas con él activo; puede romper Madd Dogg y Tanker Commander. No guardes la partida principal con este truco activo."),
+        Cheat("Modo caos", "AKOZBCH", WORLD, "Los peatones se atacan con palos de golf y el mundo se vuelve hostil.", "Puede quedar permanente al guardar la partida; no lo uses en tu archivo principal."),
         Cheat("Peatones atacan a CJ", "FARYJHZ", WORLD, "Todos los peatones persiguen a CJ.", "Puede quedar permanente al guardar la partida."),
         Cheat("Peatones atacan con armas", "ERFBFNI", WORLD, "Los peatones armados atacan a CJ.", "Puede quedar permanente al guardar la partida."),
         Cheat("Peatones llevan armas", "GDNXHDK", WORLD, "Los peatones llevan armas variadas."),
@@ -96,7 +96,7 @@ object CheatCatalog {
         Cheat("Reclutar con lanzacohetes", "QAONHOH", FUN, "Permite reclutar peatones que llevan lanzacohetes."),
         Cheat("Juego acelerado", "EHWBWDS", FUN, "Acelera la velocidad global del juego."),
         Cheat("Cámara lenta", "FNJFCZC", FUN, "Ralentiza la velocidad global del juego."),
-        Cheat("Completar misión actual", "BYIXZIY", FUN, "Completa la misión actual; código específico de la edición móvil.")
+        Cheat("Completar misión actual", "BYIXZIY", FUN, "Completa la misión actual; código específico de la edición móvil, pero no funciona en todas las misiones.")
     )
 
     fun search(query: String, category: String?): List<Cheat> {
