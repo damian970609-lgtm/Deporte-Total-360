@@ -8,9 +8,29 @@ import org.junit.Test
 
 class CheatCatalogTest {
     @Test
-    fun mobileCatalogContains83UniqueCodes() {
+    fun mobileCatalogContainsTheExact83CodesFromTheMobileList() {
+        val expectedCodes = setOf(
+            "PJYNQCQ", "BLOKKIK", "SLOTSFK", "AESHXWQI", "SGVDSQW", "AWXDCRJ",
+            "MTGIISR", "APGZLQR", "AEZLCKXU", "POOOJOX", "KBTMUVH", "GONPXWR",
+            "BEFWKSBQ", "SHHIHJG", "GOIZSSX", "NECUMZ", "RYSMRM", "BIEUHQY",
+            "CDGUDEP", "GSUMLEG", "AYNVQVK", "AWPTMIIQ", "BIGLWCDD", "BGJPSYC",
+            "BIEAVBAY", "HPGPIJZ", "PSPNATX", "IXSMWCQ", "QPOLSVK", "DAHESZY",
+            "BXBTUBTI", "BKFONFE", "DLNNHZJ", "WUSDOTO", "DOTBSFK", "PTHSEO",
+            "BDBGXNJI", "JBVIJXA", "TDBKCEH",
+            "BYKGOAB", "NCBXXDX", "KDTZNHO", "GWJZWC",
+            "ENQCFMA", "IOKXTFJ", "GOYDVAO", "GYKVYTR", "FRIUBIL", "JTBCSN",
+            "DEHDRX", "NJXPCYE", "AKOZBCH", "FARYJHZ", "ERFBFNI", "GDNXHDK",
+            "EAMLJNN", "HAPOHXR",
+            "AAEXPPQC", "HTRTTVJ", "VBWEMQX", "TAVPIER", "EAKILHM", "EGCEBVM",
+            "JBWDWWO", "KTGDLXY", "AWUJNBB", "OWAKIJ", "YACKMWS",
+            "LRMYOJM", "BFMANNZP", "SLSNRKK", "BWCMMTD", "HDLIWGB", "BNIZWSB",
+            "OAXCCRI", "AAUSQP", "LNHVOAE", "JEZRPI", "AWIOMPH", "QAONHOH",
+            "EHWBWDS", "FNJFCZC", "BYIXZIY"
+        )
+
         assertEquals(83, CheatCatalog.all.size)
         assertEquals(83, CheatCatalog.all.map { it.code }.distinct().size)
+        assertEquals(expectedCodes, CheatCatalog.all.map { it.code }.toSet())
     }
 
     @Test
@@ -18,6 +38,18 @@ class CheatCatalogTest {
         CheatCatalog.all.forEach { cheat ->
             assertNotNull("${cheat.title}: ${cheat.code}", InputKeyMapper.toKeyCodes(cheat.code))
         }
+    }
+
+    @Test
+    fun knownMobileCodeMapsToTheExpectedAndroidKeyEvents() {
+        assertEquals(
+            listOf(44, 38, 53, 42, 45, 31, 45),
+            InputKeyMapper.toKeyCodes("PJYNQCQ")?.toList()
+        )
+        assertEquals(
+            listOf(7, 16, 29),
+            InputKeyMapper.toKeyCodes("01A")?.toList()
+        )
     }
 
     @Test
