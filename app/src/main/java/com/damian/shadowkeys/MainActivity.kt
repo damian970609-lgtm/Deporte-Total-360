@@ -18,6 +18,7 @@ import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.HorizontalScrollView
@@ -44,7 +45,7 @@ class MainActivity : Activity() {
 
     private val permissionListener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
         if (requestCode == REQUEST_SHIZUKU && grantResult == PackageManager.PERMISSION_GRANTED) {
-            bindInputService()
+            connectShizukuIfAllowed()
         } else if (requestCode == REQUEST_SHIZUKU) {
             updateStatus("Permiso de Shizuku denegado. No se enviaron teclas.")
         }
@@ -161,7 +162,7 @@ class MainActivity : Activity() {
             setHintTextColor(Color.GRAY)
             setTextColor(Color.WHITE)
             textSize = 14f
-            singleLine = true
+            setSingleLine(true)
             background = rounded("#0B100D", "#315A43", 10)
             setPadding(dp(10), dp(8), dp(10), dp(8))
         }
@@ -182,7 +183,7 @@ class MainActivity : Activity() {
             setHintTextColor(Color.GRAY)
             setTextColor(Color.WHITE)
             textSize = 14f
-            singleLine = true
+            setSingleLine(true)
             background = rounded("#151D18", "#315A43", 12)
             setPadding(dp(12), dp(10), dp(12), dp(10))
         }
