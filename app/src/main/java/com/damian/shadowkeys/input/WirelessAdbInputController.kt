@@ -61,17 +61,17 @@ object WirelessAdbInputController {
         }
     }
 
-    fun isReady(context: Context): Boolean {
+    fun isReady(context: Context): Boolean = runCatching {
         initialize(context)
-        return !savedHost.isNullOrBlank() && savedPort in 1..65535
-    }
+        !savedHost.isNullOrBlank() && savedPort in 1..65535
+    }.getOrDefault(false)
 
-    fun savedEndpoint(context: Context): Pair<String, Int>? {
+    fun savedEndpoint(context: Context): Pair<String, Int>? = runCatching {
         initialize(context)
-        val host = savedHost ?: return null
+        val host = savedHost ?: return@runCatching null
         val port = savedPort
-        return if (port in 1..65535) host to port else null
-    }
+        if (port in 1..65535) host to port else null
+    }.getOrNull()
 
     fun pair(
         context: Context,
@@ -155,7 +155,12 @@ object WirelessAdbInputController {
             return
         }
 
-        initialize(context)
+        try {
+            initialize(context)
+        } catch (error: Exception) {
+            post(callback, false, "No se pudo preparar la identidad ADB: ${error.message ?: "error interno"}")
+            return
+        }
         val host = savedHost
         val port = savedPort
         if (host.isNullOrBlank() || port !in 1..65535) {
