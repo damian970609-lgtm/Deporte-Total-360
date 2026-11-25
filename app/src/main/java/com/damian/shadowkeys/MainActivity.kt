@@ -3,20 +3,17 @@ package com.damian.shadowkeys
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.ComponentName
 import android.content.Intent
-import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.IBinder
 import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
@@ -28,11 +25,8 @@ import android.widget.TextView
 import android.widget.Toast
 import com.damian.shadowkeys.data.Cheat
 import com.damian.shadowkeys.data.CheatCatalog
-import com.damian.shadowkeys.input.IInputService
-import com.damian.shadowkeys.input.InputUserService
-import com.damian.shadowkeys.input.ShizukuInputController
+import com.damian.shadowkeys.input.WirelessAdbInputController
 import com.damian.shadowkeys.overlay.CheatOverlayService
-import rikka.shizuku.Shizuku
 
 class MainActivity : Activity() {
     private lateinit var statusText: TextView
@@ -40,83 +34,35 @@ class MainActivity : Activity() {
     private lateinit var results: LinearLayout
     private lateinit var searchField: EditText
     private lateinit var testField: EditText
+    private lateinit var adbHostField: EditText
+    private lateinit var pairingPortField: EditText
+    private lateinit var pairingCodeField: EditText
+    private lateinit var connectPortField: EditText
     private var selectedCategory: String? = null
-    private var serviceBound = false
-
-    private val permissionListener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
-        if (requestCode == REQUEST_SHIZUKU && grantResult == PackageManager.PERMISSION_GRANTED) {
-            connectShizukuIfAllowed()
-        } else if (requestCode == REQUEST_SHIZUKU) {
-            updateStatus("Permiso de Shizuku denegado. No se enviaron teclas.")
-        }
-    }
-
-    private val binderListener = Shizuku.OnBinderReceivedListener {
-        runOnUiThread { connectShizukuIfAllowed() }
-    }
-
-    private val binderDeadListener = Shizuku.OnBinderDeadListener {
-        ShizukuInputController.attach(null)
-        runOnUiThread { updateStatus("Shizuku se detuvo. Reinícialo y vuelve a conectar.") }
-    }
-
-    private val inputServiceConnection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-            ShizukuInputController.attach(binder)
-            runOnUiThread {
-                updateStatus(
-                    if (ShizukuInputController.isReady()) {
-                        "Conectado. El envío se ejecuta mediante el servicio ADB de Shizuku."
-                    } else {
-                        "El servicio de entrada no respondió. Vuelve a conectar Shizuku."
-                    }
-                )
-            }
-        }
-
-        override fun onServiceDisconnected(name: ComponentName?) {
-            ShizukuInputController.attach(null)
-            serviceBound = false
-            runOnUiThread { updateStatus("Servicio de entrada desconectado.") }
-        }
-    }
-
-    private val inputServiceArgs by lazy {
-        Shizuku.UserServiceArgs(
-            ComponentName(packageName, InputUserService::class.java.name)
-        ).daemon(false).tag("shadowkeys-gta-input").version(1).processNameSuffix("input")
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.statusBarColor = Color.rgb(9, 13, 11)
         window.navigationBarColor = Color.rgb(9, 13, 11)
-        Shizuku.addBinderReceivedListenerSticky(binderListener)
-        Shizuku.addBinderDeadListener(binderDeadListener)
-        Shizuku.addRequestPermissionResultListener(permissionListener)
+        runCatching { WirelessAdbInputController.initialize(this) }
         buildScreen()
         refreshGameStatus()
-        connectShizukuIfAllowed()
+        updateStatus(
+            if (WirelessAdbInputController.isReady(this)) {
+                "Conexión ADB guardada. Comprueba Depuración inalámbrica y pulsa CONECTAR ADB."
+            } else {
+                "Sin vínculo ADB. ShadowKeys puede emparejarse con este teléfono sin instalar otra aplicación."
+            }
+        )
     }
 
     override fun onResume() {
         super.onResume()
         refreshGameStatus()
-        connectShizukuIfAllowed()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        Shizuku.removeBinderReceivedListener(binderListener)
-        Shizuku.removeBinderDeadListener(binderDeadListener)
-        Shizuku.removeRequestPermissionResultListener(permissionListener)
-        if (serviceBound) {
-            runCatching {
-                Shizuku.unbindUserService(inputServiceArgs, inputServiceConnection, true)
-            }
-            serviceBound = false
-        }
-        ShizukuInputController.attach(null)
     }
 
     private fun buildScreen() {
@@ -135,17 +81,77 @@ class MainActivity : Activity() {
         })
 
         val statusCard = panel()
-        statusText = text("Comprobando Shizuku…", 13f, Color.WHITE, true)
+        statusText = text("Preparando ADB inalámbrico…", 13f, Color.WHITE, true)
         statusCard.addView(text("ESTADO DE ENTRADA", 10f, Color.rgb(73, 226, 140), true))
         statusCard.addView(statusText.apply { setPadding(0, dp(6), 0, 0) })
         page.addView(statusCard, marginParams(bottom = 10))
+
+        val adbCard = panel()
+        adbCard.addView(text("CONEXIÓN ADB LOCAL", 12f, Color.rgb(73, 226, 140), true))
+        adbCard.addView(text(
+            "Activa Depuración inalámbrica en Opciones de desarrollador. ShadowKeys se empareja con este teléfono y envía únicamente teclas de los trucos.",
+            11f, Color.LTGRAY, false
+        ).apply { setPadding(0, dp(5), 0, dp(8)) })
+
+        adbHostField = EditText(this).apply {
+            hint = "IP del teléfono (prueba 127.0.0.1)"
+            setText("127.0.0.1")
+            setHintTextColor(Color.GRAY)
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            setSingleLine(true)
+            background = rounded("#0B100D", "#315A43", 10)
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+        }
+        pairingPortField = EditText(this).apply {
+            hint = "Puerto de «Emparejar dispositivo»"
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setHintTextColor(Color.GRAY)
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            setSingleLine(true)
+            background = rounded("#0B100D", "#315A43", 10)
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+        }
+        pairingCodeField = EditText(this).apply {
+            hint = "PIN de emparejamiento (6 cifras)"
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            setHintTextColor(Color.GRAY)
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            setSingleLine(true)
+            background = rounded("#0B100D", "#315A43", 10)
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+        }
+        connectPortField = EditText(this).apply {
+            hint = "Puerto de «IP address & port»"
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setHintTextColor(Color.GRAY)
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            setSingleLine(true)
+            background = rounded("#0B100D", "#315A43", 10)
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+        }
+        adbCard.addView(adbHostField, marginParams(bottom = 6))
+        adbCard.addView(pairingPortField, marginParams(bottom = 6))
+        adbCard.addView(pairingCodeField, marginParams(bottom = 6))
+        adbCard.addView(connectPortField, marginParams(bottom = 8))
+        adbCard.addView(actionButton("ABRIR OPCIONES DE DESARROLLADOR") {
+            openWirelessSettings()
+        }, marginParams(bottom = 6))
+        adbCard.addView(actionButton("1 · EMPAREJAR ESTE TELÉFONO") {
+            pairAdb()
+        }, marginParams(bottom = 6))
+        adbCard.addView(actionButton("2 · CONECTAR A ADB") {
+            connectAdb()
+        })
+        page.addView(adbCard, marginParams(bottom = 10))
 
         gameText = text("Comprobando GTA San Andreas…", 12f, Color.LTGRAY, false)
         page.addView(gameText, marginParams(bottom = 10))
 
         val actions = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        actions.addView(actionButton("CONECTAR SHIZUKU") { connectShizukuIfAllowed(userInitiated = true) }, marginParams(bottom = 7))
-        actions.addView(actionButton("DESCARGAR / ABRIR SHIZUKU") { openShizuku() }, marginParams(bottom = 7))
         actions.addView(actionButton("ACTIVAR PANEL FLOTANTE") { enableOverlay() }, marginParams(bottom = 7))
         actions.addView(actionButton("DETENER PANEL FLOTANTE") { CheatOverlayService.stop(this) }, marginParams(bottom = 7))
         actions.addView(actionButton("ABRIR GTA SAN ANDREAS") { openGta() }, marginParams(bottom = 12))
@@ -232,33 +238,40 @@ class MainActivity : Activity() {
         renderCheats()
     }
 
-    private fun connectShizukuIfAllowed(userInitiated: Boolean = false) {
-        if (!Shizuku.pingBinder()) {
-            if (userInitiated) updateStatus("Shizuku no está iniciado. Abre Shizuku y pulsa Iniciar.")
-            else updateStatus("Shizuku no detectado. Consulta la guía de conexión.")
+    private fun openWirelessSettings() {
+        runCatching {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+        }.onFailure {
+            Toast.makeText(this, "Abre Ajustes > Sistema > Opciones de desarrollador > Depuración inalámbrica.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun pairAdb() {
+        val host = adbHostField.text.toString().trim()
+        val port = pairingPortField.text.toString().toIntOrNull()
+        val code = pairingCodeField.text.toString().trim()
+        if (port == null || code.length != 6) {
+            Toast.makeText(this, "Introduce el puerto de emparejamiento y el PIN de seis cifras.", Toast.LENGTH_LONG).show()
             return
         }
+        updateStatus("Emparejando ShadowKeys con el servicio ADB del teléfono…")
+        WirelessAdbInputController.pair(this, host, port, code) { _, message ->
+            updateStatus(message)
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        }
+    }
 
-        try {
-            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-                if (userInitiated || !Shizuku.shouldShowRequestPermissionRationale()) {
-                    Shizuku.requestPermission(REQUEST_SHIZUKU)
-                    updateStatus("Autoriza ShadowKeys en la ventana de Shizuku.")
-                } else {
-                    updateStatus("Falta autorizar ShadowKeys desde Shizuku.")
-                }
-                return
-            }
-            if (!serviceBound) {
-                Shizuku.bindUserService(inputServiceArgs, inputServiceConnection)
-                serviceBound = true
-                updateStatus("Conectando el servicio de entrada…")
-            } else {
-                updateStatus("Servicio de entrada conectado.")
-            }
-        } catch (error: Exception) {
-            serviceBound = false
-            updateStatus("No se pudo conectar: ${error.message ?: "error de Shizuku"}")
+    private fun connectAdb() {
+        val host = adbHostField.text.toString().trim()
+        val port = connectPortField.text.toString().toIntOrNull()
+        if (port == null) {
+            Toast.makeText(this, "Introduce el puerto de conexión que aparece junto a la IP.", Toast.LENGTH_LONG).show()
+            return
+        }
+        updateStatus("Comprobando la conexión ADB…")
+        WirelessAdbInputController.connect(this, host, port) { _, message ->
+            updateStatus(message)
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -283,15 +296,6 @@ class MainActivity : Activity() {
             "GTA San Andreas: no detectado con el paquete Rockstar esperado."
         } else {
             "GTA detectado · ${version}. La versión de destino para las pruebas es 2.11.311."
-        }
-    }
-
-    private fun openShizuku() {
-        val launch = packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE)
-        if (launch != null) {
-            startActivity(launch)
-        } else {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SHIZUKU_DOWNLOAD)))
         }
     }
 
@@ -365,12 +369,13 @@ class MainActivity : Activity() {
     }
 
     private fun sendCode(code: String) {
-        if (!ShizukuInputController.isReady()) {
-            Toast.makeText(this, "Primero inicia Shizuku y conecta el servicio ADB.", Toast.LENGTH_LONG).show()
-            updateStatus("Sin conexión de inyección. Comprueba Shizuku y vuelve a conectar.")
+        if (!WirelessAdbInputController.isReady(this)) {
+            Toast.makeText(this, "Primero empareja y conecta ShadowKeys en Depuración inalámbrica.", Toast.LENGTH_LONG).show()
+            updateStatus("Sin ADB conectado. Abre Opciones de desarrollador y completa el emparejamiento.")
             return
         }
-        ShizukuInputController.send(code) { _, message ->
+        WirelessAdbInputController.send(this, code) { _, message ->
+            updateStatus(message)
             Toast.makeText(this, message, Toast.LENGTH_LONG).show()
         }
     }
@@ -425,9 +430,6 @@ class MainActivity : Activity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     companion object {
-        private const val REQUEST_SHIZUKU = 1811
         private const val GTA_PACKAGE = "com.rockstargames.gtasa"
-        private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
-        private const val SHIZUKU_DOWNLOAD = "https://shizuku.rikka.app/download/"
     }
 }
