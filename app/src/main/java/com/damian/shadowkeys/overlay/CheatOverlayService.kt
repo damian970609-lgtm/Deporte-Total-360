@@ -24,7 +24,7 @@ import android.content.Context
 import android.content.pm.ServiceInfo
 import com.damian.shadowkeys.data.Cheat
 import com.damian.shadowkeys.data.CheatCatalog
-import com.damian.shadowkeys.input.ShizukuInputController
+import com.damian.shadowkeys.input.WirelessAdbInputController
 
 class CheatOverlayService : Service() {
     private lateinit var windowManager: WindowManager
@@ -205,7 +205,7 @@ class CheatOverlayService : Service() {
         val send = Button(this).apply {
             text = "ENVIAR"
             setOnClickListener {
-                ShizukuInputController.send(cheat.code) { _, message ->
+                WirelessAdbInputController.send(this@CheatOverlayService, cheat.code) { _, message ->
                     Toast.makeText(this@CheatOverlayService, message, Toast.LENGTH_LONG).show()
                 }
             }
