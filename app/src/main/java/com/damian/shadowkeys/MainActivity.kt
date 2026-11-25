@@ -47,8 +47,9 @@ class MainActivity : Activity() {
         runCatching { WirelessAdbInputController.initialize(this) }
         buildScreen()
         refreshGameStatus()
+        val adbSaved = runCatching { WirelessAdbInputController.isReady(this) }.getOrDefault(false)
         updateStatus(
-            if (WirelessAdbInputController.isReady(this)) {
+            if (adbSaved) {
                 "Conexión ADB guardada. Comprueba Depuración inalámbrica y pulsa CONECTAR ADB."
             } else {
                 "Sin vínculo ADB. ShadowKeys puede emparejarse con este teléfono sin instalar otra aplicación."
@@ -132,6 +133,11 @@ class MainActivity : Activity() {
             setSingleLine(true)
             background = rounded("#0B100D", "#315A43", 10)
             setPadding(dp(10), dp(8), dp(10), dp(8))
+        }
+
+        runCatching { WirelessAdbInputController.savedEndpoint(this) }.getOrNull()?.let { endpoint ->
+            adbHostField.setText(endpoint.first)
+            connectPortField.setText(endpoint.second.toString())
         }
         adbCard.addView(adbHostField, marginParams(bottom = 6))
         adbCard.addView(pairingPortField, marginParams(bottom = 6))
