@@ -15,10 +15,6 @@ android {
         versionName = "1.0.0"
     }
 
-    buildFeatures {
-        aidl = true
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -30,9 +26,8 @@ android {
 }
 
 dependencies {
-    implementation("androidx.annotation:annotation:1.9.1")
-    implementation("dev.rikka.shizuku:api:13.1.5")
-    implementation("dev.rikka.shizuku:provider:13.1.5")
+    implementation("com.flyfishxu:kadb:1.2.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     testImplementation("junit:junit:4.13.2")
 }
