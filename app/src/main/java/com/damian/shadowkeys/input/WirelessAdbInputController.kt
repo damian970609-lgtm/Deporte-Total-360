@@ -167,7 +167,7 @@ object WirelessAdbInputController {
             val result = runCatching {
                 synchronized(adbLock) {
                     val keys = keyCodes.joinToString(" ")
-                    val script = "for k in $keys; do input keyevent \"$k\" || exit 1; sleep 0.12; done"
+                    val script = "for k in $keys; do input keyevent \"\$k\" || exit 1; sleep 0.12; done"
                     Kadb.create(host, port, 7_000, 10_000).use { adb ->
                         adb.shell(script).also { response ->
                             check(response.exitCode == 0) {
