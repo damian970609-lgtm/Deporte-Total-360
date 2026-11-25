@@ -7,6 +7,12 @@ android {
     namespace = "com.damian.shadowkeys"
     compileSdk = 35
 
+    packaging {
+        resources {
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.damian.shadowkeys.localadb"
         minSdk = 26
