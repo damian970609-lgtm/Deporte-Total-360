@@ -47,7 +47,7 @@ class CheatCatalogTest {
             InputKeyMapper.toKeyCodes("PJYNQCQ")?.toList()
         )
         assertEquals(
-            listOf(7, 16, 29),
+            listOf(7, 8, 29),
             InputKeyMapper.toKeyCodes("01A")?.toList()
         )
     }
