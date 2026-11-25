@@ -53,8 +53,8 @@ Artefacto: `ShadowKeys-debug`.
 
 ## Identificadores
 
-- Nombre: ShadowKeys
-- Package name: `com.damian.shadowkeys`
+- Nombre: ShadowKeys ADB
+- Package name: `com.damian.shadowkeys.localadb`
 - minSdk: 26
 - targetSdk / compileSdk: 35
 - Java: 17
