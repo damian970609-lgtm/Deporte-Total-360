@@ -117,6 +117,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
     }
 
     _refreshing = true;
+    if (mounted) setState(() {});
     try {
       final next = await _agendaService.buildBoardState(now: DateTime.now());
       if (!mounted) return;
@@ -129,6 +130,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
         final oldPlayer = _player;
         _player = null;
         _selectedEventId = null;
+        _loadingPlayer = false;
         _playerError = null;
         await _disposePlayer(oldPlayer);
       }
@@ -149,6 +151,7 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
       debugPrint('Error al actualizar Transmisión en vivo: $error');
     } finally {
       _refreshing = false;
+      if (mounted) setState(() {});
     }
   }
 
@@ -219,7 +222,9 @@ class _LiveChannelsScreenState extends State<LiveChannelsScreen>
         videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
       );
       await nextPlayer.initialize().timeout(const Duration(seconds: 30));
-      if (!mounted) {
+      if (!mounted ||
+          !widget.isActive ||
+          _selectedEventId != assignment.event.id) {
         await _disposePlayer(nextPlayer);
         return;
       }
