@@ -252,7 +252,7 @@ class _AgendaWebScreenState extends State<AgendaWebScreen> {
                       // El reproductor original se carga como subframe dentro
                       // de la tarjeta; la navegación principal sigue limitada
                       // al dominio de la Agenda.
-                      if (!action.isForMainFrame) {
+                      if (action.isForMainFrame == false) {
                         return NavigationActionPolicy.ALLOW;
                       }
                       return _isAllowedHost(target.host)
