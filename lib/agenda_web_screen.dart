@@ -493,6 +493,16 @@ const String _agendaLiveCaptureScript = r'''
       .trim();
   }
 
+  // textContent incluye nodos con display:none/visibility:hidden. La Agenda
+  // puede guardar los canales dentro de detalles ocultos de cada evento.
+  function rawText(element) {
+    return String(element && element.textContent || '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/[\t ]+/g, ' ')
+      .replace(/\s*\n\s*/g, '\n')
+      .trim();
+  }
+
   function cleanReference(value) {
     return String(value || '')
       .replace(/\b(?:abrir partido|abrir canal|ver partido|reproducir)\b/gi, '')
@@ -562,6 +572,9 @@ const String _agendaLiveCaptureScript = r'''
 
   function readChannelReferences(card, cardText) {
     const found = [];
+    // No usar innerText aquí: excluye precisamente los textos que la página
+    // mantiene ocultos dentro de la ficha del evento.
+    const sourceText = rawText(card) || cardText;
     const generic = new Set([
       'abrir', 'canal', 'senal', 'fuente', 'ver partido',
       'programacion deportiva', 'mas informacion', 'disponible',
@@ -581,7 +594,7 @@ const String _agendaLiveCaptureScript = r'''
 
     // Formato habitual: "Fuente 1: ESPN 2", "Canal 2: DSports".
     let marker;
-    while ((marker = referencePattern.exec(cardText)) !== null) add(marker[1]);
+    while ((marker = referencePattern.exec(sourceText)) !== null) add(marker[1]);
     referencePattern.lastIndex = 0;
 
     // Algunas fichas publican los nombres agrupados en una línea/lista,
@@ -592,7 +605,7 @@ const String _agendaLiveCaptureScript = r'''
     ];
     sectionPatterns.forEach((pattern) => {
       let section;
-      while ((section = pattern.exec(cardText)) !== null) {
+      while ((section = pattern.exec(sourceText)) !== null) {
         addDelimited(section[1]);
       }
       pattern.lastIndex = 0;
@@ -608,10 +621,14 @@ const String _agendaLiveCaptureScript = r'''
       add(element.getAttribute('data-channel-name'));
       add(element.getAttribute('data-source'));
       add(element.getAttribute('data-signal'));
+      add(element.getAttribute('data-name'));
+      add(element.getAttribute('data-label'));
+      add(element.getAttribute('data-tvg-id'));
       add(element.getAttribute('aria-label'));
       add(element.getAttribute('title'));
       add(element.getAttribute('alt'));
-      const value = visibleText(element);
+      add(element.getAttribute('value'));
+      const value = rawText(element) || visibleText(element);
       if (value.length <= 180) {
         let match;
         while ((match = referencePattern.exec(value)) !== null) add(match[1]);
@@ -623,8 +640,14 @@ const String _agendaLiveCaptureScript = r'''
           }
           pattern.lastIndex = 0;
         });
-        if (element.matches('a, button, [role="button"]') &&
-            !/abrir partido|abrir canal|ver partido/i.test(value)) add(value);
+        const isChannelNode =
+          /channel|source|signal|stream|broadcast|transmission/i.test(
+            String(element.className || '')
+          );
+        if ((element.matches('a, button, [role="button"]') || isChannelNode) &&
+            !/abrir partido|abrir canal|ver partido/i.test(value)) {
+          addDelimited(value);
+        }
       }
     });
     return found;
@@ -663,7 +686,7 @@ const String _agendaLiveCaptureScript = r'''
       status = 'scheduled';
     }
 
-    const channelReferences = readChannelReferences(card, text);
+    const channelReferences = readChannelReferences(card, rawText(card) || text);
     const elementId = card.getAttribute('data-event-id') ||
       card.getAttribute('data-id') || card.id || '';
     const id = elementId && elementId.length < 100
