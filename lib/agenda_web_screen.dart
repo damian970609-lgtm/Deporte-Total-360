@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'agenda_live_service.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
@@ -191,30 +189,10 @@ class _AgendaWebScreenState extends State<AgendaWebScreen> {
   Future<void> _applyAgendaOnlyView(InAppWebViewController controller) async {
     try {
       await controller.evaluateJavascript(source: _agendaOnlyScript);
-      await controller.evaluateJavascript(source: _agendaLiveCaptureScript);
+      await controller.evaluateJavascript(source: _agendaInlinePlayerScript);
     } catch (error) {
       debugPrint('No se pudo aplicar el filtro o leer los eventos de Agenda: $error');
     }
-  }
-
-  Future<void> _storeCapturedAgendaEvents(dynamic payload) async {
-    try {
-      await AgendaLiveService().captureAgendaEvents(payload);
-    } catch (error) {
-      debugPrint('No se pudieron guardar las referencias de canales de Agenda: $error');
-    }
-  }
-
-  void _registerAgendaBridge(InAppWebViewController controller) {
-    controller.addJavaScriptHandler(
-      handlerName: 'dt360AgendaEvents',
-      callback: (arguments) {
-        if (arguments.isNotEmpty) {
-          unawaited(_storeCapturedAgendaEvents(arguments.first));
-        }
-        return true;
-      },
-    );
   }
 
   @override
@@ -246,7 +224,6 @@ class _AgendaWebScreenState extends State<AgendaWebScreen> {
                     ),
                     onWebViewCreated: (controller) {
                       _controller = controller;
-                      _registerAgendaBridge(controller);
                     },
                     onLoadStart: (controller, url) {
                       if (!mounted) return;
@@ -272,6 +249,12 @@ class _AgendaWebScreenState extends State<AgendaWebScreen> {
                       final target = action.request.url;
                       if (target == null) return NavigationActionPolicy.CANCEL;
                       if (target.scheme == 'about') return NavigationActionPolicy.ALLOW;
+                      // El reproductor original se carga como subframe dentro
+                      // de la tarjeta; la navegación principal sigue limitada
+                      // al dominio de la Agenda.
+                      if (!action.isForMainFrame) {
+                        return NavigationActionPolicy.ALLOW;
+                      }
                       return _isAllowedHost(target.host)
                           ? NavigationActionPolicy.ALLOW
                           : NavigationActionPolicy.CANCEL;
@@ -469,10 +452,10 @@ const String _agendaOnlyScript = r'''
 ''';
 
 
-const String _agendaLiveCaptureScript = r'''
+const String _agendaInlinePlayerScript = r'''
 (function () {
-  if (window.__dt360AgendaCaptureInstalled) {
-    if (window.__dt360EmitAgendaEvents) window.__dt360EmitAgendaEvents();
+  if (window.__dt360InlinePlayersInstalled) {
+    if (window.__dt360RefreshInlinePlayers) window.__dt360RefreshInlinePlayers();
     return;
   }
 
@@ -484,7 +467,6 @@ const String _agendaLiveCaptureScript = r'''
     .trim();
   const timePattern = /\b([01]?\d|2[0-3]):([0-5]\d)\b/;
   const timeGlobalPattern = /\b(?:[01]?\d|2[0-3]):[0-5]\d\b/g;
-  const referencePattern = /(?:fuente|canal|señal|senal|opción|opcion)\s*\d+\s*[:\-]?\s*(.*?)(?=(?:fuente|canal|señal|senal|opción|opcion)\s*\d+|[\n|•]|$)/gi;
 
   function visibleText(element) {
     return String(element && (element.innerText || element.textContent) || '')
@@ -493,308 +475,262 @@ const String _agendaLiveCaptureScript = r'''
       .trim();
   }
 
-  // textContent incluye nodos con display:none/visibility:hidden. La Agenda
-  // puede guardar los canales dentro de detalles ocultos de cada evento.
   function rawText(element) {
     return String(element && element.textContent || '')
       .replace(/\u00a0/g, ' ')
       .replace(/[\t ]+/g, ' ')
-      .replace(/\s*\n\s*/g, '\n')
       .trim();
   }
 
-  function cleanReference(value) {
-    return String(value || '')
-      .replace(/\b(?:abrir partido|abrir canal|ver partido|reproducir)\b/gi, '')
-      .replace(/\b(?:español|espanol|english|inglés|ingles|portugués|portugues|brasil|latino)\b/gi, '')
-      .replace(/[·•|].*$/, '')
-      .replace(/^\s*(?:fuente|canal|señal|senal|opción|opcion)\s*\d+\s*[:\-]?/i, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  function findEventCard(timeNode) {
-    let current = timeNode && timeNode.parentElement;
-    let best = current;
-    for (let depth = 0; depth < 9 && current &&
+  function findEventCard(node) {
+    let current = node && (node.nodeType === 1 ? node : node.parentElement);
+    let best = null;
+    for (let depth = 0; depth < 10 && current &&
         current !== document.body && current !== document.documentElement; depth += 1) {
       const value = visibleText(current);
       const times = (value.match(timeGlobalPattern) || []).length;
-      if (value.length > 950 || times > 2) break;
-      if (value.length >= 18 && times >= 1) best = current;
+      if (value.length > 1100 || times > 2) break;
+      if (value.length >= 12 && times === 1) best = current;
       const className = String(current.className || '').toLowerCase();
       const looksLikeEvent = current.hasAttribute('data-event-id') ||
         /event|match|fixture|partido|encuentro/.test(className);
-      if (looksLikeEvent && value.length >= 18 && times >= 1) return current;
+      if (looksLikeEvent && value.length >= 12 && times >= 1 && times <= 2) {
+        return current;
+      }
       current = current.parentElement;
     }
     return best;
   }
 
-  function readStartAt(card, text) {
-    const timeElement = card.querySelector('time[datetime], [data-start], [data-start-time], [data-time]');
-    const explicit = timeElement
-      ? (timeElement.getAttribute('datetime') || timeElement.getAttribute('data-start') ||
-         timeElement.getAttribute('data-start-time') || timeElement.getAttribute('data-time') || '')
-      : '';
-    if (explicit) {
-      const parsed = new Date(explicit);
-      if (!Number.isNaN(parsed.getTime())) {
-        const local = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000);
-        return local.toISOString().slice(0, 19);
-      }
+  function safePlayerPage(raw) {
+    if (!raw) return '';
+    let url;
+    try {
+      url = new URL(String(raw), location.href);
+    } catch (_) {
+      return '';
     }
-    const match = text.match(timePattern);
-    if (!match) return '';
-    const now = new Date();
-    const hour = Number(match[1]);
-    const minute = Number(match[2]);
-    const start = new Date(
-      now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0, 0
+    if (url.protocol !== 'https:' || url.username || url.password) return '';
+    const host = url.hostname.toLowerCase();
+    const agendaHost = host === 'futbol-libre.cam' || host.endsWith('.futbol-libre.cam');
+    const playerHost = host === 'tvf90.com' || host.endsWith('.tvf90.com');
+    if (!agendaHost && !playerHost) return '';
+    if (agendaHost &&
+        !/^\/(?:canal|player|play|reproducir|transmision)\//i.test(url.pathname)) {
+      return '';
+    }
+    if (/\.(?:m3u8|mpd|mp4|m4v|mov|mkv|webm|ts|mpeg|mpg)$/i.test(url.pathname)) {
+      return '';
+    }
+    return url.href;
+  }
+
+  function playerTargetForCard(card) {
+    const nodes = Array.from(card.querySelectorAll(
+      'iframe[src], a[href], [data-player-url], [data-play-url], ' +
+      '[data-stream-url], [data-channel-url], [data-href], [data-url]'
+    ));
+    const candidates = [];
+    nodes.forEach((element) => {
+      const raw = element.getAttribute('src') ||
+        element.getAttribute('data-player-url') ||
+        element.getAttribute('data-play-url') ||
+        element.getAttribute('data-stream-url') ||
+        element.getAttribute('data-channel-url') ||
+        element.getAttribute('data-href') ||
+        element.getAttribute('data-url') ||
+        element.getAttribute('href') || '';
+      const url = safePlayerPage(raw);
+      if (!url) return;
+      const parsed = new URL(url);
+      const label = normalize(rawText(element));
+      const host = parsed.hostname.toLowerCase();
+      const isAgendaHost = host === 'futbol-libre.cam' || host.endsWith('.futbol-libre.cam');
+      if (isAgendaHost && /\/(?:partido|evento|match|event)\//i.test(parsed.pathname)) return;
+
+      let score = 0;
+      if (host === 'tvf90.com' || host.endsWith('.tvf90.com')) score += 120;
+      if (parsed.searchParams.has('stream')) score += 35;
+      if (/\.(?:php|html?)$/i.test(parsed.pathname)) score += 15;
+      if (/abrir canal|ver canal|ver señal|ver senal|reproducir|transmision|en vivo/.test(label)) {
+        score += 25;
+      }
+      if (element.tagName === 'IFRAME') score += 30;
+      if (isAgendaHost && /\/canal\//i.test(parsed.pathname)) score += 70;
+      candidates.push({url: url, score: score});
+    });
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates.length ? candidates[0].url : '';
+  }
+
+  function setPanelStatus(panel, message) {
+    const status = panel.querySelector('.dt360-player-status');
+    if (status) status.textContent = message;
+  }
+
+  function loadPlayer(panel, url) {
+    const safeUrl = safePlayerPage(url);
+    if (!safeUrl) {
+      setPanelStatus(panel, 'El destino del reproductor no es una página HTTPS admitida.');
+      return;
+    }
+
+    document.querySelectorAll('.dt360-inline-player iframe').forEach((frame) => {
+      frame.remove();
+    });
+    document.querySelectorAll('.dt360-inline-player').forEach((other) => {
+      if (other !== panel) {
+        const otherButton = other.querySelector('.dt360-player-button');
+        if (otherButton) otherButton.textContent = 'REPRODUCIR';
+        setPanelStatus(other, 'Toca REPRODUCIR para abrir la señal de este evento.');
+      }
+    });
+
+    const holder = panel.querySelector('.dt360-player-frame-holder');
+    if (!holder) return;
+    holder.replaceChildren();
+
+    const frame = document.createElement('iframe');
+    frame.className = 'dt360-inline-frame';
+    frame.src = safeUrl;
+    frame.title = 'Reproductor del evento';
+    frame.loading = 'lazy';
+    frame.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
+    frame.setAttribute('allowfullscreen', '');
+    frame.referrerPolicy = 'strict-origin-when-cross-origin';
+    frame.style.cssText =
+      'display:block;width:100%;height:230px;border:0;border-radius:8px;background:#000;';
+    frame.addEventListener('load', () => {
+      setPanelStatus(panel, 'Página del reproductor cargada. Pulsa PLAY dentro de la señal.');
+    });
+    frame.addEventListener('error', () => {
+      setPanelStatus(panel, 'No se pudo cargar la página del reproductor.');
+    });
+    holder.appendChild(frame);
+
+    const button = panel.querySelector('.dt360-player-button');
+    if (button) button.textContent = 'RECARGAR';
+    setPanelStatus(
+      panel,
+      'Abriendo el reproductor original del evento. Si el proveedor bloquea la inserción, puede que no aparezca aquí.'
     );
-    const pad = (number) => String(number).padStart(2, '0');
-    return String(start.getFullYear()).padStart(4, '0') + '-' +
-      pad(start.getMonth() + 1) + '-' + pad(start.getDate()) + 'T' +
-      pad(hour) + ':' + pad(minute) + ':00';
   }
 
-  function readEndAt(card) {
-    const element = card.querySelector('[data-end], [data-end-time], time[aria-label*="fin"]');
-    if (!element) return '';
-    const value = element.getAttribute('datetime') ||
-      element.getAttribute('data-end') || element.getAttribute('data-end-time') || '';
-    if (!value) return '';
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return '';
-    const local = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000);
-    return local.toISOString().slice(0, 19);
+  function ensurePlayerPanel(card, url, title) {
+    if (!card || !card.parentElement) return null;
+    let panel = card.nextElementSibling;
+    if (!panel || !panel.classList.contains('dt360-inline-player')) {
+      panel = document.createElement('section');
+      panel.className = 'dt360-inline-player';
+      panel.style.cssText =
+        'box-sizing:border-box;margin:8px 0 14px;padding:10px;background:#0b1724;' +
+        'border:1px solid #16415b;border-radius:10px;color:#eaf3ff;';
+      const heading = document.createElement('div');
+      heading.className = 'dt360-player-heading';
+      heading.textContent = 'REPRODUCTOR DEL EVENTO';
+      heading.style.cssText =
+        'margin:0 0 8px;color:#00a3ff;font-size:12px;font-weight:900;letter-spacing:.5px;';
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'dt360-player-button';
+      button.textContent = 'REPRODUCIR';
+      button.style.cssText =
+        'display:block;width:100%;min-height:42px;padding:9px 12px;border:1px solid #1d9d69;' +
+        'border-radius:8px;background:#073a27;color:#39ff85;font-size:13px;font-weight:900;';
+      const status = document.createElement('div');
+      status.className = 'dt360-player-status';
+      status.textContent = 'Toca REPRODUCIR para abrir la señal de este evento.';
+      status.style.cssText =
+        'margin-top:7px;color:#b8c5d8;font-size:11px;line-height:1.4;';
+      const holder = document.createElement('div');
+      holder.className = 'dt360-player-frame-holder';
+      holder.style.cssText = 'margin-top:8px;width:100%;';
+      panel.appendChild(heading);
+      panel.appendChild(button);
+      panel.appendChild(status);
+      panel.appendChild(holder);
+      button.addEventListener('click', () => loadPlayer(panel, panel.dataset.playerUrl || ''));
+      card.insertAdjacentElement('afterend', panel);
+    }
+
+    panel.dataset.playerUrl = url;
+    panel.dataset.eventTitle = title || 'Evento';
+    const heading = panel.querySelector('.dt360-player-heading');
+    if (heading) heading.textContent = 'REPRODUCTOR · ' + (title || 'EVENTO');
+    const button = panel.querySelector('.dt360-player-button');
+    const frame = panel.querySelector('iframe');
+    if (frame && frame.src !== url) {
+      frame.remove();
+      if (button) button.textContent = 'REPRODUCIR';
+      setPanelStatus(panel, 'Toca REPRODUCIR para abrir la señal actualizada.');
+    }
+    return panel;
   }
 
-  function readChannelReferences(card, cardText, eventTitle) {
-    const found = [];
-    // No usar innerText aquí: excluye precisamente los textos que la página
-    // mantiene ocultos dentro de la ficha del evento.
-    const sourceText = rawText(card) || cardText;
-    const generic = new Set([
-      'abrir', 'canal', 'senal', 'fuente', 'ver partido',
-      'programacion deportiva', 'mas informacion', 'disponible',
-      'canales de referencia', 'senales disponibles', 'fuentes disponibles'
-    ]);
-    const add = (raw) => {
-      const clean = cleanReference(raw);
-      if (clean.length < 2 || clean.length > 70) return;
-      const key = normalize(clean);
-      if (!key || generic.has(key) ||
-          found.some((item) => normalize(item) === key)) return;
-      found.push(clean);
-    };
-    const addDelimited = (raw) => {
-      String(raw || '').split(/[,;\n•|]+/).forEach((item) => add(item));
-    };
-
-    // Formato habitual: "Fuente 1: ESPN 2", "Canal 2: DSports".
-    let marker;
-    while ((marker = referencePattern.exec(sourceText)) !== null) add(marker[1]);
-    referencePattern.lastIndex = 0;
-
-    // Algunas fichas publican los nombres agrupados en una línea/lista,
-    // sin numerar cada fuente. Captura solo el valor posterior al encabezado.
-    const sectionPatterns = [
-      /(?:canales?|señales|fuentes)\s+(?:de\s+)?(?:referencia|disponibles|publicadas|recomendadas|posibles)\s*:?\s*([^\n]{2,180})/gi,
-      /(?:transmisiones?|señales)\s+(?:posibles|disponibles)\s*:?\s*([^\n]{2,180})/gi
-    ];
-    sectionPatterns.forEach((pattern) => {
-      let section;
-      while ((section = pattern.exec(sourceText)) !== null) {
-        addDelimited(section[1]);
-      }
-      pattern.lastIndex = 0;
+  function refreshInlinePlayers() {
+    const timeNodes = Array.from(document.querySelectorAll(
+      'time, [data-time], [class*="time"], span, strong, small, div'
+    )).filter((element) =>
+      element.children.length === 0 && timePattern.test(visibleText(element))
+    );
+    const seenCards = new Set();
+    timeNodes.forEach((node) => {
+      const card = findEventCard(node);
+      if (!card || seenCards.has(card)) return;
+      seenCards.add(card);
+      const titleNode = card.querySelector(
+        '[data-event-title], [class*="event-title"], [class*="match-title"], h2, h3, h4, strong'
+      );
+      const title = visibleText(titleNode) ||
+        visibleText(card).replace(timeGlobalPattern, '').trim().slice(0, 100);
+      const url = playerTargetForCard(card);
+      if (url) ensurePlayerPanel(card, url, title);
     });
-
-    const referenceNodes = [
-      card,
-      ...Array.from(card.querySelectorAll(
-        '[data-channel], [data-channel-name], [data-source], [data-signal], ' +
-        '[data-channel-list], [data-stream], [data-transmission], ' +
-        '[class*="channel"], [class*="source"], [class*="signal"], [class*="stream"], ' +
-        '[class*="broadcast"], [class*="transmission"]'
-      ))
-    ];
-    referenceNodes.forEach((element) => {
-      add(element.getAttribute('data-channel'));
-      add(element.getAttribute('data-channel-name'));
-      add(element.getAttribute('data-source'));
-      add(element.getAttribute('data-signal'));
-      add(element.getAttribute('data-channel-list'));
-      add(element.getAttribute('data-stream'));
-      add(element.getAttribute('data-transmission'));
-      add(element.getAttribute('data-name'));
-      add(element.getAttribute('data-label'));
-      add(element.getAttribute('data-tvg-id'));
-      add(element.getAttribute('aria-label'));
-      add(element.getAttribute('title'));
-      add(element.getAttribute('alt'));
-      add(element.getAttribute('value'));
-      const value = rawText(element) || visibleText(element);
-      if (value.length <= 180) {
-        let match;
-        while ((match = referencePattern.exec(value)) !== null) add(match[1]);
-        referencePattern.lastIndex = 0;
-        sectionPatterns.forEach((pattern) => {
-          let section;
-          while ((section = pattern.exec(value)) !== null) {
-            addDelimited(section[1]);
-          }
-          pattern.lastIndex = 0;
-        });
-        const isChannelNode =
-          /channel|source|signal|stream|broadcast|transmission/i.test(
-            String(element.className || '')
-          );
-        if ((element.matches('a, button, [role="button"]') || isChannelNode) &&
-            !/abrir partido|abrir canal|ver partido/i.test(value)) {
-          addDelimited(value);
-        }
-      }
-    });
-    // Fallback para fichas que muestran el nombre del canal en un nodo
-    // independiente sin atributos ni clases identificables. También lee
-    // nodos ocultos o detalles plegados, pero descarta título y hora del evento.
-    const titleKey = normalize(eventTitle);
-    Array.from(card.querySelectorAll(
-      'span, small, strong, em, b, p, div, label, a, button, [role="button"]'
-    )).forEach((element) => {
-      if (element.children.length > 0 ||
-          element.closest(
-            'h1, h2, h3, h4, [data-event-title], [class*="event-title"], [class*="match-title"]'
-          )) return;
-      const value = rawText(element);
-      const key = normalize(value);
-      if (value.length < 2 || value.length > 70 ||
-          !key || key === titleKey || timePattern.test(value) ||
-          /abrir partido|abrir canal|ver partido|reproducir/i.test(value)) {
-        return;
-      }
-      addDelimited(value);
-    });
-    return found;
   }
 
-  function readEvent(card) {
-    const text = visibleText(card);
-    const startAt = readStartAt(card, text);
-    if (!startAt) return null;
-    const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  document.addEventListener('click', (event) => {
+    const target = event.target && event.target.closest
+      ? event.target.closest('a[href]')
+      : null;
+    if (!target) return;
+    const url = safePlayerPage(target.href);
+    if (!url) return;
+    const card = findEventCard(target);
+    if (!card) return;
+    event.preventDefault();
+    event.stopPropagation();
     const titleNode = card.querySelector(
       '[data-event-title], [class*="event-title"], [class*="match-title"], h2, h3, h4, strong'
     );
-    const titleFromNode = visibleText(titleNode);
-    const matchup = lines.find((line) =>
-      /\b(?:vs?\.?|versus)\b/i.test(line)
-    ) || '';
-    const title = (matchup || titleFromNode ||
-      lines.find((line) => line.length > 5 && !timePattern.test(line)) || '')
-      .replace(timeGlobalPattern, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (!title || title.length > 160) return null;
-
-    const competition = lines.find((line) =>
-      /liga|league|copa|cup|torneo|tournament|premier|champions|concacaf|conmebol|uefa|nba|mlb|nhl/i.test(line) &&
-      line !== title
-    ) || '';
-    const lower = normalize(text);
-    let status = 'unknown';
-    if (/\b(finalizado|finalizada|terminado|terminada|finished|completed|full time|cancelado|cancelada|suspended)\b/.test(lower)) {
-      status = 'finished';
-    } else if (/\b(en vivo|live|1st half|2nd half|primer tiempo|segundo tiempo|entretiempo|halftime)\b/.test(lower)) {
-      status = 'live';
-    } else if (/\b(proximo|proxima|scheduled|por comenzar)\b/.test(lower)) {
-      status = 'scheduled';
-    }
-
-    const channelReferences = readChannelReferences(
-      card,
-      rawText(card) || text,
-      title
-    );
-    const elementId = card.getAttribute('data-event-id') ||
-      card.getAttribute('data-id') || card.id || '';
-    const id = elementId && elementId.length < 100
-      ? elementId
-      : normalize(title).replace(/[^a-z0-9]+/g, '-') + '_' + startAt;
-    const eventLink = card.querySelector(
-      'a[href*="partido"], a[href*="evento"], a[href*="match"], a[href*="event"]'
-    );
-    return {
-      id: id,
-      title: title,
-      competition: competition,
-      startsAt: startAt,
-      endsAt: readEndAt(card),
-      status: status,
-      channelReferences: channelReferences,
-      detailUrl: eventLink ? eventLink.href : location.href,
-      updatedAt: new Date().toISOString()
-    };
-  }
-
-  let lastSignature = '';
-  let queued = false;
-  function emitAgendaEvents() {
-    queued = false;
-    if (!window.flutter_inappwebview ||
-        typeof window.flutter_inappwebview.callHandler !== 'function') return;
-    const timeNodes = Array.from(document.querySelectorAll(
-      'time, [data-time], [class*="time"], span, strong, small, div'
-    )).filter((element) => element.children.length === 0 &&
-      timePattern.test(visibleText(element)));
-    const seenCards = new Set();
-    const events = [];
-    for (const node of timeNodes) {
-      const card = findEventCard(node);
-      if (!card || seenCards.has(card)) continue;
-      seenCards.add(card);
-      const event = readEvent(card);
-      if (event) events.push(event);
-    }
-    const unique = [];
-    const keys = new Set();
-    for (const event of events) {
-      const key = event.id + '|' + event.startsAt;
-      if (keys.has(key)) continue;
-      keys.add(key);
-      unique.push(event);
-    }
-    if (unique.length === 0) return;
-    const signature = JSON.stringify(unique);
-    if (signature === lastSignature) return;
-    lastSignature = signature;
-    window.flutter_inappwebview.callHandler('dt360AgendaEvents', unique);
-  }
-
-  function queueEmit() {
-    if (queued) return;
-    queued = true;
-    window.setTimeout(emitAgendaEvents, 250);
-  }
-
-  document.addEventListener('click', () => {
-    window.setTimeout(queueEmit, 250);
-    window.setTimeout(queueEmit, 900);
-    window.setTimeout(queueEmit, 1800);
+    const title = visibleText(titleNode) ||
+      visibleText(card).replace(timeGlobalPattern, '').trim().slice(0, 100);
+    const panel = ensurePlayerPanel(card, url, title);
+    if (panel) loadPlayer(panel, url);
   }, true);
 
-  const observer = new MutationObserver(queueEmit);
+  let queued = false;
+  function queueRefresh() {
+    if (queued) return;
+    queued = true;
+    window.setTimeout(() => {
+      queued = false;
+      refreshInlinePlayers();
+    }, 300);
+  }
+
+  const observer = new MutationObserver(queueRefresh);
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
-    characterData: true
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['href', 'src', 'data-player-url', 'data-play-url', 'data-channel-url']
   });
-  window.__dt360EmitAgendaEvents = emitAgendaEvents;
-  window.__dt360AgendaCaptureObserver = observer;
-  window.__dt360AgendaCaptureInstalled = true;
-  emitAgendaEvents();
-  window.setInterval(emitAgendaEvents, 20000);
+
+  window.__dt360RefreshInlinePlayers = refreshInlinePlayers;
+  window.__dt360InlinePlayerObserver = observer;
+  window.__dt360InlinePlayersInstalled = true;
+  refreshInlinePlayers();
+  window.setInterval(refreshInlinePlayers, 10000);
 })();
 ''';
