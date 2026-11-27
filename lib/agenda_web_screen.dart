@@ -653,10 +653,16 @@ const String _agendaInlinePlayerScript = r'''
       card.insertAdjacentElement('afterend', panel);
     }
 
-    panel.dataset.playerUrl = url;
-    panel.dataset.eventTitle = title || 'Evento';
+    if (panel.dataset.playerUrl !== url) panel.dataset.playerUrl = url;
+    const eventTitle = title || 'Evento';
+    if (panel.dataset.eventTitle !== eventTitle) {
+      panel.dataset.eventTitle = eventTitle;
+    }
     const heading = panel.querySelector('.dt360-player-heading');
-    if (heading) heading.textContent = 'REPRODUCTOR · ' + (title || 'EVENTO');
+    const headingText = 'REPRODUCTOR · ' + (title || 'EVENTO');
+    if (heading && heading.textContent !== headingText) {
+      heading.textContent = headingText;
+    }
     const button = panel.querySelector('.dt360-player-button');
     const frame = panel.querySelector('iframe');
     if (frame && frame.src !== url) {
