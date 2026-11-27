@@ -535,7 +535,7 @@ const String _agendaInlinePlayerScript = r'''
     nodes.forEach((element) => {
       const clickCode = element.getAttribute('onclick') || '';
       const clickMatch = clickCode.match(
-        /(?:window\\.open|location(?:\\.href)?\\s*=|location\\.assign)\\s*\\(?\\s*['"]([^'"]+)['"]/
+        /(?:window\.open|location(?:\.href)?\s*=|location\.assign)\s*\(?\s*['"]([^'"]+)['"]/
       );
       const raw = element.getAttribute('src') ||
         element.getAttribute('data-player-url') ||
