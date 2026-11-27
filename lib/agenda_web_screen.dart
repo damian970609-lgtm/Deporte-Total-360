@@ -527,11 +527,16 @@ const String _agendaInlinePlayerScript = r'''
 
   function playerTargetForCard(card) {
     const nodes = Array.from(card.querySelectorAll(
-      'iframe[src], a[href], [data-player-url], [data-play-url], ' +
-      '[data-stream-url], [data-channel-url], [data-href], [data-url]'
+      'iframe[src], a[href], button[formaction], [onclick], ' +
+      '[data-player-url], [data-play-url], [data-stream-url], ' +
+      '[data-channel-url], [data-href], [data-url]'
     ));
     const candidates = [];
     nodes.forEach((element) => {
+      const clickCode = element.getAttribute('onclick') || '';
+      const clickMatch = clickCode.match(
+        /(?:window\\.open|location(?:\\.href)?\\s*=|location\\.assign)\\s*\\(?\\s*['"]([^'"]+)['"]/
+      );
       const raw = element.getAttribute('src') ||
         element.getAttribute('data-player-url') ||
         element.getAttribute('data-play-url') ||
@@ -539,7 +544,9 @@ const String _agendaInlinePlayerScript = r'''
         element.getAttribute('data-channel-url') ||
         element.getAttribute('data-href') ||
         element.getAttribute('data-url') ||
-        element.getAttribute('href') || '';
+        element.getAttribute('formaction') ||
+        element.getAttribute('href') ||
+        (clickMatch ? clickMatch[1] : '');
       const url = safePlayerPage(raw);
       if (!url) return;
       const parsed = new URL(url);
