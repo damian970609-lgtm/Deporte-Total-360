@@ -516,7 +516,7 @@ const String _agendaInlinePlayerScript = r'''
     const playerHost = host === 'tvf90.com' || host.endsWith('.tvf90.com');
     if (!agendaHost && !playerHost) return '';
     if (agendaHost &&
-        !/^\/(?:canal|player|play|reproducir|transmision)\//i.test(url.pathname)) {
+        !/^\/(?:canal|player|play|reproducir|transmision|partido|evento|match|event)\//i.test(url.pathname)) {
       return '';
     }
     if (/\.(?:m3u8|mpd|mp4|m4v|mov|mkv|webm|ts|mpeg|mpg)$/i.test(url.pathname)) {
@@ -546,14 +546,15 @@ const String _agendaInlinePlayerScript = r'''
       const label = normalize(rawText(element));
       const host = parsed.hostname.toLowerCase();
       const isAgendaHost = host === 'futbol-libre.cam' || host.endsWith('.futbol-libre.cam');
-      if (isAgendaHost && /\/(?:partido|evento|match|event)\//i.test(parsed.pathname)) return;
-
       let score = 0;
       if (host === 'tvf90.com' || host.endsWith('.tvf90.com')) score += 120;
       if (parsed.searchParams.has('stream')) score += 35;
       if (/\.(?:php|html?)$/i.test(parsed.pathname)) score += 15;
-      if (/abrir canal|ver canal|ver señal|ver senal|reproducir|transmision|en vivo/.test(label)) {
+      if (/abrir canal|ver canal|ver señal|ver senal|abrir partido|ver partido|reproducir|transmision|en vivo/.test(label)) {
         score += 25;
+      }
+      if (isAgendaHost && /\/(?:partido|evento|match|event)\//i.test(parsed.pathname)) {
+        score += 90;
       }
       if (element.tagName === 'IFRAME') score += 30;
       if (isAgendaHost && /\/canal\//i.test(parsed.pathname)) score += 70;
