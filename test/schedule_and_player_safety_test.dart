@@ -20,7 +20,7 @@ void main() {
 
     expect(event, isNotNull);
     expect(event!.channelReferences, <String>[
-      'no disponible',
+      'canal no disponible',
       'disney plus',
     ]);
   });
