@@ -662,9 +662,12 @@ const String _agendaLiveCaptureScript = r'''
     // nodos ocultos o detalles plegados, pero descarta título y hora del evento.
     const titleKey = normalize(eventTitle);
     Array.from(card.querySelectorAll(
-      'span, small, strong, em, b, a, button, [role="button"]'
+      'span, small, strong, em, b, p, div, label, a, button, [role="button"]'
     )).forEach((element) => {
-      if (element.children.length > 0) return;
+      if (element.children.length > 0 ||
+          element.closest(
+            'h1, h2, h3, h4, [data-event-title], [class*="event-title"], [class*="match-title"]'
+          )) return;
       const value = rawText(element);
       const key = normalize(value);
       if (value.length < 2 || value.length > 70 ||
