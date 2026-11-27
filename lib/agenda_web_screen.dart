@@ -554,7 +554,9 @@ const String _agendaInlinePlayerScript = r'''
         score += 25;
       }
       if (isAgendaHost && /\/(?:partido|evento|match|event)\//i.test(parsed.pathname)) {
-        score += 90;
+        // La ficha de partido de la propia Agenda contiene el reproductor
+        // original y prevalece sobre enlaces genéricos de canal.
+        score += 200;
       }
       if (element.tagName === 'IFRAME') score += 30;
       if (isAgendaHost && /\/canal\//i.test(parsed.pathname)) score += 70;
@@ -666,10 +668,21 @@ const String _agendaInlinePlayerScript = r'''
     }
     const button = panel.querySelector('.dt360-player-button');
     const frame = panel.querySelector('iframe');
-    if (frame && frame.src !== url) {
+    if (button) button.disabled = !url;
+    if (!url) {
+      if (frame) frame.remove();
+      if (button) button.textContent = 'SIN REPRODUCTOR';
+      setPanelStatus(
+        panel,
+        'La Agenda todavía no ha publicado un destino de reproducción para este evento.'
+      );
+    } else if (frame && frame.src !== url) {
       frame.remove();
       if (button) button.textContent = 'REPRODUCIR';
       setPanelStatus(panel, 'Toca REPRODUCIR para abrir la señal actualizada.');
+    } else if (!frame && button) {
+      button.textContent = 'REPRODUCIR';
+      setPanelStatus(panel, 'Se ha seleccionado una sola reproducción original para este evento.');
     }
     return panel;
   }
@@ -690,8 +703,10 @@ const String _agendaInlinePlayerScript = r'''
       );
       const title = visibleText(titleNode) ||
         visibleText(card).replace(timeGlobalPattern, '').trim().slice(0, 100);
+      // Se reserva un cuadro para cada evento; cuando la ficha publica
+      // una sola opción válida, se conecta al reproductor original.
       const url = playerTargetForCard(card);
-      if (url) ensurePlayerPanel(card, url, title);
+      ensurePlayerPanel(card, url, title);
     });
   }
 
