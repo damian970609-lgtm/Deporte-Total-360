@@ -570,7 +570,7 @@ const String _agendaLiveCaptureScript = r'''
     return local.toISOString().slice(0, 19);
   }
 
-  function readChannelReferences(card, cardText) {
+  function readChannelReferences(card, cardText, eventTitle) {
     const found = [];
     // No usar innerText aquí: excluye precisamente los textos que la página
     // mantiene ocultos dentro de la ficha del evento.
@@ -657,6 +657,23 @@ const String _agendaLiveCaptureScript = r'''
         }
       }
     });
+    // Fallback para fichas que muestran el nombre del canal en un nodo
+    // independiente sin atributos ni clases identificables. También lee
+    // nodos ocultos o detalles plegados, pero descarta título y hora del evento.
+    const titleKey = normalize(eventTitle);
+    Array.from(card.querySelectorAll(
+      'span, small, strong, em, b, a, button, [role="button"]'
+    )).forEach((element) => {
+      if (element.children.length > 0) return;
+      const value = rawText(element);
+      const key = normalize(value);
+      if (value.length < 2 || value.length > 70 ||
+          !key || key === titleKey || timePattern.test(value) ||
+          /abrir partido|abrir canal|ver partido|reproducir/i.test(value)) {
+        return;
+      }
+      addDelimited(value);
+    });
     return found;
   }
 
@@ -693,7 +710,11 @@ const String _agendaLiveCaptureScript = r'''
       status = 'scheduled';
     }
 
-    const channelReferences = readChannelReferences(card, rawText(card) || text);
+    const channelReferences = readChannelReferences(
+      card,
+      rawText(card) || text,
+      title
+    );
     const elementId = card.getAttribute('data-event-id') ||
       card.getAttribute('data-id') || card.id || '';
     const id = elementId && elementId.length < 100
