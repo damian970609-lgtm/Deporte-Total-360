@@ -490,7 +490,7 @@ const String _agendaInlinePlayerScript = r'''
       const value = visibleText(current);
       const times = (value.match(timeGlobalPattern) || []).length;
       if (value.length > 1100 || times > 2) break;
-      if (value.length >= 12 && times === 1) best = current;
+      if (value.length >= 12 && times >= 1 && times <= 2) best = current;
       const className = String(current.className || '').toLowerCase();
       const looksLikeEvent = current.hasAttribute('data-event-id') ||
         /event|match|fixture|partido|encuentro/.test(className);
