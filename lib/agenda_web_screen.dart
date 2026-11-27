@@ -611,16 +611,23 @@ const String _agendaLiveCaptureScript = r'''
       pattern.lastIndex = 0;
     });
 
-    const referenceNodes = card.querySelectorAll(
-      '[data-channel], [data-channel-name], [data-source], [data-signal], ' +
-      '[class*="channel"], [class*="source"], [class*="signal"], [class*="stream"], ' +
-      '[class*="broadcast"], [class*="transmission"]'
-    );
+    const referenceNodes = [
+      card,
+      ...Array.from(card.querySelectorAll(
+        '[data-channel], [data-channel-name], [data-source], [data-signal], ' +
+        '[data-channel-list], [data-stream], [data-transmission], ' +
+        '[class*="channel"], [class*="source"], [class*="signal"], [class*="stream"], ' +
+        '[class*="broadcast"], [class*="transmission"]'
+      ))
+    ];
     referenceNodes.forEach((element) => {
       add(element.getAttribute('data-channel'));
       add(element.getAttribute('data-channel-name'));
       add(element.getAttribute('data-source'));
       add(element.getAttribute('data-signal'));
+      add(element.getAttribute('data-channel-list'));
+      add(element.getAttribute('data-stream'));
+      add(element.getAttribute('data-transmission'));
       add(element.getAttribute('data-name'));
       add(element.getAttribute('data-label'));
       add(element.getAttribute('data-tvg-id'));
